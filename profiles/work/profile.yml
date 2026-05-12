@@ -1,0 +1,13 @@
+name: work
+extends: base
+description: Work AI setup using OpenAI models.
+mcp:
+  aws-knowledge:
+    enabled: true
+  pinescript-docs:
+    enabled: false
+opencode:
+  agent:
+    explore:
+      model: openai/gpt-5.4-mini
+      reasoningEffort: medium

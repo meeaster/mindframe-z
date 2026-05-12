@@ -1,0 +1,7 @@
+references:
+  - name: opencode
+    url: https://github.com/anomalyco/opencode.git
+    description: OpenCode source and documentation.
+  - name: openspec
+    url: https://github.com/Fission-AI/OpenSpec.git
+    description: OpenSpec AI specification and tooling reference.

@@ -1,0 +1,30 @@
+[tools]
+node = "24"
+python = "3.14"
+rust = "latest"
+aws-cli = "latest"
+aws-sam-cli = "latest"
+gh = "latest"
+jq = "latest"
+pipx = "latest"
+pre-commit = "latest"
+ripgrep = "latest"
+rtk = "latest"
+uv = "latest"
+"npm:@upstash/context7-mcp" = "latest"
+"npm:aws-cdk" = "latest"
+"npm:ctx7" = "latest"
+websocat = "latest"
+"npm:executor" = "latest"
+"github:SocketDev/sfw-free" = "latest"
+
+[tools."github:dmtrKovalenko/fff"]
+version = "latest"
+asset_pattern = "fff-mcp-x86_64-unknown-linux-*"
+bin = "fff-mcp"
+
+[env]
+OPENCODE_ENABLE_EXA = "1"
+OPENCODE_EXPERIMENTAL_OXFMT = "1"
+OPENCODE_EXPERIMENTAL_SCOUT = "0"
+OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL = "true"

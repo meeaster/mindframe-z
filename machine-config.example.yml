@@ -1,0 +1,5 @@
+# Machine-local AI config. Place this at ~/.mindframe-z/config.yml.
+# Overrides the profile selection and references directory for this machine.
+# This file is not checked into the repo — it's per-machine config.
+profile: personal
+references_dir: ~/references

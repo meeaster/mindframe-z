@@ -1,0 +1,60 @@
+skills:
+  - name: home-assistant-best-practices
+    source: git
+    repo: https://github.com/homeassistant-ai/skills
+    skill: home-assistant-best-practices
+    description: >
+      Best practices for HA automations, helpers, scripts, device controls, and dashboards.
+      Use when creating/editing automations, scripts, scenes, dashboards, helpers, Zigbee
+      button/remote automations, entity renames, or Home Assistant dashboard cards.
+    targets: [opencode]
+
+  - name: homeassistant
+    source: local
+    path: ~/code/mindframe-z/skills
+    skill: homeassistant
+    description: >
+      Use when inspecting, scripting, testing, or troubleshooting Home Assistant through
+      CLI-accessible HTTP or WebSocket APIs, including curl, inline Python with uv,
+      authentication, service calls, events, entity registry work, or voice-assistant exposure.
+    targets: [opencode]
+
+  - name: impeccable
+    source: git
+    repo: https://github.com/pbakaus/impeccable
+    skill: impeccable
+    description: >
+      Use when designing, redesigning, shaping, critiquing, auditing, polishing, clarifying,
+      hardening, optimizing, adapting, animating, colorizing, extracting, or otherwise improving
+      a frontend interface.
+    targets: [opencode]
+
+  - name: mise
+    source: local
+    path: ~/code/mindframe-z/skills
+    skill: mise
+    description: >
+      Use when answering mise basics: installing or adding global tools, choosing a mise backend,
+      managing global mise environment variables, checking mise config, or giving concise mise
+      command guidance.
+    targets: [opencode]
+
+  - name: opencode-db
+    source: local
+    path: ~/code/mindframe-z/skills
+    skill: opencode-db
+    description: >
+      Use when safely inspecting or querying OpenCode's local database with `opencode db`,
+      including sessions, messages, projects, workspaces, tool calls, skill/MCP usage,
+      subagents, or prior assistant behavior.
+    targets: [opencode]
+
+  - name: skill-writer
+    source: git
+    repo: https://github.com/getsentry/skills
+    skill: skill-writer
+    description: >
+      Create, synthesize, and iteratively improve agent skills following the Agent Skills
+      specification. Use when asked to create, write, synthesize, improve, update, or maintain
+      skill docs and registration.
+    targets: [opencode]

@@ -1,0 +1,3 @@
+[tools]
+websocat = "latest"
+"npm:executor" = "latest"

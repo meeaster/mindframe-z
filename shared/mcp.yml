@@ -1,0 +1,35 @@
+servers:
+  context7:
+    description: Documentation lookup MCP.
+    targets: [opencode, claude-code]
+    type: remote
+    transport: http
+    url: https://mcp.context7.com/mcp
+  fff:
+    description: Local fast file finder MCP.
+    targets: [opencode]
+    type: local
+    command: [fff-mcp]
+  deepwiki:
+    description: Repository documentation and implementation detail MCP.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://mcp.deepwiki.com/mcp
+  pinescript-docs:
+    description: Pine Script documentation MCP server.
+    targets: [opencode]
+    type: local
+    command: [npx, -y, pinescript-mcp-server]
+  aws-knowledge:
+    description: AWS knowledge MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://knowledge-mcp.global.api.aws
+  homeassistant:
+    description: Home Assistant MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://homeassistant.easterly.cloud/api/mcp
