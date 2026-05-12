@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
@@ -206,6 +206,38 @@ describe("CLI integration", () => {
     );
   });
 
+  it("applies machine-local OpenCode permission overrides", async () => {
+    const workDir = path.join(home, "work");
+    const referencesDir = path.join(home, "references");
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "opencode:",
+        "  permission:",
+        "    websearch: allow",
+        "    external_directory:",
+        `      ${workDir}/**: allow`,
+        "    edit:",
+        `      ${referencesDir}/**: deny`,
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await cli("mindframe-z", root, home, ["apply", "--target", "opencode"]);
+    expect(result.stdout).toContain("rendered");
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8",
+    );
+    expect(opencode).toContain("permission");
+    expect(opencode).toContain(workDir);
+    expect(opencode).toContain(referencesDir);
+  });
+
   it("renders mise config from base profile and links it", async () => {
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
@@ -217,12 +249,33 @@ describe("CLI integration", () => {
     expect(mise).toContain('jq = "latest"');
   });
 
-  it("refuses to overwrite existing unmanaged config files", async () => {
+  it("backs up and replaces existing config files after approval", async () => {
     await mkdir(path.join(home, ".claude"), { recursive: true });
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
-    await expect(
-      cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]),
-    ).rejects.toThrow(/Refusing to overwrite/);
+
+    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
+      MFZ_REPLACE_EXISTING: "yes",
+    });
+
+    expect(result.stdout).toContain("backed up");
+    await expect(realpath(path.join(home, ".claude", "settings.json"))).resolves.toBe(
+      path.join(root, "configs", "personal", "claude", "settings.json"),
+    );
+
+    const entries = await readdir(path.join(home, ".claude"));
+    expect(entries.some((entry) => entry.startsWith("settings.json.mindframe-z.bak-"))).toBe(true);
+  });
+
+  it("skips existing config files when approval is denied", async () => {
+    await mkdir(path.join(home, ".claude"), { recursive: true });
+    await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
+
+    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
+      MFZ_REPLACE_EXISTING: "no",
+    });
+
+    expect(result.stdout).toContain("skipped");
+    expect(await readFile(path.join(home, ".claude", "settings.json"), "utf8")).toBe("{}\n");
   });
 
   it("writes a reference index from profile references", async () => {
