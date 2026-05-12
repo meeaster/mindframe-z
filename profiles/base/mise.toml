@@ -22,13 +22,14 @@ tflint = "0"
 yamllint = "1"
 "npm:aws-cdk" = "latest"
 "npm:sfw" = "latest"
+"npm:@tobilu/qmd" = "latest"
 
 [settings]
 minimum_release_age = "3d"
 
 [tools."github:dmtrKovalenko/fff"]
 version = "latest"
-asset_pattern = "fff-mcp-x86_64-unknown-linux-*"
+asset_pattern = "fff-mcp-x86_64-unknown-linux-gnu"
 bin = "fff-mcp"
 
 [env]
