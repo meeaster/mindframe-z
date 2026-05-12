@@ -52,6 +52,7 @@ Integration tests are completely isolated — they use `mkdtemp` temp directorie
 
 ## Conventions
 
+- This repo is in active development with no external users yet; prefer the simplest direct design and do not add backward-compatibility or fallback behavior unless there is a concrete current need.
 - Lint/formatter: oxlint + oxfmt (not eslint/prettier). Config in `oxlint.json` and `.oxfmtrc.json`.
 - `dist/`, `.runtime/`, `machine/machine.yml`, `/references/` are gitignored.
 - The shared instruction file `shared/AGENTS.global.md` is rendered into AI tool runtime config — it is not this repo's agents guide.

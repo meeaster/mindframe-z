@@ -5,3 +5,6 @@ references:
   - name: openspec
     url: https://github.com/Fission-AI/OpenSpec.git
     description: OpenSpec AI specification and tooling reference.
+  - name: mise
+    url: https://github.com/jdx/mise.git
+    description: Mise tool version manager and documentation.

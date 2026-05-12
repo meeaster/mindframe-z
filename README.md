@@ -1,6 +1,6 @@
 # mindframe-z
 
-Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles and renders runtime config for OpenCode and Claude Code.
+Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles and renders runtime config for OpenCode and Claude Code. Machine-local config can add per-host OpenCode permission rules and reference directories.
 
 ## Commands
 

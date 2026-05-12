@@ -22,8 +22,6 @@ tflint = "0"
 yamllint = "1"
 "npm:aws-cdk" = "latest"
 "npm:sfw" = "latest"
-websocat = "latest"
-"npm:executor" = "latest"
 
 [tools."github:dmtrKovalenko/fff"]
 version = "latest"
