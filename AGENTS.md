@@ -15,6 +15,8 @@ npm run dev -- refs list
 
 `npm run dev` uses `tsx` for development. The compiled entry point in `bin/mindframe-z` imports from `dist/` — build first before using the binary.
 
+After `mindframe-z apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
+
 ## Architecture
 
 Profile-aware AI tool config renderer. Reads YAML manifests from `shared/`, `profiles/`, and `machine/` and renders runtime config for OpenCode and Claude Code into `.runtime/`. Symlinks are created from global config directories into the rendered runtime files.
