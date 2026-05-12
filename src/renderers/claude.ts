@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
@@ -25,24 +24,7 @@ export async function renderClaude(
       "Use the shared AI configuration rendered by mindframe-z.",
     ].join("\n") + "\n";
 
-  // Read existing settings to preserve unmanaged keys
-  let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
-  } catch {
-    // File doesn't exist yet
-  }
-
-  // Managed keys: 'model' and all keys from claude.settings
-  const settingsManagedKeys = new Set(Object.keys(profile.profile.claude.settings));
-  settingsManagedKeys.add("model");
-
-  const unmanaged = Object.fromEntries(
-    Object.entries(existing).filter(([key]) => !settingsManagedKeys.has(key)),
-  );
-
   const settings = {
-    ...unmanaged,
     ...profile.profile.claude.settings,
     ...(profile.profile.claude.model ? { model: profile.profile.claude.model } : {}),
   };

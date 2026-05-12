@@ -26,18 +26,24 @@ export interface ResolvedProfile {
   mcpServers: ResolvedMcpServer[];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function deepMerge(
   base: Record<string, unknown>,
   child: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...base };
   for (const [key, value] of Object.entries(child)) {
-    if (isRecord(value) && isRecord(result[key])) {
-      result[key] = deepMerge(result[key] as Record<string, unknown>, value);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof result[key] === "object" &&
+      result[key] !== null &&
+      !Array.isArray(result[key])
+    ) {
+      result[key] = deepMerge(
+        result[key] as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
     } else {
       result[key] = value;
     }

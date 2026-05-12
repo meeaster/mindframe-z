@@ -1,6 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "jsonc-parser";
 import type { RuntimePaths } from "../core/paths.js";
 import { expandHome, profileConfigsDir } from "../core/paths.js";
 import { filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
@@ -69,7 +68,15 @@ export async function renderOpenCode(
   const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
-        return [name, { type: "remote", url: server.url, enabled }];
+        return [
+          name,
+          {
+            type: "remote",
+            url: server.url,
+            enabled,
+            ...(server.headers ? { headers: server.headers } : {}),
+          },
+        ];
       }
       return [
         name,
@@ -82,32 +89,10 @@ export async function renderOpenCode(
       ];
     }),
   );
-
-  // Read existing config to preserve unmanaged keys
-  let existing: Record<string, unknown> = {};
-  try {
-    const raw = await readFile(configPath, "utf8");
-    const parsed = parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      existing = parsed as Record<string, unknown>;
-    }
-  } catch {
-    // File doesn't exist yet
-  }
-
-  // Remove profile-managed keys from existing (they'll be overwritten)
-  const managedKeys = new Set(Object.keys(profile.profile.opencode));
-  const unmanaged = Object.fromEntries(
-    Object.entries(existing).filter(([key]) => !managedKeys.has(key)),
-  );
-
-  // Derived keys that are always overwritten
+  const machinePermission = profile.manifests.machine.opencode.permission;
   const config = {
-    // Start with unmanaged existing keys
-    ...unmanaged,
-    // Then managed keys from profile (overwrites existing)
     ...profile.profile.opencode,
-    // Then derived keys (always overwrite)
+    ...(machinePermission ? { permission: machinePermission } : {}),
     $schema: "https://opencode.ai/config.json",
     instructions,
     plugin,
