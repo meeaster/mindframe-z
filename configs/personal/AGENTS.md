@@ -34,3 +34,31 @@ Use MCP tools selectively and do not query multiple documentation MCPs in parall
 - For explicit comparisons or evaluations, query both tools with the same question and compare source quality, specificity, freshness, and usefulness.
 - Prefer MCP documentation tools over general web search for library and repository documentation.
 <!-- mcp-interactions -->
+
+## Git
+
+- Use Conventional Commits.
+
+## GitHub Actions
+
+- Prefer mature latest action versions; pin actions to commit SHAs.
+- Validate workflow changes with `actionlint` and `zizmor --min-severity high`.
+- For local or reusable actions, declare outputs in action metadata.
+- Write step outputs to `$GITHUB_OUTPUT` at the end of the step.
+
+## Package Installs
+
+- Prefer exact versions and packages older than 7 days.
+
+## Documentation
+
+- Flag docs that may be obsolete after code changes.
+- Avoid hardcoded counts in docs; use descriptive terms instead.
+
+## Collaboration
+
+- Push back on flawed assumptions and ask when intent is unclear.
+
+## Code Conventions
+
+- Do not use `isRecord`-style guard helpers; understand the code path types directly, and when input shape is uncertain validate it once at the boundary with a schema instead of scattering guards through the logic.

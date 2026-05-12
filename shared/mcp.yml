@@ -5,6 +5,11 @@ servers:
     type: remote
     transport: http
     url: https://mcp.context7.com/mcp
+  qmd:
+    description: Local markdown knowledge base MCP.
+    targets: [opencode]
+    type: local
+    command: [qmd, mcp]
   fff:
     description: Local fast file finder MCP.
     targets: [opencode]
@@ -27,6 +32,24 @@ servers:
     type: remote
     transport: http
     url: https://knowledge-mcp.global.api.aws
+  jira:
+    description: Jira MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://mcp.atlassian.com/v1/mcp
+  confluence:
+    description: Confluence MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://mcp.atlassian.com/v1/mcp
+  datadog:
+    description: Datadog MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://mcp.datadoghq.com/api/unstable/mcp-server/mcp
   homeassistant:
     description: Home Assistant MCP server.
     targets: [opencode]
