@@ -1,57 +1,66 @@
 {
+  "lsp": true,
+  "reference": {
+    "opencode": "https://github.com/anomalyco/opencode"
+  },
+  "agent": {
+    "explore": {
+      "model": "opencode-go/deepseek-v4-flash",
+      "reasoningEffort": "medium"
+    }
+  },
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
     "/home/mark/code/mindframe-z/configs/personal/AGENTS.md",
-    "/home/mark/code/mindframe-z/configs/personal/references.md",
+    "/home/mark/code/mindframe-z/configs/personal/references.md"
   ],
   "plugin": [
-    "file:///home/mark/code/mindframe-z/configs/personal/opencode/plugins/mindframe-z-example.ts",
+    "file:///home/mark/code/mindframe-z/configs/personal/opencode/plugins/mindframe-z-example.ts"
   ],
   "mcp": {
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true,
+      "enabled": true
     },
     "qmd": {
       "type": "local",
-      "command": ["qmd", "mcp"],
-      "enabled": true,
+      "command": [
+        "qmd",
+        "mcp"
+      ],
+      "enabled": true
     },
     "fff": {
       "type": "local",
-      "command": ["fff-mcp"],
-      "enabled": true,
+      "command": [
+        "fff-mcp"
+      ],
+      "enabled": true
     },
     "deepwiki": {
       "type": "remote",
       "url": "https://mcp.deepwiki.com/mcp",
-      "enabled": true,
+      "enabled": true
     },
     "homeassistant": {
       "type": "remote",
       "url": "https://homeassistant.easterly.cloud/api/mcp",
-      "enabled": false,
+      "enabled": false
     },
     "pinescript-docs": {
       "type": "local",
-      "command": ["npx", "-y", "pinescript-mcp-server"],
-      "enabled": false,
+      "command": [
+        "npx",
+        "-y",
+        "pinescript-mcp-server"
+      ],
+      "enabled": false
     },
     "aws-knowledge": {
       "type": "remote",
       "url": "https://knowledge-mcp.global.api.aws",
-      "enabled": false,
-    },
-  },
-  "lsp": true,
-  "reference": {
-    "opencode": "https://github.com/anomalyco/opencode",
-  },
-  "agent": {
-    "explore": {
-      "model": "opencode-go/deepseek-v4-flash",
-      "reasoningEffort": "medium",
-    },
-  },
+      "enabled": false
+    }
+  }
 }
