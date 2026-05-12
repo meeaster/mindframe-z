@@ -1,14 +1,39 @@
+import * as readline from "node:readline/promises";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
+import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import { createRuntimePaths, targetList, type ApplyTarget } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeRenderedFiles } from "../core/render.js";
-import { ensureLink, verifyLink } from "../core/symlinks.js";
+import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
 import { applySkill } from "../skills/npx-skills.js";
 import { runSync } from "../sync/index.js";
+
+async function confirmReplace(
+  rl: readline.Interface | null,
+  linkPath: string,
+  backupPath: string,
+): Promise<boolean> {
+  const replaceExisting = process.env.MFZ_REPLACE_EXISTING?.trim().toLowerCase();
+  if (replaceExisting === "y" || replaceExisting === "yes" || replaceExisting === "true") {
+    return true;
+  }
+  if (replaceExisting === "n" || replaceExisting === "no" || replaceExisting === "false") {
+    return false;
+  }
+
+  let answer = "";
+  if (rl) {
+    answer = await rl.question(`Replace existing ${linkPath}? Backup: ${backupPath} [y/N]: `);
+  } else {
+    return false;
+  }
+  const normalized = answer.trim().toLowerCase();
+  return normalized === "y" || normalized === "yes";
+}
 
 async function applyConfig(options: {
   root?: string | undefined;
@@ -20,20 +45,58 @@ async function applyConfig(options: {
 }): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile);
-  if (!options.dryRun) await writeReferenceIndex(paths, profile);
-  for (const target of targetList(options.target)) {
-    const result = await renderTarget(paths, profile, target);
-    if (!options.dryRun) await writeRenderedFiles(result.files);
-    for (const file of result.files)
-      console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
-    if (!options.noLink) {
-      for (const link of result.links) {
-        const status = await ensureLink(link, options.dryRun ?? false);
-        console.log(
-          `${options.dryRun ? "would link" : status.state === "missing" ? "linked" : "link ok"}\t${link.linkPath} -> ${link.targetPath}`,
-        );
+  const usePrompts = !options.dryRun && !options.noLink;
+  const rl =
+    usePrompts && processStdin.isTTY
+      ? readline.createInterface({ input: processStdin, output: processStdout })
+      : null;
+
+  try {
+    if (!options.dryRun) await writeReferenceIndex(paths, profile);
+    for (const target of targetList(options.target)) {
+      const result = await renderTarget(paths, profile, target);
+      if (!options.dryRun) await writeRenderedFiles(result.files);
+      for (const file of result.files)
+        console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
+      if (!options.noLink) {
+        for (const link of result.links) {
+          const status = await verifyLink(link);
+          if (options.dryRun) {
+            const action =
+              status.state === "missing"
+                ? "would link"
+                : status.state === "ok"
+                  ? "link ok"
+                  : "would replace after backup";
+            console.log(`${action}\t${link.linkPath} -> ${link.targetPath}`);
+            continue;
+          }
+
+          if (status.state === "ok") {
+            console.log(`link ok\t${link.linkPath} -> ${link.targetPath}`);
+            continue;
+          }
+
+          if (status.state === "missing") {
+            await createLink(link);
+            console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+            continue;
+          }
+
+          const backupPath = backupPathFor(link.linkPath);
+          if (!(await confirmReplace(rl, link.linkPath, backupPath))) {
+            console.log(`skipped\t${link.linkPath} (${status.detail})`);
+            continue;
+          }
+
+          await replaceWithBackup(link, backupPath);
+          console.log(`backed up\t${link.linkPath} -> ${backupPath}`);
+          console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+        }
       }
     }
+  } finally {
+    rl?.close();
   }
 }
 

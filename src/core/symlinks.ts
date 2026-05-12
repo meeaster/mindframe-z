@@ -1,4 +1,4 @@
-import { lstat, mkdir, readlink, symlink } from "node:fs/promises";
+import { lstat, mkdir, readlink, rename, symlink } from "node:fs/promises";
 import path from "node:path";
 
 export interface LinkPlan {
@@ -36,8 +36,22 @@ export async function ensureLink(plan: LinkPlan, dryRun = false): Promise<LinkSt
   if (status.state === "conflict")
     throw new Error(`Refusing to overwrite ${plan.linkPath}: ${status.detail}`);
   if (status.state === "missing" && !dryRun) {
-    await mkdir(path.dirname(plan.linkPath), { recursive: true });
-    await symlink(plan.targetPath, plan.linkPath);
+    await createLink(plan);
   }
   return status;
+}
+
+export function backupPathFor(linkPath: string): string {
+  return `${linkPath}.mindframe-z.bak-${Date.now()}`;
+}
+
+export async function createLink(plan: LinkPlan): Promise<void> {
+  await mkdir(path.dirname(plan.linkPath), { recursive: true });
+  await symlink(plan.targetPath, plan.linkPath);
+}
+
+export async function replaceWithBackup(plan: LinkPlan, backupPath: string): Promise<void> {
+  await mkdir(path.dirname(plan.linkPath), { recursive: true });
+  await rename(plan.linkPath, backupPath);
+  await symlink(plan.targetPath, plan.linkPath);
 }
