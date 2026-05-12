@@ -37,6 +37,7 @@ const mcpServerBaseSchema = z.object({
   type: z.enum(["remote", "local"]),
   transport: z.enum(["http", "sse", "stdio"]).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
 });
 
 export const mcpServerSchema = z.union([
@@ -49,6 +50,12 @@ export const mcpManifestSchema = z.object({
 });
 
 const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
+
+const miseTomlSchema = z.object({
+  tools: z.record(z.string(), miseToolValueSchema).default({}),
+  env: z.record(z.string(), z.coerce.string()).default({}),
+  tool_alias: z.record(z.string(), z.coerce.string()).default({}),
+});
 
 export const profileSchema = z.object({
   name: z.string().min(1),
@@ -80,6 +87,7 @@ export const profileSchema = z.object({
 export const machineSchema = z.object({
   profile: z.string().optional(),
   references_dir: z.string().default("~/references"),
+  opencode: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
@@ -105,10 +113,6 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
   if (!(await exists(file))) return fallback;
   const parsed = YAML.parse(await readFile(file, "utf8"));
@@ -129,8 +133,9 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
   const machine = effectiveHome
     ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
         references_dir: "~/references",
+        opencode: {},
       })
-    : { references_dir: "~/references" as const };
+    : { references_dir: "~/references" as const, opencode: {} };
   const profileMap = new Map<string, ProfileManifest>();
   const profilesDir = path.join(root, "profiles");
   try {
@@ -164,19 +169,10 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       if (await exists(miseToml)) {
         try {
           const raw = await readFile(miseToml, "utf8");
-          const toml = parse(raw) as Record<string, unknown>;
-          if (isRecord(toml.tools))
-            profile.mise.tools = toml.tools as ProfileManifest["mise"]["tools"];
-          if (isRecord(toml.env)) {
-            profile.mise.env = Object.fromEntries(
-              Object.entries(toml.env).map(([k, v]) => [k, String(v)]),
-            );
-          }
-          if (isRecord(toml.tool_alias)) {
-            profile.mise.tool_alias = Object.fromEntries(
-              Object.entries(toml.tool_alias).map(([k, v]) => [k, String(v)]),
-            );
-          }
+          const toml = miseTomlSchema.parse(parse(raw));
+          profile.mise.tools = toml.tools;
+          profile.mise.env = toml.env;
+          profile.mise.tool_alias = toml.tool_alias;
         } catch {
           // Malformed TOML — skip, keep YAML defaults
         }
