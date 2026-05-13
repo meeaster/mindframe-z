@@ -25,6 +25,7 @@ yamllint = "1"
 "npm:sfw" = "latest"
 "npm:@tobilu/qmd" = "latest"
 "npm:@fission-ai/openspec" = "latest"
+"github:Infisical/agent-vault" = "latest"
 
 [settings]
 minimum_release_age = "3d"
