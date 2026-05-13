@@ -71,3 +71,35 @@ skills:
     targets:
       - opencode
     installer: npx-skills
+  - name: openspec-apply-change
+    source: local
+    skill: openspec-apply-change
+    description: >
+      Implement tasks from an OpenSpec change. Use when starting implementation, continuing implementation,
+      or working through tasks.
+    targets:
+      - opencode
+  - name: openspec-archive-change
+    source: local
+    skill: openspec-archive-change
+    description: >
+      Archive a completed change in the experimental workflow. Use when finalizing and archiving a change
+      after implementation is complete.
+    targets:
+      - opencode
+  - name: openspec-explore
+    source: local
+    skill: openspec-explore
+    description: >
+      Enter explore mode — a thinking partner for exploring ideas, investigating problems, and clarifying
+      requirements. Use when thinking through something before or during a change.
+    targets:
+      - opencode
+  - name: openspec-propose
+    source: local
+    skill: openspec-propose
+    description: >
+      Propose a new change with all artifacts generated in one step. Use when quickly describing what to build
+      and getting a complete proposal with design, specs, and tasks ready for implementation.
+    targets:
+      - opencode
