@@ -29,13 +29,15 @@ mcp:
   deepwiki:
     enabled: true
 opencode:
-  lsp: true
-  reference:
-    opencode: https://github.com/anomalyco/opencode
-opencode_plugins:
-  - mindframe-z-example
-commands:
-  - opsx-archive
-  - opsx-apply
-  - opsx-explore
-  - opsx-propose
+  config:
+    lsp: true
+    reference:
+      opencode: https://github.com/anomalyco/opencode
+  plugins:
+    - mindframe-z-example
+  commands:
+    - opsx-archive
+    - opsx-apply
+    - opsx-explore
+    - opsx-propose
+    - rmslop

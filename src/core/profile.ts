@@ -67,10 +67,12 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
     skills: dedupe([...base.skills, ...child.skills]),
-    commands: dedupe([...base.commands, ...child.commands]),
     mcp: { ...base.mcp, ...child.mcp },
-    opencode: deepMerge(base.opencode, child.opencode),
-    opencode_plugins: dedupe([...base.opencode_plugins, ...child.opencode_plugins]),
+    opencode: {
+      config: deepMerge(base.opencode.config, child.opencode.config),
+      plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
+      commands: dedupe([...base.opencode.commands, ...child.opencode.commands])
+    },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     mise: {
       tools: deepMerge(
@@ -116,7 +118,7 @@ export async function resolveProfile(
     if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
     return skill;
   });
-  const enabledCommands = dedupe(profile.commands);
+  const enabledCommands = dedupe(profile.opencode.commands);
   for (const commandName of enabledCommands) {
     try {
       await access(path.join(paths.root, "opencode", "commands", `${commandName}.md`));
