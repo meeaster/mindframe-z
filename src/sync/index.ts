@@ -9,13 +9,14 @@ import type { ResolvedProfile } from "../core/profile.js";
 import { syncMise } from "./mise.js";
 import { syncOpencode } from "./opencode.js";
 import { syncClaude } from "./claude.js";
+import { syncSkills, type UnknownSkill } from "./skills.js";
 import type { SyncCandidate } from "./types.js";
 
 function setNested(
   obj: Record<string, unknown>,
   prefix: string,
   key: string,
-  value: unknown,
+  value: unknown
 ): void {
   const parts = prefix.split(".");
   let current = obj;
@@ -62,7 +63,7 @@ async function writeMiseToml(root: string, targetProfile: string, candidate: Syn
 
 async function promptUser(
   candidate: SyncCandidate,
-  profileNames: string[],
+  profileNames: string[]
 ): Promise<string | null> {
   const rl = readline.createInterface({ input: processStdin, output: processStdout });
   try {
@@ -70,7 +71,7 @@ async function promptUser(
       typeof candidate.value === "string" ? candidate.value : JSON.stringify(candidate.value);
     const options = profileNames.map((n) => `"${n}"`).join(", ");
     const answer = await rl.question(
-      `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}\n  Add to [${options}, skip]: `,
+      `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}\n  Add to [${options}, skip]: `
     );
     const trimmed = answer.trim().toLowerCase();
     if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
@@ -84,10 +85,74 @@ async function promptUser(
   }
 }
 
+async function promptSkillUser(
+  skill: UnknownSkill,
+  profileNames: string[]
+): Promise<string | null> {
+  const rl = readline.createInterface({ input: processStdin, output: processStdout });
+  try {
+    const options = profileNames.join(", ");
+    const answer = await rl.question(
+      `Unmanaged skill: ${skill.name} (${skill.entry.repo ?? ""})\n  Add to [${options}, skip]: `
+    );
+    const trimmed = answer.trim().toLowerCase();
+    if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
+    if (profileNames.includes(trimmed)) return trimmed;
+    const match = profileNames.find((n) => n.startsWith(trimmed));
+    if (match) return match;
+    console.log(`  Unknown profile "${trimmed}". Use: ${options}, skip`);
+    return null;
+  } finally {
+    rl.close();
+  }
+}
+
+async function writeSkillsCatalog(root: string, skills: UnknownSkill[]): Promise<void> {
+  const yamlPath = path.join(root, "shared", "skills.yml");
+  let doc: Record<string, unknown>;
+  try {
+    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    doc = { skills: [] };
+  }
+  if (!Array.isArray(doc.skills)) doc.skills = [];
+  const catalog = doc.skills as unknown[];
+  const existing = new Set(
+    catalog
+      .map((skill: unknown) =>
+        skill && typeof skill === "object" && !Array.isArray(skill)
+          ? (skill as Record<string, unknown>).name
+          : undefined
+      )
+      .filter((name: unknown): name is string => typeof name === "string")
+  );
+  for (const skill of skills) {
+    if (!existing.has(skill.name)) {
+      catalog.push(skill.entry);
+      existing.add(skill.name);
+    }
+  }
+  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
+}
+
+async function enableSkillInProfile(root: string, targetProfile: string, skillName: string) {
+  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
+  let doc: Record<string, unknown>;
+  try {
+    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    doc = { name: targetProfile };
+  }
+  if (!Array.isArray(doc.skills)) doc.skills = [];
+  const profileSkills = doc.skills as unknown[];
+  if (!profileSkills.includes(skillName)) profileSkills.push(skillName);
+  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
+}
+
 export async function runSync(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  targetProfile?: string,
+  targetProfile?: string
 ): Promise<void> {
   const configsProfile = profileConfigsDir(paths, profile.name);
 
@@ -95,19 +160,20 @@ export async function runSync(
   const ocp = path.join(configsProfile, "opencode", "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
 
-  const [miseResult, opencodeResult, claudeResult] = await Promise.all([
+  const [miseResult, opencodeResult, claudeResult, skillCandidates] = await Promise.all([
     syncMise(mcp, profile),
     syncOpencode(ocp, profile),
     syncClaude(clp, profile),
+    syncSkills(paths.home, profile.manifests)
   ]);
 
   const candidates = [
     ...miseResult.candidates,
     ...opencodeResult.candidates,
-    ...claudeResult.candidates,
+    ...claudeResult.candidates
   ];
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && skillCandidates.length === 0) {
     console.log("No unmanaged keys found — everything is in sync.");
     return;
   }
@@ -116,6 +182,7 @@ export async function runSync(
   const uniqueProfiles = [...new Set(availableProfiles)];
 
   const manualMoves: { candidate: SyncCandidate; targetProfile: string }[] = [];
+  const skillMoves: { skill: UnknownSkill; targetProfile: string }[] = [];
 
   for (const candidate of candidates) {
     const chosen =
@@ -127,11 +194,33 @@ export async function runSync(
     }
   }
 
+  for (const skill of skillCandidates) {
+    const chosen =
+      targetProfile && uniqueProfiles.includes(targetProfile)
+        ? targetProfile
+        : await promptSkillUser(skill, uniqueProfiles);
+    if (chosen) {
+      skillMoves.push({ skill, targetProfile: chosen });
+    }
+  }
+
+  if (skillMoves.length > 0) {
+    await writeSkillsCatalog(
+      paths.root,
+      skillMoves.map(({ skill }) => skill)
+    );
+    console.log("  Updated shared/skills.yml");
+    for (const { skill, targetProfile } of skillMoves) {
+      await enableSkillInProfile(paths.root, targetProfile, skill.name);
+      console.log(`  Updated ${targetProfile}/profile.yml: skills.${skill.name}`);
+    }
+  }
+
   for (const { candidate, targetProfile } of manualMoves) {
     if (candidate.target === "mise") {
       await writeMiseToml(paths.root, targetProfile, candidate);
       console.log(
-        `  Updated ${targetProfile}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`,
+        `  Updated ${targetProfile}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`
       );
     } else {
       const yamlPath = path.join(paths.root, "profiles", targetProfile, "profile.yml");
@@ -148,7 +237,7 @@ export async function runSync(
       const yaml = YAML.stringify(doc, { lineWidth: 120 });
       await writeFile(yamlPath, yaml, "utf8");
       console.log(
-        `  Updated ${targetProfile}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`,
+        `  Updated ${targetProfile}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`
       );
     }
   }
