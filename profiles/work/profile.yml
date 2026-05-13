@@ -3,13 +3,13 @@ extends: base
 description: Work AI setup using OpenAI models.
 mcp:
   aws-knowledge:
-    enabled: true
+    enabled: false
   jira:
-    enabled: true
+    enabled: false
   confluence:
-    enabled: true
+    enabled: false
   datadog:
-    enabled: true
+    enabled: false
 opencode:
   config:
     agent:
