@@ -108,6 +108,12 @@ export interface LoadedManifests {
   machine: MachineManifest;
 }
 
+export interface ManifestValidationResult {
+  file: string;
+  ok: boolean;
+  error?: string;
+}
+
 async function exists(file: string): Promise<boolean> {
   try {
     await access(file);
@@ -121,6 +127,63 @@ export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: 
   if (!(await exists(file))) return fallback;
   const parsed = YAML.parse(await readFile(file, "utf8"));
   return schema.parse(parsed);
+}
+
+async function validateYamlFile<T>(
+  file: string,
+  schema: z.ZodType<T>
+): Promise<ManifestValidationResult | null> {
+  if (!(await exists(file))) return null;
+  try {
+    schema.parse(YAML.parse(await readFile(file, "utf8")));
+    return { file, ok: true };
+  } catch (error) {
+    return { file, ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function validateManifests(
+  root: string,
+  home?: string
+): Promise<ManifestValidationResult[]> {
+  const files: Array<{ file: string; schema: z.ZodType }> = [
+    { file: path.join(root, "shared", "refs.yml"), schema: refsManifestSchema },
+    { file: path.join(root, "shared", "skills.yml"), schema: skillsManifestSchema },
+    { file: path.join(root, "shared", "mcp.yml"), schema: mcpManifestSchema }
+  ];
+
+  const effectiveHome = home ?? process.env.HOME;
+  if (effectiveHome) {
+    files.push({
+      file: path.join(effectiveHome, ".mindframe-z", "config.yml"),
+      schema: machineSchema
+    });
+  }
+
+  const profilesDir = path.join(root, "profiles");
+  try {
+    for (const entry of await readdir(profilesDir)) {
+      const fullPath = path.join(profilesDir, entry);
+      let stat;
+      try {
+        stat = await lstat(fullPath);
+      } catch {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        files.push({ file: path.join(fullPath, "profile.yml"), schema: profileSchema });
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  const results: ManifestValidationResult[] = [];
+  for (const entry of files) {
+    const result = await validateYamlFile(entry.file, entry.schema);
+    if (result) results.push(result);
+  }
+  return results;
 }
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {

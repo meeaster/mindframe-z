@@ -4,6 +4,8 @@ import { mkdir } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
+import { generateSchemas } from "../core/generate-schemas.js";
+import { validateManifests } from "../core/manifests.js";
 import { createRuntimePaths, targetList, type ApplyTarget } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeRenderedFiles } from "../core/render.js";
@@ -106,14 +108,22 @@ async function doctor(options: {
   profile?: string | undefined;
 }): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
   console.log(`root\t${paths.root}`);
   console.log(`home\t${paths.home}`);
-  console.log(`profile\t${profile.name}`);
   console.log(`configs\t${paths.configsDir}`);
   console.log(`opencode config dir\t${paths.opencodeConfigDir}`);
   console.log(`claude dir\t${paths.claudeDir}`);
   console.log(`mise config dir\t${paths.miseConfigDir}`);
+  const manifestResults = await validateManifests(paths.root, paths.home);
+  const hasInvalidManifest = manifestResults.some((result) => !result.ok);
+  for (const result of manifestResults) {
+    console.log(`manifest:${result.ok ? "✓" : "✗"}\t${path.relative(paths.root, result.file)}`);
+    if (result.error) console.log(result.error);
+  }
+  if (hasInvalidManifest) return;
+
+  const profile = await resolveProfile(paths, options.profile);
+  console.log(`profile\t${profile.name}`);
   for (const target of targetList("all")) {
     const result = await renderTarget(paths, profile, target);
     for (const link of result.links) {
@@ -121,6 +131,10 @@ async function doctor(options: {
       console.log(`link:${status.state}\t${status.linkPath}\t${status.detail}`);
     }
   }
+}
+
+async function schemas(options: { root?: string | undefined }): Promise<void> {
+  for (const file of await generateSchemas(options.root)) console.log(`wrote\t${file}`);
 }
 
 async function statusFn(options: {
@@ -193,6 +207,11 @@ program
   .command("status")
   .description("Print resolved profile status")
   .action(async () => statusFn(program.opts()));
+
+program
+  .command("schemas")
+  .description("Generate JSON Schemas for YAML manifests")
+  .action(async () => schemas(program.opts()));
 
 program
   .command("sync")
