@@ -1,4 +1,4 @@
 [tools]
-websocat = "latest"
-"npm:executor" = "latest"
+websocat = "1"
+"npm:executor" = "1"
 
