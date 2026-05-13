@@ -1,6 +1,7 @@
 import { execa } from "execa";
+import path from "node:path";
 import type { ToolTarget } from "../core/paths.js";
-import { expandHome, type RuntimePaths } from "../core/paths.js";
+import type { RuntimePaths } from "../core/paths.js";
 import type { SkillEntry } from "../core/manifests.js";
 
 export function buildNpxSkillsCommand(
@@ -10,12 +11,11 @@ export function buildNpxSkillsCommand(
 ): string[] {
   const agent = target === "claude-code" ? "claude-code" : "opencode";
   if (skill.source === "local") {
-    if (!skill.path) throw new Error(`Local skill ${skill.name} is missing path`);
     return [
       "npx",
       "skills",
       "add",
-      expandHome(skill.path, paths.home),
+      path.join(paths.root, "skills"),
       ...(skill.skill ? ["--skill", skill.skill] : []),
       "-a",
       agent,

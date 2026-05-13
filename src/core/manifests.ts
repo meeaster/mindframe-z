@@ -19,7 +19,6 @@ export const refsManifestSchema = z.object({
 export const skillSchema = z.object({
   name: z.string().min(1),
   source: z.enum(["local", "git"]),
-  path: z.string().optional(),
   repo: z.string().optional(),
   skill: z.string().optional(),
   description: z.string().default(""),

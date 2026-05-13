@@ -11,7 +11,6 @@ skills:
 
   - name: homeassistant
     source: local
-    path: ~/code/mindframe-z/skills
     skill: homeassistant
     description: >
       Use when inspecting, scripting, testing, or troubleshooting Home Assistant through
@@ -40,7 +39,6 @@ skills:
 
   - name: mise
     source: local
-    path: ~/code/mindframe-z/skills
     skill: mise
     description: >
       Use when answering mise basics: installing or adding global tools, choosing a mise backend,
@@ -50,7 +48,6 @@ skills:
 
   - name: opencode-db
     source: local
-    path: ~/code/mindframe-z/skills
     skill: opencode-db
     description: >
       Use when safely inspecting or querying OpenCode's local database with `opencode db`,
