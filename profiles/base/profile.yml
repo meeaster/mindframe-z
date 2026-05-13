@@ -19,7 +19,7 @@ mcp:
   context7:
     enabled: true
   qmd:
-    enabled: true
+    enabled: false
   fff:
     enabled: true
   deepwiki:
