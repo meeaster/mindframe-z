@@ -12,10 +12,11 @@ mcp:
   aws-knowledge:
     enabled: false
 opencode:
-  agent:
-    explore:
-      model: opencode-go/deepseek-v4-flash
-      reasoningEffort: medium
+  config:
+    agent:
+      explore:
+        model: opencode-go/deepseek-v4-flash
+        reasoningEffort: medium
 claude:
   model: sonnet
   settings:
