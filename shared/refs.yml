@@ -17,3 +17,6 @@ references:
   - name: agent-vault
     url: https://github.com/Infisical/agent-vault.git
     description: Agent Vault - AI agent secret management by Infisical.
+  - name: datadog-agent
+    url: https://github.com/datadog/datadog-agent.git
+    description: Datadog Agent source and documentation.

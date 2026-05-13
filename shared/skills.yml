@@ -35,6 +35,15 @@ skills:
       adapting, animating, colorizing, extracting, or otherwise improving a frontend interface.
     targets:
       - opencode
+  - name: jira-writer
+    source: local
+    skill: jira-writer
+    description: >
+      Create clear, high-level Jira stories from notes, requirements, discovery, bug reports, or implementation ideas.
+      Use when drafting a Jira story, creating a Jira ticket, turning rough notes into Jira-ready work, or rewriting a
+      story so it is concise and actionable.
+    targets:
+      - opencode
   - name: mise
     source: local
     skill: mise
