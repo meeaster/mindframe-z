@@ -135,6 +135,7 @@ async function statusFn(options: {
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
   );
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
+  console.log(`commands\t${profile.enabledCommands.join(", ") || "none"}`);
   console.log(
     `mcp\t${profile.mcpServers.map((server) => `${server.name}:${server.enabled ? "enabled" : "disabled"}`).join(", ") || "none"}`
   );

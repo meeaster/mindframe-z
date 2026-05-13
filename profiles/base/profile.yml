@@ -30,3 +30,8 @@ opencode:
     opencode: https://github.com/anomalyco/opencode
 opencode_plugins:
   - mindframe-z-example
+commands:
+  - opsx-archive
+  - opsx-apply
+  - opsx-explore
+  - opsx-propose

@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { dedupe, expandHome, type RuntimePaths } from "./paths.js";
 import {
@@ -23,6 +24,7 @@ export interface ResolvedProfile {
   referencesDir: string;
   enabledReferences: ReferenceEntry[];
   enabledSkills: SkillEntry[];
+  enabledCommands: string[];
   mcpServers: ResolvedMcpServer[];
 }
 
@@ -65,6 +67,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
     skills: dedupe([...base.skills, ...child.skills]),
+    commands: dedupe([...base.commands, ...child.commands]),
     mcp: { ...base.mcp, ...child.mcp },
     opencode: deepMerge(base.opencode, child.opencode),
     opencode_plugins: dedupe([...base.opencode_plugins, ...child.opencode_plugins]),
@@ -113,6 +116,17 @@ export async function resolveProfile(
     if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
     return skill;
   });
+  const enabledCommands = dedupe(profile.commands);
+  for (const commandName of enabledCommands) {
+    try {
+      await access(path.join(paths.root, "opencode", "commands", `${commandName}.md`));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Profile ${name} references unknown command: ${commandName}`);
+      }
+      throw error;
+    }
+  }
   const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
@@ -129,6 +143,7 @@ export async function resolveProfile(
     ),
     enabledReferences,
     enabledSkills,
+    enabledCommands,
     mcpServers
   };
 }

@@ -48,6 +48,25 @@ async function collectPluginFiles(
   return files;
 }
 
+async function collectCommandFiles(
+  root: string,
+  configsOpencode: string,
+  commandNames: readonly string[]
+): Promise<RenderResult["files"]> {
+  const sourceDir = path.join(root, "opencode", "commands");
+  const files: RenderResult["files"] = [];
+
+  for (const commandName of commandNames) {
+    const fileName = `${commandName}.md`;
+    files.push({
+      path: path.join(configsOpencode, "commands", fileName),
+      content: await readFile(path.join(sourceDir, fileName), "utf8")
+    });
+  }
+
+  return files;
+}
+
 export async function renderOpenCode(
   paths: RuntimePaths,
   profile: ResolvedProfile
@@ -61,6 +80,11 @@ export async function renderOpenCode(
     profile.profile.opencode_plugins
   );
   const plugin = pluginFiles.map((file) => `file://${file.path}`);
+  const commandFiles = await collectCommandFiles(
+    paths.root,
+    configsOpencode,
+    profile.enabledCommands
+  );
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
     path.join(configsProfile, "references.md")
@@ -100,9 +124,13 @@ export async function renderOpenCode(
   };
 
   return {
-    files: [...pluginFiles, { path: configPath, content: toJsonc(config) }],
+    files: [...pluginFiles, ...commandFiles, { path: configPath, content: toJsonc(config) }],
     links: [
-      { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath }
+      { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "commands"),
+        targetPath: path.join(configsOpencode, "commands")
+      }
     ]
   };
 }
