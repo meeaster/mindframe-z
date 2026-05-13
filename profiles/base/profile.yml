@@ -18,6 +18,7 @@ skills:
   - openspec-archive-change
   - openspec-explore
   - openspec-propose
+  - openspec-sync-specs
   - skill-writer
 mcp:
   context7:
