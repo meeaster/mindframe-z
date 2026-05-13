@@ -8,6 +8,7 @@ references:
   - openspec
   - mise
 skills:
+  - gpt-5-5-prompting
   - impeccable
   - mise
   - opencode-db
