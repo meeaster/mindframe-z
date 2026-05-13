@@ -73,8 +73,7 @@ skills:
     source: git
     repo: https://github.com/modem-dev/hunk
     skill: hunk-review
-    description:
-      Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
+    description: Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
       reloads session contents, and adds inline review comments. Use when the user has a Hunk session running or wants
       to review diffs interactively.
     targets:
@@ -84,39 +83,48 @@ skills:
     source: local
     skill: openspec-apply-change
     description: >
-      Implement tasks from an OpenSpec change. Use when starting implementation, continuing implementation,
-      or working through tasks.
+      Implement tasks from an OpenSpec change. Use when starting implementation, continuing implementation, or working
+      through tasks.
     targets:
       - opencode
   - name: openspec-archive-change
     source: local
     skill: openspec-archive-change
     description: >
-      Archive a completed change in the experimental workflow. Use when finalizing and archiving a change
-      after implementation is complete.
+      Archive a completed change in the experimental workflow. Use when finalizing and archiving a change after
+      implementation is complete.
     targets:
       - opencode
   - name: openspec-explore
     source: local
     skill: openspec-explore
     description: >
-      Enter explore mode — a thinking partner for exploring ideas, investigating problems, and clarifying
-      requirements. Use when thinking through something before or during a change.
+      Enter explore mode — a thinking partner for exploring ideas, investigating problems, and clarifying requirements.
+      Use when thinking through something before or during a change.
     targets:
       - opencode
   - name: openspec-propose
     source: local
     skill: openspec-propose
     description: >
-      Propose a new change with all artifacts generated in one step. Use when quickly describing what to build
-      and getting a complete proposal with design, specs, and tasks ready for implementation.
+      Propose a new change with all artifacts generated in one step. Use when quickly describing what to build and
+      getting a complete proposal with design, specs, and tasks ready for implementation.
     targets:
       - opencode
   - name: openspec-sync-specs
     source: local
     skill: openspec-sync-specs
     description: >
-      Sync delta specs from a change to main specs. Use when updating main specs with changes from a delta spec,
-      without archiving the change.
+      Sync delta specs from a change to main specs. Use when updating main specs with changes from a delta spec, without
+      archiving the change.
     targets:
       - opencode
+  - name: pr-writer
+    source: git
+    repo: https://github.com/getsentry/skills
+    skill: pr-writer
+    description: Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
+      existing PR after material changes.
+    targets:
+      - opencode
+    installer: npx-skills

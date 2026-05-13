@@ -241,8 +241,7 @@ export async function runSync(
     return;
   }
 
-  const availableProfiles = ["base", profile.name];
-  const uniqueProfiles = [...new Set(availableProfiles)];
+  const availableProfiles = [...profile.manifests.profiles.keys()];
 
   const manualMoves: { candidate: SyncCandidate; targetProfile: string }[] = [];
   const skillMoves: { skill: UnknownSkill; targetProfile: string }[] = [];
@@ -250,9 +249,9 @@ export async function runSync(
 
   for (const candidate of candidates) {
     const chosen =
-      targetProfile && uniqueProfiles.includes(targetProfile)
+      targetProfile && availableProfiles.includes(targetProfile)
         ? targetProfile
-        : await promptUser(candidate, uniqueProfiles);
+        : await promptUser(candidate, availableProfiles);
     if (chosen) {
       manualMoves.push({ candidate, targetProfile: chosen });
     }
@@ -260,9 +259,9 @@ export async function runSync(
 
   for (const skill of skillCandidates) {
     const chosen =
-      targetProfile && uniqueProfiles.includes(targetProfile)
+      targetProfile && availableProfiles.includes(targetProfile)
         ? targetProfile
-        : await promptSkillUser(skill, uniqueProfiles);
+        : await promptSkillUser(skill, availableProfiles);
     if (chosen) {
       skillMoves.push({ skill, targetProfile: chosen });
     }
@@ -270,9 +269,9 @@ export async function runSync(
 
   for (const command of commandCandidates) {
     const chosen =
-      targetProfile && uniqueProfiles.includes(targetProfile)
+      targetProfile && availableProfiles.includes(targetProfile)
         ? targetProfile
-        : await promptCommandUser(command, uniqueProfiles);
+        : await promptCommandUser(command, availableProfiles);
     if (chosen) {
       commandMoves.push({ command, targetProfile: chosen });
     }
