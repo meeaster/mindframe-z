@@ -103,3 +103,11 @@ skills:
       and getting a complete proposal with design, specs, and tasks ready for implementation.
     targets:
       - opencode
+  - name: openspec-sync-specs
+    source: local
+    skill: openspec-sync-specs
+    description: >
+      Sync delta specs from a change to main specs. Use when updating main specs with changes from a delta spec,
+      without archiving the change.
+    targets:
+      - opencode
