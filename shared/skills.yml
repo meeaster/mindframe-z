@@ -4,63 +4,69 @@ skills:
     repo: https://github.com/homeassistant-ai/skills
     skill: home-assistant-best-practices
     description: >
-      Best practices for HA automations, helpers, scripts, device controls, and dashboards.
-      Use when creating/editing automations, scripts, scenes, dashboards, helpers, Zigbee
-      button/remote automations, entity renames, or Home Assistant dashboard cards.
-    targets: [opencode]
-
+      Best practices for HA automations, helpers, scripts, device controls, and dashboards. Use when creating/editing
+      automations, scripts, scenes, dashboards, helpers, Zigbee button/remote automations, entity renames, or Home
+      Assistant dashboard cards.
+    targets:
+      - opencode
   - name: homeassistant
     source: local
     skill: homeassistant
     description: >
-      Use when inspecting, scripting, testing, or troubleshooting Home Assistant through
-      CLI-accessible HTTP or WebSocket APIs, including curl, inline Python with uv,
-      authentication, service calls, events, entity registry work, or voice-assistant exposure.
-    targets: [opencode]
-
+      Use when inspecting, scripting, testing, or troubleshooting Home Assistant through CLI-accessible HTTP or
+      WebSocket APIs, including curl, inline Python with uv, authentication, service calls, events, entity registry
+      work, or voice-assistant exposure.
+    targets:
+      - opencode
   - name: gpt-5-5-prompting
     source: local
     skill: gpt-5-5-prompting
     description: >
-      Use when creating, reviewing, migrating, or tightening prompts for GPT-5.5, especially
-      outcome-first goals, concise style controls, retrieval budgets, preambles, phase handling,
-      validation loops, or prompt structure.
-    targets: [opencode]
-
+      Use when creating, reviewing, migrating, or tightening prompts for GPT-5.5, especially outcome-first goals,
+      concise style controls, retrieval budgets, preambles, phase handling, validation loops, or prompt structure.
+    targets:
+      - opencode
   - name: impeccable
     source: git
     repo: https://github.com/pbakaus/impeccable
     skill: impeccable
     description: >
-      Use when designing, redesigning, shaping, critiquing, auditing, polishing, clarifying,
-      hardening, optimizing, adapting, animating, colorizing, extracting, or otherwise improving
-      a frontend interface.
-    targets: [opencode]
-
+      Use when designing, redesigning, shaping, critiquing, auditing, polishing, clarifying, hardening, optimizing,
+      adapting, animating, colorizing, extracting, or otherwise improving a frontend interface.
+    targets:
+      - opencode
   - name: mise
     source: local
     skill: mise
     description: >
-      Use when answering mise basics: installing or adding global tools, choosing a mise backend,
-      managing global mise environment variables, checking mise config, or giving concise mise
-      command guidance.
-    targets: [opencode]
-
+      Use when answering mise basics: installing or adding global tools, choosing a mise backend, managing global mise
+      environment variables, checking mise config, or giving concise mise command guidance.
+    targets:
+      - opencode
   - name: opencode-db
     source: local
     skill: opencode-db
     description: >
-      Use when safely inspecting or querying OpenCode's local database with `opencode db`,
-      including sessions, messages, projects, workspaces, tool calls, skill/MCP usage,
-      subagents, or prior assistant behavior.
-    targets: [opencode]
-
+      Use when safely inspecting or querying OpenCode's local database with `opencode db`, including sessions, messages,
+      projects, workspaces, tool calls, skill/MCP usage, subagents, or prior assistant behavior.
+    targets:
+      - opencode
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills
     skill: skill-writer
     description: >
-      Create, synthesize, and iteratively improve agent skills following the Agent Skills
-      specification. Use when asked to create, write, synthesize, improve, update, or maintain
-      skill docs and registration.
-    targets: [opencode]
+      Create, synthesize, and iteratively improve agent skills following the Agent Skills specification. Use when asked
+      to create, write, synthesize, improve, update, or maintain skill docs and registration.
+    targets:
+      - opencode
+  - name: hunk-review
+    source: git
+    repo: https://github.com/modem-dev/hunk
+    skill: hunk-review
+    description: Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
+      reloads session contents, and adds inline review comments. Use when the user has a Hunk session running or wants
+      to review diffs interactively.
+    targets:
+      - opencode
+    installer: npx-skills
