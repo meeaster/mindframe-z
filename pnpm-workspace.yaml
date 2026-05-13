@@ -1,0 +1,7 @@
+blockExoticSubdeps: true
+minimumReleaseAge: 4320
+trustPolicy: no-downgrade
+strictDepBuilds: true
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true

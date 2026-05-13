@@ -5,13 +5,13 @@ Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles
 ## Commands
 
 ```sh
-npm install
-npm run build
-npm test
-npm run dev -- doctor
-npm run dev -- apply --profile personal --target all --dry-run
-npm run dev -- smoke-opencode --home /tmp/mindframe-z-home
-npm run dev -- refs list
+pnpm install
+pnpm build
+pnpm test
+pnpm dev -- doctor
+pnpm dev -- apply --profile personal --target all --dry-run
+pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
+pnpm dev -- refs list
 ```
 
 By default, commands use the current repository as the config root. Override with `--root <path>` or `MFZ_ROOT`.

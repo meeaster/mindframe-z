@@ -5,18 +5,18 @@ Read `ARCHITECTURE.md` before making any architectural changes or decisions. Any
 ## Commands
 
 ```sh
-npm run build          # tsc → dist/
-npm test               # vitest run
-npm run test:integration  # vitest run tests/integration
-npm run lint           # oxlint
-npm run fmt            # oxfmt
-npm run check          # lint → fmt:check → build → test (run this before committing)
-npm run schemas        # regenerate schemas/*.schema.json from Zod manifest schemas
-npm run dev -- doctor
-npm run dev -- refs list
+pnpm build          # tsc → dist/
+pnpm test               # vitest run
+pnpm test:integration  # vitest run tests/integration
+pnpm lint           # oxlint
+pnpm fmt            # oxfmt
+pnpm check          # lint → fmt:check → build → test (run this before committing)
+pnpm schemas        # regenerate schemas/*.schema.json from Zod manifest schemas
+pnpm dev -- doctor
+pnpm dev -- refs list
 ```
 
-`npm run dev` uses `tsx` for development. The compiled entry point in `bin/mindframe-z` imports from `dist/` — build first before using the binary.
+`pnpm dev` uses `tsx` for development. The compiled entry point in `bin/mindframe-z` imports from `dist/` — build first before using the binary.
 
 After `mindframe-z apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
 
