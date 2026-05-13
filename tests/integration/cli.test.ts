@@ -8,7 +8,7 @@ const projectRoot = path.resolve(import.meta.dirname, "../..");
 
 async function makeTempDir(): Promise<string> {
   return await import("node:fs/promises").then((fs) =>
-    fs.mkdtemp(path.join(os.tmpdir(), "mindframe-z-test-")),
+    fs.mkdtemp(path.join(os.tmpdir(), "mindframe-z-test-"))
   );
 }
 
@@ -28,9 +28,9 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "    },",
       "  };",
       "};",
-      "",
+      ""
     ].join("\n"),
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "shared", "refs.yml"),
@@ -39,9 +39,9 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  - name: local-ref",
       "    url: https://example.invalid/local-ref.git",
       "    description: Local test reference.",
-      "",
+      ""
     ].join("\n"),
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "shared", "skills.yml"),
@@ -53,9 +53,9 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "    description: Local test skill.",
       "    targets: [opencode, claude-code]",
       "    installer: npx-skills",
-      "",
+      ""
     ].join("\n"),
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "shared", "mcp.yml"),
@@ -67,24 +67,24 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "    type: remote",
       "    transport: http",
       "    url: https://mcp.context7.com/mcp",
-      "",
+      ""
     ].join("\n"),
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "profiles", "base", "profile.yml"),
     ["name: base", "mcp:", "  context7:", "    enabled: true", ""].join("\n"),
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "profiles", "base", "mise.toml"),
     '[tools]\njq = "latest"\n',
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "profiles", "base", ".npmrc"),
     "min-release-age=3\nminimum-release-age=4320\n",
-    "utf8",
+    "utf8"
   );
   await writeFile(
     path.join(root, "profiles", "personal", "profile.yml"),
@@ -109,9 +109,9 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  model: sonnet",
       "  settings:",
       "    includeGitInstructions: true",
-      "",
+      ""
     ].join("\n"),
-    "utf8",
+    "utf8"
   );
   if (home) {
     const cfgDir = path.join(home, ".mindframe-z");
@@ -119,7 +119,7 @@ async function writeFixture(root: string, home?: string): Promise<void> {
     await writeFile(
       path.join(cfgDir, "config.yml"),
       ["profile: personal", "references_dir: ~/references", ""].join("\n"),
-      "utf8",
+      "utf8"
     );
   }
 }
@@ -130,7 +130,7 @@ function cli(
   home: string,
   args: string[],
   env: NodeJS.ProcessEnv = {},
-  input?: string,
+  input?: string
 ) {
   const options: Record<string, unknown> = {
     cwd: projectRoot,
@@ -140,8 +140,8 @@ function cli(
       MFZ_HOME: home,
       OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
-      ...env,
-    },
+      ...env
+    }
   };
   if (input !== undefined) options.input = input;
   return execa(
@@ -154,9 +154,9 @@ function cli(
       root,
       "--home",
       home,
-      ...args,
+      ...args
     ],
-    options,
+    options
   );
 }
 
@@ -181,28 +181,28 @@ describe("CLI integration", () => {
 
     const opencode = await readFile(
       path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
-      "utf8",
+      "utf8"
     );
     expect(opencode).toContain("https://opencode.ai/config.json");
     expect(opencode).toContain("context7");
     expect(
       await readFile(
         path.join(root, "configs", "personal", "opencode", "plugins", "config-marker.ts"),
-        "utf8",
-      ),
+        "utf8"
+      )
     ).toContain("mindframe-z-plugin-loaded");
 
     const claude = await readFile(
       path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
-      "utf8",
+      "utf8"
     );
     expect(claude).toContain("@" + path.join(root, "configs", "personal", "AGENTS.md"));
 
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc")
     );
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
-      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      path.join(root, "configs", "personal", "claude", "CLAUDE.md")
     );
   });
 
@@ -221,9 +221,9 @@ describe("CLI integration", () => {
         `      ${workDir}/**: allow`,
         "    edit:",
         `      ${referencesDir}/**: deny`,
-        "",
+        ""
       ].join("\n"),
-      "utf8",
+      "utf8"
     );
 
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "opencode"]);
@@ -231,7 +231,7 @@ describe("CLI integration", () => {
 
     const opencode = await readFile(
       path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
-      "utf8",
+      "utf8"
     );
     expect(opencode).toContain("permission");
     expect(opencode).toContain(workDir);
@@ -244,7 +244,7 @@ describe("CLI integration", () => {
 
     const mise = await readFile(
       path.join(root, "configs", "personal", "mise", "config.toml"),
-      "utf8",
+      "utf8"
     );
     expect(mise).toContain('jq = "latest"');
   });
@@ -254,12 +254,12 @@ describe("CLI integration", () => {
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
 
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
-      MFZ_REPLACE_EXISTING: "yes",
+      MFZ_REPLACE_EXISTING: "yes"
     });
 
     expect(result.stdout).toContain("backed up");
     await expect(realpath(path.join(home, ".claude", "settings.json"))).resolves.toBe(
-      path.join(root, "configs", "personal", "claude", "settings.json"),
+      path.join(root, "configs", "personal", "claude", "settings.json")
     );
 
     const entries = await readdir(path.join(home, ".claude"));
@@ -271,7 +271,7 @@ describe("CLI integration", () => {
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
 
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
-      MFZ_REPLACE_EXISTING: "no",
+      MFZ_REPLACE_EXISTING: "no"
     });
 
     expect(result.stdout).toContain("skipped");
@@ -288,7 +288,7 @@ describe("CLI integration", () => {
   it("uses MFZ_REFERENCES_DIR as the reference clone directory", async () => {
     const referencesDir = path.join(home, "custom-reference-cache");
     const result = await cli("mindframe-z", root, home, ["refs", "list"], {
-      MFZ_REFERENCES_DIR: referencesDir,
+      MFZ_REFERENCES_DIR: referencesDir
     });
 
     expect(result.stdout).toContain(`${referencesDir}/local-ref`);
@@ -320,19 +320,70 @@ describe("CLI integration", () => {
     expect(miseAfter).toContain('jq = "latest"');
   });
 
+  it("sync detects unmanaged git skills and promotes them to the chosen profile", async () => {
+    await mkdir(path.join(home, ".agents", "skills", "remote-skill"), { recursive: true });
+    await writeFile(
+      path.join(home, ".agents", ".skill-lock.json"),
+      JSON.stringify(
+        {
+          version: 3,
+          skills: {
+            "remote-skill": {
+              source: "example/skills",
+              sourceType: "github",
+              sourceUrl: "https://github.com/example/skills.git",
+              skillPath: "skills/remote-skill/SKILL.md"
+            }
+          }
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    await writeFile(
+      path.join(home, ".agents", "skills", "remote-skill", "SKILL.md"),
+      ["---", "description: Remote test skill.", "---", "", "# Remote Skill", ""].join("\n"),
+      "utf8"
+    );
+
+    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "personal\n");
+    expect(syncResult.stdout).toContain(
+      "Unmanaged skill: remote-skill (https://github.com/example/skills)"
+    );
+    expect(syncResult.stdout).toContain("Updated shared/skills.yml");
+    expect(syncResult.stdout).toContain("Updated personal/profile.yml: skills.remote-skill");
+
+    const skillsYaml = await readFile(path.join(root, "shared", "skills.yml"), "utf8");
+    expect(skillsYaml).toContain("name: remote-skill");
+    expect(skillsYaml).toContain("repo: https://github.com/example/skills");
+    expect(skillsYaml).toContain("skill: remote-skill");
+    expect(skillsYaml).toContain("description: Remote test skill.");
+    expect(skillsYaml).toContain("targets:");
+    expect(skillsYaml).toContain("- opencode");
+    expect(skillsYaml).toContain("installer: npx-skills");
+
+    const profileYaml = await readFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "utf8"
+    );
+    expect(profileYaml).toContain("- local-skill");
+    expect(profileYaml).toContain("- remote-skill");
+  });
+
   it("renders and links .npmrc dotfile from profile folder", async () => {
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
     const npmrc = await readFile(
       path.join(root, "configs", "personal", "dotfiles", ".npmrc"),
-      "utf8",
+      "utf8"
     );
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
 
     await expect(realpath(path.join(home, ".npmrc"))).resolves.toBe(
-      path.join(root, "configs", "personal", "dotfiles", ".npmrc"),
+      path.join(root, "configs", "personal", "dotfiles", ".npmrc")
     );
   });
 
@@ -341,7 +392,7 @@ describe("CLI integration", () => {
     await writeFile(
       path.join(root, "profiles", "personal", ".npmrc"),
       "minimum-release-age-exclude[]=test-pkg\n",
-      "utf8",
+      "utf8"
     );
 
     const result = await cli("mindframe-z", root, home, ["apply", "--target", "dotfiles"]);
@@ -349,7 +400,7 @@ describe("CLI integration", () => {
 
     const npmrc = await readFile(
       path.join(root, "configs", "personal", "dotfiles", ".npmrc"),
-      "utf8",
+      "utf8"
     );
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
