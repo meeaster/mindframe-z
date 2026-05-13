@@ -15,6 +15,7 @@ async function makeTempDir(): Promise<string> {
 async function writeFixture(root: string, home?: string): Promise<void> {
   await mkdir(path.join(root, "shared"), { recursive: true });
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
+  await mkdir(path.join(root, "opencode", "commands"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
   await writeFile(path.join(root, "shared", "AGENTS.global.md"), "# Test Agents\n", "utf8");
@@ -30,6 +31,11 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "};",
       ""
     ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "opencode", "commands", "test-cmd.md"),
+    ["---", "description: Test command.", "---", "", "Run the test command.", ""].join("\n"),
     "utf8"
   );
   await writeFile(
@@ -97,6 +103,8 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  - local-ref",
       "skills:",
       "  - local-skill",
+      "commands:",
+      "  - test-cmd",
       "mcp:",
       "  context7:",
       "    enabled: true",
@@ -190,6 +198,12 @@ describe("CLI integration", () => {
         "utf8"
       )
     ).toContain("mindframe-z-plugin-loaded");
+    expect(
+      await readFile(
+        path.join(root, "configs", "personal", "opencode", "commands", "test-cmd.md"),
+        "utf8"
+      )
+    ).toContain("Run the test command.");
 
     const claude = await readFile(
       path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
@@ -199,6 +213,9 @@ describe("CLI integration", () => {
 
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
       path.join(root, "configs", "personal", "opencode", "opencode.jsonc")
+    );
+    await expect(realpath(path.join(home, ".config", "opencode", "commands"))).resolves.toBe(
+      path.join(root, "configs", "personal", "opencode", "commands")
     );
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
       path.join(root, "configs", "personal", "claude", "CLAUDE.md")
@@ -368,6 +385,58 @@ describe("CLI integration", () => {
     );
     expect(profileYaml).toContain("- local-skill");
     expect(profileYaml).toContain("- remote-skill");
+  });
+
+  it("prints enabled commands in status output", async () => {
+    const result = await cli("mindframe-z", root, home, ["status"]);
+    expect(result.stdout).toContain("commands\ttest-cmd");
+  });
+
+  it("throws when a profile references a missing command file", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "commands:", "  - missing-cmd", ""].join("\n"),
+      "utf8"
+    );
+
+    await expect(cli("mindframe-z", root, home, ["status"])).rejects.toMatchObject({
+      stderr: expect.stringContaining("Profile personal references unknown command: missing-cmd")
+    });
+  });
+
+  it("merges and deduplicates commands from parent and child profiles", async () => {
+    await writeFile(
+      path.join(root, "opencode", "commands", "base-cmd.md"),
+      "Base command.\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "commands:", "  - base-cmd", "  - test-cmd", ""].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mindframe-z", root, home, ["status"]);
+    expect(result.stdout).toContain("commands\tbase-cmd, test-cmd");
+  });
+
+  it("sync detects unmanaged commands and promotes them to the chosen profile", async () => {
+    await writeFile(
+      path.join(root, "opencode", "commands", "new-cmd.md"),
+      "New command.\n",
+      "utf8"
+    );
+
+    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "personal\n");
+    expect(syncResult.stdout).toContain("Unmanaged command: new-cmd");
+    expect(syncResult.stdout).toContain("Updated personal/profile.yml: commands.new-cmd");
+
+    const profileYaml = await readFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "utf8"
+    );
+    expect(profileYaml).toContain("- test-cmd");
+    expect(profileYaml).toContain("- new-cmd");
   });
 
   it("renders and links .npmrc dotfile from profile folder", async () => {

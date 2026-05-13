@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import * as readline from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
@@ -149,6 +149,65 @@ async function enableSkillInProfile(root: string, targetProfile: string, skillNa
   await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
 }
 
+interface UnknownCommand {
+  name: string;
+}
+
+async function syncCommands(
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<UnknownCommand[]> {
+  let entries;
+  try {
+    entries = await readdir(path.join(paths.root, "opencode", "commands"), { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+
+  const enabled = new Set(profile.enabledCommands);
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => ({ name: entry.name.slice(0, -3) }))
+    .filter((command) => !enabled.has(command.name));
+}
+
+async function promptCommandUser(
+  command: UnknownCommand,
+  profileNames: string[]
+): Promise<string | null> {
+  const rl = readline.createInterface({ input: processStdin, output: processStdout });
+  try {
+    const options = profileNames.join(", ");
+    const answer = await rl.question(
+      `Unmanaged command: ${command.name}\n  Add to [${options}, skip]: `
+    );
+    const trimmed = answer.trim().toLowerCase();
+    if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
+    if (profileNames.includes(trimmed)) return trimmed;
+    const match = profileNames.find((n) => n.startsWith(trimmed));
+    if (match) return match;
+    console.log(`  Unknown profile "${trimmed}". Use: ${options}, skip`);
+    return null;
+  } finally {
+    rl.close();
+  }
+}
+
+async function enableCommandInProfile(root: string, targetProfile: string, commandName: string) {
+  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
+  let doc: Record<string, unknown>;
+  try {
+    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    doc = { name: targetProfile };
+  }
+  if (!Array.isArray(doc.commands)) doc.commands = [];
+  const profileCommands = doc.commands as unknown[];
+  if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
+  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
+}
+
 export async function runSync(
   paths: RuntimePaths,
   profile: ResolvedProfile,
@@ -160,12 +219,14 @@ export async function runSync(
   const ocp = path.join(configsProfile, "opencode", "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
 
-  const [miseResult, opencodeResult, claudeResult, skillCandidates] = await Promise.all([
-    syncMise(mcp, profile),
-    syncOpencode(ocp, profile),
-    syncClaude(clp, profile),
-    syncSkills(paths.home, profile.manifests)
-  ]);
+  const [miseResult, opencodeResult, claudeResult, skillCandidates, commandCandidates] =
+    await Promise.all([
+      syncMise(mcp, profile),
+      syncOpencode(ocp, profile),
+      syncClaude(clp, profile),
+      syncSkills(paths.home, profile.manifests),
+      syncCommands(paths, profile)
+    ]);
 
   const candidates = [
     ...miseResult.candidates,
@@ -173,7 +234,7 @@ export async function runSync(
     ...claudeResult.candidates
   ];
 
-  if (candidates.length === 0 && skillCandidates.length === 0) {
+  if (candidates.length === 0 && skillCandidates.length === 0 && commandCandidates.length === 0) {
     console.log("No unmanaged keys found — everything is in sync.");
     return;
   }
@@ -183,6 +244,7 @@ export async function runSync(
 
   const manualMoves: { candidate: SyncCandidate; targetProfile: string }[] = [];
   const skillMoves: { skill: UnknownSkill; targetProfile: string }[] = [];
+  const commandMoves: { command: UnknownCommand; targetProfile: string }[] = [];
 
   for (const candidate of candidates) {
     const chosen =
@@ -204,6 +266,16 @@ export async function runSync(
     }
   }
 
+  for (const command of commandCandidates) {
+    const chosen =
+      targetProfile && uniqueProfiles.includes(targetProfile)
+        ? targetProfile
+        : await promptCommandUser(command, uniqueProfiles);
+    if (chosen) {
+      commandMoves.push({ command, targetProfile: chosen });
+    }
+  }
+
   if (skillMoves.length > 0) {
     await writeSkillsCatalog(
       paths.root,
@@ -214,6 +286,11 @@ export async function runSync(
       await enableSkillInProfile(paths.root, targetProfile, skill.name);
       console.log(`  Updated ${targetProfile}/profile.yml: skills.${skill.name}`);
     }
+  }
+
+  for (const { command, targetProfile } of commandMoves) {
+    await enableCommandInProfile(paths.root, targetProfile, command.name);
+    console.log(`  Updated ${targetProfile}/profile.yml: commands.${command.name}`);
   }
 
   for (const { candidate, targetProfile } of manualMoves) {

@@ -53,7 +53,7 @@ machine config ────┤               claude,       claude/              
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
 2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent).
 3. **Render** — for each target, the renderer produces files and link plans:
-   - **opencode**: `opencode.jsonc` + plugin files, linked to `~/.config/opencode/opencode.jsonc`
+   - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
    - **claude-code**: `CLAUDE.md` + `settings.json`, linked to `~/.claude/`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
@@ -110,7 +110,9 @@ mindframe-z/
 │   ├── skills/                # npx skills adapter
 │   └── cli/mindframe-z.ts     # CLI: apply, doctor, status, sync, skills, refs
 │
-├── opencode/plugins/          # OpenCode plugin source files
+├── opencode/
+│   ├── plugins/               # OpenCode plugin source files
+│   └── commands/              # OpenCode slash command markdown files
 ├── skills/                    # Local skill source directories
 └── machine/                   # Per-machine overrides (gitignored)
 ```
@@ -124,6 +126,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `instructions`     | Concatenate + deduplicate                       |
 | `references`       | Concatenate + deduplicate                       |
 | `skills`           | Concatenate + deduplicate                       |
+| `commands`         | Concatenate + deduplicate                       |
 | `opencode_plugins` | Concatenate + deduplicate                       |
 | `mcp`              | Deep merge — child keys override parent         |
 | `opencode`         | Deep merge — child keys override parent         |
@@ -163,6 +166,7 @@ Features from the design that are not yet implemented:
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.
+- **OpenCode commands are profile-selected files**: Profiles list command names in `commands`; matching `opencode/commands/<name>.md` files render to `configs/<profile>/opencode/commands/` and are exposed through the global OpenCode commands directory symlink.
 
 ## Environment Variables
 
