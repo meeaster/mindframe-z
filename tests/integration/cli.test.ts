@@ -49,7 +49,6 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "skills:",
       "  - name: local-skill",
       "    source: local",
-      "    path: ~/skills/local-skill",
       "    description: Local test skill.",
       "    targets: [opencode, claude-code]",
       "    installer: npx-skills",
