@@ -37,16 +37,54 @@ export function buildNpxSkillsCommand(
   ];
 }
 
+export function buildNpxSkillsUpdateCommand(skill: SkillEntry): string[] | null {
+  if (skill.source === "local") return null;
+  return ["npx", "skills", "update", skill.name, "-g", "-y"];
+}
+
+export async function listInstalledSkills(): Promise<Set<string>> {
+  const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], { timeout: 30000 });
+  const skills = JSON.parse(stdout) as { name: string }[];
+  return new Set(skills.map((s) => s.name));
+}
+
+async function runCommand(command: string[], emptyCommandMessage: string): Promise<string> {
+  const [binary, ...args] = command;
+  if (!binary) throw new Error(emptyCommandMessage);
+  await execa(binary, args, { stdio: "inherit" });
+  return command.join(" ");
+}
+
 export async function applySkill(
+  paths: RuntimePaths,
+  skill: SkillEntry,
+  target: ToolTarget,
+  dryRun: boolean,
+  installedSkills?: ReadonlySet<string>
+): Promise<string> {
+  const command = buildNpxSkillsCommand(paths, skill, target);
+  if (dryRun) return command.join(" ");
+
+  if ((installedSkills ?? (await listInstalledSkills())).has(skill.name)) {
+    return `skipped: ${skill.name} (already installed)`;
+  }
+
+  return runCommand(command, "No skills command generated");
+}
+
+export async function updateSkill(
   paths: RuntimePaths,
   skill: SkillEntry,
   target: ToolTarget,
   dryRun: boolean
 ): Promise<string> {
-  const command = buildNpxSkillsCommand(paths, skill, target);
-  if (dryRun) return command.join(" ");
-  const [binary, ...args] = command;
-  if (!binary) throw new Error("No skills command generated");
-  await execa(binary, args, { stdio: "inherit" });
-  return command.join(" ");
+  const updateCommand = buildNpxSkillsUpdateCommand(skill);
+  if (!updateCommand) {
+    const command = buildNpxSkillsCommand(paths, skill, target);
+    if (dryRun) return command.join(" ");
+    return runCommand(command, "No skills command generated");
+  }
+
+  if (dryRun) return updateCommand.join(" ");
+  return runCommand(updateCommand, "No skills update command generated");
 }

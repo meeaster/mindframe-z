@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNpxSkillsCommand } from "./npx-skills.js";
+import { buildNpxSkillsCommand, buildNpxSkillsUpdateCommand } from "./npx-skills.js";
 
 describe("buildNpxSkillsCommand", () => {
   it("builds local skill commands from repo skills directory", () => {
@@ -71,5 +71,34 @@ describe("buildNpxSkillsCommand", () => {
       "-g",
       "-y"
     ]);
+  });
+});
+
+describe("buildNpxSkillsUpdateCommand", () => {
+  it("returns null for local skills", () => {
+    const command = buildNpxSkillsUpdateCommand({
+      name: "mise",
+      source: "local",
+      skill: "mise",
+      description: "",
+      targets: ["opencode"],
+      installer: "npx-skills"
+    });
+
+    expect(command).toBeNull();
+  });
+
+  it("builds git skill update commands", () => {
+    const command = buildNpxSkillsUpdateCommand({
+      name: "skill-writer",
+      source: "git",
+      repo: "https://github.com/getsentry/skills",
+      skill: "skill-writer",
+      description: "",
+      targets: ["opencode"],
+      installer: "npx-skills"
+    });
+
+    expect(command).toEqual(["npx", "skills", "update", "skill-writer", "-g", "-y"]);
   });
 });

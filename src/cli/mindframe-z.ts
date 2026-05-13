@@ -11,7 +11,7 @@ import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeRenderedFiles } from "../core/render.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
-import { applySkill } from "../skills/npx-skills.js";
+import { applySkill, listInstalledSkills, updateSkill } from "../skills/npx-skills.js";
 import { runSync } from "../sync/index.js";
 
 async function confirmReplace(
@@ -259,8 +259,23 @@ skills
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
     const target = options.target as "opencode" | "claude-code";
+    const installedSkills = options.dryRun ? undefined : await listInstalledSkills();
     for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
-      console.log(await applySkill(paths, skill, target, options.dryRun ?? false));
+      console.log(await applySkill(paths, skill, target, options.dryRun ?? false, installedSkills));
+    }
+  });
+
+skills
+  .command("update")
+  .description("Update profile-enabled skills with npx skills")
+  .option("--target <target>", "opencode or claude-code", "opencode")
+  .option("--dry-run", "print npx skills commands without running them")
+  .action(async (options) => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+    const target = options.target as "opencode" | "claude-code";
+    for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
+      console.log(await updateSkill(paths, skill, target, options.dryRun ?? false));
     }
   });
 
