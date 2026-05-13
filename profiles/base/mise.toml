@@ -26,6 +26,7 @@ yamllint = "1"
 "npm:@tobilu/qmd" = "2"
 "npm:@fission-ai/openspec" = "1"
 "github:Infisical/agent-vault" = "0"
+"github:kitlangton/ghui" = "0"
 
 [settings]
 minimum_release_age = "3d"
