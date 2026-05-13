@@ -11,3 +11,6 @@ references:
   - name: hunk
     url: https://github.com/modem-dev/hunk.git
     description: Hunk interactive diff review tool.
+  - name: vercel-skills
+    url: https://github.com/vercel-labs/skills.git
+    description: Vercel AI SDK skills and tooling reference.
