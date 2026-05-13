@@ -10,9 +10,7 @@ mcp:
     enabled: true
   datadog:
     enabled: true
-  pinescript-docs:
-    enabled: false
-opencode:
+  opencode:
   agent:
     explore:
       model: openai/gpt-5.4-mini
