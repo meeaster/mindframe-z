@@ -8,3 +8,6 @@ references:
   - name: mise
     url: https://github.com/jdx/mise.git
     description: Mise tool version manager and documentation.
+  - name: hunk
+    url: https://github.com/modem-dev/hunk.git
+    description: Hunk interactive diff review tool.
