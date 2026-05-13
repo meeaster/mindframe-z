@@ -395,6 +395,30 @@ describe("CLI integration", () => {
     expect(result.stdout).toContain("commands\ttest-cmd");
   });
 
+  it("doctor reports valid manifests", async () => {
+    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    expect(result.stdout).toContain("manifest:✓\tshared/refs.yml");
+    expect(result.stdout).toContain("manifest:✓\tshared/skills.yml");
+    expect(result.stdout).toContain("manifest:✓\tshared/mcp.yml");
+    expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
+  });
+
+  it("doctor reports invalid manifests without throwing", async () => {
+    await writeFile(
+      path.join(root, "shared", "mcp.yml"),
+      ["servers:", "  broken:", "    type: websocket", "    url: https://example.invalid", ""].join(
+        "\n"
+      ),
+      "utf8"
+    );
+
+    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    expect(result.stdout).toContain("manifest:✗\tshared/mcp.yml");
+    expect(result.stdout).toContain("Invalid input");
+    expect(result.stdout).toContain("remote");
+    expect(result.stdout).toContain("local");
+  });
+
   it("throws when a profile references a missing command file", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
