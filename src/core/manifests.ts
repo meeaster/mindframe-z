@@ -9,11 +9,11 @@ const targetSchema = z.enum(["opencode", "claude-code"]);
 export const referenceSchema = z.object({
   name: z.string().min(1),
   url: z.string().min(1),
-  description: z.string().default(""),
+  description: z.string().default("")
 });
 
 export const refsManifestSchema = z.object({
-  references: z.array(referenceSchema).default([]),
+  references: z.array(referenceSchema).default([])
 });
 
 export const skillSchema = z.object({
@@ -24,11 +24,11 @@ export const skillSchema = z.object({
   skill: z.string().optional(),
   description: z.string().default(""),
   targets: z.array(targetSchema).default(["opencode", "claude-code"]),
-  installer: z.literal("npx-skills").default("npx-skills"),
+  installer: z.literal("npx-skills").default("npx-skills")
 });
 
 export const skillsManifestSchema = z.object({
-  skills: z.array(skillSchema).default([]),
+  skills: z.array(skillSchema).default([])
 });
 
 const mcpServerBaseSchema = z.object({
@@ -37,16 +37,16 @@ const mcpServerBaseSchema = z.object({
   type: z.enum(["remote", "local"]),
   transport: z.enum(["http", "sse", "stdio"]).optional(),
   env: z.record(z.string(), z.string()).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional()
 });
 
 export const mcpServerSchema = z.union([
   mcpServerBaseSchema.extend({ type: z.literal("remote"), url: z.string().min(1) }),
-  mcpServerBaseSchema.extend({ type: z.literal("local"), command: z.array(z.string()).min(1) }),
+  mcpServerBaseSchema.extend({ type: z.literal("local"), command: z.array(z.string()).min(1) })
 ]);
 
 export const mcpManifestSchema = z.object({
-  servers: z.record(z.string(), mcpServerSchema).default({}),
+  servers: z.record(z.string(), mcpServerSchema).default({})
 });
 
 const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
@@ -54,7 +54,7 @@ const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown(
 const miseTomlSchema = z.object({
   tools: z.record(z.string(), miseToolValueSchema).default({}),
   env: z.record(z.string(), z.coerce.string()).default({}),
-  tool_alias: z.record(z.string(), z.coerce.string()).default({}),
+  tool_alias: z.record(z.string(), z.coerce.string()).default({})
 });
 
 export const profileSchema = z.object({
@@ -71,23 +71,23 @@ export const profileSchema = z.object({
   claude: z
     .object({
       model: z.string().optional(),
-      settings: z.record(z.string(), z.unknown()).default({}),
+      settings: z.record(z.string(), z.unknown()).default({})
     })
     .default({ settings: {} }),
   mise: z
     .object({
       tools: z.record(z.string(), miseToolValueSchema).default({}),
       env: z.record(z.string(), z.string()).default({}),
-      tool_alias: z.record(z.string(), z.string()).default({}),
+      tool_alias: z.record(z.string(), z.string()).default({})
     })
     .default({ tools: {}, env: {}, tool_alias: {} }),
-  dotfiles: z.record(z.string(), z.string()).default({}),
+  dotfiles: z.record(z.string(), z.string()).default({})
 });
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
   references_dir: z.string().default("~/references"),
-  opencode: z.record(z.string(), z.unknown()).default({}),
+  opencode: z.record(z.string(), z.unknown()).default({})
 });
 
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
@@ -121,19 +121,19 @@ export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: 
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
   const refs = await readYaml(path.join(root, "shared", "refs.yml"), refsManifestSchema, {
-    references: [],
+    references: []
   });
   const skills = await readYaml(path.join(root, "shared", "skills.yml"), skillsManifestSchema, {
-    skills: [],
+    skills: []
   });
   const mcp = await readYaml(path.join(root, "shared", "mcp.yml"), mcpManifestSchema, {
-    servers: {},
+    servers: {}
   });
   const effectiveHome = home ?? process.env.HOME;
   const machine = effectiveHome
     ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
         references_dir: "~/references",
-        opencode: {},
+        opencode: {}
       })
     : { references_dir: "~/references" as const, opencode: {} };
   const profileMap = new Map<string, ProfileManifest>();
@@ -162,7 +162,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {} },
         dotfiles: {},
-        description: "",
+        description: ""
       });
 
       const miseToml = path.join(fullPath, "mise.toml");
@@ -194,6 +194,6 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     skills: skills.skills,
     mcpServers: mcp.servers,
     profiles: profileMap,
-    machine,
+    machine
   };
 }

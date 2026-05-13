@@ -21,13 +21,13 @@ export interface RenderResult {
 
 export async function renderRuntimeInstructions(
   paths: RuntimePaths,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<RenderedFile[]> {
   const files: RenderedFile[] = [];
   for (const file of profile.instructionFiles) {
     files.push({
       path: path.join(profileConfigsDir(paths, profile.name), "AGENTS.md"),
-      content: await readFile(file, "utf8"),
+      content: await readFile(file, "utf8")
     });
   }
   return files;
@@ -43,7 +43,7 @@ export async function writeRenderedFiles(files: RenderedFile[]): Promise<void> {
 export async function renderTarget(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  target: ToolTarget,
+  target: ToolTarget
 ): Promise<RenderResult> {
   const instructions = await renderRuntimeInstructions(paths, profile);
   let rendered: RenderResult;

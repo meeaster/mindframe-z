@@ -6,7 +6,7 @@ import {
   type McpServer,
   type ProfileManifest,
   type ReferenceEntry,
-  type SkillEntry,
+  type SkillEntry
 } from "./manifests.js";
 
 export interface ResolvedMcpServer {
@@ -28,7 +28,7 @@ export interface ResolvedProfile {
 
 function deepMerge(
   base: Record<string, unknown>,
-  child: Record<string, unknown>,
+  child: Record<string, unknown>
 ): Record<string, unknown> {
   const result = { ...base };
   for (const [key, value] of Object.entries(child)) {
@@ -42,7 +42,7 @@ function deepMerge(
     ) {
       result[key] = deepMerge(
         result[key] as Record<string, unknown>,
-        value as Record<string, unknown>,
+        value as Record<string, unknown>
       );
     } else {
       result[key] = value;
@@ -72,18 +72,18 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     mise: {
       tools: deepMerge(
         base.mise.tools as Record<string, unknown>,
-        child.mise.tools as Record<string, unknown>,
+        child.mise.tools as Record<string, unknown>
       ) as ProfileManifest["mise"]["tools"],
       env: { ...base.mise.env, ...child.mise.env },
-      tool_alias: { ...base.mise.tool_alias, ...child.mise.tool_alias },
+      tool_alias: { ...base.mise.tool_alias, ...child.mise.tool_alias }
     },
-    dotfiles,
+    dotfiles
   };
 }
 
 async function resolveProfileByName(
   manifests: LoadedManifests,
-  name: string,
+  name: string
 ): Promise<ProfileManifest> {
   const profile = manifests.profiles.get(name);
   if (!profile) throw new Error(`Unknown profile: ${name}`);
@@ -94,7 +94,7 @@ async function resolveProfileByName(
 
 export async function resolveProfile(
   paths: RuntimePaths,
-  requestedProfile?: string,
+  requestedProfile?: string
 ): Promise<ResolvedProfile> {
   const manifests = await loadManifests(paths.root, paths.home);
   const name =
@@ -125,17 +125,17 @@ export async function resolveProfile(
     manifests,
     instructionFiles,
     referencesDir: path.resolve(
-      expandHome(process.env.MFZ_REFERENCES_DIR ?? manifests.machine.references_dir, paths.home),
+      expandHome(process.env.MFZ_REFERENCES_DIR ?? manifests.machine.references_dir, paths.home)
     ),
     enabledReferences,
     enabledSkills,
-    mcpServers,
+    mcpServers
   };
 }
 
 export function filterMcpForTarget(
   profile: ResolvedProfile,
-  target: "opencode" | "claude-code",
+  target: "opencode" | "claude-code"
 ): ResolvedMcpServer[] {
   return profile.mcpServers.filter((entry) => entry.server.targets.includes(target));
 }

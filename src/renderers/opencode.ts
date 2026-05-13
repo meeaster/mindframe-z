@@ -12,7 +12,7 @@ function toJsonc(value: unknown): string {
 async function collectPluginFiles(
   root: string,
   configsOpencode: string,
-  pluginNames: readonly string[],
+  pluginNames: readonly string[]
 ): Promise<RenderResult["files"]> {
   const sourceDir = path.join(root, "opencode", "plugins");
   try {
@@ -39,7 +39,7 @@ async function collectPluginFiles(
       if (!includeAll && (!pluginName || !selected.has(pluginName))) continue;
       files.push({
         path: path.join(configsOpencode, "plugins", relative),
-        content: await readFile(sourcePath, "utf8"),
+        content: await readFile(sourcePath, "utf8")
       });
     }
   }
@@ -50,7 +50,7 @@ async function collectPluginFiles(
 
 export async function renderOpenCode(
   paths: RuntimePaths,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<RenderResult> {
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpencode = path.join(configsProfile, "opencode");
@@ -58,12 +58,12 @@ export async function renderOpenCode(
   const pluginFiles = await collectPluginFiles(
     paths.root,
     configsOpencode,
-    profile.profile.opencode_plugins,
+    profile.profile.opencode_plugins
   );
   const plugin = pluginFiles.map((file) => `file://${file.path}`);
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
-    path.join(configsProfile, "references.md"),
+    path.join(configsProfile, "references.md")
   ];
   const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
@@ -74,8 +74,8 @@ export async function renderOpenCode(
             type: "remote",
             url: server.url,
             enabled,
-            ...(server.headers ? { headers: server.headers } : {}),
-          },
+            ...(server.headers ? { headers: server.headers } : {})
+          }
         ];
       }
       return [
@@ -84,10 +84,10 @@ export async function renderOpenCode(
           type: "local",
           command: server.command.map((part) => expandHome(part, paths.home)),
           enabled,
-          ...(server.env ? { env: server.env } : {}),
-        },
+          ...(server.env ? { env: server.env } : {})
+        }
       ];
-    }),
+    })
   );
   const machinePermission = profile.manifests.machine.opencode.permission;
   const config = {
@@ -96,13 +96,13 @@ export async function renderOpenCode(
     $schema: "https://opencode.ai/config.json",
     instructions,
     plugin,
-    mcp,
+    mcp
   };
 
   return {
     files: [...pluginFiles, { path: configPath, content: toJsonc(config) }],
     links: [
-      { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
-    ],
+      { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath }
+    ]
   };
 }

@@ -274,26 +274,26 @@ OpenCode config shape details that matter:
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["AGENTS.md"],
   "skills": {
-    "paths": ["/absolute/path/to/skills"],
+    "paths": ["/absolute/path/to/skills"]
   },
   "mcp": {
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true,
+      "enabled": true
     },
     "local-server": {
       "type": "local",
       "command": ["some-command", "arg"],
       "enabled": false,
-      "env": {},
-    },
+      "env": {}
+    }
   },
   "plugin": [
     "opencode-plugin-name",
     "./local-plugin.ts",
-    ["opencode-plugin-with-options", { "key": "value" }],
-  ],
+    ["opencode-plugin-with-options", { "key": "value" }]
+  ]
 }
 ```
 
@@ -648,7 +648,7 @@ OpenCode render example:
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true,
+      "enabled": true
     },
     "excalidraw": {
       "type": "local",
@@ -656,10 +656,10 @@ OpenCode render example:
       "enabled": false,
       "env": {
         "EXPRESS_SERVER_URL": "http://localhost:3000",
-        "ENABLE_CANVAS_SYNC": "true",
-      },
-    },
-  },
+        "ENABLE_CANVAS_SYNC": "true"
+      }
+    }
+  }
 }
 ```
 
@@ -701,8 +701,8 @@ For OpenCode:
 {
   "instructions": [
     "~/mindframe-z/.runtime/shared/AGENTS.md",
-    "~/mindframe-z/.runtime/indexes/references.md",
-  ],
+    "~/mindframe-z/.runtime/indexes/references.md"
+  ]
 }
 ```
 
