@@ -8,6 +8,7 @@ references:
   - openspec
   - mise
   - hunk
+  - vercel-skills
 skills:
   - gpt-5-5-prompting
   - hunk-review
