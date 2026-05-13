@@ -7,8 +7,10 @@ references:
   - opencode
   - openspec
   - mise
+  - hunk
 skills:
   - gpt-5-5-prompting
+  - hunk-review
   - impeccable
   - mise
   - opencode-db
