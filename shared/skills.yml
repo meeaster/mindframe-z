@@ -19,6 +19,15 @@ skills:
       authentication, service calls, events, entity registry work, or voice-assistant exposure.
     targets: [opencode]
 
+  - name: gpt-5-5-prompting
+    source: local
+    skill: gpt-5-5-prompting
+    description: >
+      Use when creating, reviewing, migrating, or tightening prompts for GPT-5.5, especially
+      outcome-first goals, concise style controls, retrieval budgets, preambles, phase handling,
+      validation loops, or prompt structure.
+    targets: [opencode]
+
   - name: impeccable
     source: git
     repo: https://github.com/pbakaus/impeccable
