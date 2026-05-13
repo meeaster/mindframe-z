@@ -14,3 +14,6 @@ references:
   - name: vercel-skills
     url: https://github.com/vercel-labs/skills.git
     description: Vercel AI SDK skills and tooling reference.
+  - name: agent-vault
+    url: https://github.com/Infisical/agent-vault.git
+    description: Agent Vault - AI agent secret management by Infisical.
