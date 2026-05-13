@@ -1,0 +1,9 @@
+{
+  "yaml.schemas": {
+    "./schemas/refs.schema.json": "shared/refs.yml",
+    "./schemas/skills.schema.json": "shared/skills.yml",
+    "./schemas/mcp.schema.json": "shared/mcp.yml",
+    "./schemas/profile.schema.json": "profiles/*/profile.yml",
+    "./schemas/machine.schema.json": "machine-config.example.yml"
+  }
+}
