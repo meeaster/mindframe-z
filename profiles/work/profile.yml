@@ -1,6 +1,10 @@
 name: work
 extends: base
 description: Work AI setup using OpenAI models.
+skills:
+  - jira-writer
+references:
+  - datadog-agent
 mcp:
   aws-knowledge:
     enabled: false
