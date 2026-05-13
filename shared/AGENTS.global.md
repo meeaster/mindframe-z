@@ -59,6 +59,16 @@ Use MCP tools selectively and do not query multiple documentation MCPs in parall
 
 - Push back on flawed assumptions and ask when intent is unclear.
 
+## Development Principles
+
+- YAGNI: do not add unused features, abstractions, options, or compatibility paths.
+- KISS: prefer the simplest correct implementation.
+- Prefer refactoring to the better design over bandaids, fallbacks, or parallel old/new paths.
+- Treat LOC as maintenance cost; keep lines, files, helpers, and abstractions low.
+- Treat branches as testing and bug surface; keep conditionals and alternate paths low.
+- Keep tests meaningful and repeatable; avoid tests that only verify mocks of our own implementation details.
+- Prefer one clear implementation over configurable behavior unless configuration is required by the problem domain.
+
 ## Code Conventions
 
 - Do not use `isRecord`-style guard helpers; understand the code path types directly, and when input shape is uncertain validate it once at the boundary with a schema instead of scattering guards through the logic.
