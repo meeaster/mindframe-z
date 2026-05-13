@@ -24,6 +24,7 @@ yamllint = "1"
 "npm:aws-cdk" = "latest"
 "npm:sfw" = "latest"
 "npm:@tobilu/qmd" = "latest"
+"npm:@fission-ai/openspec" = "latest"
 websocat = "latest"
 "npm:executor" = "latest"
 
