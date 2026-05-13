@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "skills": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "git"
+            ]
+          },
+          "repo": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "targets": {
+            "default": [
+              "opencode",
+              "claude-code"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "opencode",
+                "claude-code"
+              ]
+            }
+          },
+          "installer": {
+            "default": "npx-skills",
+            "type": "string",
+            "const": "npx-skills"
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ]
+      }
+    }
+  }
+}

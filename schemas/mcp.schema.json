@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "servers": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "targets": {
+                "default": [
+                  "opencode"
+                ],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "opencode",
+                    "claude-code"
+                  ]
+                }
+              },
+              "type": {
+                "type": "string",
+                "const": "remote"
+              },
+              "transport": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "sse",
+                  "stdio"
+                ]
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "headers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "url"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "targets": {
+                "default": [
+                  "opencode"
+                ],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "opencode",
+                    "claude-code"
+                  ]
+                }
+              },
+              "type": {
+                "type": "string",
+                "const": "local"
+              },
+              "transport": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "sse",
+                  "stdio"
+                ]
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "headers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "command": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "command"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
