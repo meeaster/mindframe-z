@@ -56,6 +56,12 @@ const miseTomlSchema = z.object({
   tool_alias: z.record(z.string(), z.coerce.string()).default({})
 });
 
+const opencodeConfigSchema = z.object({
+  config: z.record(z.string(), z.unknown()).default({}),
+  plugins: z.array(z.string()).default([]),
+  commands: z.array(z.string()).default([])
+});
+
 export const profileSchema = z.object({
   name: z.string().min(1),
   extends: z.string().optional(),
@@ -64,10 +70,8 @@ export const profileSchema = z.object({
   instructions: z.array(z.string()).default([]),
   references: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([]),
-  commands: z.array(z.string()).default([]),
   mcp: z.record(z.string(), z.object({ enabled: z.boolean() })).default({}),
-  opencode: z.record(z.string(), z.unknown()).default({}),
-  opencode_plugins: z.array(z.string()).default([]),
+  opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
   claude: z
     .object({
       model: z.string().optional(),
@@ -156,10 +160,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         instructions: [],
         references: [],
         skills: [],
-        commands: [],
         mcp: {},
-        opencode: {},
-        opencode_plugins: [],
+        opencode: { config: {}, plugins: [], commands: [] },
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {} },
         dotfiles: {},

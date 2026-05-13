@@ -202,8 +202,10 @@ async function enableCommandInProfile(root: string, targetProfile: string, comma
   } catch {
     doc = { name: targetProfile };
   }
-  if (!Array.isArray(doc.commands)) doc.commands = [];
-  const profileCommands = doc.commands as unknown[];
+  if (typeof doc.opencode !== "object" || doc.opencode === null) doc.opencode = {};
+  const oc = doc.opencode as Record<string, unknown>;
+  if (!Array.isArray(oc.commands)) oc.commands = [];
+  const profileCommands = oc.commands as unknown[];
   if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
   await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
 }
@@ -290,7 +292,7 @@ export async function runSync(
 
   for (const { command, targetProfile } of commandMoves) {
     await enableCommandInProfile(paths.root, targetProfile, command.name);
-    console.log(`  Updated ${targetProfile}/profile.yml: commands.${command.name}`);
+    console.log(`  Updated ${targetProfile}/profile.yml: opencode.commands.${command.name}`);
   }
 
   for (const { candidate, targetProfile } of manualMoves) {

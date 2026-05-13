@@ -21,14 +21,14 @@ export async function syncOpencode(
   }
 
   const derived = new Set(["$schema", "instructions", "plugin", "mcp"]);
-  const managedKeys = new Set(Object.keys(profile.profile.opencode));
+  const managedKeys = new Set(Object.keys(profile.profile.opencode.config));
 
   for (const [key, value] of Object.entries(existing)) {
     if (derived.has(key)) continue;
     if (!managedKeys.has(key)) {
       candidates.push({
         target: "opencode",
-        yamlPrefix: "opencode",
+        yamlPrefix: "opencode.config",
         key,
         value
       });

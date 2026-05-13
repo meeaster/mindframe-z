@@ -109,9 +109,12 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  context7:",
       "    enabled: true",
       "opencode:",
-      "  model: test/model",
-      "opencode_plugins:",
-      "  - config-marker",
+      "  config:",
+      "    model: test/model",
+      "  plugins:",
+      "    - config-marker",
+      "  commands:",
+      "    - test-cmd",
       "claude:",
       "  model: sonnet",
       "  settings:",
@@ -395,7 +398,9 @@ describe("CLI integration", () => {
   it("throws when a profile references a missing command file", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "commands:", "  - missing-cmd", ""].join("\n"),
+      ["name: personal", "extends: base", "opencode:", "  commands:", "    - missing-cmd", ""].join(
+        "\n"
+      ),
       "utf8"
     );
 
@@ -412,7 +417,7 @@ describe("CLI integration", () => {
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      ["name: base", "commands:", "  - base-cmd", "  - test-cmd", ""].join("\n"),
+      ["name: base", "opencode:", "  commands:", "    - base-cmd", "    - test-cmd", ""].join("\n"),
       "utf8"
     );
 
@@ -429,7 +434,7 @@ describe("CLI integration", () => {
 
     const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "personal\n");
     expect(syncResult.stdout).toContain("Unmanaged command: new-cmd");
-    expect(syncResult.stdout).toContain("Updated personal/profile.yml: commands.new-cmd");
+    expect(syncResult.stdout).toContain("Updated personal/profile.yml: opencode.commands.new-cmd");
 
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),

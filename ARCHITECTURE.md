@@ -121,21 +121,21 @@ mindframe-z/
 
 Profiles use `extends` to inherit from a parent. The merge rules are:
 
-| Field              | Merge Behavior                                  |
-| ------------------ | ----------------------------------------------- |
-| `instructions`     | Concatenate + deduplicate                       |
-| `references`       | Concatenate + deduplicate                       |
-| `skills`           | Concatenate + deduplicate                       |
-| `commands`         | Concatenate + deduplicate                       |
-| `opencode_plugins` | Concatenate + deduplicate                       |
-| `mcp`              | Deep merge — child keys override parent         |
-| `opencode`         | Deep merge — child keys override parent         |
-| `claude`           | Deep merge — child keys override parent         |
-| `mise.tools`       | Deep merge                                      |
-| `mise.env`         | Shallow merge — child overrides parent          |
-| `mise.tool_alias`  | Shallow merge — child overrides parent          |
-| `dotfiles`         | Concatenate with newline separator for same key |
-| `targets`          | Child replaces parent if non-empty              |
+| Field               | Merge Behavior                                  |
+| ------------------- | ----------------------------------------------- |
+| `instructions`      | Concatenate + deduplicate                       |
+| `references`        | Concatenate + deduplicate                       |
+| `skills`            | Concatenate + deduplicate                       |
+| `mcp`               | Deep merge — child keys override parent         |
+| `opencode.config`   | Deep merge — child keys override parent         |
+| `opencode.plugins`  | Concatenate + deduplicate                       |
+| `opencode.commands` | Concatenate + deduplicate                       |
+| `claude`            | Deep merge — child keys override parent         |
+| `mise.tools`        | Deep merge                                      |
+| `mise.env`          | Shallow merge — child overrides parent          |
+| `mise.tool_alias`   | Shallow merge — child overrides parent          |
+| `dotfiles`          | Concatenate with newline separator for same key |
+| `targets`           | Child replaces parent if non-empty              |
 
 Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
 
@@ -166,7 +166,7 @@ Features from the design that are not yet implemented:
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.
-- **OpenCode commands are profile-selected files**: Profiles list command names in `commands`; matching `opencode/commands/<name>.md` files render to `configs/<profile>/opencode/commands/` and are exposed through the global OpenCode commands directory symlink.
+- **OpenCode commands are profile-selected files**: Profiles list command names in `opencode.commands`; matching `opencode/commands/<name>.md` files render to `configs/<profile>/opencode/commands/` and are exposed through the global OpenCode commands directory symlink.
 
 ## Environment Variables
 

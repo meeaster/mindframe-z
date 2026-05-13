@@ -77,7 +77,7 @@ export async function renderOpenCode(
   const pluginFiles = await collectPluginFiles(
     paths.root,
     configsOpencode,
-    profile.profile.opencode_plugins
+    profile.profile.opencode.plugins
   );
   const plugin = pluginFiles.map((file) => `file://${file.path}`);
   const commandFiles = await collectCommandFiles(
@@ -115,7 +115,7 @@ export async function renderOpenCode(
   );
   const machinePermission = profile.manifests.machine.opencode.permission;
   const config = {
-    ...profile.profile.opencode,
+    ...profile.profile.opencode.config,
     ...(machinePermission ? { permission: machinePermission } : {}),
     $schema: "https://opencode.ai/config.json",
     instructions,
