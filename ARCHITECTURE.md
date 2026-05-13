@@ -32,6 +32,8 @@ Each output target (opencode, claude-code, mise, dotfiles) has its own renderer 
 
 The YAML manifests in `shared/` and `profiles/` are the authoritative source of configuration state. Tool-level state — what `npx skills` has installed, what `~/.claude.json` contains, what mise has configured — is a _rendered output_, not the source of truth. The `sync` command bridges the gap by detecting drift between rendered output and manifests, but the manifests remain the canonical record.
 
+Manifest schemas live in `src/core/manifests.ts` as Zod definitions. `mindframe-z schemas` generates editor-facing JSON Schema files into `schemas/` from those same Zod definitions, so runtime validation and editor autocomplete share one source of truth.
+
 ## Architecture Overview
 
 ```
@@ -102,6 +104,13 @@ mindframe-z/
 │       └── dotfiles/
 │           └── .npmrc          # Rendered dotfiles
 │
+├── schemas/                   # Generated JSON Schemas for YAML manifests
+│   ├── refs.schema.json
+│   ├── skills.schema.json
+│   ├── mcp.schema.json
+│   ├── profile.schema.json
+│   └── machine.schema.json
+│
 ├── src/
 │   ├── core/                  # Manifest loading, profile resolution, rendering orchestration, symlinks
 │   ├── renderers/             # Target-specific config generators (opencode, claude, mise, dotfiles)
@@ -116,6 +125,24 @@ mindframe-z/
 ├── skills/                    # Local skill source directories
 └── machine/                   # Per-machine overrides (gitignored)
 ```
+
+## YAML Schema Workflow
+
+`src/core/manifests.ts` defines the Zod schemas used to validate YAML manifests at runtime. `src/core/generate-schemas.ts` converts those schemas to JSON Schema with Zod's native `z.toJSONSchema()` using `io: "input"` and `unrepresentable: "any"`, then writes the generated artifacts to `schemas/`.
+
+The generated schemas are committed artifacts so editors can validate manifests immediately after clone. When manifest Zod schemas change, run `npm run schemas` and commit the resulting `schemas/*.schema.json` changes with the source change.
+
+Project editor settings map schemas to YAML files:
+
+| Manifest file                | Schema file                   |
+| ---------------------------- | ----------------------------- |
+| `shared/refs.yml`            | `schemas/refs.schema.json`    |
+| `shared/skills.yml`          | `schemas/skills.schema.json`  |
+| `shared/mcp.yml`             | `schemas/mcp.schema.json`     |
+| `profiles/*/profile.yml`     | `schemas/profile.schema.json` |
+| `machine-config.example.yml` | `schemas/machine.schema.json` |
+
+Zed uses `.zed/settings.json` to configure `yaml-language-server`; VS Code uses `.vscode/settings.json` with `yaml.schemas`.
 
 ## Profile Inheritance and Merge Semantics
 

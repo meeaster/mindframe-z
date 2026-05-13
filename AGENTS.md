@@ -11,6 +11,7 @@ npm run test:integration  # vitest run tests/integration
 npm run lint           # oxlint
 npm run fmt            # oxfmt
 npm run check          # lint → fmt:check → build → test (run this before committing)
+npm run schemas        # regenerate schemas/*.schema.json from Zod manifest schemas
 npm run dev -- doctor
 npm run dev -- refs list
 ```
