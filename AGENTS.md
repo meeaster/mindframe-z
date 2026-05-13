@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Read `ARCHITECTURE.md` before making any architectural changes or decisions. Any changes to the architecture or new/updated architectural principles must also update `ARCHITECTURE.md` to keep it current — this file is the authoritative record of the project's architecture.
+
 ## Commands
 
 ```sh
@@ -16,6 +18,17 @@ npm run dev -- refs list
 `npm run dev` uses `tsx` for development. The compiled entry point in `bin/mindframe-z` imports from `dist/` — build first before using the binary.
 
 After `mindframe-z apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
+
+## Pre-commit
+
+Gitleaks is configured as a pre-commit hook to detect secrets in commits.
+
+```sh
+pre-commit install     # enable hooks locally (run once)
+pre-commit run --all-files  # run all hooks manually
+```
+
+`pre-commit` is provided by mise (see `profiles/base/mise.toml`). The hook config lives in `.pre-commit-config.yaml` at the repo root.
 
 ## Architecture
 
