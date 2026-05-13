@@ -15,7 +15,7 @@ import { runSync } from "../sync/index.js";
 async function confirmReplace(
   rl: readline.Interface | null,
   linkPath: string,
-  backupPath: string,
+  backupPath: string
 ): Promise<boolean> {
   const replaceExisting = process.env.MFZ_REPLACE_EXISTING?.trim().toLowerCase();
   if (replaceExisting === "y" || replaceExisting === "yes" || replaceExisting === "true") {
@@ -132,11 +132,11 @@ async function statusFn(options: {
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
   console.log(
-    `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`,
+    `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
   );
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
   console.log(
-    `mcp\t${profile.mcpServers.map((server) => `${server.name}:${server.enabled ? "enabled" : "disabled"}`).join(", ") || "none"}`,
+    `mcp\t${profile.mcpServers.map((server) => `${server.name}:${server.enabled ? "enabled" : "disabled"}`).join(", ") || "none"}`
   );
 }
 
@@ -161,8 +161,8 @@ async function opencodeSmoke(options: {
         XDG_CONFIG_HOME: `${isolated}/config`,
         XDG_DATA_HOME: `${isolated}/data`,
         XDG_CACHE_HOME: `${isolated}/cache`,
-        XDG_STATE_HOME: `${isolated}/state`,
-      },
+        XDG_STATE_HOME: `${isolated}/state`
+      }
     });
     console.log(result.stdout);
   } catch (error) {
@@ -214,8 +214,8 @@ program
       ...program.opts(),
       target: options.target as ApplyTarget,
       dryRun: options.dryRun,
-      noLink: !options.link,
-    }),
+      noLink: !options.link
+    })
   );
 
 const skills = program.command("skills").description("Manage skills through npx skills");

@@ -11,7 +11,7 @@ export function referencePath(profile: ResolvedProfile, reference: ReferenceEntr
 
 export async function writeReferenceIndex(
   paths: RuntimePaths,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<string> {
   const lines = ["# Enabled References", ""];
   for (const ref of profile.enabledReferences) {

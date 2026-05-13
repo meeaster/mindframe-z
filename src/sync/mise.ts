@@ -7,7 +7,7 @@ import type { SyncResult, SyncCandidate } from "./types.js";
 const renderedMiseSchema = z.object({
   tools: z.record(z.string(), z.unknown()).default({}),
   env: z.record(z.string(), z.unknown()).default({}),
-  tool_alias: z.record(z.string(), z.unknown()).default({}),
+  tool_alias: z.record(z.string(), z.unknown()).default({})
 });
 
 export async function syncMise(configPath: string, profile: ResolvedProfile): Promise<SyncResult> {
@@ -31,7 +31,7 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
         target: "mise",
         yamlPrefix: "mise.tools",
         key,
-        value: existing.tools[key],
+        value: existing.tools[key]
       });
     }
   }
@@ -42,7 +42,7 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
         target: "mise",
         yamlPrefix: "mise.env",
         key,
-        value: existing.env[key],
+        value: existing.env[key]
       });
     }
   }
@@ -53,7 +53,7 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
         target: "mise",
         yamlPrefix: "mise.tool_alias",
         key,
-        value: existing.tool_alias[key],
+        value: existing.tool_alias[key]
       });
     }
   }

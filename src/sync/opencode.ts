@@ -5,7 +5,7 @@ import type { SyncResult, SyncCandidate } from "./types.js";
 
 export async function syncOpencode(
   configPath: string,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<SyncResult> {
   const candidates: SyncCandidate[] = [];
 
@@ -30,7 +30,7 @@ export async function syncOpencode(
         target: "opencode",
         yamlPrefix: "opencode",
         key,
-        value,
+        value
       });
     }
   }

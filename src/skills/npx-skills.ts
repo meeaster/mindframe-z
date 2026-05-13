@@ -6,7 +6,7 @@ import type { SkillEntry } from "../core/manifests.js";
 export function buildNpxSkillsCommand(
   paths: RuntimePaths,
   skill: SkillEntry,
-  target: ToolTarget,
+  target: ToolTarget
 ): string[] {
   const agent = target === "claude-code" ? "claude-code" : "opencode";
   if (skill.source === "local") {
@@ -20,7 +20,7 @@ export function buildNpxSkillsCommand(
       "-a",
       agent,
       "-g",
-      "-y",
+      "-y"
     ];
   }
   if (!skill.repo) throw new Error(`Git skill ${skill.name} is missing repo`);
@@ -33,7 +33,7 @@ export function buildNpxSkillsCommand(
     "-a",
     agent,
     "-g",
-    "-y",
+    "-y"
   ];
 }
 
@@ -41,7 +41,7 @@ export async function applySkill(
   paths: RuntimePaths,
   skill: SkillEntry,
   target: ToolTarget,
-  dryRun: boolean,
+  dryRun: boolean
 ): Promise<string> {
   const command = buildNpxSkillsCommand(paths, skill, target);
   if (dryRun) return command.join(" ");

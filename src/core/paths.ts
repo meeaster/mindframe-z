@@ -37,7 +37,7 @@ export function resolveRoot(input?: string): string {
 
 export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   const home = path.resolve(
-    expandHome(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd()),
+    expandHome(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd())
   );
   const root = resolveRoot(options.root);
   return {
@@ -49,18 +49,18 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
         options.opencodeConfigDir ??
           process.env.OPENCODE_CONFIG_DIR ??
           path.join(home, ".config", "opencode"),
-        home,
-      ),
+        home
+      )
     ),
     claudeDir: path.resolve(
       expandHome(
         options.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
-        home,
-      ),
+        home
+      )
     ),
     miseConfigDir: path.resolve(
-      expandHome(process.env.MISE_CONFIG_DIR ?? path.join(home, ".config", "mise"), home),
-    ),
+      expandHome(process.env.MISE_CONFIG_DIR ?? path.join(home, ".config", "mise"), home)
+    )
   };
 }
 

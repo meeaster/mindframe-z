@@ -4,7 +4,7 @@ import type { SyncResult, SyncCandidate } from "./types.js";
 
 export async function syncClaude(
   settingsPath: string,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<SyncResult> {
   const candidates: SyncCandidate[] = [];
 
@@ -24,7 +24,7 @@ export async function syncClaude(
         target: "claude",
         yamlPrefix: "claude.settings",
         key,
-        value,
+        value
       });
     }
   }

@@ -10,7 +10,7 @@ describe("buildNpxSkillsCommand", () => {
         configsDir: "/repo/configs",
         opencodeConfigDir: "/home/tester/.config/opencode",
         claudeDir: "/home/tester/.claude",
-        miseConfigDir: "/home/tester/.config/mise",
+        miseConfigDir: "/home/tester/.config/mise"
       },
       {
         name: "impeccable",
@@ -18,9 +18,9 @@ describe("buildNpxSkillsCommand", () => {
         path: "~/skills/impeccable",
         description: "",
         targets: ["opencode", "claude-code"],
-        installer: "npx-skills",
+        installer: "npx-skills"
       },
-      "opencode",
+      "opencode"
     );
 
     expect(command).toEqual([
@@ -31,7 +31,7 @@ describe("buildNpxSkillsCommand", () => {
       "-a",
       "opencode",
       "-g",
-      "-y",
+      "-y"
     ]);
   });
 
@@ -43,7 +43,7 @@ describe("buildNpxSkillsCommand", () => {
         configsDir: "/repo/configs",
         opencodeConfigDir: "/home/tester/.config/opencode",
         claudeDir: "/home/tester/.claude",
-        miseConfigDir: "/home/tester/.config/mise",
+        miseConfigDir: "/home/tester/.config/mise"
       },
       {
         name: "mise",
@@ -52,9 +52,9 @@ describe("buildNpxSkillsCommand", () => {
         skill: "mise",
         description: "",
         targets: ["opencode"],
-        installer: "npx-skills",
+        installer: "npx-skills"
       },
-      "opencode",
+      "opencode"
     );
 
     expect(command).toEqual([
@@ -67,7 +67,7 @@ describe("buildNpxSkillsCommand", () => {
       "-a",
       "opencode",
       "-g",
-      "-y",
+      "-y"
     ]);
   });
 });

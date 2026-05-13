@@ -1,3 +1,4 @@
 {
-  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**"]
+  "trailingComma": "none",
+  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**", "configs/**"]
 }

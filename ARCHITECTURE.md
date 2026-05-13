@@ -30,7 +30,7 @@ Each output target (opencode, claude-code, mise, dotfiles) has its own renderer 
 
 ### Manifests Are the Source of Truth
 
-The YAML manifests in `shared/` and `profiles/` are the authoritative source of configuration state. Tool-level state — what `npx skills` has installed, what `~/.claude.json` contains, what mise has configured — is a *rendered output*, not the source of truth. The `sync` command bridges the gap by detecting drift between rendered output and manifests, but the manifests remain the canonical record.
+The YAML manifests in `shared/` and `profiles/` are the authoritative source of configuration state. Tool-level state — what `npx skills` has installed, what `~/.claude.json` contains, what mise has configured — is a _rendered output_, not the source of truth. The `sync` command bridges the gap by detecting drift between rendered output and manifests, but the manifests remain the canonical record.
 
 ## Architecture Overview
 
@@ -119,20 +119,20 @@ mindframe-z/
 
 Profiles use `extends` to inherit from a parent. The merge rules are:
 
-| Field | Merge Behavior |
-|---|---|
-| `instructions` | Concatenate + deduplicate |
-| `references` | Concatenate + deduplicate |
-| `skills` | Concatenate + deduplicate |
-| `opencode_plugins` | Concatenate + deduplicate |
-| `mcp` | Deep merge — child keys override parent |
-| `opencode` | Deep merge — child keys override parent |
-| `claude` | Deep merge — child keys override parent |
-| `mise.tools` | Deep merge |
-| `mise.env` | Shallow merge — child overrides parent |
-| `mise.tool_alias` | Shallow merge — child overrides parent |
-| `dotfiles` | Concatenate with newline separator for same key |
-| `targets` | Child replaces parent if non-empty |
+| Field              | Merge Behavior                                  |
+| ------------------ | ----------------------------------------------- |
+| `instructions`     | Concatenate + deduplicate                       |
+| `references`       | Concatenate + deduplicate                       |
+| `skills`           | Concatenate + deduplicate                       |
+| `opencode_plugins` | Concatenate + deduplicate                       |
+| `mcp`              | Deep merge — child keys override parent         |
+| `opencode`         | Deep merge — child keys override parent         |
+| `claude`           | Deep merge — child keys override parent         |
+| `mise.tools`       | Deep merge                                      |
+| `mise.env`         | Shallow merge — child overrides parent          |
+| `mise.tool_alias`  | Shallow merge — child overrides parent          |
+| `dotfiles`         | Concatenate with newline separator for same key |
+| `targets`          | Child replaces parent if non-empty              |
 
 Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
 
@@ -140,16 +140,17 @@ Resolution order: `base` → child profile (e.g., `personal` extends `base`). Ma
 
 The [initial prototype design](docs/initial-prototype-design.md) laid out a comprehensive vision. Here's how the as-built architecture differs:
 
-| Design | Implementation | Rationale |
-|---|---|---|
-| `.runtime/` directory | `configs/` directory | More descriptive name; configs are profile-scoped rather than a single runtime tree |
-| Single `.runtime/opencode/` | `configs/<profile>/opencode/` | Per-profile rendering allows multiple profiles to coexist without re-rendering |
-| Separate `refctl` binary | `mindframe-z refs` subcommand | Unified CLI reduces cognitive load; ref-store module handles the logic |
+| Design                        | Implementation                    | Rationale                                                                                         |
+| ----------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `.runtime/` directory         | `configs/` directory              | More descriptive name; configs are profile-scoped rather than a single runtime tree               |
+| Single `.runtime/opencode/`   | `configs/<profile>/opencode/`     | Per-profile rendering allows multiple profiles to coexist without re-rendering                    |
+| Separate `refctl` binary      | `mindframe-z refs` subcommand     | Unified CLI reduces cognitive load; ref-store module handles the logic                            |
 | Work overlay as separate repo | Single repo with `profiles/work/` | Work overlay repo concept is preserved in design but not yet implemented as a separate repository |
-| TUI planned | CLI only | Deferred per YAGNI — CLI primitives must stabilize first |
-| Project-level config | Machine/user-level only | Projects live anywhere; no forced workspace structure |
+| TUI planned                   | CLI only                          | Deferred per YAGNI — CLI primitives must stabilize first                                          |
+| Project-level config          | Machine/user-level only           | Projects live anywhere; no forced workspace structure                                             |
 
 Features from the design that are not yet implemented:
+
 - Work overlay as a separate company-owned repository
 - `diff-runtime` command
 - Claude Code MCP rendering (currently OpenCode-only for MCP)
@@ -165,12 +166,12 @@ Features from the design that are not yet implemented:
 
 ## Environment Variables
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `MFZ_ROOT` | Config root directory | cwd |
-| `MFZ_HOME` | Home directory | `$HOME` |
-| `MFZ_PROFILE` | Active profile name | machine profile or `personal` |
-| `MFZ_REFERENCES_DIR` | Reference clone directory | `~/references` |
-| `OPENCODE_CONFIG_DIR` | OpenCode global config dir | `~/.config/opencode` |
-| `CLAUDE_CONFIG_DIR` | Claude global config dir | `~/.claude` |
-| `MISE_CONFIG_DIR` | Mise config dir | `~/.config/mise` |
+| Variable              | Purpose                    | Default                       |
+| --------------------- | -------------------------- | ----------------------------- |
+| `MFZ_ROOT`            | Config root directory      | cwd                           |
+| `MFZ_HOME`            | Home directory             | `$HOME`                       |
+| `MFZ_PROFILE`         | Active profile name        | machine profile or `personal` |
+| `MFZ_REFERENCES_DIR`  | Reference clone directory  | `~/references`                |
+| `OPENCODE_CONFIG_DIR` | OpenCode global config dir | `~/.config/opencode`          |
+| `CLAUDE_CONFIG_DIR`   | Claude global config dir   | `~/.claude`                   |
+| `MISE_CONFIG_DIR`     | Mise config dir            | `~/.config/mise`              |

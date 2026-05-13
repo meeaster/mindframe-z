@@ -6,19 +6,19 @@ import type { RenderResult } from "../core/render.js";
 
 export async function renderDotfiles(
   paths: RuntimePaths,
-  profile: ResolvedProfile,
+  profile: ResolvedProfile
 ): Promise<RenderResult> {
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsDotfiles = path.join(configsProfile, "dotfiles");
 
   const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => ({
     path: path.join(configsDotfiles, filename),
-    content,
+    content
   }));
 
   const links = Object.keys(profile.profile.dotfiles).map((filename) => ({
     linkPath: path.join(paths.home, filename),
-    targetPath: path.join(configsDotfiles, filename),
+    targetPath: path.join(configsDotfiles, filename)
   }));
 
   return { files, links };
