@@ -121,7 +121,8 @@
       "default": {
         "tools": {},
         "env": {},
-        "tool_alias": {}
+        "tool_alias": {},
+        "settings": {}
       },
       "type": "object",
       "properties": {
@@ -165,6 +166,14 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "settings": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       }
     },
