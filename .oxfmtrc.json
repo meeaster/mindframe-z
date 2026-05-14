@@ -6,6 +6,8 @@
     "coverage/**",
     "configs/**",
     "schemas/**",
-    ".opencode/**"
+    ".opencode/**",
+    "skills/**",
+    "openspec/**"
   ]
 }
