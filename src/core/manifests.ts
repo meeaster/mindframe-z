@@ -5,6 +5,13 @@ import YAML from "yaml";
 import { z } from "zod";
 
 const targetSchema = z.enum(["opencode", "claude-code"]);
+const skillTargetSchema = z.enum(["opencode", "claude-code", "all"]);
+const profileSkillTargetsSchema = z
+  .array(skillTargetSchema)
+  .min(1)
+  .refine((targets) => !targets.includes("all") || targets.length === 1, {
+    message: "Use either [all] or explicit skill targets, not both"
+  });
 
 export const referenceSchema = z.object({
   name: z.string().min(1),
@@ -22,7 +29,6 @@ export const skillSchema = z.object({
   repo: z.string().optional(),
   skill: z.string().optional(),
   description: z.string().default(""),
-  targets: z.array(targetSchema).default(["opencode", "claude-code"]),
   installer: z.literal("npx-skills").default("npx-skills")
 });
 
@@ -70,7 +76,7 @@ export const profileSchema = z.object({
   targets: z.array(targetSchema).default(["opencode", "claude-code"]),
   instructions: z.array(z.string()).default([]),
   references: z.array(z.string()).default([]),
-  skills: z.array(z.string()).default([]),
+  skills: z.record(z.string(), profileSkillTargetsSchema).default({}),
   mcp: z.record(z.string(), z.object({ enabled: z.boolean() })).default({}),
   opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
   claude: z
@@ -98,6 +104,8 @@ export const machineSchema = z.object({
 
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
+export type ToolTargetName = z.infer<typeof targetSchema>;
+export type ProfileSkillTarget = z.infer<typeof skillTargetSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
@@ -224,7 +232,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         targets: ["opencode", "claude-code"],
         instructions: [],
         references: [],
-        skills: [],
+        skills: {},
         mcp: {},
         opencode: { config: {}, plugins: [], commands: [] },
         claude: { settings: {} },

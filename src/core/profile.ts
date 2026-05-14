@@ -6,6 +6,7 @@ import {
   type LoadedManifests,
   type McpServer,
   type ProfileManifest,
+  type ToolTargetName,
   type ReferenceEntry,
   type SkillEntry
 } from "./manifests.js";
@@ -16,6 +17,8 @@ export interface ResolvedMcpServer {
   enabled: boolean;
 }
 
+export type ResolvedSkill = SkillEntry & { targets: ToolTargetName[] };
+
 export interface ResolvedProfile {
   name: string;
   profile: ProfileManifest;
@@ -23,7 +26,7 @@ export interface ResolvedProfile {
   instructionFiles: string[];
   referencesDir: string;
   enabledReferences: ReferenceEntry[];
-  enabledSkills: SkillEntry[];
+  enabledSkills: ResolvedSkill[];
   enabledCommands: string[];
   mcpServers: ResolvedMcpServer[];
 }
@@ -66,7 +69,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     targets: child.targets.length > 0 ? child.targets : base.targets,
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
-    skills: dedupe([...base.skills, ...child.skills]),
+    skills: { ...base.skills, ...child.skills },
     mcp: { ...base.mcp, ...child.mcp },
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
@@ -85,6 +88,11 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     },
     dotfiles
   };
+}
+
+function expandSkillTargets(targets: ProfileManifest["skills"][string]): ToolTargetName[] {
+  if (targets.includes("all")) return ["opencode", "claude-code"];
+  return targets.filter((target): target is ToolTargetName => target !== "all");
 }
 
 async function resolveProfileByName(
@@ -114,10 +122,10 @@ export async function resolveProfile(
     if (!ref) throw new Error(`Profile ${name} references unknown reference: ${refName}`);
     return ref;
   });
-  const enabledSkills = profile.skills.map((skillName) => {
+  const enabledSkills = Object.entries(profile.skills).map(([skillName, targets]) => {
     const skill = manifests.skills.find((s) => s.name === skillName);
     if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
-    return skill;
+    return { ...skill, targets: expandSkillTargets(targets) };
   });
   const enabledCommands = dedupe(profile.opencode.commands);
   for (const commandName of enabledCommands) {

@@ -29,20 +29,6 @@
             "default": "",
             "type": "string"
           },
-          "targets": {
-            "default": [
-              "opencode",
-              "claude-code"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "opencode",
-                "claude-code"
-              ]
-            }
-          },
           "installer": {
             "default": "npx-skills",
             "type": "string",

@@ -72,5 +72,5 @@ Integration tests are completely isolated — they use `mkdtemp` temp directorie
 - Lint/formatter: oxlint + oxfmt (not eslint/prettier). Config in `oxlint.json` and `.oxfmtrc.json`.
 - `dist/`, `.runtime/`, `machine/machine.yml`, `/references/` are gitignored.
 - The shared instruction file `shared/AGENTS.global.md` is rendered into AI tool runtime config — it is not this repo's agents guide.
-- Profiles use `extends` to inherit from a parent. `profiles/base.yml` is the shared foundation; `personal` and `work` extend it. Arrays (`skills`, `references`, `instructions`, `opencode.plugins`, `opencode.commands`) are additive on merge; maps (`mcp`, `opencode.config`, `claude`) are deep-merged with child keys overriding parent keys.
+- Profiles use `extends` to inherit from a parent. `profiles/base.yml` is the shared foundation; `personal` and `work` extend it. Arrays (`references`, `instructions`, `opencode.plugins`, `opencode.commands`) are additive on merge; maps (`skills`, `mcp`, `opencode.config`, `claude`) are merged with child keys overriding parent keys.
 - MCP servers are configured in profiles as a map: `serverName: { enabled: true/false }`. Servers not listed are not rendered. `shared/mcp.yml` defines server configurations (type, url, command, etc.) but does not control enable state or profile visibility.

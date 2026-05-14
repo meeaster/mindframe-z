@@ -1,8 +1,58 @@
 import { execa } from "execa";
+import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ToolTarget } from "../core/paths.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { SkillEntry } from "../core/manifests.js";
+
+interface ListedInstalledSkill {
+  name: string;
+  agents?: string[];
+}
+
+function targetSkillsDir(paths: RuntimePaths, target: ToolTarget): string | null {
+  switch (target) {
+    case "opencode":
+      return path.join(paths.home, ".agents", "skills");
+    case "claude-code":
+      return path.join(paths.claudeDir, "skills");
+    default:
+      return null;
+  }
+}
+
+function targetAgentDisplayName(target: Extract<ToolTarget, "opencode" | "claude-code">): string {
+  return target === "claude-code" ? "Claude Code" : "OpenCode";
+}
+
+async function listSkillDirectories(skillsDir: string): Promise<Set<string>> {
+  let entries;
+  try {
+    entries = await readdir(skillsDir, { withFileTypes: true });
+  } catch {
+    return new Set();
+  }
+
+  const installed = new Set<string>();
+  for (const entry of entries) {
+    const skillDir = path.join(skillsDir, entry.name);
+    try {
+      const dirStat = await stat(skillDir);
+      if (!dirStat.isDirectory()) continue;
+      await access(path.join(skillDir, "SKILL.md"));
+      installed.add(entry.name);
+    } catch {
+      // Ignore non-skill entries and dangling links.
+    }
+  }
+
+  return installed;
+}
+
+async function listCliInstalledSkills(): Promise<ListedInstalledSkill[]> {
+  const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], { timeout: 30000 });
+  return JSON.parse(stdout) as ListedInstalledSkill[];
+}
 
 export function buildNpxSkillsCommand(
   paths: RuntimePaths,
@@ -42,10 +92,23 @@ export function buildNpxSkillsUpdateCommand(skill: SkillEntry): string[] | null 
   return ["npx", "skills", "update", skill.name, "-g", "-y"];
 }
 
-export async function listInstalledSkills(): Promise<Set<string>> {
-  const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], { timeout: 30000 });
-  const skills = JSON.parse(stdout) as { name: string }[];
-  return new Set(skills.map((s) => s.name));
+export async function listInstalledSkills(
+  paths: RuntimePaths,
+  target: Extract<ToolTarget, "opencode" | "claude-code">
+): Promise<Set<string>> {
+  const skillsDir = targetSkillsDir(paths, target);
+  if (!skillsDir) return new Set();
+
+  const installed = await listSkillDirectories(skillsDir);
+  if (target === "opencode") return installed;
+
+  const cliSkills = await listCliInstalledSkills();
+  const targetAgent = targetAgentDisplayName(target);
+  for (const skill of cliSkills) {
+    if (skill.agents?.includes(targetAgent)) installed.add(skill.name);
+  }
+
+  return installed;
 }
 
 async function runCommand(command: string[], emptyCommandMessage: string): Promise<string> {
@@ -65,7 +128,11 @@ export async function applySkill(
   const command = buildNpxSkillsCommand(paths, skill, target);
   if (dryRun) return command.join(" ");
 
-  if ((installedSkills ?? (await listInstalledSkills())).has(skill.name)) {
+  if (target !== "opencode" && target !== "claude-code") {
+    return runCommand(command, "No skills command generated");
+  }
+
+  if ((installedSkills ?? (await listInstalledSkills(paths, target))).has(skill.name)) {
     return `skipped: ${skill.name} (already installed)`;
   }
 

@@ -2,8 +2,8 @@ name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
 skills:
-  - home-assistant-best-practices
-  - homeassistant
+  home-assistant-best-practices: [all]
+  homeassistant: [all]
 mcp:
   homeassistant:
     enabled: false

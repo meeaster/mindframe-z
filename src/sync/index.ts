@@ -143,9 +143,11 @@ async function enableSkillInProfile(root: string, targetProfile: string, skillNa
   } catch {
     doc = { name: targetProfile };
   }
-  if (!Array.isArray(doc.skills)) doc.skills = [];
-  const profileSkills = doc.skills as unknown[];
-  if (!profileSkills.includes(skillName)) profileSkills.push(skillName);
+  if (typeof doc.skills !== "object" || doc.skills === null || Array.isArray(doc.skills)) {
+    doc.skills = {};
+  }
+  const profileSkills = doc.skills as Record<string, unknown>;
+  if (!(skillName in profileSkills)) profileSkills[skillName] = ["opencode"];
   await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
 }
 
