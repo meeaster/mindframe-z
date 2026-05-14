@@ -7,7 +7,8 @@ import type { SyncResult, SyncCandidate } from "./types.js";
 const renderedMiseSchema = z.object({
   tools: z.record(z.string(), z.unknown()).default({}),
   env: z.record(z.string(), z.unknown()).default({}),
-  tool_alias: z.record(z.string(), z.unknown()).default({})
+  tool_alias: z.record(z.string(), z.unknown()).default({}),
+  settings: z.record(z.string(), z.unknown()).default({})
 });
 
 export async function syncMise(configPath: string, profile: ResolvedProfile): Promise<SyncResult> {
@@ -24,6 +25,7 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
   const managedTools = new Set(Object.keys(profile.profile.mise.tools));
   const managedEnv = new Set(Object.keys(profile.profile.mise.env));
   const managedAliases = new Set(Object.keys(profile.profile.mise.tool_alias));
+  const managedSettings = new Set(Object.keys(profile.profile.mise.settings));
 
   for (const key of Object.keys(existing.tools)) {
     if (!managedTools.has(key)) {
@@ -54,6 +56,17 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
         yamlPrefix: "mise.tool_alias",
         key,
         value: existing.tool_alias[key]
+      });
+    }
+  }
+
+  for (const key of Object.keys(existing.settings)) {
+    if (!managedSettings.has(key)) {
+      candidates.push({
+        target: "mise",
+        yamlPrefix: "mise.settings",
+        key,
+        value: existing.settings[key]
       });
     }
   }

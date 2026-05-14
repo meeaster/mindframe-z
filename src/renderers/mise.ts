@@ -23,11 +23,12 @@ export async function renderMise(
   const configsMise = path.join(configsProfile, "mise");
   const configPath = path.join(configsMise, "config.toml");
 
-  const { tools, env, tool_alias } = profile.profile.mise;
+  const { tools, env, tool_alias, settings } = profile.profile.mise;
   const managed = {
     ...(Object.keys(tools).length > 0 ? { tools: miseToolsToToml(tools) } : {}),
     ...(Object.keys(env).length > 0 ? { env } : {}),
-    ...(Object.keys(tool_alias).length > 0 ? { tool_alias } : {})
+    ...(Object.keys(tool_alias).length > 0 ? { tool_alias } : {}),
+    ...(Object.keys(settings).length > 0 ? { settings } : {})
   };
 
   const content = Object.keys(managed).length > 0 ? stringify(managed) : "";

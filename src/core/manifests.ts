@@ -53,7 +53,8 @@ const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown(
 const miseTomlSchema = z.object({
   tools: z.record(z.string(), miseToolValueSchema).default({}),
   env: z.record(z.string(), z.coerce.string()).default({}),
-  tool_alias: z.record(z.string(), z.coerce.string()).default({})
+  tool_alias: z.record(z.string(), z.coerce.string()).default({}),
+  settings: z.record(z.string(), z.unknown()).default({})
 });
 
 const opencodeConfigSchema = z.object({
@@ -82,9 +83,10 @@ export const profileSchema = z.object({
     .object({
       tools: z.record(z.string(), miseToolValueSchema).default({}),
       env: z.record(z.string(), z.string()).default({}),
-      tool_alias: z.record(z.string(), z.string()).default({})
+      tool_alias: z.record(z.string(), z.string()).default({}),
+      settings: z.record(z.string(), z.unknown()).default({})
     })
-    .default({ tools: {}, env: {}, tool_alias: {} }),
+    .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
   dotfiles: z.record(z.string(), z.string()).default({})
 });
 
@@ -226,7 +228,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         mcp: {},
         opencode: { config: {}, plugins: [], commands: [] },
         claude: { settings: {} },
-        mise: { tools: {}, env: {}, tool_alias: {} },
+        mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         dotfiles: {},
         description: ""
       });
@@ -239,6 +241,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
           profile.mise.tools = toml.tools;
           profile.mise.env = toml.env;
           profile.mise.tool_alias = toml.tool_alias;
+          profile.mise.settings = toml.settings;
         } catch {
           // Malformed TOML — skip, keep YAML defaults
         }

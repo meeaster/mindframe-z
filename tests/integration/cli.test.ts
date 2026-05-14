@@ -83,7 +83,7 @@ async function writeFixture(root: string, home?: string): Promise<void> {
   );
   await writeFile(
     path.join(root, "profiles", "base", "mise.toml"),
-    '[tools]\njq = "latest"\n',
+    '[tools]\njq = "latest"\n\n[settings]\nminimum_release_age = "3d"\n',
     "utf8"
   );
   await writeFile(
@@ -266,6 +266,8 @@ describe("CLI integration", () => {
       "utf8"
     );
     expect(mise).toContain('jq = "latest"');
+    expect(mise).toContain('[settings]');
+    expect(mise).toContain('minimum_release_age = "3d"');
   });
 
   it("backs up and replaces existing config files after approval", async () => {
@@ -324,7 +326,11 @@ describe("CLI integration", () => {
 
     const misePath = path.join(root, "configs", "personal", "mise", "config.toml");
     // Simulate mise use -g rust@latest: write TOML with an unmanaged tool
-    await writeFile(misePath, '[tools]\njq = "latest"\nrust = "latest"\n', "utf8");
+    await writeFile(
+      misePath,
+      '[tools]\njq = "latest"\nrust = "latest"\n\n[settings]\nminimum_release_age = "3d"\n',
+      "utf8"
+    );
 
     const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "base\n");
     expect(syncResult.stdout).toContain("Updated base/mise.toml");
@@ -337,6 +343,28 @@ describe("CLI integration", () => {
     const miseAfter = await readFile(misePath, "utf8");
     expect(miseAfter).toContain('rust = "latest"');
     expect(miseAfter).toContain('jq = "latest"');
+  });
+
+  it("sync detects unmanaged mise settings and promotes them to base profile mise.toml", async () => {
+    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+
+    const misePath = path.join(root, "configs", "personal", "mise", "config.toml");
+    await writeFile(
+      misePath,
+      '[tools]\njq = "latest"\n\n[settings]\nminimum_release_age = "3d"\nidiomatic_version_file_enable_tools = ["node"]\n',
+      "utf8"
+    );
+
+    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "base\n");
+    expect(syncResult.stdout).toContain("Updated base/mise.toml: settings.idiomatic_version_file_enable_tools");
+
+    const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
+    expect(baseMise).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
+
+    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+    const miseAfter = await readFile(misePath, "utf8");
+    expect(miseAfter).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
+    expect(miseAfter).toContain('minimum_release_age = "3d"');
   });
 
   it("sync detects unmanaged git skills and promotes them to the chosen profile", async () => {
