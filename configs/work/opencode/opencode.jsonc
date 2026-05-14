@@ -5,7 +5,7 @@
   },
   "agent": {
     "explore": {
-      "model": "openai/gpt-5.4-mini",
+      "model": "github-copilot/gpt-5.4-mini",
       "reasoningEffort": "medium"
     }
   },
@@ -54,6 +54,11 @@
       "type": "remote",
       "url": "https://mcp.deepwiki.com/mcp",
       "enabled": true
+    },
+    "openai-docs": {
+      "type": "remote",
+      "url": "https://developers.openai.com/mcp",
+      "enabled": false
     },
     "aws-knowledge": {
       "type": "remote",

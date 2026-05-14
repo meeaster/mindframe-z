@@ -21,6 +21,12 @@ servers:
     type: remote
     transport: http
     url: https://mcp.deepwiki.com/mcp
+  openai-docs:
+    description: OpenAI developer documentation MCP server.
+    targets: [opencode]
+    type: remote
+    transport: http
+    url: https://developers.openai.com/mcp
   pinescript-docs:
     description: Pine Script documentation MCP server.
     targets: [opencode]

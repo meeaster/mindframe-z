@@ -18,12 +18,12 @@ skills:
       work, or voice-assistant exposure.
     targets:
       - opencode
-  - name: gpt-5-5-prompting
+  - name: gpt-model-selection
     source: local
-    skill: gpt-5-5-prompting
+    skill: gpt-model-selection
     description: >
-      Use when creating, reviewing, migrating, or tightening prompts for GPT-5.5, especially outcome-first goals,
-      concise style controls, retrieval budgets, preambles, phase handling, validation loops, or prompt structure.
+      Use when choosing which GPT model or reasoning effort to use, or when creating, reviewing, migrating, or tightening
+      prompts for GPT-5.5, GPT-5.4, GPT-5.4-mini, or GPT-5.3 Codex.
     targets:
       - opencode
   - name: impeccable
@@ -125,6 +125,37 @@ skills:
     skill: pr-writer
     description: Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
       existing PR after material changes.
+    targets:
+      - opencode
+    installer: npx-skills
+  - name: qmd
+    source: git
+    repo: https://github.com/tobi/qmd
+    skill: qmd
+    description: Search markdown knowledge bases, notes, and documentation using QMD. Use when users ask to search notes,
+      find documents, or look up information.
+    targets:
+      - opencode
+    installer: npx-skills
+  - name: visual-explainer
+    source: git
+    repo: https://github.com/nicobailon/visual-explainer
+    skill: visual-explainer
+    description: Generate beautiful, self-contained HTML pages that visually explain systems, code changes, plans, and data.
+      Use when the user asks for a diagram, architecture overview, diff review, plan review, project recap, comparison
+      table, or any visual explanation of technical concepts. Also use proactively when you are about to render a
+      complex ASCII table (4+ rows or 3+ columns) — present it as a styled HTML page instead.
+    targets:
+      - opencode
+    installer: npx-skills
+  - name: openai-docs
+    source: git
+    repo: https://github.com/openai/skills
+    skill: openai-docs
+    description: Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official
+      documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade
+      guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any
+      fallback browsing to official OpenAI domains.
     targets:
       - opencode
     installer: npx-skills

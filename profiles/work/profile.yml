@@ -4,6 +4,7 @@ description: Work AI setup using OpenAI models.
 skills:
   - jira-writer
   - pr-writer
+  - visual-explainer
 references:
   - datadog-agent
 mcp:
@@ -19,7 +20,7 @@ opencode:
   config:
     agent:
       explore:
-        model: openai/gpt-5.4-mini
+        model: github-copilot/gpt-5.4-mini
         reasoningEffort: medium
 claude:
   settings:
