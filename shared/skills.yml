@@ -128,3 +128,10 @@ skills:
       guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any
       fallback browsing to official OpenAI domains.
     installer: npx-skills
+  - name: claude-code-docs
+    source: local
+    skill: claude-code-docs
+    description: >
+      Navigate and fetch Claude Code documentation. Use when answering questions about Claude Code features,
+      configuration, capabilities, hooks, plugins, MCP servers, settings, CLI usage, deployment options, or
+      troubleshooting.

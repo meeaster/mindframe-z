@@ -26,6 +26,7 @@ skills:
   gpt-model-selection: [all]
   qmd: [all]
   openai-docs: [all]
+  claude-code-docs: [opencode]
 mcp:
   context7:
     enabled: true
