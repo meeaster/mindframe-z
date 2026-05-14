@@ -69,7 +69,6 @@ export async function syncSkills(
         repo: stripGitSuffix(skill.sourceUrl),
         skill: name,
         description: await readSkillDescription(home, name),
-        targets: ["opencode"],
         installer: "npx-skills"
       }
     });

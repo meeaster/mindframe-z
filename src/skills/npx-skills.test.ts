@@ -1,5 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { buildNpxSkillsCommand, buildNpxSkillsUpdateCommand } from "./npx-skills.js";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { execa } from "execa";
+import {
+  buildNpxSkillsCommand,
+  buildNpxSkillsUpdateCommand,
+  listInstalledSkills
+} from "./npx-skills.js";
+
+vi.mock("execa", () => ({ execa: vi.fn() }));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("buildNpxSkillsCommand", () => {
   it("builds local skill commands from repo skills directory", () => {
@@ -17,7 +31,6 @@ describe("buildNpxSkillsCommand", () => {
         source: "local",
         skill: "mise",
         description: "",
-        targets: ["opencode"],
         installer: "npx-skills"
       },
       "opencode"
@@ -53,7 +66,6 @@ describe("buildNpxSkillsCommand", () => {
         repo: "https://github.com/getsentry/skills",
         skill: "skill-writer",
         description: "",
-        targets: ["opencode"],
         installer: "npx-skills"
       },
       "opencode"
@@ -81,7 +93,6 @@ describe("buildNpxSkillsUpdateCommand", () => {
       source: "local",
       skill: "mise",
       description: "",
-      targets: ["opencode"],
       installer: "npx-skills"
     });
 
@@ -95,10 +106,61 @@ describe("buildNpxSkillsUpdateCommand", () => {
       repo: "https://github.com/getsentry/skills",
       skill: "skill-writer",
       description: "",
-      targets: ["opencode"],
       installer: "npx-skills"
     });
 
     expect(command).toEqual(["npx", "skills", "update", "skill-writer", "-g", "-y"]);
+  });
+});
+
+describe("listInstalledSkills", () => {
+  it("treats canonical .agents skills as installed for OpenCode", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-skills-"));
+    const opencodeSkillDir = path.join(home, ".agents", "skills", "jira-writer");
+    await mkdir(opencodeSkillDir, { recursive: true });
+    await writeFile(path.join(opencodeSkillDir, "SKILL.md"), "# Jira Writer\n", "utf8");
+
+    const installed = await listInstalledSkills(
+      {
+        root: "/repo",
+        home,
+        configsDir: "/repo/configs",
+        opencodeConfigDir: path.join(home, ".config", "opencode"),
+        claudeDir: path.join(home, ".claude"),
+        miseConfigDir: path.join(home, ".config", "mise")
+      },
+      "opencode"
+    );
+
+    expect(installed.has("jira-writer")).toBe(true);
+  });
+
+  it("uses Claude directory and CLI agent attribution for Claude Code", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-skills-"));
+    const claudeSkillDir = path.join(home, ".claude", "skills", "context7-mcp");
+    await mkdir(claudeSkillDir, { recursive: true });
+    await writeFile(path.join(claudeSkillDir, "SKILL.md"), "# Context7\n", "utf8");
+    vi.mocked(execa).mockResolvedValue({
+      stdout: JSON.stringify([
+        { name: "pr-writer", agents: ["Claude Code"] },
+        { name: "jira-writer", agents: ["OpenCode"] }
+      ])
+    } as Awaited<ReturnType<typeof execa>>);
+
+    const installed = await listInstalledSkills(
+      {
+        root: "/repo",
+        home,
+        configsDir: "/repo/configs",
+        opencodeConfigDir: path.join(home, ".config", "opencode"),
+        claudeDir: path.join(home, ".claude"),
+        miseConfigDir: path.join(home, ".config", "mise")
+      },
+      "claude-code"
+    );
+
+    expect(installed.has("context7-mcp")).toBe(true);
+    expect(installed.has("pr-writer")).toBe(true);
+    expect(installed.has("jira-writer")).toBe(false);
   });
 });

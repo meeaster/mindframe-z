@@ -75,7 +75,7 @@ machine config ────┤               claude,       claude/              
 mindframe-z/
 ├── shared/                    # Catalog: what exists
 │   ├── refs.yml               # Reference repositories (name, url, description)
-│   ├── skills.yml             # Skill definitions (local/git source, targets)
+│   ├── skills.yml             # Portable skill definitions (local/git source)
 │   ├── mcp.yml                # MCP server definitions (remote/local, transports)
 │   └── AGENTS.global.md       # Shared AI instructions (rendered into all profiles)
 │
@@ -148,21 +148,21 @@ Zed uses `.zed/settings.json` to configure `yaml-language-server`; VS Code uses 
 
 Profiles use `extends` to inherit from a parent. The merge rules are:
 
-| Field               | Merge Behavior                                  |
-| ------------------- | ----------------------------------------------- |
-| `instructions`      | Concatenate + deduplicate                       |
-| `references`        | Concatenate + deduplicate                       |
-| `skills`            | Concatenate + deduplicate                       |
-| `mcp`               | Deep merge — child keys override parent         |
-| `opencode.config`   | Deep merge — child keys override parent         |
-| `opencode.plugins`  | Concatenate + deduplicate                       |
-| `opencode.commands` | Concatenate + deduplicate                       |
-| `claude`            | Deep merge — child keys override parent         |
-| `mise.tools`        | Deep merge                                      |
-| `mise.env`          | Shallow merge — child overrides parent          |
-| `mise.tool_alias`   | Shallow merge — child overrides parent          |
-| `dotfiles`          | Concatenate with newline separator for same key |
-| `targets`           | Child replaces parent if non-empty              |
+| Field               | Merge Behavior                                           |
+| ------------------- | -------------------------------------------------------- |
+| `instructions`      | Concatenate + deduplicate                                |
+| `references`        | Concatenate + deduplicate                                |
+| `skills`            | Merge by skill name — child target list overrides parent |
+| `mcp`               | Deep merge — child keys override parent                  |
+| `opencode.config`   | Deep merge — child keys override parent                  |
+| `opencode.plugins`  | Concatenate + deduplicate                                |
+| `opencode.commands` | Concatenate + deduplicate                                |
+| `claude`            | Deep merge — child keys override parent                  |
+| `mise.tools`        | Deep merge                                               |
+| `mise.env`          | Shallow merge — child overrides parent                   |
+| `mise.tool_alias`   | Shallow merge — child overrides parent                   |
+| `dotfiles`          | Concatenate with newline separator for same key          |
+| `targets`           | Child replaces parent if non-empty                       |
 
 Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
 
@@ -189,7 +189,7 @@ Features from the design that are not yet implemented:
 ## Key Decisions
 
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes.
-- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The skill catalog lives in `shared/skills.yml`, not in the installed location.
+- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which tools each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, or `[all]`.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.

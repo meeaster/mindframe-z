@@ -7,8 +7,6 @@ skills:
       Best practices for HA automations, helpers, scripts, device controls, and dashboards. Use when creating/editing
       automations, scripts, scenes, dashboards, helpers, Zigbee button/remote automations, entity renames, or Home
       Assistant dashboard cards.
-    targets:
-      - opencode
   - name: homeassistant
     source: local
     skill: homeassistant
@@ -16,16 +14,12 @@ skills:
       Use when inspecting, scripting, testing, or troubleshooting Home Assistant through CLI-accessible HTTP or
       WebSocket APIs, including curl, inline Python with uv, authentication, service calls, events, entity registry
       work, or voice-assistant exposure.
-    targets:
-      - opencode
   - name: gpt-model-selection
     source: local
     skill: gpt-model-selection
     description: >
       Use when choosing which GPT model or reasoning effort to use, or when creating, reviewing, migrating, or tightening
       prompts for GPT-5.5, GPT-5.4, GPT-5.4-mini, or GPT-5.3 Codex.
-    targets:
-      - opencode
   - name: impeccable
     source: git
     repo: https://github.com/pbakaus/impeccable
@@ -33,8 +27,6 @@ skills:
     description: >
       Use when designing, redesigning, shaping, critiquing, auditing, polishing, clarifying, hardening, optimizing,
       adapting, animating, colorizing, extracting, or otherwise improving a frontend interface.
-    targets:
-      - opencode
   - name: jira-writer
     source: local
     skill: jira-writer
@@ -42,24 +34,18 @@ skills:
       Create clear, high-level Jira stories from notes, requirements, discovery, bug reports, or implementation ideas.
       Use when drafting a Jira story, creating a Jira ticket, turning rough notes into Jira-ready work, or rewriting a
       story so it is concise and actionable.
-    targets:
-      - opencode
   - name: mise
     source: local
     skill: mise
     description: >
       Use when answering mise basics: installing or adding global tools, choosing a mise backend, managing global mise
       environment variables, checking mise config, or giving concise mise command guidance.
-    targets:
-      - opencode
   - name: opencode-db
     source: local
     skill: opencode-db
     description: >
       Use when safely inspecting or querying OpenCode's local database with `opencode db`, including sessions, messages,
       projects, workspaces, tool calls, skill/MCP usage, subagents, or prior assistant behavior.
-    targets:
-      - opencode
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills
@@ -67,17 +53,14 @@ skills:
     description: >
       Create, synthesize, and iteratively improve agent skills following the Agent Skills specification. Use when asked
       to create, write, synthesize, improve, update, or maintain skill docs and registration.
-    targets:
-      - opencode
   - name: hunk-review
     source: git
     repo: https://github.com/modem-dev/hunk
     skill: hunk-review
-    description: Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
+    description:
+      Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
       reloads session contents, and adds inline review comments. Use when the user has a Hunk session running or wants
       to review diffs interactively.
-    targets:
-      - opencode
     installer: npx-skills
   - name: openspec-apply-change
     source: local
@@ -85,77 +68,63 @@ skills:
     description: >
       Implement tasks from an OpenSpec change. Use when starting implementation, continuing implementation, or working
       through tasks.
-    targets:
-      - opencode
   - name: openspec-archive-change
     source: local
     skill: openspec-archive-change
     description: >
       Archive a completed change in the experimental workflow. Use when finalizing and archiving a change after
       implementation is complete.
-    targets:
-      - opencode
   - name: openspec-explore
     source: local
     skill: openspec-explore
     description: >
       Enter explore mode — a thinking partner for exploring ideas, investigating problems, and clarifying requirements.
       Use when thinking through something before or during a change.
-    targets:
-      - opencode
   - name: openspec-propose
     source: local
     skill: openspec-propose
     description: >
       Propose a new change with all artifacts generated in one step. Use when quickly describing what to build and
       getting a complete proposal with design, specs, and tasks ready for implementation.
-    targets:
-      - opencode
   - name: openspec-sync-specs
     source: local
     skill: openspec-sync-specs
     description: >
       Sync delta specs from a change to main specs. Use when updating main specs with changes from a delta spec, without
       archiving the change.
-    targets:
-      - opencode
   - name: pr-writer
     source: git
     repo: https://github.com/getsentry/skills
     skill: pr-writer
-    description: Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
+    description:
+      Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
       existing PR after material changes.
-    targets:
-      - opencode
     installer: npx-skills
   - name: qmd
     source: git
     repo: https://github.com/tobi/qmd
     skill: qmd
-    description: Search markdown knowledge bases, notes, and documentation using QMD. Use when users ask to search notes,
+    description:
+      Search markdown knowledge bases, notes, and documentation using QMD. Use when users ask to search notes,
       find documents, or look up information.
-    targets:
-      - opencode
     installer: npx-skills
   - name: visual-explainer
     source: git
     repo: https://github.com/nicobailon/visual-explainer
     skill: visual-explainer
-    description: Generate beautiful, self-contained HTML pages that visually explain systems, code changes, plans, and data.
+    description:
+      Generate beautiful, self-contained HTML pages that visually explain systems, code changes, plans, and data.
       Use when the user asks for a diagram, architecture overview, diff review, plan review, project recap, comparison
       table, or any visual explanation of technical concepts. Also use proactively when you are about to render a
       complex ASCII table (4+ rows or 3+ columns) — present it as a styled HTML page instead.
-    targets:
-      - opencode
     installer: npx-skills
   - name: openai-docs
     source: git
     repo: https://github.com/openai/skills
     skill: openai-docs
-    description: Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official
+    description:
+      Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official
       documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade
       guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any
       fallback browsing to official OpenAI domains.
-    targets:
-      - opencode
     installer: npx-skills

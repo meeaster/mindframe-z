@@ -239,6 +239,7 @@ program
   );
 
 const skills = program.command("skills").description("Manage skills through npx skills");
+const skillTargets = ["opencode", "claude-code"] as const;
 
 skills
   .command("list")
@@ -253,29 +254,40 @@ skills
 skills
   .command("apply")
   .description("Install profile-enabled skills with npx skills")
-  .option("--target <target>", "opencode or claude-code", "opencode")
+  .option("--target <target>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const target = options.target as "opencode" | "claude-code";
-    const installedSkills = options.dryRun ? undefined : await listInstalledSkills();
-    for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
-      console.log(await applySkill(paths, skill, target, options.dryRun ?? false, installedSkills));
+    const requestedTarget = options.target as "opencode" | "claude-code" | undefined;
+    const targets = requestedTarget ? [requestedTarget] : skillTargets;
+    for (const target of targets) {
+      const installedSkills = options.dryRun ? undefined : await listInstalledSkills(paths, target);
+      for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
+        console.log(
+          await applySkill(paths, skill, target, options.dryRun ?? false, installedSkills)
+        );
+      }
     }
   });
 
 skills
   .command("update")
   .description("Update profile-enabled skills with npx skills")
-  .option("--target <target>", "opencode or claude-code", "opencode")
+  .option("--target <target>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const target = options.target as "opencode" | "claude-code";
-    for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
-      console.log(await updateSkill(paths, skill, target, options.dryRun ?? false));
+    const requestedTarget = options.target as "opencode" | "claude-code" | undefined;
+    const targets = requestedTarget ? [requestedTarget] : skillTargets;
+    const updatedGitSkills = new Set<string>();
+    for (const target of targets) {
+      for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
+        if (skill.source === "git" && updatedGitSkills.has(skill.name)) continue;
+        console.log(await updateSkill(paths, skill, target, options.dryRun ?? false));
+        if (skill.source === "git") updatedGitSkills.add(skill.name);
+      }
     }
   });
 

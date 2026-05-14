@@ -13,19 +13,19 @@ references:
   - vercel-skills
   - agent-vault
 skills:
-  - hunk-review
-  - impeccable
-  - mise
-  - opencode-db
-  - openspec-apply-change
-  - openspec-archive-change
-  - openspec-explore
-  - openspec-propose
-  - openspec-sync-specs
-  - skill-writer
-  - gpt-model-selection
-  - qmd
-  - openai-docs
+  hunk-review: [all]
+  impeccable: [all]
+  mise: [all]
+  opencode-db: [opencode]
+  openspec-apply-change: [all]
+  openspec-archive-change: [all]
+  openspec-explore: [all]
+  openspec-propose: [all]
+  openspec-sync-specs: [all]
+  skill-writer: [all]
+  gpt-model-selection: [all]
+  qmd: [all]
+  openai-docs: [all]
 mcp:
   context7:
     enabled: true

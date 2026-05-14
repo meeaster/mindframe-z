@@ -56,7 +56,14 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  - name: local-skill",
       "    source: local",
       "    description: Local test skill.",
-      "    targets: [opencode, claude-code]",
+      "    installer: npx-skills",
+      "  - name: claude-skill",
+      "    source: local",
+      "    description: Claude test skill.",
+      "    installer: npx-skills",
+      "  - name: all-skill",
+      "    source: local",
+      "    description: All targets test skill.",
       "    installer: npx-skills",
       ""
     ].join("\n"),
@@ -102,7 +109,9 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "references:",
       "  - local-ref",
       "skills:",
-      "  - local-skill",
+      "  local-skill: [opencode]",
+      "  claude-skill: [claude-code]",
+      "  all-skill: [all]",
       "commands:",
       "  - test-cmd",
       "mcp:",
@@ -266,7 +275,7 @@ describe("CLI integration", () => {
       "utf8"
     );
     expect(mise).toContain('jq = "latest"');
-    expect(mise).toContain('[settings]');
+    expect(mise).toContain("[settings]");
     expect(mise).toContain('minimum_release_age = "3d"');
   });
 
@@ -356,7 +365,9 @@ describe("CLI integration", () => {
     );
 
     const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "base\n");
-    expect(syncResult.stdout).toContain("Updated base/mise.toml: settings.idiomatic_version_file_enable_tools");
+    expect(syncResult.stdout).toContain(
+      "Updated base/mise.toml: settings.idiomatic_version_file_enable_tools"
+    );
 
     const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
     expect(baseMise).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
@@ -406,16 +417,87 @@ describe("CLI integration", () => {
     expect(skillsYaml).toContain("repo: https://github.com/example/skills");
     expect(skillsYaml).toContain("skill: remote-skill");
     expect(skillsYaml).toContain("description: Remote test skill.");
-    expect(skillsYaml).toContain("targets:");
-    expect(skillsYaml).toContain("- opencode");
+    expect(skillsYaml).not.toContain("targets:");
     expect(skillsYaml).toContain("installer: npx-skills");
 
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       "utf8"
     );
-    expect(profileYaml).toContain("- local-skill");
-    expect(profileYaml).toContain("- remote-skill");
+    expect(profileYaml).toContain("local-skill:");
+    expect(profileYaml).toContain("remote-skill:");
+    expect(profileYaml).toContain("- opencode");
+  });
+
+  it("lists resolved skill targets from the profile", async () => {
+    const result = await cli("mindframe-z", root, home, ["skills", "list"]);
+    expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
+    expect(result.stdout).toContain("claude-skill\tclaude-code\tClaude test skill.");
+    expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll targets test skill.");
+  });
+
+  it("applies skills for all configured targets by default", async () => {
+    const result = await cli("mindframe-z", root, home, ["skills", "apply", "--dry-run"]);
+    const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
+    expect(lines).toHaveLength(4);
+    expect(lines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
+    expect(lines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(2);
+  });
+
+  it("updates skills for all configured targets by default", async () => {
+    await writeFile(
+      path.join(root, "shared", "skills.yml"),
+      [
+        "skills:",
+        "  - name: shared-git-skill",
+        "    source: git",
+        "    repo: https://github.com/example/skills",
+        "    skill: shared-git-skill",
+        "    description: Shared git skill.",
+        "    installer: npx-skills",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "skills:", "  shared-git-skill: [all]", ""].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mindframe-z", root, home, ["skills", "update", "--dry-run"]);
+    const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills update"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("npx skills update shared-git-skill -g -y");
+  });
+
+  it("child profile overrides inherited skill targets", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "skills:", "  local-skill: [claude-code]", ""].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "skills:", "  local-skill: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mindframe-z", root, home, ["skills", "list"]);
+    expect(result.stdout).toContain("local-skill\tclaude-code\tLocal test skill.");
+    expect(result.stdout).not.toContain("local-skill\topencode");
+  });
+
+  it("rejects empty skill target arrays", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "skills:", "  local-skill: []", ""].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    expect(result.stdout).toContain("manifest:✗\tprofiles/personal/profile.yml");
+    expect(result.stdout).toContain("Too small");
   });
 
   it("prints enabled commands in status output", async () => {

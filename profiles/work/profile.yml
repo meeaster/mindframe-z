@@ -2,9 +2,9 @@ name: work
 extends: base
 description: Work AI setup using OpenAI models.
 skills:
-  - jira-writer
-  - pr-writer
-  - visual-explainer
+  jira-writer: [all]
+  pr-writer: [all]
+  visual-explainer: [all]
 references:
   - datadog-agent
 mcp:
