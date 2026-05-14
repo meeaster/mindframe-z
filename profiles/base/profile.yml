@@ -1,6 +1,8 @@
 name: base
 description: Shared base config for all profiles.
-targets: [opencode, claude-code]
+targets:
+  - opencode
+  - claude-code
 instructions:
   - shared/AGENTS.global.md
 references:
@@ -11,7 +13,6 @@ references:
   - vercel-skills
   - agent-vault
 skills:
-  - gpt-5-5-prompting
   - hunk-review
   - impeccable
   - mise
@@ -22,6 +23,9 @@ skills:
   - openspec-propose
   - openspec-sync-specs
   - skill-writer
+  - gpt-model-selection
+  - qmd
+  - openai-docs
 mcp:
   context7:
     enabled: true
@@ -31,6 +35,8 @@ mcp:
     enabled: true
   deepwiki:
     enabled: true
+  openai-docs:
+    enabled: false
 opencode:
   config:
     lsp: true
