@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
@@ -232,6 +232,7 @@ describe("CLI integration", () => {
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
       path.join(root, "configs", "personal", "claude", "CLAUDE.md")
     );
+    expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
   });
 
   it("applies machine-local OpenCode permission overrides", async () => {
@@ -279,32 +280,96 @@ describe("CLI integration", () => {
     expect(mise).toContain('minimum_release_age = "3d"');
   });
 
-  it("backs up and replaces existing config files after approval", async () => {
+  it("merges Claude settings into the machine-local file without linking", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "targets: [opencode, claude-code]",
+        "claude:",
+        "  model: sonnet",
+        "  settings:",
+        "    includeGitInstructions: true",
+        "    env:",
+        '      CLAUDE_CODE_ENABLE_TELEMETRY: "1"',
+        ""
+      ].join("\n"),
+      "utf8"
+    );
     await mkdir(path.join(home, ".claude"), { recursive: true });
-    await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
-
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
-      MFZ_REPLACE_EXISTING: "yes"
-    });
-
-    expect(result.stdout).toContain("backed up");
-    await expect(realpath(path.join(home, ".claude", "settings.json"))).resolves.toBe(
-      path.join(root, "configs", "personal", "claude", "settings.json")
+    await writeFile(
+      path.join(home, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          env: {
+            AWS_PROFILE: "ClaudeCodeUnix",
+            AWS_REGION: "us-west-2"
+          },
+          awsAuthRefresh: "/work/credential-process"
+        },
+        null,
+        2
+      ) + "\n",
+      "utf8"
     );
 
-    const entries = await readdir(path.join(home, ".claude"));
-    expect(entries.some((entry) => entry.startsWith("settings.json.mindframe-z.bak-"))).toBe(true);
+    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+
+    expect(result.stdout).toContain("wrote local");
+    expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
+
+    const localSettings = JSON.parse(
+      await readFile(path.join(home, ".claude", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(localSettings).toMatchObject({
+      includeGitInstructions: true,
+      model: "sonnet",
+      awsAuthRefresh: "/work/credential-process",
+      env: {
+        AWS_PROFILE: "ClaudeCodeUnix",
+        AWS_REGION: "us-west-2",
+        CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+      }
+    });
+
+    const snapshot = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(snapshot).toEqual({
+      includeGitInstructions: true,
+      env: { CLAUDE_CODE_ENABLE_TELEMETRY: "1" },
+      model: "sonnet"
+    });
   });
 
-  it("skips existing config files when approval is denied", async () => {
+  it("replaces an old Claude settings symlink with a machine-local file", async () => {
+    const snapshotPath = path.join(root, "configs", "personal", "claude", "settings.json");
+    const settingsPath = path.join(home, ".claude", "settings.json");
+    await mkdir(path.dirname(snapshotPath), { recursive: true });
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(snapshotPath, '{"awsAuthRefresh":"/work/credential-process"}\n', "utf8");
+    await symlink(snapshotPath, settingsPath);
+
+    await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+
+    expect((await lstat(settingsPath)).isSymbolicLink()).toBe(false);
+    expect(await readFile(settingsPath, "utf8")).toContain("/work/credential-process");
+    expect(await readFile(settingsPath, "utf8")).toContain("includeGitInstructions");
+  });
+
+  it("does not write machine-local Claude settings with --no-link", async () => {
     await mkdir(path.join(home, ".claude"), { recursive: true });
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
 
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"], {
-      MFZ_REPLACE_EXISTING: "no"
-    });
+    const result = await cli("mindframe-z", root, home, [
+      "apply",
+      "--target",
+      "claude-code",
+      "--no-link"
+    ]);
 
-    expect(result.stdout).toContain("skipped");
+    expect(result.stdout).not.toContain("wrote local");
     expect(await readFile(path.join(home, ".claude", "settings.json"), "utf8")).toBe("{}\n");
   });
 

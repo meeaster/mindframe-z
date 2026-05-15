@@ -56,15 +56,18 @@ machine config ────┤               claude,       claude/              
 2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent).
 3. **Render** — for each target, the renderer produces files and link plans:
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
-   - **claude-code**: `CLAUDE.md` + `settings.json`, linked to `~/.claude/`
+   - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
 4. **Write files** — rendered content is written to `configs/<profile>/`.
-5. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
+5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
+6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
+
+Claude Code `settings.json` is intentionally not symlinked. The committed `configs/<profile>/claude/settings.json` contains only profile-managed settings. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
 
 ### Sync (tools → profiles)
 
-1. **Read rendered configs** — parse `configs/<profile>/opencode/opencode.jsonc`, `claude/settings.json`, `mise/config.toml`.
+1. **Read rendered configs** — parse `configs/<profile>/opencode/opencode.jsonc`, `claude/settings.json`, `mise/config.toml`. Claude sync reads the managed snapshot, not the machine-local merged settings file.
 2. **Diff against profile** — identify keys present in the rendered config but not declared in the profile YAML (unmanaged keys).
 3. **Prompt or assign** — for each unmanaged key, prompt the user to assign it to `base` or the current profile (or skip). Can be automated with `--profile`.
 4. **Write back** — update the target `profile.yml` or `mise.toml` with the new key.
@@ -188,7 +191,7 @@ Features from the design that are not yet implemented:
 
 ## Key Decisions
 
-- **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes.
+- **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.
 - **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which tools each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, or `[all]`.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.

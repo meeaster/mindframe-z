@@ -8,7 +8,7 @@ import { generateSchemas } from "../core/generate-schemas.js";
 import { validateManifests } from "../core/manifests.js";
 import { createRuntimePaths, targetList, type ApplyTarget } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
-import { renderTarget, writeRenderedFiles } from "../core/render.js";
+import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
 import { applySkill, listInstalledSkills, updateSkill } from "../skills/npx-skills.js";
@@ -60,6 +60,11 @@ async function applyConfig(options: {
       if (!options.dryRun) await writeRenderedFiles(result.files);
       for (const file of result.files)
         console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
+      if (result.localFiles && !options.noLink) {
+        if (!options.dryRun) await writeLocalFiles(result.localFiles);
+        for (const file of result.localFiles)
+          console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
+      }
       if (!options.noLink) {
         for (const link of result.links) {
           const status = await verifyLink(link);
