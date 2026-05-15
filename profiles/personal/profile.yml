@@ -8,6 +8,8 @@ mcp:
   homeassistant:
     targets: [opencode, claude-code]
     enabled: false
+  openai-docs:
+    enabled: false
   pinescript-docs:
     targets: [opencode, claude-code]
     enabled: false
@@ -16,6 +18,9 @@ mcp:
     enabled: false
 opencode:
   config:
+    skills:
+      urls:
+        - https://docs.x.com/.well-known/skills/
     agent:
       explore:
         model: opencode-go/deepseek-v4-flash
