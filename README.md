@@ -8,13 +8,15 @@ Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles
 pnpm install
 pnpm build
 pnpm test
+pnpm build && npm link
 pnpm dev -- doctor
 pnpm dev -- apply --profile personal --target all --dry-run
 pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
 pnpm dev -- refs list
+mfz doctor
 ```
 
-By default, commands use the current repository as the config root. Override with `--root <path>` or `MFZ_ROOT`.
+By default, commands use `--root <path>`, `MFZ_ROOT`, `repo_path` from `~/.mindframe-z/config.yml`, then the current directory as the config root. Set `repo_path` when using the globally linked `mfz` command from outside this repository.
 
 Integration tests use temporary directories and do not touch `~/.config/opencode` or `~/.claude`.
 

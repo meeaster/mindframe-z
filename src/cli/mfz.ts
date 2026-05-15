@@ -196,7 +196,7 @@ async function opencodeSmoke(options: {
 }
 
 const program = new Command()
-  .name("mindframe-z")
+  .name("mfz")
   .description("Render profile-aware AI coding tool configuration")
   .version("0.1.0")
   .option("--root <path>", "AI config root")

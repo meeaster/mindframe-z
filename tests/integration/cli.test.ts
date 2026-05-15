@@ -158,7 +158,7 @@ async function writeFixture(root: string, home?: string): Promise<void> {
 }
 
 function cli(
-  name: "mindframe-z",
+  name: "mfz",
   root: string,
   home: string,
   args: string[],
@@ -193,6 +193,23 @@ function cli(
   );
 }
 
+function cliWithMachineRepoPath(home: string, args: string[]) {
+  return execa(
+    process.execPath,
+    ["--import", "tsx", path.join(projectRoot, "src", "cli", "mfz.ts"), "--home", home, ...args],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        MFZ_HOME: home,
+        MFZ_ROOT: undefined,
+        OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
+        CLAUDE_CONFIG_DIR: path.join(home, ".claude")
+      }
+    }
+  );
+}
+
 describe("CLI integration", () => {
   let root: string;
   let home: string;
@@ -209,7 +226,7 @@ describe("CLI integration", () => {
   });
 
   it("renders and links OpenCode and Claude config into temporary homes", async () => {
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "all"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
     const opencode = await readFile(
@@ -262,6 +279,19 @@ describe("CLI integration", () => {
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
   });
 
+  it("uses machine repo_path when root is not provided", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      ["profile: personal", `repo_path: ${root}`, "references_dir: ~/references", ""].join("\n"),
+      "utf8"
+    );
+
+    const result = await cliWithMachineRepoPath(home, ["doctor"]);
+
+    expect(result.stdout).toContain(`root\t${root}`);
+    expect(result.stdout).toContain("manifest:✓\tshared/refs.yml");
+  });
+
   it("applies machine-local OpenCode permission overrides", async () => {
     const workDir = path.join(home, "work");
     const referencesDir = path.join(home, "references");
@@ -282,7 +312,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "opencode"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "opencode"]);
     expect(result.stdout).toContain("rendered");
 
     const opencode = await readFile(
@@ -295,7 +325,7 @@ describe("CLI integration", () => {
   });
 
   it("renders mise config from base profile and links it", async () => {
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "all"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
     const mise = await readFile(
@@ -341,7 +371,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
 
     expect(result.stdout).toContain("wrote local");
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
@@ -378,7 +408,7 @@ describe("CLI integration", () => {
     await writeFile(snapshotPath, '{"awsAuthRefresh":"/work/credential-process"}\n', "utf8");
     await symlink(snapshotPath, settingsPath);
 
-    await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+    await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
 
     expect((await lstat(settingsPath)).isSymbolicLink()).toBe(false);
     expect(await readFile(settingsPath, "utf8")).toContain("/work/credential-process");
@@ -390,12 +420,7 @@ describe("CLI integration", () => {
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
     await writeFile(path.join(home, ".claude.json"), '{"mcpServers":{}}\n', "utf8");
 
-    const result = await cli("mindframe-z", root, home, [
-      "apply",
-      "--target",
-      "claude-code",
-      "--no-link"
-    ]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "claude-code", "--no-link"]);
 
     expect(result.stdout).not.toContain("wrote local");
     expect(await readFile(path.join(home, ".claude", "settings.json"), "utf8")).toBe("{}\n");
@@ -456,7 +481,7 @@ describe("CLI integration", () => {
   });
 
   it("writes a reference index from profile references", async () => {
-    await cli("mindframe-z", root, home, ["refs", "index"]);
+    await cli("mfz", root, home, ["refs", "index"]);
     const index = await readFile(path.join(root, "configs", "personal", "references.md"), "utf8");
     expect(index).toContain("local-ref");
     expect(index).toContain("Local test reference");
@@ -464,7 +489,7 @@ describe("CLI integration", () => {
 
   it("uses MFZ_REFERENCES_DIR as the reference clone directory", async () => {
     const referencesDir = path.join(home, "custom-reference-cache");
-    const result = await cli("mindframe-z", root, home, ["refs", "list"], {
+    const result = await cli("mfz", root, home, ["refs", "list"], {
       MFZ_REFERENCES_DIR: referencesDir
     });
 
@@ -473,12 +498,12 @@ describe("CLI integration", () => {
   });
 
   it("verifies rendered OpenCode config shows mise", async () => {
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "all"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("mise");
   });
 
   it("sync detects unmanaged mise tools and promotes them to base profile mise.toml", async () => {
-    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
     const misePath = path.join(root, "configs", "personal", "mise", "config.toml");
     // Simulate mise use -g rust@latest: write TOML with an unmanaged tool
@@ -488,21 +513,21 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "base\n");
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "base\n");
     expect(syncResult.stdout).toContain("Updated base/mise.toml");
 
     const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
     expect(baseMise).toContain("rust");
 
     // Re-render and verify rust is still there
-    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
     const miseAfter = await readFile(misePath, "utf8");
     expect(miseAfter).toContain('rust = "latest"');
     expect(miseAfter).toContain('jq = "latest"');
   });
 
   it("sync detects unmanaged mise settings and promotes them to base profile mise.toml", async () => {
-    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
     const misePath = path.join(root, "configs", "personal", "mise", "config.toml");
     await writeFile(
@@ -511,7 +536,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "base\n");
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "base\n");
     expect(syncResult.stdout).toContain(
       "Updated base/mise.toml: settings.idiomatic_version_file_enable_tools"
     );
@@ -519,7 +544,7 @@ describe("CLI integration", () => {
     const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
     expect(baseMise).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
 
-    await cli("mindframe-z", root, home, ["apply", "--target", "mise", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
     const miseAfter = await readFile(misePath, "utf8");
     expect(miseAfter).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
     expect(miseAfter).toContain('minimum_release_age = "3d"');
@@ -552,7 +577,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "personal\n");
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
     expect(syncResult.stdout).toContain(
       "Unmanaged skill: remote-skill (https://github.com/example/skills)"
     );
@@ -577,14 +602,14 @@ describe("CLI integration", () => {
   });
 
   it("lists resolved skill targets from the profile", async () => {
-    const result = await cli("mindframe-z", root, home, ["skills", "list"]);
+    const result = await cli("mfz", root, home, ["skills", "list"]);
     expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
     expect(result.stdout).toContain("claude-skill\tclaude-code\tClaude test skill.");
     expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll targets test skill.");
   });
 
   it("applies skills for all configured targets by default", async () => {
-    const result = await cli("mindframe-z", root, home, ["skills", "apply", "--dry-run"]);
+    const result = await cli("mfz", root, home, ["skills", "apply", "--dry-run"]);
     const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
     expect(lines).toHaveLength(4);
     expect(lines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
@@ -612,7 +637,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["skills", "update", "--dry-run"]);
+    const result = await cli("mfz", root, home, ["skills", "update", "--dry-run"]);
     const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills update"));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("npx skills update shared-git-skill -g -y");
@@ -630,7 +655,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["skills", "list"]);
+    const result = await cli("mfz", root, home, ["skills", "list"]);
     expect(result.stdout).toContain("local-skill\tclaude-code\tLocal test skill.");
     expect(result.stdout).not.toContain("local-skill\topencode");
   });
@@ -642,18 +667,18 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    const result = await cli("mfz", root, home, ["doctor"]);
     expect(result.stdout).toContain("manifest:✗\tprofiles/personal/profile.yml");
     expect(result.stdout).toContain("Too small");
   });
 
   it("prints enabled commands in status output", async () => {
-    const result = await cli("mindframe-z", root, home, ["status"]);
+    const result = await cli("mfz", root, home, ["status"]);
     expect(result.stdout).toContain("commands\ttest-cmd");
   });
 
   it("doctor reports valid manifests", async () => {
-    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    const result = await cli("mfz", root, home, ["doctor"]);
     expect(result.stdout).toContain("manifest:✓\tshared/refs.yml");
     expect(result.stdout).toContain("manifest:✓\tshared/skills.yml");
     expect(result.stdout).toContain("manifest:✓\tshared/mcp.yml");
@@ -669,7 +694,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["doctor"]);
+    const result = await cli("mfz", root, home, ["doctor"]);
     expect(result.stdout).toContain("manifest:✗\tshared/mcp.yml");
     expect(result.stdout).toContain("Invalid input");
     expect(result.stdout).toContain("remote");
@@ -685,7 +710,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    await expect(cli("mindframe-z", root, home, ["status"])).rejects.toMatchObject({
+    await expect(cli("mfz", root, home, ["status"])).rejects.toMatchObject({
       stderr: expect.stringContaining("Profile personal references unknown command: missing-cmd")
     });
   });
@@ -702,7 +727,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["status"]);
+    const result = await cli("mfz", root, home, ["status"]);
     expect(result.stdout).toContain("commands\tbase-cmd, test-cmd");
   });
 
@@ -713,7 +738,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const syncResult = await cli("mindframe-z", root, home, ["sync"], {}, "personal\n");
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
     expect(syncResult.stdout).toContain("Unmanaged command: new-cmd");
     expect(syncResult.stdout).toContain("Updated personal/profile.yml: opencode.commands.new-cmd");
 
@@ -726,7 +751,7 @@ describe("CLI integration", () => {
   });
 
   it("renders and links .npmrc dotfile from profile folder", async () => {
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "dotfiles"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
     const npmrc = await readFile(
@@ -749,7 +774,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mindframe-z", root, home, ["apply", "--target", "dotfiles"]);
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
     const npmrc = await readFile(

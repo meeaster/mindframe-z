@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "mindframe-z": "./bin/mindframe-z"
+    "mfz": "./bin/mfz"
   },
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "npm run lint && npm run fmt:check && npm run build && npm test",
-    "dev": "tsx src/cli/mindframe-z.ts",
+    "dev": "tsx src/cli/mfz.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",

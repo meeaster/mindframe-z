@@ -16,9 +16,9 @@ pnpm dev -- doctor
 pnpm dev -- refs list
 ```
 
-`pnpm dev` uses `tsx` for development. The compiled entry point in `bin/mindframe-z` imports from `dist/` — build first before using the binary.
+`pnpm dev` uses `tsx` for development. The compiled entry point in `bin/mfz` imports from `dist/` — build first before using the binary.
 
-After `mindframe-z apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
+After `mfz apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
 
 ## Pre-commit
 
@@ -38,7 +38,7 @@ Profile-aware AI tool config renderer. Reads YAML manifests from `shared/`, `pro
 Key directories:
 
 - `src/core/` — manifests, profile resolution, path logic, rendering orchestration, symlinks
-- `src/cli/mindframe-z.ts` — main CLI: apply, doctor, status, sync, skills, smoke-opencode, refs
+- `src/cli/mfz.ts` — main CLI: apply, doctor, status, sync, skills, smoke-opencode, refs
 - `src/renderers/` — OpenCode and Claude config generators
 - `src/ref-store/` — git clone/update references, write reference index
 - `src/skills/` — npx skills integration
@@ -59,7 +59,7 @@ Integration tests are completely isolated — they use `mkdtemp` temp directorie
 
 ## Environment variables
 
-- `MFZ_ROOT` — overrides config root (default: cwd)
+- `MFZ_ROOT` — overrides config root (default: machine `repo_path`, then cwd)
 - `MFZ_HOME` — overrides home directory (default: `$HOME`)
 - `MFZ_PROFILE` — profile name (default: `machine/machine.yml` profile or `personal`)
 - `MFZ_REFERENCES_DIR` — where refs are cloned (default: `~/references`)
