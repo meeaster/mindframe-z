@@ -3,6 +3,11 @@
   "reference": {
     "opencode": "https://github.com/anomalyco/opencode"
   },
+  "skills": {
+    "urls": [
+      "https://docs.x.com/.well-known/skills/"
+    ]
+  },
   "agent": {
     "explore": {
       "model": "opencode-go/deepseek-v4-flash",
@@ -42,6 +47,11 @@
       "type": "remote",
       "url": "https://mcp.deepwiki.com/mcp",
       "enabled": true
+    },
+    "openai-docs": {
+      "type": "remote",
+      "url": "https://developers.openai.com/mcp",
+      "enabled": false
     },
     "homeassistant": {
       "type": "remote",
