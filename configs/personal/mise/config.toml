@@ -30,6 +30,7 @@ yamllint = "1"
 "npm:agent-browser" = "latest"
 websocat = "1"
 "npm:executor" = "1"
+usage = "3"
 
 [tools."github:dmtrKovalenko/fff"]
 version = "0"
