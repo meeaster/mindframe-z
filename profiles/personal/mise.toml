@@ -1,4 +1,4 @@
 [tools]
 websocat = "1"
 "npm:executor" = "1"
-
+usage = "3"
