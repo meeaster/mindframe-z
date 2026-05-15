@@ -8,10 +8,10 @@ mindframe-z is a profile-aware AI tool configuration renderer. It manages global
 
 The CLI tools exist to orchestrate, not to gatekeep. AI agents should be able to edit rendered configuration files directly in `configs/<profile>/` — editing `opencode.jsonc`, `settings.json`, `mise/config.toml`, or any other rendered file — without being forced through a CLI wizard. The `sync` command then detects these unmanaged changes and promotes them back into the source profile YAMLs.
 
-This is a core design choice: the natural workflow for an AI agent is to edit the config file it understands, then run `mindframe-z sync` to persist the change upstream. The CLI does not try to intercept every modification.
+This is a core design choice: the natural workflow for an AI agent is to edit the config file it understands, then run `mfz sync` to persist the change upstream. The CLI does not try to intercept every modification.
 
 ```
-edit configs/personal/opencode/opencode.jsonc  →  mindframe-z sync  →  profiles/personal/profile.yml
+edit configs/personal/opencode/opencode.jsonc  →  mfz sync  →  profiles/personal/profile.yml
 ```
 
 ### Profile Layering
@@ -20,7 +20,7 @@ Configuration is organized in three conceptual layers:
 
 - **Catalog** (`shared/*.yml`) — what exists: available references, skills, and MCP servers.
 - **Profile** (`profiles/*/profile.yml`) — what a context wants: which catalog items are enabled, plus tool-specific settings.
-- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: active profile, references directory, machine-specific overrides.
+- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: repo path, active profile, references directory, machine-specific overrides.
 
 This separation prevents any single manifest from trying to encode every concern. The catalog is shared across all profiles; profiles select from it; the machine decides which profile is active.
 
@@ -32,7 +32,7 @@ Each output target (opencode, claude-code, mise, dotfiles) has its own renderer 
 
 The YAML manifests in `shared/` and `profiles/` are the authoritative source of configuration state. Tool-level state — what `npx skills` has installed, what `~/.claude.json` contains, what mise has configured — is a _rendered output_, not the source of truth. The `sync` command bridges the gap by detecting drift between rendered output and manifests, but the manifests remain the canonical record.
 
-Manifest schemas live in `src/core/manifests.ts` as Zod definitions. `mindframe-z schemas` generates editor-facing JSON Schema files into `schemas/` from those same Zod definitions, so runtime validation and editor autocomplete share one source of truth.
+Manifest schemas live in `src/core/manifests.ts` as Zod definitions. `mfz schemas` generates editor-facing JSON Schema files into `schemas/` from those same Zod definitions, so runtime validation and editor autocomplete share one source of truth.
 
 ## Architecture Overview
 
@@ -53,7 +53,7 @@ machine config ────┤               claude,       claude/              
 ### Apply (profiles → tools)
 
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
-2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`, while each profile decides which targets each server applies to.
+2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`, while each profile decides which targets each server applies to.
 3. **Render** — for each target, the renderer produces files and link plans:
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
    - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`
@@ -123,7 +123,7 @@ mindframe-z/
 │   ├── sync/                  # Bidirectional sync: detect drift and promote to profiles
 │   ├── ref-store/             # Git clone/update references, write reference index
 │   ├── skills/                # npx skills adapter
-│   └── cli/mindframe-z.ts     # CLI: apply, doctor, status, sync, skills, refs
+│   └── cli/mfz.ts             # CLI: apply, doctor, status, sync, skills, refs
 │
 ├── opencode/
 │   ├── plugins/               # OpenCode plugin source files
@@ -205,7 +205,7 @@ Features from the design that are not yet implemented:
 
 | Variable              | Purpose                    | Default                       |
 | --------------------- | -------------------------- | ----------------------------- |
-| `MFZ_ROOT`            | Config root directory      | cwd                           |
+| `MFZ_ROOT`            | Config root directory      | machine `repo_path`, then cwd |
 | `MFZ_HOME`            | Home directory             | `$HOME`                       |
 | `MFZ_PROFILE`         | Active profile name        | machine profile or `personal` |
 | `MFZ_REFERENCES_DIR`  | Reference clone directory  | `~/references`                |

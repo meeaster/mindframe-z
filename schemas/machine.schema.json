@@ -5,6 +5,9 @@
     "profile": {
       "type": "string"
     },
+    "repo_path": {
+      "type": "string"
+    },
     "references_dir": {
       "default": "~/references",
       "type": "string"

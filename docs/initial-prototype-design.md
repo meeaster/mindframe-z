@@ -795,18 +795,18 @@ Why not adopt OCX wholesale immediately:
 
 Start with small CLIs or one CLI with strongly separated subcommands. The names are placeholders.
 
-### `mindframe-z`
+### `mfz`
 
 Primary orchestrator.
 
 ```text
-mindframe-z doctor
-mindframe-z status
-mindframe-z apply --profile personal --target opencode
-mindframe-z apply --profile personal --target claude-code
-mindframe-z apply --profile personal --target all
-mindframe-z diff-runtime
-mindframe-z use <profile>
+mfz doctor
+mfz status
+mfz apply --profile personal --target opencode
+mfz apply --profile personal --target claude-code
+mfz apply --profile personal --target all
+mfz diff-runtime
+mfz use <profile>
 ```
 
 Responsibilities:
@@ -1051,9 +1051,9 @@ Phase 1 should prove the minimum useful loop.
 
 Deliverables:
 
-- `mindframe-z doctor` verifies expected directories, required tools, active profile, and symlink status.
-- `mindframe-z apply --profile personal --target opencode` renders OpenCode global config and symlinks it.
-- `mindframe-z apply --profile personal --target claude-code` renders Claude Code global config and symlinks it.
+- `mfz doctor` verifies expected directories, required tools, active profile, and symlink status.
+- `mfz apply --profile personal --target opencode` renders OpenCode global config and symlinks it.
+- `mfz apply --profile personal --target claude-code` renders Claude Code global config and symlinks it.
 - `refctl list`, `refctl enable`, `refctl sync`, and `refctl index` work for references.
 - `mindframe-z skills apply` delegates to `npx skills` for local-path skills.
 

@@ -1,6 +1,9 @@
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import YAML from "yaml";
+import { machineSchema } from "./manifests.js";
 
 export type ToolTarget = "opencode" | "claude-code" | "mise" | "dotfiles";
 export type ApplyTarget = ToolTarget | "all";
@@ -31,15 +34,26 @@ export function expandHome(value: string, home = process.env.HOME ?? ""): string
   return value;
 }
 
-export function resolveRoot(input?: string): string {
-  return path.resolve(expandHome(input ?? process.env.MFZ_ROOT ?? process.cwd()));
+function machineRepoPath(home: string): string | undefined {
+  try {
+    const parsed = YAML.parse(readFileSync(path.join(home, ".mindframe-z", "config.yml"), "utf8"));
+    return machineSchema.parse(parsed).repo_path;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveRoot(input?: string, home = process.env.HOME ?? ""): string {
+  return path.resolve(
+    expandHome(input ?? process.env.MFZ_ROOT ?? machineRepoPath(home) ?? process.cwd(), home)
+  );
 }
 
 export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   const home = path.resolve(
     expandHome(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd())
   );
-  const root = resolveRoot(options.root);
+  const root = resolveRoot(options.root, home);
   return {
     root,
     home,

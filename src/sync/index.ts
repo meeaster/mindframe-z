@@ -322,5 +322,5 @@ export async function runSync(
     }
   }
 
-  console.log("Sync complete. Run `mindframe-z apply` to re-render.");
+  console.log("Sync complete. Run `mfz apply` to re-render.");
 }

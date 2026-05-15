@@ -101,6 +101,7 @@ export const profileSchema = z.object({
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
+  repo_path: z.string().optional(),
   references_dir: z.string().default("~/references"),
   opencode: z.record(z.string(), z.unknown()).default({})
 });
