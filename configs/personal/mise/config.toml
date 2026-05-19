@@ -27,6 +27,7 @@ yamllint = "1"
 "npm:@fission-ai/openspec" = "1"
 "github:Infisical/agent-vault" = "0"
 "github:kitlangton/ghui" = "0"
+"npm:agent-browser" = "latest"
 websocat = "1"
 "npm:executor" = "1"
 
@@ -41,3 +42,6 @@ OPENCODE_EXPERIMENTAL_OXFMT = "1"
 OPENCODE_EXPERIMENTAL_SCOUT = "0"
 OPENCODE_EXPERIMENTAL_WORKSPACES = "1"
 OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL = "true"
+
+[settings]
+minimum_release_age = "3d"
