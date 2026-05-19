@@ -6,6 +6,10 @@ import { z } from "zod";
 
 const targetSchema = z.enum(["opencode", "claude-code"]);
 const skillTargetSchema = z.enum(["opencode", "claude-code", "all"]);
+const profileMcpConfigSchema = z.object({
+  targets: z.array(targetSchema).min(1),
+  enabled: z.boolean()
+});
 const profileSkillTargetsSchema = z
   .array(skillTargetSchema)
   .min(1)
@@ -38,7 +42,6 @@ export const skillsManifestSchema = z.object({
 
 const mcpServerBaseSchema = z.object({
   description: z.string().default(""),
-  targets: z.array(targetSchema).default(["opencode"]),
   type: z.enum(["remote", "local"]),
   transport: z.enum(["http", "sse", "stdio"]).optional(),
   env: z.record(z.string(), z.string()).optional(),
@@ -77,7 +80,7 @@ export const profileSchema = z.object({
   instructions: z.array(z.string()).default([]),
   references: z.array(z.string()).default([]),
   skills: z.record(z.string(), profileSkillTargetsSchema).default({}),
-  mcp: z.record(z.string(), z.object({ enabled: z.boolean() })).default({}),
+  mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
   opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
   claude: z
     .object({

@@ -53,10 +53,10 @@ machine config ────┤               claude,       claude/              
 ### Apply (profiles → tools)
 
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
-2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent).
+2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`, while each profile decides which targets each server applies to.
 3. **Render** — for each target, the renderer produces files and link plans:
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
-   - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`
+   - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
 4. **Write files** — rendered content is written to `configs/<profile>/`.
@@ -64,6 +64,8 @@ machine config ────┤               claude,       claude/              
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
 
 Claude Code `settings.json` is intentionally not symlinked. The committed `configs/<profile>/claude/settings.json` contains only profile-managed settings. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
+
+Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The committed `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
 
 ### Sync (tools → profiles)
 
@@ -84,7 +86,7 @@ mindframe-z/
 │
 ├── profiles/                  # Profile definitions
 │   ├── base/                  # Shared foundation — all profiles extend this
-│   │   ├── profile.yml        # Base references, skills, MCP, tool settings
+│   │   ├── profile.yml        # Base references, skills, MCP targets/toggles, tool settings
 │   │   ├── mise.toml          # Base tool versions and environment
 │   │   └── .npmrc             # Base dotfile
 │   ├── personal/              # Personal profile (extends base)
@@ -101,7 +103,8 @@ mindframe-z/
 │       │   └── opencode.jsonc  # Rendered OpenCode config
 │       ├── claude/
 │       │   ├── CLAUDE.md       # Imports AGENTS.md + references.md
-│       │   └── settings.json   # Rendered Claude settings
+│       │   ├── settings.json   # Rendered Claude settings snapshot
+│       │   └── mcp.json        # Rendered Claude MCP snapshot
 │       ├── mise/
 │       │   └── config.toml     # Rendered mise config
 │       └── dotfiles/
@@ -156,7 +159,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `instructions`      | Concatenate + deduplicate                                |
 | `references`        | Concatenate + deduplicate                                |
 | `skills`            | Merge by skill name — child target list overrides parent |
-| `mcp`               | Deep merge — child keys override parent                  |
+| `mcp`               | Deep merge by server name — child keys override parent   |
 | `opencode.config`   | Deep merge — child keys override parent                  |
 | `opencode.plugins`  | Concatenate + deduplicate                                |
 | `opencode.commands` | Concatenate + deduplicate                                |
@@ -186,13 +189,13 @@ Features from the design that are not yet implemented:
 
 - Work overlay as a separate company-owned repository
 - `diff-runtime` command
-- Claude Code MCP rendering (currently OpenCode-only for MCP)
 - Project-level `.claude/` and `.mcp.json` generation
 
 ## Key Decisions
 
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.
 - **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which tools each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, or `[all]`.
+- **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles decide where each server is used with `mcp.<name>.targets` plus an `enabled` flag. OpenCode respects both `targets` and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.

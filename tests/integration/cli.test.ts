@@ -75,17 +75,30 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "servers:",
       "  context7:",
       "    description: Docs.",
-      "    targets: [opencode, claude-code]",
       "    type: remote",
       "    transport: http",
       "    url: https://mcp.context7.com/mcp",
+      "  local-helper:",
+      "    description: Local helper.",
+      "    type: local",
+      "    command: [tool-helper, --serve]",
       ""
     ].join("\n"),
     "utf8"
   );
   await writeFile(
     path.join(root, "profiles", "base", "profile.yml"),
-    ["name: base", "mcp:", "  context7:", "    enabled: true", ""].join("\n"),
+    [
+      "name: base",
+      "mcp:",
+      "  context7:",
+      "    targets: [opencode, claude-code]",
+      "    enabled: true",
+      "  local-helper:",
+      "    targets: [claude-code]",
+      "    enabled: false",
+      ""
+    ].join("\n"),
     "utf8"
   );
   await writeFile(
@@ -114,10 +127,11 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  all-skill: [all]",
       "commands:",
       "  - test-cmd",
-      "mcp:",
-      "  context7:",
-      "    enabled: true",
-      "opencode:",
+       "mcp:",
+       "  context7:",
+       "    targets: [opencode, claude-code]",
+       "    enabled: true",
+       "opencode:",
       "  config:",
       "    model: test/model",
       "  plugins:",
@@ -223,6 +237,14 @@ describe("CLI integration", () => {
     );
     expect(claude).toContain("@" + path.join(root, "configs", "personal", "AGENTS.md"));
 
+    const claudeMcp = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "claude", "mcp.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(claudeMcp).toMatchObject({
+      context7: { type: "http", url: "https://mcp.context7.com/mcp" },
+      "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
+    });
+
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
       path.join(root, "configs", "personal", "opencode", "opencode.jsonc")
     );
@@ -233,6 +255,11 @@ describe("CLI integration", () => {
       path.join(root, "configs", "personal", "claude", "CLAUDE.md")
     );
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
+
+    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
+      mcpServers?: Record<string, unknown>;
+    };
+    expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
   });
 
   it("applies machine-local OpenCode permission overrides", async () => {
@@ -361,6 +388,7 @@ describe("CLI integration", () => {
   it("does not write machine-local Claude settings with --no-link", async () => {
     await mkdir(path.join(home, ".claude"), { recursive: true });
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
+    await writeFile(path.join(home, ".claude.json"), '{"mcpServers":{}}\n', "utf8");
 
     const result = await cli("mindframe-z", root, home, [
       "apply",
@@ -371,6 +399,60 @@ describe("CLI integration", () => {
 
     expect(result.stdout).not.toContain("wrote local");
     expect(await readFile(path.join(home, ".claude", "settings.json"), "utf8")).toBe("{}\n");
+    expect(await readFile(path.join(home, ".claude.json"), "utf8")).toBe('{"mcpServers":{}}\n');
+  });
+
+  it("merges Claude MCP into top-level .claude.json and prunes non-targeted managed servers", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "mcp:",
+        "  context7:",
+        "    targets: [opencode]",
+        "    enabled: true",
+        "  local-helper:",
+        "    targets: [claude-code]",
+        "    enabled: false",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(home, ".claude.json"),
+      JSON.stringify(
+        {
+          installMethod: "native",
+          mcpServers: {
+            context7: { type: "http", url: "https://old.invalid" },
+            manual: { type: "http", url: "https://manual.invalid" }
+          },
+          projects: {
+            [path.join(home, "src")]: {
+              disabledMcpServers: ["local-helper"]
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+
+    await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+
+    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
+      installMethod?: string;
+      mcpServers?: Record<string, unknown>;
+      projects?: Record<string, unknown>;
+    };
+    expect(localClaudeJson.installMethod).toBe("native");
+    expect(localClaudeJson.projects).toBeDefined();
+    expect(localClaudeJson.mcpServers).toEqual({
+      manual: { type: "http", url: "https://manual.invalid" },
+      "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
+    });
   });
 
   it("writes a reference index from profile references", async () => {
