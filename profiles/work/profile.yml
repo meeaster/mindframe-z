@@ -9,12 +9,16 @@ references:
   - datadog-agent
 mcp:
   aws-knowledge:
+    targets: [opencode, claude-code]
     enabled: false
   jira:
+    targets: [opencode, claude-code]
     enabled: false
   confluence:
+    targets: [opencode, claude-code]
     enabled: false
   datadog:
+    targets: [opencode, claude-code]
     enabled: false
 opencode:
   config:

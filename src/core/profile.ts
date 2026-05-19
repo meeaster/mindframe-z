@@ -14,6 +14,7 @@ import {
 export interface ResolvedMcpServer {
   name: string;
   server: McpServer;
+  targets: ToolTargetName[];
   enabled: boolean;
 }
 
@@ -70,7 +71,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
     skills: { ...base.skills, ...child.skills },
-    mcp: { ...base.mcp, ...child.mcp },
+    mcp: deepMerge(base.mcp, child.mcp) as ProfileManifest["mcp"],
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
@@ -138,10 +139,10 @@ export async function resolveProfile(
       throw error;
     }
   }
-  const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled }]) => {
+  const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled, targets }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    return { name: serverName, server, enabled };
+    return { name: serverName, server, targets, enabled };
   });
 
   return {
@@ -163,5 +164,5 @@ export function filterMcpForTarget(
   profile: ResolvedProfile,
   target: "opencode" | "claude-code"
 ): ResolvedMcpServer[] {
-  return profile.mcpServers.filter((entry) => entry.server.targets.includes(target));
+  return profile.mcpServers.filter((entry) => entry.targets.includes(target));
 }

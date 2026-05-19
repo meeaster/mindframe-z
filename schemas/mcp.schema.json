@@ -17,19 +17,6 @@
                 "default": "",
                 "type": "string"
               },
-              "targets": {
-                "default": [
-                  "opencode"
-                ],
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "opencode",
-                    "claude-code"
-                  ]
-                }
-              },
               "type": {
                 "type": "string",
                 "const": "remote"
@@ -76,19 +63,6 @@
               "description": {
                 "default": "",
                 "type": "string"
-              },
-              "targets": {
-                "default": [
-                  "opencode"
-                ],
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "opencode",
-                    "claude-code"
-                  ]
-                }
               },
               "type": {
                 "type": "string",

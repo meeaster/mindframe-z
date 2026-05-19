@@ -27,6 +27,7 @@ yamllint = "1"
 "npm:@fission-ai/openspec" = "1"
 "github:Infisical/agent-vault" = "0"
 "github:kitlangton/ghui" = "0"
+"npm:agent-browser" = "latest"
 
 [settings]
 minimum_release_age = "3d"

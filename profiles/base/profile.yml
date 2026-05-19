@@ -29,14 +29,19 @@ skills:
   claude-code-docs: [opencode]
 mcp:
   context7:
+    targets: [opencode, claude-code]
     enabled: true
   qmd:
+    targets: [opencode, claude-code]
     enabled: false
   fff:
+    targets: [opencode, claude-code]
     enabled: true
   deepwiki:
+    targets: [opencode, claude-code]
     enabled: true
   openai-docs:
+    targets: [opencode, claude-code]
     enabled: false
 opencode:
   config:

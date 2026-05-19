@@ -69,11 +69,23 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "targets": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "opencode",
+                "claude-code"
+              ]
+            }
+          },
           "enabled": {
             "type": "boolean"
           }
         },
         "required": [
+          "targets",
           "enabled"
         ]
       }

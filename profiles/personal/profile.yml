@@ -6,10 +6,13 @@ skills:
   homeassistant: [all]
 mcp:
   homeassistant:
+    targets: [opencode, claude-code]
     enabled: false
   pinescript-docs:
+    targets: [opencode, claude-code]
     enabled: false
   aws-knowledge:
+    targets: [opencode, claude-code]
     enabled: false
 opencode:
   config:
