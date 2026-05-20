@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
 
+export type AgentName = "opencode" | "claude-code";
 export type ToolTarget = "opencode" | "claude-code" | "mise" | "dotfiles";
+export type InfraTarget = "mise" | "dotfiles";
 export type ApplyTarget = ToolTarget | "all";
+export type ApplyAgent = AgentName | "all";
 
 export interface RuntimePaths {
   root: string;
@@ -92,4 +95,12 @@ export function dedupe<T>(items: readonly T[]): T[] {
 
 export function targetList(target: ApplyTarget): ToolTarget[] {
   return target === "all" ? ["opencode", "claude-code", "mise", "dotfiles"] : [target];
+}
+
+export function infraTargetList(target: InfraTarget | "all"): InfraTarget[] {
+  return target === "all" ? ["mise", "dotfiles"] : [target];
+}
+
+export function agentList(agent: ApplyAgent, profileAgents: AgentName[]): AgentName[] {
+  return agent === "all" ? profileAgents : [agent];
 }

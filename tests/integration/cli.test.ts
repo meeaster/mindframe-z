@@ -63,7 +63,7 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "    installer: npx-skills",
       "  - name: all-skill",
       "    source: local",
-      "    description: All targets test skill.",
+      "    description: All agents test skill.",
       "    installer: npx-skills",
       ""
     ].join("\n"),
@@ -92,7 +92,6 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "name: base",
       "mcp:",
       "  context7:",
-      "    targets: [opencode, claude-code]",
       "    enabled: true",
       "  local-helper:",
       "    targets: [claude-code]",
@@ -116,20 +115,17 @@ async function writeFixture(root: string, home?: string): Promise<void> {
     [
       "name: personal",
       "extends: base",
-      "targets: [opencode, claude-code]",
+      "agents: [opencode, claude-code]",
       "instructions:",
       "  - shared/AGENTS.global.md",
       "references:",
       "  - local-ref",
       "skills:",
-      "  local-skill: [opencode]",
+      "  local-skill:",
       "  claude-skill: [claude-code]",
       "  all-skill: [all]",
-      "commands:",
-      "  - test-cmd",
       "mcp:",
       "  context7:",
-      "    targets: [opencode, claude-code]",
       "    enabled: true",
       "opencode:",
       "  config:",
@@ -312,7 +308,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["apply", "--target", "opencode"]);
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     expect(result.stdout).toContain("rendered");
 
     const opencode = await readFile(
@@ -343,7 +339,7 @@ describe("CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "targets: [opencode, claude-code]",
+        "agents: [opencode, claude-code]",
         "claude:",
         "  model: sonnet",
         "  settings:",
@@ -371,7 +367,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
+    const result = await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
     expect(result.stdout).toContain("wrote local");
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
@@ -408,7 +404,7 @@ describe("CLI integration", () => {
     await writeFile(snapshotPath, '{"awsAuthRefresh":"/work/credential-process"}\n', "utf8");
     await symlink(snapshotPath, settingsPath);
 
-    await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
     expect((await lstat(settingsPath)).isSymbolicLink()).toBe(false);
     expect(await readFile(settingsPath, "utf8")).toContain("/work/credential-process");
@@ -420,7 +416,7 @@ describe("CLI integration", () => {
     await writeFile(path.join(home, ".claude", "settings.json"), "{}\n", "utf8");
     await writeFile(path.join(home, ".claude.json"), '{"mcpServers":{}}\n', "utf8");
 
-    const result = await cli("mfz", root, home, ["apply", "--target", "claude-code", "--no-link"]);
+    const result = await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
 
     expect(result.stdout).not.toContain("wrote local");
     expect(await readFile(path.join(home, ".claude", "settings.json"), "utf8")).toBe("{}\n");
@@ -465,7 +461,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
     const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
       installMethod?: string;
@@ -603,17 +599,101 @@ describe("CLI integration", () => {
 
   it("lists resolved skill targets from the profile", async () => {
     const result = await cli("mfz", root, home, ["skills", "list"]);
-    expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
+    expect(result.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
     expect(result.stdout).toContain("claude-skill\tclaude-code\tClaude test skill.");
-    expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll targets test skill.");
+    expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll agents test skill.");
   });
 
   it("sync installs missing skills and removes extra skills", async () => {
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
     const addLines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
-    expect(addLines).toHaveLength(4);
+    expect(addLines).toHaveLength(5);
     expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
-    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(2);
+    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(3);
+  });
+
+  it("does not render Claude config for an opencode-only profile", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "instructions:",
+        "  - shared/AGENTS.global.md",
+        "mcp:",
+        "  context7:",
+        "    enabled: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    await expect(
+      readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+    ).resolves.toContain("context7");
+    await expect(
+      readFile(path.join(root, "configs", "personal", "claude", "CLAUDE.md"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("defaults omitted skill targets to profile agents", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "skills:",
+        "  local-skill:",
+        "  all-skill: [all]",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["skills", "list"]);
+    expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
+    expect(result.stdout).toContain("all-skill\topencode\tAll agents test skill.");
+    expect(result.stdout).not.toContain("claude-code");
+  });
+
+  it("defaults omitted MCP targets to profile agents", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "instructions:",
+        "  - shared/AGENTS.global.md",
+        "mcp:",
+        "  context7:",
+        "    enabled: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    expect(opencode).toContain("context7");
+  });
+
+  it("filters agent rendering with --agent", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    await expect(
+      readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+    ).resolves.toContain("test/model");
+    await expect(
+      readFile(path.join(root, "configs", "personal", "claude", "CLAUDE.md"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("sync removes extra installed skills not in profile", async () => {
@@ -673,7 +753,7 @@ describe("CLI integration", () => {
     expect(result.stdout).not.toContain("local-skill\topencode");
   });
 
-  it("accepts empty skill target arrays as disabled", async () => {
+  it("defaults empty skill target arrays to profile agents", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       ["name: personal", "extends: base", "skills:", "  local-skill: []", ""].join("\n"),
@@ -684,7 +764,7 @@ describe("CLI integration", () => {
     expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
 
     const listResult = await cli("mfz", root, home, ["skills", "list"]);
-    expect(listResult.stdout).not.toContain("local-skill");
+    expect(listResult.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
   });
 
   it("prints enabled commands in status output", async () => {

@@ -13,7 +13,7 @@
       "default": "",
       "type": "string"
     },
-    "targets": {
+    "agents": {
       "default": [
         "opencode",
         "claude-code"
@@ -48,15 +48,22 @@
         "type": "string"
       },
       "additionalProperties": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "opencode",
-            "claude-code",
-            "all"
-          ]
-        }
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "opencode",
+                "claude-code",
+                "all"
+              ]
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "mcp": {
@@ -84,7 +91,6 @@
           }
         },
         "required": [
-          "targets",
           "enabled"
         ]
       }
@@ -213,5 +219,6 @@
   },
   "required": [
     "name"
-  ]
+  ],
+  "additionalProperties": false
 }

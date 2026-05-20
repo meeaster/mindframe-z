@@ -226,10 +226,14 @@ export async function runSync(
   const [miseResult, opencodeResult, claudeResult, skillCandidates, commandCandidates] =
     await Promise.all([
       syncMise(mcp, profile),
-      syncOpencode(ocp, profile),
-      syncClaude(clp, profile),
-      syncSkills(paths.home, profile.manifests),
-      syncCommands(paths, profile)
+      profile.agents.includes("opencode")
+        ? syncOpencode(ocp, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("claude-code")
+        ? syncClaude(clp, profile)
+        : Promise.resolve({ candidates: [] }),
+      syncSkills(paths.home, profile.manifests, profile.agents),
+      profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
     ]);
 
   const candidates = [

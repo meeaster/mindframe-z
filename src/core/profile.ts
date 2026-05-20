@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
-import { dedupe, expandHome, type RuntimePaths } from "./paths.js";
+import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
 import {
   loadManifests,
   type LoadedManifests,
@@ -22,6 +22,7 @@ export type ResolvedSkill = SkillEntry & { targets: ToolTargetName[] };
 
 export interface ResolvedProfile {
   name: string;
+  agents: AgentName[];
   profile: ProfileManifest;
   manifests: LoadedManifests;
   instructionFiles: string[];
@@ -67,7 +68,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     name: child.name,
     extends: child.extends ?? base.extends,
     description: child.description || base.description,
-    targets: child.targets.length > 0 ? child.targets : base.targets,
+    agents: child.agents.length > 0 ? child.agents : base.agents,
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
     skills: { ...base.skills, ...child.skills },
@@ -91,8 +92,12 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
   };
 }
 
-function expandSkillTargets(targets: ProfileManifest["skills"][string]): ToolTargetName[] {
-  if (targets.includes("all")) return ["opencode", "claude-code"];
+function expandSkillTargets(
+  targets: ProfileManifest["skills"][string],
+  agents: AgentName[]
+): ToolTargetName[] {
+  if (!targets || targets.length === 0) return agents;
+  if (targets.includes("all")) return agents;
   return targets.filter((target): target is ToolTargetName => target !== "all");
 }
 
@@ -115,6 +120,7 @@ export async function resolveProfile(
   const name =
     requestedProfile ?? process.env.MFZ_PROFILE ?? manifests.machine.profile ?? "personal";
   const profile = await resolveProfileByName(manifests, name);
+  const agents = profile.agents;
 
   const instructionFiles = profile.instructions.map((file) => path.resolve(paths.root, file));
   const referenceNames = dedupe(profile.references);
@@ -127,7 +133,7 @@ export async function resolveProfile(
     .map(([skillName, targets]) => {
       const skill = manifests.skills.find((s) => s.name === skillName);
       if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
-      return { ...skill, targets: expandSkillTargets(targets) };
+      return { ...skill, targets: expandSkillTargets(targets, agents) };
     })
     .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
@@ -144,11 +150,12 @@ export async function resolveProfile(
   const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled, targets }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    return { name: serverName, server, targets, enabled };
+    return { name: serverName, server, targets: targets ?? agents, enabled };
   });
 
   return {
     name,
+    agents,
     profile,
     manifests,
     instructionFiles,

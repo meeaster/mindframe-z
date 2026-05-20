@@ -3,6 +3,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import type { LoadedManifests, SkillEntry } from "../core/manifests.js";
+import type { AgentName } from "../core/paths.js";
 
 const skillLockEntrySchema = z.object({
   sourceType: z.string(),
@@ -45,8 +46,11 @@ async function readSkillDescription(home: string, name: string): Promise<string>
 
 export async function syncSkills(
   home: string,
-  manifests: LoadedManifests
+  manifests: LoadedManifests,
+  agents: AgentName[]
 ): Promise<UnknownSkill[]> {
+  if (!agents.includes("opencode")) return [];
+
   let lock: z.infer<typeof skillLockSchema>;
   try {
     lock = skillLockSchema.parse(

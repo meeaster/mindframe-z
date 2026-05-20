@@ -24,9 +24,9 @@ Configuration is organized in three conceptual layers:
 
 This separation prevents any single manifest from trying to encode every concern. The catalog is shared across all profiles; profiles select from it; the machine decides which profile is active.
 
-### Target-Specific Renderers
+### Agent-Gated Renderers
 
-Each output target (opencode, claude-code, mise, dotfiles) has its own renderer in `src/renderers/`. Renderers share the same resolved profile input but produce tool-specific output formats. New targets are added by writing a new renderer — no conditionals spread through the rest of the system.
+Each output target (opencode, claude-code, mise, dotfiles) has its own renderer in `src/renderers/`. Agent renderers (opencode and claude-code) are gated by the resolved profile's `agents` list, while infrastructure renderers (mise and dotfiles) always run by default. Renderers share the same resolved profile input but produce tool-specific output formats. New targets are added by writing a new renderer — no conditionals spread through the rest of the system.
 
 ### Manifests Are the Source of Truth
 
@@ -53,13 +53,13 @@ machine config ────┤               claude,       claude/              
 ### Apply (profiles → tools)
 
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
-2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`, while each profile decides which targets each server applies to.
-3. **Render** — for each target, the renderer produces files and link plans:
+2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`; each profile decides which agents are active, and individual skill/MCP target lists default to those active agents when omitted.
+3. **Render** — for each active agent and infrastructure target, the renderer produces files and link plans:
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
    - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
-4. **Write files** — rendered content is written to `configs/<profile>/`.
+4. **Write files** — rendered content is written to `configs/<profile>/`. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
 5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
 
@@ -86,7 +86,7 @@ mindframe-z/
 │
 ├── profiles/                  # Profile definitions
 │   ├── base/                  # Shared foundation — all profiles extend this
-│   │   ├── profile.yml        # Base references, skills, MCP targets/toggles, tool settings
+│   │   ├── profile.yml        # Base references, agents, skills, MCP toggles, tool settings
 │   │   ├── mise.toml          # Base tool versions and environment
 │   │   └── .npmrc             # Base dotfile
 │   ├── personal/              # Personal profile (extends base)
@@ -158,6 +158,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | ------------------- | -------------------------------------------------------- |
 | `instructions`      | Concatenate + deduplicate                                |
 | `references`        | Concatenate + deduplicate                                |
+| `agents`            | Child replaces parent if non-empty                       |
 | `skills`            | Merge by skill name — child target list overrides parent |
 | `mcp`               | Deep merge by server name — child keys override parent   |
 | `opencode.config`   | Deep merge — child keys override parent                  |
@@ -168,7 +169,6 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `mise.env`          | Shallow merge — child overrides parent                   |
 | `mise.tool_alias`   | Shallow merge — child overrides parent                   |
 | `dotfiles`          | Concatenate with newline separator for same key          |
-| `targets`           | Child replaces parent if non-empty                       |
 
 Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
 
@@ -194,8 +194,8 @@ Features from the design that are not yet implemented:
 ## Key Decisions
 
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.
-- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which tools each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, or `[all]`.
-- **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles decide where each server is used with `mcp.<name>.targets` plus an `enabled` flag. OpenCode respects both `targets` and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
+- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which agents each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, `[all]`, or by omitting the target list to use the profile's `agents` list.
+- **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles enable servers with `mcp.<name>.enabled`; optional `mcp.<name>.targets` narrows the agents for that server and otherwise defaults to the profile's `agents` list. OpenCode respects both resolved targets and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.

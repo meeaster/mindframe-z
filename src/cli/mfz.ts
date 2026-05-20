@@ -6,7 +6,14 @@ import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import { generateSchemas } from "../core/generate-schemas.js";
 import { validateManifests } from "../core/manifests.js";
-import { createRuntimePaths, targetList, type ApplyTarget } from "../core/paths.js";
+import {
+  agentList,
+  createRuntimePaths,
+  infraTargetList,
+  type AgentName,
+  type ApplyAgent,
+  type InfraTarget
+} from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
@@ -42,7 +49,8 @@ async function applyConfig(options: {
   root?: string | undefined;
   home?: string | undefined;
   profile?: string | undefined;
-  target: ApplyTarget;
+  agent: ApplyAgent;
+  target: InfraTarget | "all";
   dryRun?: boolean | undefined;
   noLink?: boolean | undefined;
 }): Promise<void> {
@@ -56,7 +64,10 @@ async function applyConfig(options: {
 
   try {
     if (!options.dryRun) await writeReferenceIndex(paths, profile);
-    for (const target of targetList(options.target)) {
+    for (const target of [
+      ...agentList(options.agent, profile.agents),
+      ...infraTargetList(options.target)
+    ]) {
       const result = await renderTarget(paths, profile, target);
       if (!options.dryRun) await writeRenderedFiles(result.files);
       for (const file of result.files)
@@ -130,7 +141,7 @@ async function doctor(options: {
 
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
-  for (const target of targetList("all")) {
+  for (const target of [...profile.agents, ...infraTargetList("all")]) {
     const result = await renderTarget(paths, profile, target);
     for (const link of result.links) {
       const status = await verifyLink(link);
@@ -151,6 +162,7 @@ async function statusFn(options: {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
+  console.log(`agents\t${profile.agents.join(", ") || "none"}`);
   console.log(
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
   );
@@ -168,7 +180,7 @@ async function opencodeSmoke(options: {
 }): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile);
-  await applyConfig({ ...options, target: "opencode", noLink: true });
+  await applyConfig({ ...options, agent: "opencode", target: "all", noLink: true });
   const isolated = `${paths.home}/.mindframe-z-opencode-smoke`;
   await mkdir(isolated, { recursive: true });
   const configsOpencode = path.join(paths.configsDir, profile.name, "opencode");
@@ -232,13 +244,15 @@ program
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option("--target <target>", "opencode, claude-code, mise, dotfiles, or all", "all")
+  .option("--agent <agent>", "opencode, claude-code, or all", "all")
+  .option("--target <target>", "mise, dotfiles, or all", "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
   .action(async (options) =>
     applyConfig({
       ...program.opts(),
-      target: options.target as ApplyTarget,
+      agent: options.agent as ApplyAgent,
+      target: options.target as InfraTarget | "all",
       dryRun: options.dryRun,
       noLink: !options.link
     })
@@ -260,13 +274,13 @@ skills
 skills
   .command("sync")
   .description("Mirror installed global skills to match the resolved profile")
-  .option("--target <target>", "opencode or claude-code")
+  .option("--agent <agent>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedTarget = options.target as "opencode" | "claude-code" | undefined;
-    const targets = requestedTarget ? [requestedTarget] : skillTargets;
+    const requestedAgent = options.agent as AgentName | undefined;
+    const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const dryRun = options.dryRun ?? false;
     const installedByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
     const desiredByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
@@ -332,13 +346,13 @@ skills
 skills
   .command("upgrade")
   .description("Update profile-enabled git skills to latest versions")
-  .option("--target <target>", "opencode or claude-code")
+  .option("--agent <agent>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedTarget = options.target as "opencode" | "claude-code" | undefined;
-    const targets = requestedTarget ? [requestedTarget] : skillTargets;
+    const requestedAgent = options.agent as AgentName | undefined;
+    const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const updatedGitSkills = new Set<string>();
     for (const target of targets) {
       for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
