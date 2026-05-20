@@ -4,7 +4,6 @@ description: Personal AI setup with Home Assistant and DeepSeek models.
 agents: [opencode]
 skills:
   home-assistant-best-practices:
-  homeassistant:
 mcp:
   homeassistant:
     enabled: false
