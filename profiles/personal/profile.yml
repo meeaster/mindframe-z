@@ -2,19 +2,20 @@ name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
 skills:
-  home-assistant-best-practices: [all]
-  homeassistant: [all]
+  home-assistant-best-practices: [opencode]
+  homeassistant: [opencode]
 mcp:
   homeassistant:
-    targets: [opencode, claude-code]
+    targets: [opencode]
     enabled: false
   openai-docs:
+    targets: [opencode]
     enabled: false
   pinescript-docs:
-    targets: [opencode, claude-code]
+    targets: [opencode]
     enabled: false
   aws-knowledge:
-    targets: [opencode, claude-code]
+    targets: [opencode]
     enabled: false
 opencode:
   config:
