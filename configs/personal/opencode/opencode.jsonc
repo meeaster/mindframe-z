@@ -55,7 +55,7 @@
     },
     "homeassistant": {
       "type": "remote",
-      "url": "https://homeassistant.easterly.cloud/api/mcp",
+      "url": "http://192.168.30.39:9583/{env:HA_MCP_SECRET_PATH}",
       "enabled": false
     },
     "pinescript-docs": {

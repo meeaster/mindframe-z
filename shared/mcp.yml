@@ -47,7 +47,7 @@ servers:
     transport: http
     url: https://mcp.datadoghq.com/api/unstable/mcp-server/mcp
   homeassistant:
-    description: Home Assistant MCP server.
+    description: Home Assistant MCP server (ha-mcp-web).
     type: remote
     transport: http
-    url: https://homeassistant.easterly.cloud/api/mcp
+    url: http://192.168.30.39:9583/{env:HA_MCP_SECRET_PATH}
