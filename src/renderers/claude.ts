@@ -51,7 +51,10 @@ async function readExistingClaudeJson(claudeJsonPath: string): Promise<Record<st
   }
 }
 
-function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], home: string): unknown {
+function renderClaudeMcpServer(
+  server: ResolvedProfile["mcpServers"][number],
+  home: string
+): unknown {
   if (server.server.type === "remote") {
     return {
       type: server.server.transport === "sse" ? "sse" : "http",

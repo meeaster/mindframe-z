@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { execa } from "execa";
 import {
   buildNpxSkillsCommand,
+  buildNpxSkillsRemoveCommand,
   buildNpxSkillsUpdateCommand,
   listInstalledSkills
 } from "./npx-skills.js";
@@ -110,6 +111,58 @@ describe("buildNpxSkillsUpdateCommand", () => {
     });
 
     expect(command).toEqual(["npx", "skills", "update", "skill-writer", "-g", "-y"]);
+  });
+});
+
+describe("buildNpxSkillsRemoveCommand", () => {
+  it("builds global remove command for a named skill", () => {
+    const command = buildNpxSkillsRemoveCommand({
+      name: "mise",
+      source: "local",
+      skill: "mise",
+      description: "",
+      installer: "npx-skills"
+    });
+
+    expect(command).toEqual(["npx", "skills", "remove", "mise", "-g", "-y"]);
+  });
+
+  it("builds remove command for git skill", () => {
+    const command = buildNpxSkillsRemoveCommand({
+      name: "skill-writer",
+      source: "git",
+      repo: "https://github.com/getsentry/skills",
+      skill: "skill-writer",
+      description: "",
+      installer: "npx-skills"
+    });
+
+    expect(command).toEqual(["npx", "skills", "remove", "skill-writer", "-g", "-y"]);
+  });
+
+  it("builds target-specific remove command for Claude Code", () => {
+    const command = buildNpxSkillsRemoveCommand(
+      {
+        name: "skill-writer",
+        source: "git",
+        repo: "https://github.com/getsentry/skills",
+        skill: "skill-writer",
+        description: "",
+        installer: "npx-skills"
+      },
+      "claude-code"
+    );
+
+    expect(command).toEqual([
+      "npx",
+      "skills",
+      "remove",
+      "skill-writer",
+      "-g",
+      "-a",
+      "claude-code",
+      "-y"
+    ]);
   });
 });
 

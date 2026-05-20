@@ -49,9 +49,25 @@ async function listSkillDirectories(skillsDir: string): Promise<Set<string>> {
   return installed;
 }
 
-async function listCliInstalledSkills(): Promise<ListedInstalledSkill[]> {
-  const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], { timeout: 30000 });
-  return JSON.parse(stdout) as ListedInstalledSkill[];
+function skillsCliEnv(paths: RuntimePaths): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: paths.home,
+    OPENCODE_CONFIG_DIR: paths.opencodeConfigDir,
+    CLAUDE_CONFIG_DIR: paths.claudeDir
+  };
+}
+
+async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstalledSkill[]> {
+  try {
+    const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], {
+      env: skillsCliEnv(paths),
+      timeout: 30000
+    });
+    return JSON.parse(stdout) as ListedInstalledSkill[];
+  } catch {
+    return [];
+  }
 }
 
 export function buildNpxSkillsCommand(
@@ -87,6 +103,15 @@ export function buildNpxSkillsCommand(
   ];
 }
 
+export function buildNpxSkillsRemoveCommand(
+  skill: SkillEntry,
+  target?: Extract<ToolTarget, "opencode" | "claude-code">
+): string[] {
+  const agent =
+    target === "claude-code" ? "claude-code" : target === "opencode" ? "opencode" : null;
+  return ["npx", "skills", "remove", skill.name, "-g", ...(agent ? ["-a", agent] : []), "-y"];
+}
+
 export function buildNpxSkillsUpdateCommand(skill: SkillEntry): string[] | null {
   if (skill.source === "local") return null;
   return ["npx", "skills", "update", skill.name, "-g", "-y"];
@@ -100,9 +125,7 @@ export async function listInstalledSkills(
   if (!skillsDir) return new Set();
 
   const installed = await listSkillDirectories(skillsDir);
-  if (target === "opencode") return installed;
-
-  const cliSkills = await listCliInstalledSkills();
+  const cliSkills = await listCliInstalledSkills(paths);
   const targetAgent = targetAgentDisplayName(target);
   for (const skill of cliSkills) {
     if (skill.agents?.includes(targetAgent)) installed.add(skill.name);
@@ -111,10 +134,14 @@ export async function listInstalledSkills(
   return installed;
 }
 
-async function runCommand(command: string[], emptyCommandMessage: string): Promise<string> {
+async function runCommand(
+  paths: RuntimePaths,
+  command: string[],
+  emptyCommandMessage: string
+): Promise<string> {
   const [binary, ...args] = command;
   if (!binary) throw new Error(emptyCommandMessage);
-  await execa(binary, args, { stdio: "inherit" });
+  await execa(binary, args, { env: skillsCliEnv(paths), stdio: "inherit" });
   return command.join(" ");
 }
 
@@ -129,14 +156,31 @@ export async function applySkill(
   if (dryRun) return command.join(" ");
 
   if (target !== "opencode" && target !== "claude-code") {
-    return runCommand(command, "No skills command generated");
+    return runCommand(paths, command, "No skills command generated");
   }
 
   if ((installedSkills ?? (await listInstalledSkills(paths, target))).has(skill.name)) {
     return `skipped: ${skill.name} (already installed)`;
   }
 
-  return runCommand(command, "No skills command generated");
+  return runCommand(paths, command, "No skills command generated");
+}
+
+export async function removeSkill(
+  paths: RuntimePaths,
+  skill: SkillEntry,
+  target: Extract<ToolTarget, "opencode" | "claude-code"> | undefined,
+  dryRun: boolean,
+  installedSkills?: ReadonlySet<string>
+): Promise<string> {
+  const command = buildNpxSkillsRemoveCommand(skill, target);
+  if (dryRun) return command.join(" ");
+
+  if (target && !(installedSkills ?? (await listInstalledSkills(paths, target))).has(skill.name)) {
+    return `skipped: ${skill.name} (not installed)`;
+  }
+
+  return runCommand(paths, command, "No skills command generated");
 }
 
 export async function updateSkill(
@@ -149,9 +193,9 @@ export async function updateSkill(
   if (!updateCommand) {
     const command = buildNpxSkillsCommand(paths, skill, target);
     if (dryRun) return command.join(" ");
-    return runCommand(command, "No skills command generated");
+    return runCommand(paths, command, "No skills command generated");
   }
 
   if (dryRun) return updateCommand.join(" ");
-  return runCommand(updateCommand, "No skills update command generated");
+  return runCommand(paths, updateCommand, "No skills update command generated");
 }
