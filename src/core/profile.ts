@@ -123,11 +123,13 @@ export async function resolveProfile(
     if (!ref) throw new Error(`Profile ${name} references unknown reference: ${refName}`);
     return ref;
   });
-  const enabledSkills = Object.entries(profile.skills).map(([skillName, targets]) => {
-    const skill = manifests.skills.find((s) => s.name === skillName);
-    if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
-    return { ...skill, targets: expandSkillTargets(targets) };
-  });
+  const enabledSkills = Object.entries(profile.skills)
+    .map(([skillName, targets]) => {
+      const skill = manifests.skills.find((s) => s.name === skillName);
+      if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
+      return { ...skill, targets: expandSkillTargets(targets) };
+    })
+    .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
   for (const commandName of enabledCommands) {
     try {

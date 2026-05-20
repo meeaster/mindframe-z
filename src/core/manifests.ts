@@ -12,7 +12,6 @@ const profileMcpConfigSchema = z.object({
 });
 const profileSkillTargetsSchema = z
   .array(skillTargetSchema)
-  .min(1)
   .refine((targets) => !targets.includes("all") || targets.length === 1, {
     message: "Use either [all] or explicit skill targets, not both"
   });

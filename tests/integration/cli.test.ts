@@ -127,11 +127,11 @@ async function writeFixture(root: string, home?: string): Promise<void> {
       "  all-skill: [all]",
       "commands:",
       "  - test-cmd",
-       "mcp:",
-       "  context7:",
-       "    targets: [opencode, claude-code]",
-       "    enabled: true",
-       "opencode:",
+      "mcp:",
+      "  context7:",
+      "    targets: [opencode, claude-code]",
+      "    enabled: true",
+      "opencode:",
       "  config:",
       "    model: test/model",
       "  plugins:",
@@ -465,7 +465,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    await cli("mindframe-z", root, home, ["apply", "--target", "claude-code"]);
+    await cli("mfz", root, home, ["apply", "--target", "claude-code"]);
 
     const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
       installMethod?: string;
@@ -608,15 +608,28 @@ describe("CLI integration", () => {
     expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll targets test skill.");
   });
 
-  it("applies skills for all configured targets by default", async () => {
-    const result = await cli("mfz", root, home, ["skills", "apply", "--dry-run"]);
-    const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
-    expect(lines).toHaveLength(4);
-    expect(lines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
-    expect(lines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(2);
+  it("sync installs missing skills and removes extra skills", async () => {
+    const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
+    const addLines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
+    expect(addLines).toHaveLength(4);
+    expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
+    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(2);
   });
 
-  it("updates skills for all configured targets by default", async () => {
+  it("sync removes extra installed skills not in profile", async () => {
+    await mkdir(path.join(home, ".agents", "skills", "extra-skill"), { recursive: true });
+    await writeFile(
+      path.join(home, ".agents", "skills", "extra-skill", "SKILL.md"),
+      "# Extra\n",
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
+    expect(result.stdout).toContain("npx skills remove extra-skill -g -y");
+    expect(result.stdout).toContain("npx skills add");
+  });
+
+  it("upgrade updates git skills for all configured targets", async () => {
     await writeFile(
       path.join(root, "shared", "skills.yml"),
       [
@@ -637,7 +650,7 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["skills", "update", "--dry-run"]);
+    const result = await cli("mfz", root, home, ["skills", "upgrade", "--dry-run"]);
     const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills update"));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("npx skills update shared-git-skill -g -y");
@@ -660,16 +673,18 @@ describe("CLI integration", () => {
     expect(result.stdout).not.toContain("local-skill\topencode");
   });
 
-  it("rejects empty skill target arrays", async () => {
+  it("accepts empty skill target arrays as disabled", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "skills:", "  local-skill: []", ""].join("\n"),
+      ["name: personal", "extends: base", "skills:", "  local-skill: []", ""].join("\n"),
       "utf8"
     );
 
     const result = await cli("mfz", root, home, ["doctor"]);
-    expect(result.stdout).toContain("manifest:✗\tprofiles/personal/profile.yml");
-    expect(result.stdout).toContain("Too small");
+    expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
+
+    const listResult = await cli("mfz", root, home, ["skills", "list"]);
+    expect(listResult.stdout).not.toContain("local-skill");
   });
 
   it("prints enabled commands in status output", async () => {

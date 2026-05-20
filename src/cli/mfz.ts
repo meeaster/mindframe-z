@@ -11,7 +11,8 @@ import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
-import { applySkill, listInstalledSkills, updateSkill } from "../skills/npx-skills.js";
+import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/npx-skills.js";
+import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
 
 async function confirmReplace(
@@ -257,8 +258,8 @@ skills
   });
 
 skills
-  .command("apply")
-  .description("Install profile-enabled skills with npx skills")
+  .command("sync")
+  .description("Mirror installed global skills to match the resolved profile")
   .option("--target <target>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
@@ -266,19 +267,71 @@ skills
     const profile = await resolveProfile(paths, program.opts().profile);
     const requestedTarget = options.target as "opencode" | "claude-code" | undefined;
     const targets = requestedTarget ? [requestedTarget] : skillTargets;
+    const dryRun = options.dryRun ?? false;
+    const installedByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
+    const desiredByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
+    const allSkillNames = new Set<string>();
+
     for (const target of targets) {
-      const installedSkills = options.dryRun ? undefined : await listInstalledSkills(paths, target);
-      for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
-        console.log(
-          await applySkill(paths, skill, target, options.dryRun ?? false, installedSkills)
-        );
+      const installed = await listInstalledSkills(paths, target);
+      const desired = new Set(
+        profile.enabledSkills
+          .filter((entry) => entry.targets.includes(target))
+          .map((entry) => entry.name)
+      );
+      installedByTarget.set(target, installed);
+      desiredByTarget.set(target, desired);
+      for (const name of installed) allSkillNames.add(name);
+      for (const name of desired) allSkillNames.add(name);
+    }
+
+    const skillEntryFor = (name: string): SkillEntry =>
+      profile.manifests.skills.find((skill) => skill.name === name) ?? {
+        name,
+        source: "git",
+        installer: "npx-skills",
+        description: ""
+      };
+
+    for (const name of allSkillNames) {
+      const installedTargets = targets.filter((target) => installedByTarget.get(target)?.has(name));
+      const desiredTargets = targets.filter((target) => desiredByTarget.get(target)?.has(name));
+      const skillEntry = skillEntryFor(name);
+
+      if (installedTargets.length > 0 && desiredTargets.length === 0) {
+        console.log(await removeSkill(paths, skillEntry, undefined, dryRun));
+        continue;
+      }
+
+      if (installedTargets.includes("opencode") && !desiredTargets.includes("opencode")) {
+        console.log(await removeSkill(paths, skillEntry, undefined, dryRun));
+        for (const target of desiredTargets) {
+          console.log(await applySkill(paths, skillEntry, target, dryRun));
+        }
+        continue;
+      }
+
+      for (const target of installedTargets) {
+        if (!desiredByTarget.get(target)?.has(name)) {
+          console.log(
+            await removeSkill(paths, skillEntry, target, dryRun, installedByTarget.get(target))
+          );
+        }
+      }
+
+      for (const target of desiredTargets) {
+        if (!installedByTarget.get(target)?.has(name)) {
+          console.log(
+            await applySkill(paths, skillEntry, target, dryRun, installedByTarget.get(target))
+          );
+        }
       }
     }
   });
 
 skills
-  .command("update")
-  .description("Update profile-enabled skills with npx skills")
+  .command("upgrade")
+  .description("Update profile-enabled git skills to latest versions")
   .option("--target <target>", "opencode or claude-code")
   .option("--dry-run", "print npx skills commands without running them")
   .action(async (options) => {
