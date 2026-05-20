@@ -1,6 +1,6 @@
 name: base
 description: Shared base config for all profiles.
-targets:
+agents:
   - opencode
   - claude-code
 instructions:
@@ -13,35 +13,30 @@ references:
   - vercel-skills
   - agent-vault
 skills:
-  hunk-review: [all]
-  impeccable: [all]
-  mise: [all]
+  hunk-review:
+  impeccable:
+  mise:
   opencode-db: [opencode]
-  openspec-apply-change: [all]
-  openspec-archive-change: [all]
-  openspec-explore: [all]
-  openspec-propose: [all]
-  openspec-sync-specs: [all]
-  skill-writer: [all]
-  gpt-model-selection: [all]
-  qmd: [all]
-  openai-docs: [all]
+  openspec-apply-change:
+  openspec-archive-change:
+  openspec-explore:
+  openspec-propose:
+  openspec-sync-specs:
+  skill-writer:
+  gpt-model-selection:
+  qmd:
+  openai-docs:
   claude-code-docs: [opencode]
 mcp:
   context7:
-    targets: [opencode, claude-code]
     enabled: true
   qmd:
-    targets: [opencode, claude-code]
     enabled: false
   fff:
-    targets: [opencode, claude-code]
     enabled: true
   deepwiki:
-    targets: [opencode, claude-code]
     enabled: true
   openai-docs:
-    targets: [opencode, claude-code]
     enabled: false
 opencode:
   config:

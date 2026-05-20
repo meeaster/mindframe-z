@@ -1,24 +1,21 @@
 name: work
 extends: base
 description: Work AI setup using OpenAI models.
+agents: [opencode, claude-code]
 skills:
-  jira-writer: [all]
-  pr-writer: [all]
-  visual-explainer: [all]
+  jira-writer:
+  pr-writer:
+  visual-explainer:
 references:
   - datadog-agent
 mcp:
   aws-knowledge:
-    targets: [opencode, claude-code]
     enabled: false
   jira:
-    targets: [opencode, claude-code]
     enabled: false
   confluence:
-    targets: [opencode, claude-code]
     enabled: false
   datadog:
-    targets: [opencode, claude-code]
     enabled: false
 opencode:
   config:

@@ -4,10 +4,11 @@ import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
 
-const targetSchema = z.enum(["opencode", "claude-code"]);
+export const agentSchema = z.enum(["opencode", "claude-code"]);
+const targetSchema = agentSchema;
 const skillTargetSchema = z.enum(["opencode", "claude-code", "all"]);
 const profileMcpConfigSchema = z.object({
-  targets: z.array(targetSchema).min(1),
+  targets: z.array(targetSchema).min(1).optional(),
   enabled: z.boolean()
 });
 const profileSkillTargetsSchema = z
@@ -71,32 +72,36 @@ const opencodeConfigSchema = z.object({
   commands: z.array(z.string()).default([])
 });
 
-export const profileSchema = z.object({
-  name: z.string().min(1),
-  extends: z.string().optional(),
-  description: z.string().default(""),
-  targets: z.array(targetSchema).default(["opencode", "claude-code"]),
-  instructions: z.array(z.string()).default([]),
-  references: z.array(z.string()).default([]),
-  skills: z.record(z.string(), profileSkillTargetsSchema).default({}),
-  mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
-  opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
-  claude: z
-    .object({
-      model: z.string().optional(),
-      settings: z.record(z.string(), z.unknown()).default({})
-    })
-    .default({ settings: {} }),
-  mise: z
-    .object({
-      tools: z.record(z.string(), miseToolValueSchema).default({}),
-      env: z.record(z.string(), z.string()).default({}),
-      tool_alias: z.record(z.string(), z.string()).default({}),
-      settings: z.record(z.string(), z.unknown()).default({})
-    })
-    .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
-  dotfiles: z.record(z.string(), z.string()).default({})
-});
+export const profileSchema = z
+  .object({
+    name: z.string().min(1),
+    extends: z.string().optional(),
+    description: z.string().default(""),
+    agents: z.array(agentSchema).default(["opencode", "claude-code"]),
+    instructions: z.array(z.string()).default([]),
+    references: z.array(z.string()).default([]),
+    skills: z
+      .record(z.string(), z.union([profileSkillTargetsSchema, z.null()]).optional())
+      .default({}),
+    mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
+    opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
+    claude: z
+      .object({
+        model: z.string().optional(),
+        settings: z.record(z.string(), z.unknown()).default({})
+      })
+      .default({ settings: {} }),
+    mise: z
+      .object({
+        tools: z.record(z.string(), miseToolValueSchema).default({}),
+        env: z.record(z.string(), z.string()).default({}),
+        tool_alias: z.record(z.string(), z.string()).default({}),
+        settings: z.record(z.string(), z.unknown()).default({})
+      })
+      .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
+    dotfiles: z.record(z.string(), z.string()).default({})
+  })
+  .strict();
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
@@ -232,7 +237,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       if (!(await exists(profileYaml))) continue;
       const profile = await readYaml(profileYaml, profileSchema, {
         name: entry,
-        targets: ["opencode", "claude-code"],
+        agents: ["opencode", "claude-code"],
         instructions: [],
         references: [],
         skills: {},

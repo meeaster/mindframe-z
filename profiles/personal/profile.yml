@@ -1,21 +1,18 @@
 name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
+agents: [opencode]
 skills:
-  home-assistant-best-practices: [opencode]
-  homeassistant: [opencode]
+  home-assistant-best-practices:
+  homeassistant:
 mcp:
   homeassistant:
-    targets: [opencode]
     enabled: false
   openai-docs:
-    targets: [opencode]
     enabled: false
   pinescript-docs:
-    targets: [opencode]
     enabled: false
   aws-knowledge:
-    targets: [opencode]
     enabled: false
 opencode:
   config:
@@ -26,7 +23,3 @@ opencode:
       explore:
         model: opencode-go/deepseek-v4-flash
         reasoningEffort: medium
-claude:
-  model: sonnet
-  settings:
-    includeGitInstructions: true
