@@ -39,6 +39,10 @@ skills:
     toggleable: false
   skill-writer:
     enabled: false
+  grill-with-docs:
+    enabled: true
+  improve-codebase-architecture:
+    enabled: true
   gpt-model-selection:
     enabled: false
   qmd:
