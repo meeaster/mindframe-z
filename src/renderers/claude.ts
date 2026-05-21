@@ -106,7 +106,7 @@ export async function renderClaude(
   const claudeMdPath = path.join(configsClaude, "CLAUDE.md");
   const settingsPath = path.join(configsClaude, "settings.json");
   const mcpPath = path.join(configsClaude, "mcp.json");
-  const extraFolders = profile.manifests.machine.extra_folders;
+  const extraFolders = profile.extraFolders;
   const allowPermissions: string[] = [];
   const denyPermissions: string[] = [];
   const additionalDirectories: string[] = [];

@@ -352,11 +352,12 @@ describe("CLI integration", () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
     const index = await readFile(path.join(home, ".mindframe-z", "extra_folders.md"), "utf8");
+    expect(index).toContain("Additional directories");
     expect(index).toContain(path.join(home, "code", "work", "proj"));
     expect(index).toContain("Work project");
+    expect(index).toContain("read: allow, edit: allow");
     expect(index).toContain(path.join(home, "code", "archived"));
-    expect(index).toContain("edit: deny");
-    expect(index).toContain("read: deny");
+    expect(index).toContain("read: deny, edit: deny");
   });
 
   it("renders extra folders in OpenCode config", async () => {
@@ -683,6 +684,8 @@ describe("CLI integration", () => {
     const index = await readFile(path.join(home, ".mindframe-z", "references.md"), "utf8");
     expect(index).toContain("local-ref");
     expect(index).toContain("Local test reference");
+    expect(index).toContain("read-only");
+    expect(index).toContain("do not edit");
   });
 
   it("uses MFZ_REFERENCES_DIR as the reference clone directory", async () => {

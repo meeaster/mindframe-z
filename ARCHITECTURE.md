@@ -203,6 +203,61 @@ Features from the design that are not yet implemented:
 - `diff-runtime` command
 - Project-level `.claude/` and `.mcp.json` generation
 
+## Description Convention
+
+Both `shared/refs.yml` entries and machine `extra_folders` entries include a `description` field rendered into agent-visible indexes (`~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md`). Descriptions must be LLM-actionable — they are the primary signal an agent uses to decide whether to consult a reference or whether a folder path is relevant.
+
+### Reference Descriptions
+
+Template:
+
+```
+<Lang/Stack> for <purpose>. <Key entrypoint or architecture note>. <LLM-useful detail: package names, config model, entrypoints, relevant tool paths>.
+```
+
+Rules:
+- Start with the primary language or runtime (e.g. "TypeScript/Bun monorepo", "Rust-based CLI", "Python project (>=3.13, FastMCP-based)")
+- State the project's purpose and what it does in one clause
+- Include at least one LLM-relevant detail: where to find the main entrypoint, what package name to import, what file defines the config schema, etc.
+- Keep to 1-3 sentences; the whole description renders inline in a bullet list
+- Use backtick-free plain text — the renderer wraps the description in markdown inline code already
+- No trailing punctuation on the last sentence (the renderer adds `.` after the path)
+
+Examples:
+
+```
+TypeScript/Bun monorepo for the open-source AI coding agent (terminal, desktop, VS Code extension). Main CLI entrypoint at packages/opencode/src/index.ts. Supports MCP, custom tools, file editing, and agentic workflows.
+```
+
+```
+Rust-based CLI (github.com/jdx/mise) combining dev tool version management, per-project environment variables, and task running into a single mise.toml. Installs and switches between hundreds of tools (node, python, terraform, etc.) without shims.
+```
+
+### Extra Folder Descriptions
+
+Extra folder descriptions render as a suffix after the path in `~/.mindframe-z/extra_folders.md`. They should describe the purpose of the directory and what an agent would find there.
+
+Template:
+
+```
+<what the directory contains> — <why an agent might need access>
+```
+
+Rules:
+- Lead with the contents of the directory, then the use case
+- Keep to one sentence (renderer appends it as a suffix)
+- No trailing punctuation (renderer appends permissions after the description)
+
+Examples:
+
+```
+Mindframe-z configuration and generated indexes (read: allow, edit: allow)
+```
+
+```
+CI build artifacts — needed for inspecting test failures (read: allow, edit: deny)
+```
+
 ## Key Decisions
 
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.

@@ -123,7 +123,7 @@ export async function renderOpenCode(
       ];
     })
   );
-  const extraFolders = profile.manifests.machine.extra_folders;
+  const extraFolders = profile.extraFolders;
   const externalDirectory: Record<string, string> = {};
   const edit: Record<string, string> = {};
 

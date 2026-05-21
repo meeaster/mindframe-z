@@ -1,28 +1,28 @@
 references:
   - name: opencode
     url: https://github.com/anomalyco/opencode.git
-    description: OpenCode source and documentation.
+    description: "TypeScript/Bun monorepo for the open-source AI coding agent (terminal, desktop, VS Code extension). Main CLI entrypoint at packages/opencode/src/index.ts. Supports MCP, custom tools, file editing, and agentic workflows."
   - name: openspec
     url: https://github.com/Fission-AI/OpenSpec.git
-    description: OpenSpec AI specification and tooling reference.
+    description: "TypeScript spec-driven development framework (npm @fission-ai/openspec) for collaboratively authoring software specifications, change proposals, and implementation plans. Defines spec schema, CLI commands (/opsx:propose, /opsx:apply), and workflow conventions for spec-first development under openspec/changes/."
   - name: mise
     url: https://github.com/jdx/mise.git
-    description: Mise tool version manager and documentation.
+    description: "Rust-based CLI (github.com/jdx/mise) combining dev tool version management, per-project environment variables, and task running into a single mise.toml. Installs and switches between hundreds of tools (node, python, terraform, etc.) without shims."
   - name: hunk
     url: https://github.com/modem-dev/hunk.git
-    description: Hunk interactive diff review tool.
+    description: "TypeScript terminal diff viewer (npm hunkdiff) for browsing agent-authored changesets. Multi-file diff review TUI with sidebar navigation, inline AI annotations, split/stack layouts, watch mode, and Git/Jujutsu/raw patch support. Entrypoint: bin/hunk.cjs."
   - name: vercel-skills
     url: https://github.com/vercel-labs/skills.git
-    description: Vercel AI SDK skills and tooling reference.
+    description: "TypeScript CLI for the open ecosystem manager of AI coding agent skills. Installs, lists, finds, updates, and removes reusable SKILL.md instruction sets across 50+ agents (OpenCode, Claude Code, Codex, Cursor, etc.) from Git repos or local paths, with project-level or global scoping."
   - name: agent-vault
     url: https://github.com/Infisical/agent-vault.git
-    description: Agent Vault - AI agent secret management by Infisical.
+    description: "Go-based open-source HTTP credential proxy/vault (by Infisical) that sits between AI agents and APIs to eliminate credential exfiltration risk. Stores credentials server-side; MITM proxy on port 14322 injects them via HTTPS_PROXY. Management API/UI on port 14321."
   - name: datadog-agent
     url: https://github.com/datadog/datadog-agent.git
     description: Datadog Agent source and documentation.
   - name: clack
     url: https://github.com/bombshell-dev/clack.git
-    description: Effortlessly build beautiful command-line apps.
+    description: "TypeScript pnpm monorepo for building stylish, interactive CLI prompts. Two main packages: @clack/prompts (ready-to-use components: text inputs, selects, spinners, multiselects) and @clack/core (headless primitives for custom prompts)."
   - name: ha-mcp
     url: https://github.com/homeassistant-ai/ha-mcp.git
-    description: Home Assistant MCP server for AI integration.
+    description: "Python project (>=3.13, FastMCP-based) providing a Model Context Protocol interface for AI assistants to control Home Assistant. Exposes 89+ MCP tools for querying device states, executing services, and managing automations via natural language. Connects via Home Assistant WebSocket API with a Long-Lived Access Token."

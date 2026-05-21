@@ -73,4 +73,10 @@ Lint/format tooling is oxlint/oxfmt, not ESLint/Prettier. `.oxfmtrc.json` intent
 
 This repo has no external users yet. Prefer one direct implementation over fallback or backward-compatibility paths unless persisted data, shipped behavior, or an explicit requirement makes compatibility necessary.
 
+## Reference Descriptions
+
+`shared/refs.yml` entries have a `description` field rendered into agent-visible indexes. Follow the conventions in `ARCHITECTURE.md#Description-Convention` when adding or updating descriptions: lead with language/stack, state purpose, and include LLM-actionable details (entrypoints, package names, config models).
+
+`extra_folders` entries in machine config also have a `description` field rendered into `~/.mindframe-z/extra_folders.md`. Describe what the directory contains and why an agent might need access, following the same convention section.
+
 `shared/AGENTS.global.md` is rendered into agent runtime configs. Do not put repo-maintainer instructions there unless they should appear in generated OpenCode/Claude guidance.

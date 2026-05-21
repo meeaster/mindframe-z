@@ -8,12 +8,12 @@ references_dir: ~/references
 
 # extra_folders:
 #   - path: ~/code/work/my-work-repo
-#     description: Main work project repo
+#     description: Work project with customer-specific schemas, CI config, and deployment scripts — needed when modifying deploy logic or reading env-specific overrides
 #   - path: ~/code/personal/side-project
-#     description: Personal side project
+#     description: Personal side project with experimental code patterns and reference implementations
 #     edit: deny
 #   - path: ~/code/archived
-#     description: Archived project
+#     description: Archived projects for reference — source patterns and past architecture decisions
 #     read: deny
 #     edit: deny
 

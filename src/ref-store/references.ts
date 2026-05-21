@@ -13,7 +13,12 @@ export async function writeReferenceIndex(
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<string> {
-  const lines = ["# Enabled References", ""];
+  const lines = [
+    "# Enabled References",
+    "",
+    "Reference repositories are cloned git repos providing documentation, code, and context for AI agents. They are read-only snapshots — do not edit, modify, reorganize, or write to any file within a reference path. If you need to change reference content, ask the user to update the upstream repo.",
+    ""
+  ];
   for (const ref of profile.enabledReferences) {
     lines.push(`- \`${ref.name}\`: ${ref.description} Path: \`${referencePath(profile, ref)}\`.`);
   }
@@ -48,7 +53,7 @@ export async function writeExtraFoldersIndex(
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<string | undefined> {
-  const folders = profile.manifests.machine.extra_folders;
+  const folders = profile.extraFolders;
   const indexPath = path.join(paths.home, ".mindframe-z", "extra_folders.md");
 
   if (folders.length === 0) {
@@ -56,17 +61,16 @@ export async function writeExtraFoldersIndex(
     return undefined;
   }
 
-  const lines = ["# Extra Folders", ""];
+  const lines = [
+    "# Extra Folders",
+    "",
+    "Additional directories outside the workspace that agents are permitted to access. Each entry lists the effective permissions granted. When in doubt about whether a path is accessible, check this file.",
+    ""
+  ];
   for (const folder of folders) {
     const absPath = expandHome(folder.path, paths.home);
-    const permParts: string[] = [];
-    if (folder.read !== "allow") permParts.push(`read: ${folder.read}`);
-    if (folder.edit !== "allow") permParts.push(`edit: ${folder.edit}`);
-    const suffix =
-      folder.description || permParts.length > 0
-        ? ` - ${[folder.description, ...(permParts.length > 0 ? [`(${permParts.join(", ")})`] : [])].filter(Boolean).join(" ")}`
-        : "";
-    lines.push(`- \`${absPath}\`${suffix}`);
+    const suffix = folder.description ? ` - ${folder.description}` : "";
+    lines.push(`- \`${absPath}\`${suffix} (read: ${folder.read}, edit: ${folder.edit})`);
   }
   lines.push("");
 

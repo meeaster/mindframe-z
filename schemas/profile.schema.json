@@ -239,6 +239,44 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "extra_folders": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "read": {
+            "default": "allow",
+            "type": "string",
+            "enum": [
+              "allow",
+              "ask",
+              "deny"
+            ]
+          },
+          "edit": {
+            "default": "allow",
+            "type": "string",
+            "enum": [
+              "allow",
+              "ask",
+              "deny"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
     }
   },
   "required": [
