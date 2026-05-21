@@ -7,11 +7,15 @@
     "explore": {
       "model": "opencode-go/deepseek-v4-flash",
       "reasoningEffort": "medium"
+    },
+    "compaction": {
+      "model": "opencode-go/deepseek-v4-flash"
     }
   },
   "permission": {
     "external_directory": {
-      "/home/mark/references/**": "allow"
+      "/home/mark/references/**": "allow",
+      "/home/mark/.mindframe-z/**": "allow"
     },
     "edit": {
       "/home/mark/references/**": "deny"
@@ -20,7 +24,8 @@
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
     "/home/mark/code/mindframe-z/configs/personal/AGENTS.md",
-    "/home/mark/.mindframe-z/references.md"
+    "/home/mark/.mindframe-z/references.md",
+    "/home/mark/.mindframe-z/extra_folders.md"
   ],
   "plugin": [
     "file:///home/mark/code/mindframe-z/configs/personal/opencode/plugins/mindframe-z-example.ts"

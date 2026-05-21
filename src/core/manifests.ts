@@ -64,6 +64,13 @@ export const mcpManifestSchema = z.object({
 
 const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
 
+export const extraFolderSchema = z.object({
+  path: z.string().min(1),
+  description: z.string().default(""),
+  read: z.enum(["allow", "ask", "deny"]).default("allow"),
+  edit: z.enum(["allow", "ask", "deny"]).default("allow")
+});
+
 const miseTomlSchema = z.object({
   tools: z.record(z.string(), miseToolValueSchema).default({}),
   env: z.record(z.string(), z.coerce.string()).default({}),
@@ -107,16 +114,10 @@ export const profileSchema = z
         settings: z.record(z.string(), z.unknown()).default({})
       })
       .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
-    dotfiles: z.record(z.string(), z.string()).default({})
+    dotfiles: z.record(z.string(), z.string()).default({}),
+    extra_folders: z.array(extraFolderSchema).default([])
   })
   .strict();
-
-export const extraFolderSchema = z.object({
-  path: z.string().min(1),
-  description: z.string().default(""),
-  read: z.enum(["allow", "ask", "deny"]).default("allow"),
-  edit: z.enum(["allow", "ask", "deny"]).default("allow")
-});
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
@@ -264,6 +265,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         dotfiles: {},
+        extra_folders: [],
         description: ""
       });
 

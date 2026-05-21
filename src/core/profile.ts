@@ -7,7 +7,8 @@ import {
   type ProfileManifest,
   type ToolTargetName,
   type ReferenceEntry,
-  type SkillEntry
+  type SkillEntry,
+  type ExtraFolder
 } from "./manifests.js";
 
 export interface ResolvedMcpServer {
@@ -34,6 +35,7 @@ export interface ResolvedProfile {
   enabledSkills: ResolvedSkill[];
   enabledCommands: string[];
   mcpServers: ResolvedMcpServer[];
+  extraFolders: ExtraFolder[];
 }
 
 export function deepMerge(
@@ -74,6 +76,12 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     agents: child.agents.length > 0 ? child.agents : base.agents,
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
+    extra_folders: (() => {
+      const map = new Map<string, ExtraFolder>();
+      for (const f of base.extra_folders) map.set(f.path, f);
+      for (const f of child.extra_folders) map.set(f.path, f);
+      return [...map.values()];
+    })(),
     skills: deepMerge(base.skills, child.skills) as ProfileManifest["skills"],
     mcp: deepMerge(base.mcp, child.mcp) as ProfileManifest["mcp"],
     opencode: {
@@ -152,6 +160,13 @@ export async function resolveProfile(
     return { name: serverName, server, targets: targets ?? agents, enabled };
   });
 
+  const extraFolders: ExtraFolder[] = (() => {
+    const map = new Map<string, ExtraFolder>();
+    for (const f of profile.extra_folders) map.set(f.path, f);
+    for (const f of manifests.machine.extra_folders) map.set(f.path, f);
+    return [...map.values()];
+  })();
+
   return {
     name,
     agents,
@@ -164,7 +179,8 @@ export async function resolveProfile(
     enabledReferences,
     enabledSkills,
     enabledCommands,
-    mcpServers
+    mcpServers,
+    extraFolders
   };
 }
 
