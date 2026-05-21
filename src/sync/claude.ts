@@ -17,6 +17,8 @@ export async function syncClaude(
 
   const managedKeys = new Set(Object.keys(profile.profile.claude.settings));
   managedKeys.add("model");
+  managedKeys.add("permissions");
+  managedKeys.add("additionalDirectories");
 
   for (const [key, value] of Object.entries(existing)) {
     if (!managedKeys.has(key)) {

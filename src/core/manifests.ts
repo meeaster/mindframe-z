@@ -111,13 +111,22 @@ export const profileSchema = z
   })
   .strict();
 
+export const extraFolderSchema = z.object({
+  path: z.string().min(1),
+  description: z.string().default(""),
+  read: z.enum(["allow", "ask", "deny"]).default("allow"),
+  edit: z.enum(["allow", "ask", "deny"]).default("allow")
+});
+
 export const machineSchema = z.object({
   profile: z.string().optional(),
   repo_path: z.string().optional(),
   references_dir: z.string().default("~/references"),
+  extra_folders: z.array(extraFolderSchema).default([]),
   opencode: z.record(z.string(), z.unknown()).default({})
 });
 
+export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
@@ -226,9 +235,10 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
   const machine = effectiveHome
     ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
         references_dir: "~/references",
+        extra_folders: [],
         opencode: {}
       })
-    : { references_dir: "~/references" as const, opencode: {} };
+    : { references_dir: "~/references" as const, extra_folders: [], opencode: {} };
   const profileMap = new Map<string, ProfileManifest>();
   const profilesDir = path.join(root, "profiles");
   try {

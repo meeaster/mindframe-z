@@ -332,6 +332,189 @@ describe("CLI integration", () => {
     expect(opencode).toContain(referencesDir);
   });
 
+  it("writes extra_folders index to machine-local path", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        `  - path: ~/code/work/proj`,
+        `    description: Work project`,
+        `  - path: ~/code/archived`,
+        `    read: deny`,
+        `    edit: deny`,
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const index = await readFile(path.join(home, ".mindframe-z", "extra_folders.md"), "utf8");
+    expect(index).toContain(path.join(home, "code", "work", "proj"));
+    expect(index).toContain("Work project");
+    expect(index).toContain(path.join(home, "code", "archived"));
+    expect(index).toContain("edit: deny");
+    expect(index).toContain("read: deny");
+  });
+
+  it("renders extra folders in OpenCode config", async () => {
+    const workPath = path.join(home, "code", "work");
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        `  - path: ~/code/work`,
+        `    description: Work code`,
+        `  - path: ~/code/restricted`,
+        `    read: deny`,
+        `    edit: deny`,
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    const config = JSON.parse(opencode) as {
+      permission: { external_directory: Record<string, string>; edit: Record<string, string> };
+    };
+    expect(config.permission.external_directory[`${workPath}/**`]).toBe("allow");
+    expect(config.permission.external_directory[`${home}/code/restricted/**`]).toBe("deny");
+    expect(config.permission.edit[`${home}/code/restricted/**`]).toBe("deny");
+  });
+
+  it("renders extra folders in Claude settings", async () => {
+    const codePath = path.join(home, "code");
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        `  - path: ~/code`,
+        `    description: All code`,
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
+
+    const settings = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(settings).toHaveProperty("permissions");
+    expect(settings).toHaveProperty("additionalDirectories");
+    expect(settings.additionalDirectories).toContain(codePath);
+    expect((settings.permissions as { allow?: string[] }).allow).toContain(`Read(/${codePath}/**)`);
+  });
+
+  it("auto-adds references_dir permissions without extra_folders", async () => {
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const refsAbs = path.join(home, "references");
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    expect(opencode).toContain(`${refsAbs}/**`);
+
+    const settings = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    const perms = settings.permissions as { allow?: string[]; deny?: string[] };
+    expect(perms.allow).toContain(`Read(/${refsAbs}/**)`);
+    expect(perms.deny).toContain(`Edit(/${refsAbs}/**)`);
+  });
+
+  it("machine.opencode overrides folder-generated permissions", async () => {
+    const workPath = path.join(home, "code", "work");
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        `  - path: ~/code/work`,
+        `    description: Work code`,
+        "opencode:",
+        "  permission:",
+        "    external_directory:",
+        `      ${workPath}/**: ask`,
+        "    websearch: allow",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    expect(opencode).toContain(`"${workPath}/**": "ask"`);
+    expect(opencode).toContain("websearch");
+  });
+
+  it("merges generated OpenCode permissions with profile permissions", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  config:",
+        "    permission:",
+        "      bash:",
+        "        rm *: deny",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    const config = JSON.parse(opencode) as {
+      permission: { bash: Record<string, string>; edit: Record<string, string> };
+    };
+    expect(config.permission.bash["rm *"]).toBe("deny");
+    expect(config.permission.edit[`${path.join(home, "references")}/**`]).toBe("deny");
+  });
+
+  it("does not write extra_folders.md or reference it when extra_folders is empty", async () => {
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const indexPath = path.join(home, ".mindframe-z", "extra_folders.md");
+    await expect(readFile(indexPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    expect(opencode).not.toContain("extra_folders.md");
+
+    const claudeMd = await readFile(
+      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      "utf8"
+    );
+    expect(claudeMd).not.toContain("extra_folders.md");
+  });
+
   it("renders mise config from base profile and links it", async () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
@@ -356,6 +539,9 @@ describe("CLI integration", () => {
         "  model: sonnet",
         "  settings:",
         "    includeGitInstructions: true",
+        "    permissions:",
+        "      deny:",
+        "        - Bash(curl *)",
         "    env:",
         '      CLAUDE_CODE_ENABLE_TELEMETRY: "1"',
         ""
@@ -403,6 +589,10 @@ describe("CLI integration", () => {
     ) as Record<string, unknown>;
     expect(snapshot).toEqual({
       includeGitInstructions: true,
+      permissions: {
+        allow: [`Read(/${path.join(home, "references")}/**)`],
+        deny: ["Bash(curl *)", `Edit(/${path.join(home, "references")}/**)`]
+      },
       env: { CLAUDE_CODE_ENABLE_TELEMETRY: "1" },
       model: "sonnet"
     });
@@ -490,7 +680,7 @@ describe("CLI integration", () => {
 
   it("writes a reference index from profile references", async () => {
     await cli("mfz", root, home, ["refs", "index"]);
-    const index = await readFile(path.join(root, "configs", "personal", "references.md"), "utf8");
+    const index = await readFile(path.join(home, ".mindframe-z", "references.md"), "utf8");
     expect(index).toContain("local-ref");
     expect(index).toContain("Local test reference");
   });

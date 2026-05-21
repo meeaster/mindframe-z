@@ -17,7 +17,12 @@ import {
 import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
-import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
+import {
+  referenceRows,
+  syncReference,
+  writeExtraFoldersIndex,
+  writeReferenceIndex
+} from "../ref-store/references.js";
 import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/npx-skills.js";
 import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
@@ -65,7 +70,10 @@ async function applyConfig(options: {
       : null;
 
   try {
-    if (!options.dryRun) await writeReferenceIndex(paths, profile);
+    if (!options.dryRun) {
+      await writeReferenceIndex(paths, profile);
+      await writeExtraFoldersIndex(paths, profile);
+    }
     for (const target of [
       ...agentList(options.agent, profile.agents),
       ...infraTargetList(options.target)

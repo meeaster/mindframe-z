@@ -20,7 +20,7 @@ Configuration is organized in three conceptual layers:
 
 - **Catalog** (`shared/*.yml`) — what exists: available references, skills, and MCP servers.
 - **Profile** (`profiles/*/profile.yml`) — what a context wants: which catalog items are enabled, plus tool-specific settings.
-- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: repo path, active profile, references directory, machine-specific overrides.
+- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: repo path, active profile, references directory, extra local folders, machine-specific overrides.
 
 This separation prevents any single manifest from trying to encode every concern. The catalog is shared across all profiles; profiles select from it; the machine decides which profile is active.
 
@@ -55,15 +55,15 @@ machine config ────┤               claude,       claude/              
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
 2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`; each profile decides which agents are active, and individual skill/MCP target lists default to those active agents when omitted.
 3. **Render** — for each active agent and infrastructure target, the renderer produces files and link plans:
-   - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`
-   - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`
+   - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`; folder permissions render to `permission.external_directory` and `permission.edit`
+   - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`; folder permissions render to `permissions` and `additionalDirectories`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
-4. **Write files** — rendered content is written to `configs/<profile>/`. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
+4. **Write files** — rendered content is written to `configs/<profile>/`. `extra_folders` also writes the machine-local `~/.mindframe-z/extra_folders.md` index. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
 5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
 
-Claude Code `settings.json` is intentionally not symlinked. The committed `configs/<profile>/claude/settings.json` contains only profile-managed settings. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
+Claude Code `settings.json` is intentionally not symlinked. The committed `configs/<profile>/claude/settings.json` contains only profile-managed settings and generated machine-folder permissions. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
 
 Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The committed `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
 
@@ -98,11 +98,10 @@ mindframe-z/
 ├── configs/                   # Rendered runtime output (per-profile)
 │   └── <profile>/
 │       ├── AGENTS.md           # Copied from shared/AGENTS.global.md + profile instructions
-│       ├── references.md       # Generated index of enabled references
 │       ├── opencode/
 │       │   └── opencode.jsonc  # Rendered OpenCode config
 │       ├── claude/
-│       │   ├── CLAUDE.md       # Imports AGENTS.md + references.md
+│       │   ├── CLAUDE.md       # Imports AGENTS.md + references from ~/.mindframe-z/
 │       │   ├── settings.json   # Rendered Claude settings snapshot
 │       │   └── mcp.json        # Rendered Claude MCP snapshot
 │       ├── mise/
@@ -183,7 +182,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `mise.tool_alias`   | Shallow merge — child overrides parent                 |
 | `dotfiles`          | Concatenate with newline separator for same key        |
 
-Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
+Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific inputs such as references directory, extra folders, and OpenCode permission overrides.
 
 ## Evolution from Original Design
 
@@ -209,7 +208,8 @@ Features from the design that are not yet implemented:
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.
 - **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which agents each skill is installed for with `skills.<name>.targets`, and `skills.<name>.enabled` sets the default local visibility state.
 - **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles enable servers with `mcp.<name>.enabled`; optional `mcp.<name>.targets` narrows the agents for that server and otherwise defaults to the profile's `agents` list. OpenCode respects both resolved targets and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
-- **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
+- **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). Generated `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` indexes provide agents with discoverability without loading full content into context; both are machine-local and not committed. Rendered agent configs grant read access to the references directory and deny edits by default.
+- **Extra folders are machine-local**: `extra_folders` lives in `~/.mindframe-z/config.yml`, not profiles, because paths are host-specific. Apply writes `~/.mindframe-z/extra_folders.md`, imports it into agent instructions, and renders matching OpenCode and Claude Code folder permissions.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.
 - **OpenCode commands are profile-selected files**: Profiles list command names in `opencode.commands`; matching `opencode/commands/<name>.md` files render to `configs/<profile>/opencode/commands/` and are exposed through the global OpenCode commands directory symlink.

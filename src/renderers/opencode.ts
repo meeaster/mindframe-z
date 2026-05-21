@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import { expandHome, profileConfigsDir } from "../core/paths.js";
-import { filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 
 function toJsonc(value: unknown): string {
@@ -97,7 +97,7 @@ export async function renderOpenCode(
   );
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
-    path.join(configsProfile, "references.md")
+    path.join(paths.home, ".mindframe-z", "references.md")
   ];
   const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
@@ -123,10 +123,42 @@ export async function renderOpenCode(
       ];
     })
   );
-  const machinePermission = profile.manifests.machine.opencode.permission;
+  const extraFolders = profile.manifests.machine.extra_folders;
+  const externalDirectory: Record<string, string> = {};
+  const edit: Record<string, string> = {};
+
+  const refPattern = `${profile.referencesDir}/**`;
+  externalDirectory[refPattern] = "allow";
+  edit[refPattern] = "deny";
+
+  for (const folder of extraFolders) {
+    const absPath = expandHome(folder.path, paths.home);
+    const pattern = `${absPath}/**`;
+    externalDirectory[pattern] = folder.read;
+    if (folder.edit !== "allow") {
+      edit[pattern] = folder.edit;
+    }
+  }
+
+  const folderPermission = { external_directory: externalDirectory, edit };
+  const machinePermission = profile.manifests.machine.opencode.permission as
+    | Record<string, unknown>
+    | undefined;
+  const mergedPerms = machinePermission
+    ? deepMerge(folderPermission, machinePermission)
+    : folderPermission;
+
+  if (extraFolders.length > 0) {
+    instructions.push(path.join(paths.home, ".mindframe-z", "extra_folders.md"));
+  }
+
+  const profilePermission = profile.profile.opencode.config.permission as
+    | Record<string, unknown>
+    | undefined;
+  const permission = profilePermission ? deepMerge(profilePermission, mergedPerms) : mergedPerms;
   const config = {
     ...profile.profile.opencode.config,
-    ...(machinePermission ? { permission: machinePermission } : {}),
+    ...(permission ? { permission } : {}),
     $schema: "https://opencode.ai/config.json",
     instructions,
     plugin,

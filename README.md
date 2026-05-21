@@ -1,6 +1,6 @@
 # mindframe-z
 
-Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles and renders runtime config for OpenCode and Claude Code. Machine-local config can add per-host OpenCode permission rules and reference directories.
+Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles and renders runtime config for OpenCode and Claude Code. Machine-local config selects the active profile, sets reference directories, and grants agents access to extra local folders.
 
 ## Commands
 
@@ -17,6 +17,8 @@ mfz doctor
 ```
 
 By default, commands use `--root <path>`, `MFZ_ROOT`, `repo_path` from `~/.mindframe-z/config.yml`, then the current directory as the config root. Set `repo_path` when using the globally linked `mfz` command from outside this repository.
+
+`~/.mindframe-z/config.yml` may declare `extra_folders` for local directories agents should know about outside the workspace. `mfz apply` writes `~/.mindframe-z/extra_folders.md`, adds it to rendered agent instructions, grants OpenCode/Claude read access, and renders edit permissions from each entry. The configured `references_dir` is always readable by agents and edit-denied by default.
 
 Integration tests use temporary directories and do not touch `~/.config/opencode` or `~/.claude`.
 

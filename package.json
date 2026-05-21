@@ -30,7 +30,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "1.14.48",
+    "@opencode-ai/plugin": "1.15.4",
     "@types/node": "25.7.0",
     "oxfmt": "0.49.0",
     "oxlint": "1.64.0",
