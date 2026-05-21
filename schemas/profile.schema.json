@@ -50,6 +50,30 @@
       "additionalProperties": {
         "anyOf": [
           {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "default": true,
+                "type": "boolean"
+              },
+              "toggleable": {
+                "default": true,
+                "type": "boolean"
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "opencode",
+                    "claude-code",
+                    "all"
+                  ]
+                }
+              }
+            }
+          },
+          {
             "type": "array",
             "items": {
               "type": "string",

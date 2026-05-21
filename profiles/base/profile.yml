@@ -14,19 +14,40 @@ references:
   - agent-vault
 skills:
   hunk-review:
+    enabled: false
   impeccable:
+    enabled: false
   mise:
-  opencode-db: [opencode]
+    enabled: true
+  opencode-db:
+    enabled: false
+    targets: [opencode]
   openspec-apply-change:
+    enabled: true
+    toggleable: false
   openspec-archive-change:
+    enabled: true
+    toggleable: false
   openspec-explore:
+    enabled: true
+    toggleable: false
   openspec-propose:
+    enabled: true
+    toggleable: false
   openspec-sync-specs:
+    enabled: true
+    toggleable: false
   skill-writer:
+    enabled: false
   gpt-model-selection:
+    enabled: false
   qmd:
+    enabled: false
   openai-docs:
-  claude-code-docs: [opencode]
+    enabled: false
+  claude-code-docs:
+    enabled: false
+    targets: [opencode]
 mcp:
   context7:
     enabled: true

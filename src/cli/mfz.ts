@@ -21,6 +21,8 @@ import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/
 import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/npx-skills.js";
 import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
+import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
+import { runSkillsTui } from "../tui/skills-tui.js";
 
 async function confirmReplace(
   rl: readline.Interface | null,
@@ -258,8 +260,54 @@ program
     })
   );
 
-const skills = program.command("skills").description("Manage skills through npx skills");
+const skills = program
+  .command("skills")
+  .description("Manage skills through npx skills")
+  .action(async () => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+    await runSkillsTui(paths, profile);
+  });
+
 const skillTargets = ["opencode", "claude-code"] as const;
+
+function parseSkillTarget(target: string | undefined): SkillToggleTarget | undefined {
+  if (!target) return undefined;
+  if (target === "opencode" || target === "claude-code") return target;
+  throw new Error(`Unknown skill target: ${target}`);
+}
+
+async function setSkillEnabled(
+  name: string,
+  enabled: boolean,
+  options: { target?: string | undefined }
+): Promise<void> {
+  const paths = createRuntimePaths(program.opts());
+  const profile = await resolveProfile(paths, program.opts().profile);
+  const skill = profile.enabledSkills.find((entry) => entry.name === name);
+  if (!skill) throw new Error(`Profile ${profile.name} does not declare skill: ${name}`);
+  if (!skill.toggleable) throw new Error(`Skill "${name}" is not toggleable`);
+  const requestedTarget = parseSkillTarget(options.target);
+  const targets = requestedTarget ? [requestedTarget] : skill.targets;
+  for (const target of targets) {
+    await setLocalSkillState(paths, target, name, enabled);
+    console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
+  }
+}
+
+skills
+  .command("enable")
+  .description("Enable a skill for this project")
+  .argument("<name>", "skill name")
+  .option("--target <target>", "opencode or claude-code")
+  .action(async (name, options) => setSkillEnabled(name, true, options));
+
+skills
+  .command("disable")
+  .description("Disable a skill for this project")
+  .argument("<name>", "skill name")
+  .option("--target <target>", "opencode or claude-code")
+  .action(async (name, options) => setSkillEnabled(name, false, options));
 
 skills
   .command("list")

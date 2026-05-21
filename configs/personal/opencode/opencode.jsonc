@@ -3,11 +3,6 @@
   "reference": {
     "opencode": "https://github.com/anomalyco/opencode"
   },
-  "skills": {
-    "urls": [
-      "https://docs.x.com/.well-known/skills/"
-    ]
-  },
   "agent": {
     "explore": {
       "model": "opencode-go/deepseek-v4-flash",

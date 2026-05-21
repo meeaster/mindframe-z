@@ -18,7 +18,11 @@ export interface ResolvedMcpServer {
   enabled: boolean;
 }
 
-export type ResolvedSkill = SkillEntry & { targets: ToolTargetName[] };
+export type ResolvedSkill = SkillEntry & {
+  enabled: boolean;
+  toggleable: boolean;
+  targets: ToolTargetName[];
+};
 
 export interface ResolvedProfile {
   name: string;
@@ -71,7 +75,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     agents: child.agents.length > 0 ? child.agents : base.agents,
     instructions: dedupe([...base.instructions, ...child.instructions]),
     references: dedupe([...base.references, ...child.references]),
-    skills: { ...base.skills, ...child.skills },
+    skills: deepMerge(base.skills, child.skills) as ProfileManifest["skills"],
     mcp: deepMerge(base.mcp, child.mcp) as ProfileManifest["mcp"],
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
@@ -92,13 +96,19 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
   };
 }
 
-function expandSkillTargets(
-  targets: ProfileManifest["skills"][string],
+function resolveSkillConfig(
+  config: ProfileManifest["skills"][string],
   agents: AgentName[]
-): ToolTargetName[] {
-  if (!targets || targets.length === 0) return agents;
-  if (targets.includes("all")) return agents;
-  return targets.filter((target): target is ToolTargetName => target !== "all");
+): { enabled: boolean; toggleable: boolean; targets: ToolTargetName[] } {
+  if (!config) return { enabled: true, toggleable: true, targets: agents };
+  const targets = Array.isArray(config) ? config : (config.targets ?? agents);
+  return {
+    enabled: Array.isArray(config) ? true : config.enabled,
+    toggleable: Array.isArray(config) ? true : config.toggleable,
+    targets: targets.includes("all")
+      ? agents
+      : targets.filter((target): target is ToolTargetName => target !== "all")
+  };
 }
 
 async function resolveProfileByName(
@@ -130,10 +140,10 @@ export async function resolveProfile(
     return ref;
   });
   const enabledSkills = Object.entries(profile.skills)
-    .map(([skillName, targets]) => {
+    .map(([skillName, config]) => {
       const skill = manifests.skills.find((s) => s.name === skillName);
       if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
-      return { ...skill, targets: expandSkillTargets(targets, agents) };
+      return { ...skill, ...resolveSkillConfig(config, agents) };
     })
     .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
