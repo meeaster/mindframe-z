@@ -49,7 +49,7 @@ MCP enablement is profile-owned: `shared/mcp.yml` defines connection details onl
 
 `extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode `external_directory`/`edit` permissions and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
 
-Claude `settings.json` and Claude MCP are not symlinked. The committed `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
+Claude `settings.json` and Claude MCP are not symlinked. The rendered `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
 
 OpenCode plugins and commands are source files under `opencode/`; profiles list enabled names, and apply copies them into `configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
 
