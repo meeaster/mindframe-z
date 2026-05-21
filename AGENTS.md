@@ -1,76 +1,74 @@
 # AGENTS.md
 
-Read `ARCHITECTURE.md` before making any architectural changes or decisions. Any changes to the architecture or new/updated architectural principles must also update `ARCHITECTURE.md` to keep it current — this file is the authoritative record of the project's architecture.
-
 ## Commands
 
 ```sh
-pnpm build          # tsc → dist/
-pnpm test               # vitest run
+pnpm build             # tsc -p tsconfig.json -> dist/
+pnpm test              # vitest run
+pnpm test -- <file>    # focused Vitest run
 pnpm test:integration  # vitest run tests/integration
-pnpm lint           # oxlint
-pnpm fmt            # oxfmt
-pnpm check          # lint → fmt:check → build → test (run this before committing)
-pnpm schemas        # regenerate schemas/*.schema.json from Zod manifest schemas
+pnpm lint              # oxlint
+pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
+pnpm check             # lint -> fmt:check -> build -> test
+pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
 pnpm dev -- doctor
+pnpm dev -- apply --profile personal --target all --dry-run
+pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
 pnpm dev -- refs list
 ```
 
-`pnpm dev` uses `tsx` for development. The compiled entry point in `bin/mfz` imports from `dist/` — build first before using the binary.
-
-After `mfz apply`, run `mise install` to download binaries referenced in the active profile (e.g. `fff-mcp`).
-
-## Pre-commit
-
-Gitleaks is configured as a pre-commit hook to detect secrets in commits.
-
-```sh
-pre-commit install     # enable hooks locally (run once)
-pre-commit run --all-files  # run all hooks manually
-```
-
-`pre-commit` is provided by mise (see `profiles/base/mise.toml`). The hook config lives in `.pre-commit-config.yaml` at the repo root.
+Use `pnpm dev -- ...` for source execution via `tsx`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz` or `npm link` behavior.
 
 ## Architecture
 
-Profile-aware AI tool config renderer. Reads YAML manifests from `shared/`, `profiles/`, and `machine/` and renders runtime config for OpenCode and Claude Code into `.runtime/`. Symlinks are created from global config directories into the rendered runtime files.
+Read `ARCHITECTURE.md` before architectural changes; update it in the same change when architecture or architectural principles change.
 
-Key directories:
+This is a profile-aware AI tool config renderer. Source manifests live in `shared/` and `profiles/`; rendered, inspectable runtime output lives in `configs/<profile>/`; global tool config paths are linked or merged from there.
 
-- `src/core/` — manifests, profile resolution, path logic, rendering orchestration, symlinks
-- `src/cli/mfz.ts` — main CLI: apply, doctor, status, sync, skills, smoke-opencode, refs
-- `src/renderers/` — OpenCode and Claude config generators
-- `src/ref-store/` — git clone/update references, write reference index
-- `src/skills/` — npx skills integration
-- `shared/` — manifest YAML files (refs, skills, MCP servers, AGENTS.md instructions)
-- `profiles/` — profile definitions
-- `machine/` — per-machine overrides (gitignored, see `machine.yml.example`)
-- `opencode/plugins/` — OpenCode plugin source files
-- `tests/integration/` — fully isolated CLI integration tests (temp dirs, no real homedirs)
-- `skills/` — local skill source directories
+Key entrypoints:
 
-## Module system
+- `src/cli/mfz.ts` defines CLI commands: `apply`, `doctor`, `status`, `sync`, `skills`, `smoke-opencode`, `refs`.
+- `src/core/manifests.ts` defines Zod schemas; run `pnpm schemas` after changing manifest shapes and commit `schemas/*.schema.json`.
+- `src/core/profile.ts` resolves profile inheritance and merge semantics.
+- `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
+- `src/sync/` promotes unmanaged edits from rendered configs back into profile YAML/TOML.
 
-ESM with `module: "nodenext"` and `moduleResolution: "nodenext"`. Import paths use `.js` extensions for TypeScript source files. Strict mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+## Manifest Model
 
-## Testing
+Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`; root resolution is `--root` > `MFZ_ROOT` > machine `repo_path` > cwd.
 
-Integration tests are completely isolated — they use `mkdtemp` temp directories for both `root` and `home`, and override `OPENCODE_CONFIG_DIR`, `CLAUDE_CONFIG_DIR`, and all other paths via env vars. They never touch `~/.config/opencode`, `~/.claude`, `~/.config/mise`, or any real home directory paths. Tests use `--no-link` to avoid symlink creation unless explicitly testing symlink behavior.
+`shared/*.yml` is the catalog of available refs, skills, and MCP servers. `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`.
 
-## Environment variables
+Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, `claude`, and `mise` are deep-merged with child keys overriding parent keys. `agents` is replaced by the child when set.
 
-- `MFZ_ROOT` — overrides config root (default: machine `repo_path`, then cwd)
-- `MFZ_HOME` — overrides home directory (default: `$HOME`)
-- `MFZ_PROFILE` — profile name (default: `machine/machine.yml` profile or `personal`)
-- `MFZ_REFERENCES_DIR` — where refs are cloned (default: `~/references`)
-- `OPENCODE_CONFIG_DIR` — OpenCode config dir (default: `~/.config/opencode`)
-- `CLAUDE_CONFIG_DIR` — Claude config dir (default: `~/.claude`)
+MCP enablement is profile-owned: `shared/mcp.yml` defines connection details only; profiles use `mcp.<name>.enabled` and optional `targets` to render servers.
 
-## Conventions
+## Rendering And Sync
 
-- This repo is in active development with no external users yet; prefer the simplest direct design and do not add backward-compatibility or fallback behavior unless there is a concrete current need.
-- Lint/formatter: oxlint + oxfmt (not eslint/prettier). Config in `oxlint.json` and `.oxfmtrc.json`.
-- `dist/`, `.runtime/`, `machine/machine.yml`, `/references/` are gitignored.
-- The shared instruction file `shared/AGENTS.global.md` is rendered into AI tool runtime config — it is not this repo's agents guide.
-- Profiles use `extends` to inherit from a parent. `profiles/base.yml` is the shared foundation; `personal` and `work` extend it. Arrays (`references`, `instructions`, `opencode.plugins`, `opencode.commands`) are additive on merge; maps (`skills`, `mcp`, `opencode.config`, `claude`) are merged with child keys overriding parent keys.
-- MCP servers are configured in profiles as a map: `serverName: { enabled: true/false }`. Servers not listed are not rendered. `shared/mcp.yml` defines server configurations (type, url, command, etc.) but does not control enable state or profile visibility.
+`mfz apply` writes rendered files under `configs/<profile>/`, writes `references.md`, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
+
+Claude `settings.json` and Claude MCP are not symlinked. The committed `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
+
+OpenCode plugins and commands are source files under `opencode/`; profiles list enabled names, and apply copies them into `configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
+
+`mfz sync` is the intended path after editing rendered configs directly in `configs/<profile>/`; it detects unmanaged top-level config keys and promotes them to `base` or the active profile.
+
+## Testing And Safety
+
+Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR` and `CLAUDE_CONFIG_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
+
+`smoke-opencode` renders OpenCode config into `configs/<profile>/opencode`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode` binary is missing.
+
+Pre-commit runs only Gitleaks. `pre-commit` is supplied by mise (`profiles/base/mise.toml`); use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
+
+## Repo Conventions
+
+ESM uses `module: "nodenext"`; TypeScript source imports local modules with `.js` extensions. Strict mode includes `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+
+Lint/format tooling is oxlint/oxfmt, not ESLint/Prettier. `.oxfmtrc.json` intentionally ignores rendered/generated/profile-owned trees such as `configs/`, `schemas/`, `skills/`, and `openspec/`.
+
+`pnpm-workspace.yaml` enforces `minimumReleaseAge`, `strictDepBuilds`, and allowed build scripts; do not bypass these when adding packages.
+
+This repo has no external users yet. Prefer one direct implementation over fallback or backward-compatibility paths unless persisted data, shipped behavior, or an explicit requirement makes compatibility necessary.
+
+`shared/AGENTS.global.md` is rendered into agent runtime configs. Do not put repo-maintainer instructions there unless they should appear in generated OpenCode/Claude guidance.
