@@ -3,6 +3,7 @@ dist/
 .runtime/
 machine/machine.yml
 /references/
+configs/
 *.log
 openspec/changes/
 openspec/specs/

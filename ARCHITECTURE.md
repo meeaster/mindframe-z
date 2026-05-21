@@ -63,9 +63,9 @@ machine config ────┤               claude,       claude/              
 5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
 
-Claude Code `settings.json` is intentionally not symlinked. The committed `configs/<profile>/claude/settings.json` contains only profile-managed settings and generated machine-folder permissions. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
+Claude Code `settings.json` is intentionally not symlinked. The rendered `configs/<profile>/claude/settings.json` contains only profile-managed settings and generated machine-folder permissions. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
 
-Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The committed `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
+Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The rendered `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
 
 ### Sync (tools → profiles)
 
