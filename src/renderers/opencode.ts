@@ -58,9 +58,19 @@ async function collectCommandFiles(
 
   for (const commandName of commandNames) {
     const fileName = `${commandName}.md`;
+    const filePath = path.join(sourceDir, fileName);
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Unknown command: ${commandName}`);
+      }
+      throw error;
+    }
     files.push({
       path: path.join(configsOpencode, "commands", fileName),
-      content: await readFile(path.join(sourceDir, fileName), "utf8")
+      content
     });
   }
 

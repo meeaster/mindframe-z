@@ -983,8 +983,8 @@ describe("CLI integration", () => {
       "utf8"
     );
 
-    await expect(cli("mfz", root, home, ["status"])).rejects.toMatchObject({
-      stderr: expect.stringContaining("Profile personal references unknown command: missing-cmd")
+    await expect(cli("mfz", root, home, ["apply", "--no-link"])).rejects.toMatchObject({
+      stderr: expect.stringContaining("Unknown command: missing-cmd")
     });
   });
 

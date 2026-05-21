@@ -3,31 +3,8 @@ import { readFile } from "node:fs/promises";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { expandHome } from "../core/paths.js";
-import { filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
-
-function deepMergeSettings(base: Record<string, unknown>, override: Record<string, unknown>) {
-  const merged: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const existing = merged[key];
-    if (
-      typeof existing === "object" &&
-      existing !== null &&
-      !Array.isArray(existing) &&
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value)
-    ) {
-      merged[key] = deepMergeSettings(
-        existing as Record<string, unknown>,
-        value as Record<string, unknown>
-      );
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
-}
 
 async function readExistingSettings(settingsPath: string): Promise<Record<string, unknown>> {
   try {
@@ -132,7 +109,7 @@ export async function renderClaude(
   const managedClaudeServerNames = new Set(profile.mcpServers.map((server) => server.name));
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
-  const mergedSettings = deepMergeSettings(await readExistingSettings(localSettingsPath), settings);
+  const mergedSettings = deepMerge(await readExistingSettings(localSettingsPath), settings);
   const mergedClaudeJson = mergeClaudeMcp(
     await readExistingClaudeJson(localClaudeJsonPath),
     managedClaudeMcp,

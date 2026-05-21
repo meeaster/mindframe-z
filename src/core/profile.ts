@@ -1,4 +1,3 @@
-import { access } from "node:fs/promises";
 import path from "node:path";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
 import {
@@ -37,7 +36,7 @@ export interface ResolvedProfile {
   mcpServers: ResolvedMcpServer[];
 }
 
-function deepMerge(
+export function deepMerge(
   base: Record<string, unknown>,
   child: Record<string, unknown>
 ): Record<string, unknown> {
@@ -147,16 +146,6 @@ export async function resolveProfile(
     })
     .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
-  for (const commandName of enabledCommands) {
-    try {
-      await access(path.join(paths.root, "opencode", "commands", `${commandName}.md`));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`Profile ${name} references unknown command: ${commandName}`);
-      }
-      throw error;
-    }
-  }
   const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled, targets }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
