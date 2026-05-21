@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import type { AgentName, RuntimePaths } from "../core/paths.js";
@@ -32,6 +32,17 @@ async function readJsonFile(file: string, jsonc: boolean): Promise<Record<string
 async function writeJsonFile(file: string, data: Record<string, unknown>): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+}
+
+async function ensureGitExcluded(root: string, pattern: string): Promise<void> {
+  const excludeFile = path.join(root, ".git", "info", "exclude");
+  try {
+    const content = await readFile(excludeFile, "utf8");
+    if (content.split("\n").some((line) => line.trimEnd() === pattern)) return;
+    await appendFile(excludeFile, `\n${pattern}\n`, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+  }
 }
 
 function stringRecord(value: unknown): Record<string, string> {
@@ -87,6 +98,7 @@ export async function writeLocalSkillOverrides(
       skill: { ...stringRecord(permission.skill), ...skillPermissionEntries(state) }
     };
     await writeJsonFile(file, config);
+    await ensureGitExcluded(paths.root, ".opencode/opencode.jsonc");
     return;
   }
 
@@ -99,6 +111,7 @@ export async function writeLocalSkillOverrides(
     )
   };
   await writeJsonFile(file, settings);
+  await ensureGitExcluded(paths.root, ".claude/settings.local.json");
 }
 
 export async function setLocalSkillState(
