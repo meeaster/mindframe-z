@@ -1,4 +1,18 @@
 skills:
+  - name: grill-with-docs
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: grill-with-docs
+    description: >
+      Grill a codebase with questions about how something works, finding related code, or
+      identifying patterns and anti-patterns in a codebase.
+  - name: improve-codebase-architecture
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: improve-codebase-architecture
+    description: >
+      Analyze a codebase architecture and suggest improvements, refactors, and structural changes
+      to improve maintainability, performance, and code quality.
   - name: home-assistant-best-practices
     source: git
     repo: https://github.com/homeassistant-ai/skills
