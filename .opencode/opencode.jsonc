@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": {
+      "hunk-review": "deny",
+      "impeccable": "deny",
+      "mise": "deny",
+      "opencode-db": "deny",
+      "openspec-apply-change": "allow",
+      "openspec-archive-change": "allow",
+      "openspec-explore": "allow",
+      "openspec-propose": "allow",
+      "openspec-sync-specs": "allow",
+      "skill-writer": "deny",
+      "gpt-model-selection": "deny",
+      "qmd": "deny",
+      "openai-docs": "deny",
+      "claude-code-docs": "allow",
+      "home-assistant-best-practices": "deny"
+    }
+  }
+}

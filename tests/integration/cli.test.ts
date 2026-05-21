@@ -1,8 +1,12 @@
 import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createRuntimePaths } from "../../src/core/paths.js";
+import { resolveProfile } from "../../src/core/profile.js";
+import { runSkillsTui } from "../../src/tui/skills-tui.js";
 
 const projectRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -204,6 +208,14 @@ function cliWithMachineRepoPath(home: string, args: string[]) {
       }
     }
   );
+}
+
+function sink(): Writable {
+  return new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    }
+  });
 }
 
 describe("CLI integration", () => {
@@ -612,6 +624,140 @@ describe("CLI integration", () => {
     expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(3);
   });
 
+  it("sync installs disabled profile skills", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "skills:",
+        "  local-skill:",
+        "    enabled: false",
+        "    targets: [opencode]",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
+    expect(result.stdout).toContain("npx skills add");
+    expect(result.stdout).toContain("-a opencode -g -y");
+  });
+
+  it("toggles skill state in local OpenCode and Claude Code config", async () => {
+    await mkdir(path.join(root, ".opencode"), { recursive: true });
+    await writeFile(
+      path.join(root, ".opencode", "opencode.jsonc"),
+      JSON.stringify({ permission: { webfetch: "allow" } }, null, 2) + "\n",
+      "utf8"
+    );
+    await mkdir(path.join(root, ".claude"), { recursive: true });
+    await writeFile(
+      path.join(root, ".claude", "settings.local.json"),
+      JSON.stringify({ includeGitInstructions: true }, null, 2) + "\n",
+      "utf8"
+    );
+
+    const disable = await cli("mfz", root, home, [
+      "skills",
+      "disable",
+      "local-skill",
+      "--target",
+      "opencode"
+    ]);
+    expect(disable.stdout).toContain("Disabled local-skill for opencode");
+
+    const enable = await cli("mfz", root, home, [
+      "skills",
+      "enable",
+      "claude-skill",
+      "--target",
+      "claude-code"
+    ]);
+    expect(enable.stdout).toContain("Enabled claude-skill for claude-code");
+
+    const opencode = JSON.parse(
+      await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
+    ) as { permission?: Record<string, unknown> };
+    expect(opencode.permission).toMatchObject({
+      webfetch: "allow",
+      skill: { "local-skill": "deny" }
+    });
+
+    const claude = JSON.parse(
+      await readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(claude).toMatchObject({
+      includeGitInstructions: true,
+      skillOverrides: { "claude-skill": "on" }
+    });
+  });
+
+  it("TUI saves profile-default skill state to local config files", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode, claude-code]",
+        "skills:",
+        "  local-skill:",
+        "    enabled: false",
+        "  claude-skill:",
+        "    enabled: true",
+        "    targets: [claude-code]",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    const paths = createRuntimePaths({ root, home });
+    const profile = await resolveProfile(paths, "personal");
+    const input = new PassThrough();
+    const promise = runSkillsTui(paths, profile, { input, output: sink() });
+
+    input.write(" \r");
+    input.end();
+    await promise;
+
+    const opencode = JSON.parse(
+      await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
+    ) as { permission?: { skill?: Record<string, string> } };
+    expect(opencode.permission?.skill?.["local-skill"]).toBe("allow");
+
+    const claude = JSON.parse(
+      await readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
+    ) as { skillOverrides?: Record<string, string> };
+    expect(claude.skillOverrides?.["claude-skill"]).toBe("on");
+  });
+
+  it("rejects enable/disable on non-toggleable skill", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "skills:",
+        "  local-skill:",
+        "    enabled: true",
+        "    toggleable: false",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const enableErr = await cli("mfz", root, home, ["skills", "enable", "local-skill"]).catch(
+      (e) => e
+    );
+    expect(enableErr.stderr).toContain('Skill "local-skill" is not toggleable');
+
+    const disableErr = await cli("mfz", root, home, ["skills", "disable", "local-skill"]).catch(
+      (e) => e
+    );
+    expect(disableErr.stderr).toContain('Skill "local-skill" is not toggleable');
+  });
+
   it("does not render Claude config for an opencode-only profile", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
@@ -736,15 +882,29 @@ describe("CLI integration", () => {
     expect(lines[0]).toContain("npx skills update shared-git-skill -g -y");
   });
 
-  it("child profile overrides inherited skill targets", async () => {
+  it("deep merges inherited skill config", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "skills:", "  local-skill: [claude-code]", ""].join("\n"),
+      [
+        "name: personal",
+        "extends: base",
+        "skills:",
+        "  local-skill:",
+        "    targets: [claude-code]",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      ["name: base", "skills:", "  local-skill: [opencode]", ""].join("\n"),
+      [
+        "name: base",
+        "skills:",
+        "  local-skill:",
+        "    enabled: false",
+        "    targets: [opencode]",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
@@ -753,7 +913,7 @@ describe("CLI integration", () => {
     expect(result.stdout).not.toContain("local-skill\topencode");
   });
 
-  it("defaults empty skill target arrays to profile agents", async () => {
+  it("accepts legacy empty skill target arrays as no targets", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       ["name: personal", "extends: base", "skills:", "  local-skill: []", ""].join("\n"),
@@ -764,7 +924,25 @@ describe("CLI integration", () => {
     expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
 
     const listResult = await cli("mfz", root, home, ["skills", "list"]);
-    expect(listResult.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
+    expect(listResult.stdout).not.toContain("local-skill");
+  });
+
+  it("accepts legacy null skill entries", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "skills:",
+        "  local-skill:",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["skills", "list"]);
+    expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
   });
 
   it("prints enabled commands in status output", async () => {

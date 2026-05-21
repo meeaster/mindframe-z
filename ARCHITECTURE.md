@@ -150,25 +150,38 @@ Project editor settings map schemas to YAML files:
 
 Zed uses `.zed/settings.json` to configure `yaml-language-server`; VS Code uses `.vscode/settings.json` with `yaml.schemas`.
 
+## Local Skill Toggles
+
+Profiles declare which skills exist for each agent target and each skill's default `enabled` state. `mfz skills sync` installs every profile-declared skill, including disabled skills, so enabling a skill later is an instant config write rather than an install operation.
+
+Per-project skill visibility is local tool state, not rendered profile state. `mfz skills tui`, `mfz skills enable`, and `mfz skills disable` write directly to project-local tool config files:
+
+| Target        | Local file                    | Managed key        |
+| ------------- | ----------------------------- | ------------------ |
+| `opencode`    | `.opencode/opencode.jsonc`    | `permission.skill` |
+| `claude-code` | `.claude/settings.local.json` | `skillOverrides`   |
+
+This path intentionally does not flow through `mfz apply`. `apply` manages global profile-rendered configuration, while skill toggles are project-local runtime preferences. OpenCode reads these changes on restart; Claude Code hot-reloads `settings.local.json`.
+
 ## Profile Inheritance and Merge Semantics
 
 Profiles use `extends` to inherit from a parent. The merge rules are:
 
-| Field               | Merge Behavior                                           |
-| ------------------- | -------------------------------------------------------- |
-| `instructions`      | Concatenate + deduplicate                                |
-| `references`        | Concatenate + deduplicate                                |
-| `agents`            | Child replaces parent if non-empty                       |
-| `skills`            | Merge by skill name — child target list overrides parent |
-| `mcp`               | Deep merge by server name — child keys override parent   |
-| `opencode.config`   | Deep merge — child keys override parent                  |
-| `opencode.plugins`  | Concatenate + deduplicate                                |
-| `opencode.commands` | Concatenate + deduplicate                                |
-| `claude`            | Deep merge — child keys override parent                  |
-| `mise.tools`        | Deep merge                                               |
-| `mise.env`          | Shallow merge — child overrides parent                   |
-| `mise.tool_alias`   | Shallow merge — child overrides parent                   |
-| `dotfiles`          | Concatenate with newline separator for same key          |
+| Field               | Merge Behavior                                         |
+| ------------------- | ------------------------------------------------------ |
+| `instructions`      | Concatenate + deduplicate                              |
+| `references`        | Concatenate + deduplicate                              |
+| `agents`            | Child replaces parent if non-empty                     |
+| `skills`            | Deep merge by skill name — child keys override parent  |
+| `mcp`               | Deep merge by server name — child keys override parent |
+| `opencode.config`   | Deep merge — child keys override parent                |
+| `opencode.plugins`  | Concatenate + deduplicate                              |
+| `opencode.commands` | Concatenate + deduplicate                              |
+| `claude`            | Deep merge — child keys override parent                |
+| `mise.tools`        | Deep merge                                             |
+| `mise.env`          | Shallow merge — child overrides parent                 |
+| `mise.tool_alias`   | Shallow merge — child overrides parent                 |
+| `dotfiles`          | Concatenate with newline separator for same key        |
 
 Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific overrides (references directory, OpenCode permissions).
 
@@ -194,7 +207,7 @@ Features from the design that are not yet implemented:
 ## Key Decisions
 
 - **Symlinks over copies**: Global tool paths are symlinks to rendered configs, making the source of truth visible and editable. Backups are created on conflict with timestamp suffixes. Claude Code `settings.json` is the exception: it is written locally as a merged file so external machine-specific setup can coexist with profile-managed settings.
-- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which agents each skill is installed for with `skills.<name>: [opencode]`, `[claude-code]`, explicit both, `[all]`, or by omitting the target list to use the profile's `agents` list.
+- **`npx skills` as installer, not source**: Skills are declared in manifests and installed via `npx skills` adapter. The portable skill catalog lives in `shared/skills.yml`; profiles decide which agents each skill is installed for with `skills.<name>.targets`, and `skills.<name>.enabled` sets the default local visibility state.
 - **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles enable servers with `mcp.<name>.enabled`; optional `mcp.<name>.targets` narrows the agents for that server and otherwise defaults to the profile's `agents` list. OpenCode respects both resolved targets and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). A generated `references.md` index provides agents with discoverability without loading full content into context.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.

@@ -4,8 +4,11 @@ description: Work AI setup using OpenAI models.
 agents: [opencode, claude-code]
 skills:
   jira-writer:
+    enabled: false
   pr-writer:
+    enabled: false
   visual-explainer:
+    enabled: false
 references:
   - datadog-agent
 mcp:

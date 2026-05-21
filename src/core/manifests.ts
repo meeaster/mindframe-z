@@ -16,6 +16,11 @@ const profileSkillTargetsSchema = z
   .refine((targets) => !targets.includes("all") || targets.length === 1, {
     message: "Use either [all] or explicit skill targets, not both"
   });
+const profileSkillConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  toggleable: z.boolean().default(true),
+  targets: profileSkillTargetsSchema.optional()
+});
 
 export const referenceSchema = z.object({
   name: z.string().min(1),
@@ -81,7 +86,10 @@ export const profileSchema = z
     instructions: z.array(z.string()).default([]),
     references: z.array(z.string()).default([]),
     skills: z
-      .record(z.string(), z.union([profileSkillTargetsSchema, z.null()]).optional())
+      .record(
+        z.string(),
+        z.union([profileSkillConfigSchema, profileSkillTargetsSchema, z.null()]).optional()
+      )
       .default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
     opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),

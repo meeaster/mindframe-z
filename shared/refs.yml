@@ -20,3 +20,9 @@ references:
   - name: datadog-agent
     url: https://github.com/datadog/datadog-agent.git
     description: Datadog Agent source and documentation.
+  - name: clack
+    url: https://github.com/bombshell-dev/clack.git
+    description: Effortlessly build beautiful command-line apps.
+  - name: ha-mcp
+    url: https://github.com/homeassistant-ai/ha-mcp.git
+    description: Home Assistant MCP server for AI integration.

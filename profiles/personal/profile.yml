@@ -2,8 +2,12 @@ name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
 agents: [opencode]
+references:
+  - clack
+  - ha-mcp
 skills:
   home-assistant-best-practices:
+    enabled: false
 mcp:
   homeassistant:
     enabled: false
@@ -15,9 +19,6 @@ mcp:
     enabled: false
 opencode:
   config:
-    skills:
-      urls:
-        - https://docs.x.com/.well-known/skills/
     agent:
       explore:
         model: opencode-go/deepseek-v4-flash
