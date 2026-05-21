@@ -6,6 +6,28 @@ import { expandHome } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 
+function claudePermissionPattern(absPath: string): string {
+  const normalized = absPath.replace(/\/+$/, "") || "/";
+  return `${normalized.startsWith("/") ? "/" : ""}${normalized}/**`;
+}
+
+function mergeClaudePermissions(
+  existing: unknown,
+  generated: Record<string, string[]>
+): Record<string, unknown> {
+  const merged =
+    typeof existing === "object" && existing !== null && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+
+  for (const key of ["allow", "deny"] as const) {
+    const current = Array.isArray(merged[key]) ? (merged[key] as string[]) : [];
+    merged[key] = [...new Set([...current, ...(generated[key] ?? [])])];
+  }
+
+  return merged;
+}
+
 async function readExistingSettings(settingsPath: string): Promise<Record<string, unknown>> {
   try {
     const parsed = JSON.parse(await readFile(settingsPath, "utf8")) as unknown;
@@ -84,22 +106,61 @@ export async function renderClaude(
   const claudeMdPath = path.join(configsClaude, "CLAUDE.md");
   const settingsPath = path.join(configsClaude, "settings.json");
   const mcpPath = path.join(configsClaude, "mcp.json");
-  const claudeMd =
-    [
-      "# CLAUDE.md",
-      "",
-      `@${path.join(configsProfile, "AGENTS.md")}`,
-      `@${path.join(configsProfile, "references.md")}`,
-      "",
-      "## Claude Code",
-      "",
-      "Use the shared AI configuration rendered by mindframe-z."
-    ].join("\n") + "\n";
+  const extraFolders = profile.manifests.machine.extra_folders;
+  const allowPermissions: string[] = [];
+  const denyPermissions: string[] = [];
+  const additionalDirectories: string[] = [];
 
-  const settings = {
+  const refPattern = claudePermissionPattern(profile.referencesDir);
+  allowPermissions.push(`Read(${refPattern})`);
+  denyPermissions.push(`Edit(${refPattern})`);
+
+  for (const folder of extraFolders) {
+    const absPath = expandHome(folder.path, paths.home);
+    const pattern = claudePermissionPattern(absPath);
+
+    if (folder.read === "allow") {
+      allowPermissions.push(`Read(${pattern})`);
+      additionalDirectories.push(absPath);
+    } else if (folder.read === "deny") {
+      denyPermissions.push(`Read(${pattern})`);
+    }
+
+    if (folder.edit === "allow") {
+      allowPermissions.push(`Edit(${pattern})`);
+    } else if (folder.edit === "deny") {
+      denyPermissions.push(`Edit(${pattern})`);
+    }
+  }
+
+  const claudeMdLines = [
+    "# CLAUDE.md",
+    "",
+    `@${path.join(configsProfile, "AGENTS.md")}`,
+    `@${path.join(paths.home, ".mindframe-z", "references.md")}`
+  ];
+  if (extraFolders.length > 0) {
+    claudeMdLines.push(`@${path.join(paths.home, ".mindframe-z", "extra_folders.md")}`);
+  }
+  claudeMdLines.push(
+    "",
+    "## Claude Code",
+    "",
+    "Use the shared AI configuration rendered by mindframe-z."
+  );
+  const claudeMd = claudeMdLines.join("\n") + "\n";
+
+  const permissions: Record<string, string[]> = {};
+  if (allowPermissions.length > 0) permissions.allow = allowPermissions;
+  if (denyPermissions.length > 0) permissions.deny = denyPermissions;
+  const settings: Record<string, unknown> = {
     ...profile.profile.claude.settings,
     ...(profile.profile.claude.model ? { model: profile.profile.claude.model } : {})
   };
+  settings.permissions = mergeClaudePermissions(settings.permissions, permissions);
+  if (additionalDirectories.length > 0) {
+    settings.additionalDirectories = additionalDirectories;
+  }
   const managedClaudeMcp = Object.fromEntries(
     filterMcpForTarget(profile, "claude-code").map((server) => [
       server.name,

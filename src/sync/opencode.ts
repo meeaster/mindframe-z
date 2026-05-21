@@ -20,7 +20,7 @@ export async function syncOpencode(
     return { candidates };
   }
 
-  const derived = new Set(["$schema", "instructions", "plugin", "mcp"]);
+  const derived = new Set(["$schema", "instructions", "plugin", "mcp", "permission"]);
   const managedKeys = new Set(Object.keys(profile.profile.opencode.config));
 
   for (const [key, value] of Object.entries(existing)) {

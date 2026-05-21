@@ -5,6 +5,18 @@
 profile: personal
 repo_path: ~/code/mindframe-z
 references_dir: ~/references
+
+# extra_folders:
+#   - path: ~/code/work/my-work-repo
+#     description: Main work project repo
+#   - path: ~/code/personal/side-project
+#     description: Personal side project
+#     edit: deny
+#   - path: ~/code/archived
+#     description: Archived project
+#     read: deny
+#     edit: deny
+
 # opencode:
 #   permission:
 #     websearch: allow

@@ -9,10 +9,18 @@
       "reasoningEffort": "medium"
     }
   },
+  "permission": {
+    "external_directory": {
+      "/home/mark/references/**": "allow"
+    },
+    "edit": {
+      "/home/mark/references/**": "deny"
+    }
+  },
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
     "/home/mark/code/mindframe-z/configs/personal/AGENTS.md",
-    "/home/mark/code/mindframe-z/configs/personal/references.md"
+    "/home/mark/.mindframe-z/references.md"
   ],
   "plugin": [
     "file:///home/mark/code/mindframe-z/configs/personal/opencode/plugins/mindframe-z-example.ts"
