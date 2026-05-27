@@ -12,6 +12,7 @@ import type { LinkPlan } from "./symlinks.js";
 export interface RenderedFile {
   path: string;
   content: string;
+  ifMissing?: boolean;
 }
 
 export interface RenderResult {
@@ -45,7 +46,9 @@ export async function writeLocalFiles(files: RenderedFile[]): Promise<void> {
   for (const file of files) {
     await mkdir(path.dirname(file.path), { recursive: true });
     try {
-      if ((await lstat(file.path)).isSymbolicLink()) await unlink(file.path);
+      const stat = await lstat(file.path);
+      if (file.ifMissing) continue;
+      if (stat.isSymbolicLink()) await unlink(file.path);
     } catch {
       // Missing files are created below.
     }

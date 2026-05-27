@@ -58,7 +58,7 @@ machine config ────┤               claude,       claude/              
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`; folder permissions render to `permission.external_directory` and `permission.edit`
    - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`; folder permissions render to `permissions` and `additionalDirectories`
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
-   - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`
+   - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`; a managed `.zshrc` also sources local secret and machine-local customization files when they exist
 4. **Write files** — rendered content is written to `configs/<profile>/`. `extra_folders` also writes the machine-local `~/.mindframe-z/extra_folders.md` index. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
 5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
@@ -66,6 +66,10 @@ machine config ────┤               claude,       claude/              
 Claude Code `settings.json` is intentionally not symlinked. The rendered `configs/<profile>/claude/settings.json` contains only profile-managed settings and generated machine-folder permissions. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
 
 Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The rendered `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
+
+Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.zshrc.local` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
+
+To migrate an existing `.zshrc`, move portable aliases, PATH setup, prompt selection, and shell framework configuration into `profiles/base/.zshrc` or a child profile `.zshrc`. Move secret exports such as API tokens to `~/.mindframe-z/secrets/zsh.env`, and move host-specific non-secret tweaks to `~/.zshrc.local`.
 
 ### Sync (tools → profiles)
 
@@ -216,6 +220,7 @@ Template:
 ```
 
 Rules:
+
 - Start with the primary language or runtime (e.g. "TypeScript/Bun monorepo", "Rust-based CLI", "Python project (>=3.13, FastMCP-based)")
 - State the project's purpose and what it does in one clause
 - Include at least one LLM-relevant detail: where to find the main entrypoint, what package name to import, what file defines the config schema, etc.
@@ -244,6 +249,7 @@ Template:
 ```
 
 Rules:
+
 - Lead with the contents of the directory, then the use case
 - Keep to one sentence (renderer appends it as a suffix)
 - No trailing punctuation (renderer appends permissions after the description)
