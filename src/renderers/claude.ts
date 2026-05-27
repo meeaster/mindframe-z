@@ -5,6 +5,7 @@ import { profileConfigsDir } from "../core/paths.js";
 import { expandHome } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
 function claudePermissionPattern(absPath: string): string {
   const normalized = absPath.replace(/\/+$/, "") || "/";
@@ -114,6 +115,12 @@ export async function renderClaude(
   const refPattern = claudePermissionPattern(profile.referencesDir);
   allowPermissions.push(`Read(${refPattern})`);
   denyPermissions.push(`Edit(${refPattern})`);
+
+  if (hasManagedZsh(profile)) {
+    const pattern = claudePermissionPattern(zshSecretsDir(paths));
+    denyPermissions.push(`Read(${pattern})`);
+    denyPermissions.push(`Edit(${pattern})`);
+  }
 
   for (const folder of extraFolders) {
     const absPath = expandHome(folder.path, paths.home);

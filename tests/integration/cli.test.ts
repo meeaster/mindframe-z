@@ -392,6 +392,26 @@ describe("CLI integration", () => {
     expect(config.permission.edit[`${home}/code/restricted/**`]).toBe("deny");
   });
 
+  it("denies managed zsh secrets in OpenCode config", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", ".zshrc"),
+      "alias gs='git status'\n",
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const config = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as {
+      permission: { external_directory: Record<string, string>; edit: Record<string, string> };
+    };
+    const secretsPattern = path.join(home, ".mindframe-z", "secrets", "**");
+    expect(config.permission.external_directory[secretsPattern]).toBe("deny");
+    expect(config.permission.edit[secretsPattern]).toBe("deny");
+    expect(config.permission.edit[path.join(home, ".zshrc")]).toBeUndefined();
+  });
+
   it("renders extra folders in Claude settings", async () => {
     const codePath = path.join(home, "code");
     await writeFile(
@@ -416,6 +436,23 @@ describe("CLI integration", () => {
     expect(settings).toHaveProperty("additionalDirectories");
     expect(settings.additionalDirectories).toContain(codePath);
     expect((settings.permissions as { allow?: string[] }).allow).toContain(`Read(/${codePath}/**)`);
+  });
+
+  it("denies managed zsh secrets in Claude settings", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", ".zshrc"),
+      "alias gs='git status'\n",
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
+
+    const settings = JSON.parse(
+      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+    ) as { permissions: { deny?: string[] } };
+    const secretsPattern = `/${path.join(home, ".mindframe-z", "secrets")}/**`;
+    expect(settings.permissions.deny).toContain(`Read(${secretsPattern})`);
+    expect(settings.permissions.deny).toContain(`Edit(${secretsPattern})`);
   });
 
   it("auto-adds references_dir permissions without extra_folders", async () => {
@@ -1230,6 +1267,68 @@ describe("CLI integration", () => {
     await expect(realpath(path.join(home, ".npmrc"))).resolves.toBe(
       path.join(root, "configs", "personal", "dotfiles", ".npmrc")
     );
+  });
+
+  it("renders and links managed .zshrc with guarded local includes", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", ".zshrc"),
+      "alias gs='git status'\n",
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+    expect(result.stdout).toContain("rendered");
+
+    const zshrc = await readFile(
+      path.join(root, "configs", "personal", "dotfiles", ".zshrc"),
+      "utf8"
+    );
+    expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
+    expect(zshrc).toContain("alias gs='git status'");
+    expect(zshrc).toContain(path.join(home, ".zshrc.local"));
+
+    await expect(realpath(path.join(home, ".zshrc"))).resolves.toBe(
+      path.join(root, "configs", "personal", "dotfiles", ".zshrc")
+    );
+  });
+
+  it("keeps managed .zshrc safe when local include files are absent", async () => {
+    await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
+
+    const zshrc = await readFile(
+      path.join(root, "configs", "personal", "dotfiles", ".zshrc"),
+      "utf8"
+    );
+    expect(zshrc).toContain("if [ -r ");
+    expect(zshrc).toContain("source ");
+    expect(zshrc).not.toContain("API_KEY=");
+    expect(zshrc).not.toContain("TOKEN=");
+  });
+
+  it("creates an empty zsh secrets file only when missing", async () => {
+    await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    const secretsPath = path.join(home, ".mindframe-z", "secrets", "zsh.env");
+    expect(await readFile(secretsPath, "utf8")).toBe("");
+
+    await writeFile(secretsPath, "export TOKEN=kept\n", "utf8");
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    expect(await readFile(secretsPath, "utf8")).toBe("export TOKEN=kept\n");
+  });
+
+  it("does not create a zsh secrets file with --no-link", async () => {
+    await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
+
+    await expect(
+      readFile(path.join(home, ".mindframe-z", "secrets", "zsh.env"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("concatenates dotfile content from parent and child profiles", async () => {

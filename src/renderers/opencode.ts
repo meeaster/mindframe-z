@@ -4,6 +4,7 @@ import type { RuntimePaths } from "../core/paths.js";
 import { expandHome, profileConfigsDir } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
 function toJsonc(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -130,6 +131,12 @@ export async function renderOpenCode(
   const refPattern = `${profile.referencesDir}/**`;
   externalDirectory[refPattern] = "allow";
   edit[refPattern] = "deny";
+
+  if (hasManagedZsh(profile)) {
+    const pattern = `${zshSecretsDir(paths)}/**`;
+    externalDirectory[pattern] = "deny";
+    edit[pattern] = "deny";
+  }
 
   for (const folder of extraFolders) {
     const absPath = expandHome(folder.path, paths.home);
