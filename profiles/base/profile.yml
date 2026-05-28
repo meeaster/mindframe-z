@@ -12,6 +12,8 @@ references:
 skills:
   hunk-review:
     enabled: false
+  thermo-nuclear-code-quality-review:
+    enabled: true
   impeccable:
     enabled: false
   mise:

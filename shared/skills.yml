@@ -76,6 +76,15 @@ skills:
       reloads session contents, and adds inline review comments. Use when the user has a Hunk session running or wants
       to review diffs interactively.
     installer: npx-skills
+  - name: thermo-nuclear-code-quality-review
+    source: git
+    repo: https://github.com/cursor/plugins
+    skill: thermo-nuclear-code-quality-review
+    description: >
+      Run an extremely strict maintainability review for abstraction quality, giant files, and spaghetti-condition
+      growth. Use for a thermo-nuclear code quality review, thermonuclear review, deep code quality audit, or
+      especially harsh maintainability review.
+    installer: npx-skills
   - name: openspec-apply-change
     source: local
     skill: openspec-apply-change
