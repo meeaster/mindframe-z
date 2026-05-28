@@ -23,6 +23,11 @@ if command -v mise >/dev/null 2>&1; then
 fi
 
 alias ll="ls -la"
+alias npm="sfw npm"
+alias pnpm="sfw pnpm"
+alias pip="sfw pip"
+alias uv="sfw uv"
+alias cargo="sfw cargo"
 
 # To customize prompt, edit the managed profile .p10k.zsh source, then run mfz apply.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
