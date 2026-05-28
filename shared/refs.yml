@@ -19,7 +19,13 @@ references:
     description: "Go-based open-source HTTP credential proxy/vault (by Infisical) that sits between AI agents and APIs to eliminate credential exfiltration risk. Stores credentials server-side; MITM proxy on port 14322 injects them via HTTPS_PROXY. Management API/UI on port 14321."
   - name: datadog-agent
     url: https://github.com/datadog/datadog-agent.git
-    description: Datadog Agent source and documentation.
+    description: Go/Bazel monorepo for the Datadog Agent v6 and v7, including the agent runtime, component bundles, packaging, and developer docs. Main developer docs live under docs/dev and comp/README.md lists component packages and their pkg.go.dev entrypoints
+  - name: integrations-core
+    url: https://github.com/DataDog/integrations-core.git
+    description: Python monorepo for Datadog Agent integrations and the shared framework/tooling around them. The ddev CLI is the main entrypoint for testing, validation, and release workflows, and datadog_checks_base/datadog_checks_dev provide the core integration framework. Individual integrations live in their own directories with pyproject.toml, manifest.json, and datadog_checks/<name>/ packages
+  - name: datadog-documentation
+    url: https://github.com/DataDog/documentation.git
+    description: Hugo-based documentation site for Datadog, publishing the markdown in content/ to docs.datadoghq.com. The repo includes generated API docs under content/*/api, site data and partials under data/, and build scripts in package.json for local preview, checks, and deployment
   - name: clack
     url: https://github.com/bombshell-dev/clack.git
     description: "TypeScript pnpm monorepo for building stylish, interactive CLI prompts. Two main packages: @clack/prompts (ready-to-use components: text inputs, selects, spinners, multiselects) and @clack/core (headless primitives for custom prompts)."

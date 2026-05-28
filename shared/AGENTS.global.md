@@ -59,6 +59,14 @@ Use MCP tools selectively and do not query multiple documentation MCPs in parall
 
 - Push back on flawed assumptions and ask when intent is unclear.
 
+## Permissions
+
+- Bash permissions are profile-defined and evaluated against the exact shell text the harness sees.
+- The goal is both safety and reuse: prefer command forms that can be approved once and repeated safely.
+- Inline env prefixes, wrappers, and chaining create different shell text and may require separate approval.
+- Favor narrow read-only command forms over broad convenience forms when possible.
+- Examples: `aws ec2 describe-instances *` can be reused, while `AWS_PROFILE=foo aws ec2 describe-instances *` and `sh -c 'aws ec2 describe-instances *'` are different shell text and may ask again.
+
 ## Development Principles
 
 - YAGNI: do not add unused features, abstractions, options, or compatibility paths.

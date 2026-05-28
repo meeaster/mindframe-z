@@ -1,2 +1,4 @@
 #!/usr/bin/env node
-import("../dist/src/cli/mfz.js");
+import { tsImport } from "tsx/esm/api";
+
+await tsImport("../src/cli/mfz.ts", import.meta.url);
