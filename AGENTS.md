@@ -53,6 +53,26 @@ Claude `settings.json` and Claude MCP are not symlinked. The rendered `configs/<
 
 OpenCode plugins and commands are source files under `opencode/`; profiles list enabled names, and apply copies them into `configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
 
+## Permissions
+
+Profile permissions belong in `profiles/*/profile.yml` under `opencode.config.permission`.
+
+- Default `bash` to `ask` with `"*": ask`.
+- Add explicit allow rules only for safe, read-only command forms you want to reuse.
+- Match the exact shell text you want approved; inline env prefixes, wrappers, and chained commands are separate patterns.
+- Keep allow rules narrow rather than using broad convenience globs.
+
+Example:
+
+```yml
+opencode:
+  config:
+    permission:
+      bash:
+        "*": ask
+        "aws ec2 describe-instances *": allow
+```
+
 `mfz sync` is the intended path after editing rendered configs directly in `configs/<profile>/`; it detects unmanaged top-level config keys and promotes them to `base` or the active profile.
 
 ## Testing And Safety

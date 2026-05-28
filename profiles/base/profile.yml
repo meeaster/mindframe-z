@@ -15,9 +15,9 @@ skills:
   impeccable:
     enabled: false
   mise:
-    enabled: true
-  opencode-db:
     enabled: false
+  opencode-db:
+    enabled: true
     targets: [opencode]
   openspec-apply-change:
     enabled: true
@@ -37,9 +37,9 @@ skills:
   skill-writer:
     enabled: false
   grill-with-docs:
-    enabled: true
+    enabled: false
   improve-codebase-architecture:
-    enabled: true
+    enabled: false
   gpt-model-selection:
     enabled: false
   qmd:
@@ -65,6 +65,35 @@ opencode:
     lsp: true
     reference:
       opencode: https://github.com/anomalyco/opencode
+    permission:
+      read:
+        "~/.aws/**": deny
+        "~/.dotfiles/secrets.zsh": deny
+      bash:
+        "*": ask
+        "aws ec2 describe-instances *": allow
+        "pnpm *": allow
+        "npm *": allow
+        "git status --short*": allow
+        "git diff*": allow
+        "git log*": allow
+        "git branch --show-current": allow
+        "uv lock*": allow
+        "pytest *": allow
+        "actionlint *": allow
+        "zizmor *": allow
+        "gh repo *": allow
+        "gh run list*": allow
+        "openspec *": allow
+        "*/.aws/*": deny
+        "*/.dotfiles/secrets.zsh": deny
+        "*ARTIFACTORY_TOKEN*": deny
+        "*UV_INDEX_ARTIFACTORY_PASSWORD*": deny
+        "*DD_API_KEY*": deny
+        "*DD_APP_KEY*": deny
+        "*EXA_API_KEY*": deny
+        "*GITHUB_TOKEN*": deny
+        "*GH_TOKEN*": deny
   plugins:
     - mindframe-z-example
   commands:

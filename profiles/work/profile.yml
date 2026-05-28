@@ -4,13 +4,15 @@ description: Work AI setup using OpenAI models.
 agents: [opencode, claude-code]
 skills:
   jira-writer:
-    enabled: false
+    enabled: true
   pr-writer:
-    enabled: false
+    enabled: true
   visual-explainer:
     enabled: false
 references:
   - datadog-agent
+  - integrations-core
+  - datadog-documentation
 mcp:
   aws-knowledge:
     enabled: false
@@ -26,6 +28,8 @@ opencode:
       explore:
         model: github-copilot/gpt-5.4-mini
         reasoningEffort: medium
+      compaction:
+        model: github-copilot/gpt-5.4-mini
 claude:
   settings:
     includeGitInstructions: false
