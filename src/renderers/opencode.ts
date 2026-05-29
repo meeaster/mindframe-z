@@ -4,7 +4,12 @@ import type { RuntimePaths } from "../core/paths.js";
 import { expandHome, profileConfigsDir } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
+
+interface OpenCodeRenderOptions {
+  readonly skillOverrides?: Record<string, boolean>;
+}
 
 function toJsonc(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -80,7 +85,8 @@ async function collectCommandFiles(
 
 export async function renderOpenCode(
   paths: RuntimePaths,
-  profile: ResolvedProfile
+  profile: ResolvedProfile,
+  options: OpenCodeRenderOptions = {}
 ): Promise<RenderResult> {
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpencode = path.join(configsProfile, "opencode");
@@ -171,9 +177,14 @@ export async function renderOpenCode(
     plugin,
     mcp
   };
+  const renderedConfig = mergeSkillOverrides("opencode", config, options.skillOverrides ?? {});
 
   return {
-    files: [...pluginFiles, ...commandFiles, { path: configPath, content: toJsonc(config) }],
+    files: [
+      ...pluginFiles,
+      ...commandFiles,
+      { path: configPath, content: toJsonc(renderedConfig) }
+    ],
     links: [
       { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
       {

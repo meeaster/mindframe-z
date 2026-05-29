@@ -89,6 +89,10 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
+export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): string {
+  return path.join(paths.home, ".mindframe-z", "skill-overrides", `${target}.json`);
+}
+
 export function dedupe<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
 }

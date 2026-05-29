@@ -78,7 +78,9 @@ async function applyConfig(options: {
       ...agentList(options.agent, profile.agents),
       ...infraTargetList(options.target)
     ]) {
-      const result = await renderTarget(paths, profile, target);
+      const result = await renderTarget(paths, profile, target, {
+        includeGlobalSkillState: !options.noLink
+      });
       if (!options.dryRun) await writeRenderedFiles(result.files);
       for (const file of result.files)
         console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
@@ -298,7 +300,7 @@ async function setSkillEnabled(
   const requestedTarget = parseSkillTarget(options.target);
   const targets = requestedTarget ? [requestedTarget] : skill.targets;
   for (const target of targets) {
-    await setLocalSkillState(paths, target, name, enabled);
+    await setLocalSkillState(paths, profile, target, name, enabled);
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
   }
 }
