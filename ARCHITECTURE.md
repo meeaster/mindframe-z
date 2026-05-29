@@ -153,18 +153,18 @@ Project editor settings map schemas to YAML files:
 
 Zed uses `.zed/settings.json` to configure `yaml-language-server`; VS Code uses `.vscode/settings.json` with `yaml.schemas`.
 
-## Local Skill Toggles
+## Repo-Scoped Skill Toggles
 
 Profiles declare which skills exist for each agent target and each skill's default `enabled` state. `mfz skills sync` installs every profile-declared skill, including disabled skills, so enabling a skill later is an instant config write rather than an install operation.
 
-Per-project skill visibility is local tool state, not rendered profile state. `mfz skills tui`, `mfz skills enable`, and `mfz skills disable` write directly to project-local tool config files:
+Skill visibility is runtime tool state, not rendered profile state. `mfz skills tui`, `mfz skills enable`, and `mfz skills disable` detect the current git repository with `git rev-parse --show-toplevel`. Inside a repo they write to repo-local tool config at the git root; outside a repo they write to user-global tool config:
 
-| Target        | Local file                    | Managed key        |
-| ------------- | ----------------------------- | ------------------ |
-| `opencode`    | `.opencode/opencode.jsonc`    | `permission.skill` |
-| `claude-code` | `.claude/settings.local.json` | `skillOverrides`   |
+| Target        | Repo-local file               | Global file                         | Managed key        |
+| ------------- | ----------------------------- | ----------------------------------- | ------------------ |
+| `opencode`    | `.opencode/opencode.jsonc`    | `~/.config/opencode/opencode.jsonc` | `permission.skill` |
+| `claude-code` | `.claude/settings.local.json` | `~/.claude/settings.json`           | `skillOverrides`   |
 
-This path intentionally does not flow through `mfz apply`. `apply` manages global profile-rendered configuration, while skill toggles are project-local runtime preferences. OpenCode reads these changes on restart; Claude Code hot-reloads `settings.local.json`.
+Read precedence is repo-local overrides, then global overrides, then profile defaults. Repo-local files are added to `.git/info/exclude`; global writes skip git exclusion. Global skill state is also recorded under `~/.mindframe-z/skill-overrides/` so `mfz apply` can explicitly overlay OpenCode skill preferences onto the linked runtime snapshot without scraping generated config. Claude Code global settings are merged as local state during apply. OpenCode reads these changes on restart; Claude Code hot-reloads local settings.
 
 ## Profile Inheritance and Merge Semantics
 

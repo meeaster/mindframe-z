@@ -6,8 +6,9 @@ import type { Readable, Writable } from "node:stream";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile, ResolvedSkill } from "../core/profile.js";
 import {
-  resolveSkillToggleState,
-  writeLocalSkillOverrides,
+  resolveSkillConfigPaths,
+  resolveSkillToggleStateForConfigPaths,
+  writeChangedSkillOverridesForTargets,
   type SkillToggleState,
   type SkillToggleTarget
 } from "./config-io.js";
@@ -164,14 +165,18 @@ export async function runSkillsTui(
   profile: ResolvedProfile,
   streams: { input?: Readable; output?: Writable } = {}
 ): Promise<void> {
+  const configPaths = await resolveSkillConfigPaths(paths);
+  const [opencodeState, claudeCodeState] = await Promise.all([
+    resolveSkillToggleStateForConfigPaths(configPaths, profile, "opencode"),
+    resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code")
+  ]);
   const states: Record<SkillToggleTarget, SkillToggleState> = {
-    opencode: await resolveSkillToggleState(paths, profile, "opencode"),
-    "claude-code": await resolveSkillToggleState(paths, profile, "claude-code")
+    opencode: opencodeState,
+    "claude-code": claudeCodeState
   };
   const prompt = new SkillsTogglePrompt(profile, states, streams);
   const result = await prompt.prompt();
   if (isCancel(result) || !prompt.result.saved) return;
 
-  await writeLocalSkillOverrides(paths, "opencode", prompt.result.states.opencode);
-  await writeLocalSkillOverrides(paths, "claude-code", prompt.result.states["claude-code"]);
+  await writeChangedSkillOverridesForTargets(configPaths, profile, prompt.result.states);
 }
