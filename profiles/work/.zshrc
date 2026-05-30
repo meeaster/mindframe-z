@@ -1,5 +1,5 @@
 # Work-only Oh My Zsh plugins. Keep here until plugin auto-bootstrap exists.
-plugins+=(docker aws terraform F-Sy-H zsh-autocomplete zsh-autosuggestions zsh-bat)
+plugins+=(docker aws terraform)
 
 # Work workspace defaults.
 export OPENCODE_SPACE=work
