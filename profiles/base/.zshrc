@@ -26,7 +26,7 @@ fpath=(
 
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
-plugins=(git mise)
+plugins=(git mise zsh-autosuggestions zsh-bat fast-syntax-highlighting)
 
 # Language/runtime managers that install shell environment files.
 if [ -f "$HOME/.cargo/env" ]; then
