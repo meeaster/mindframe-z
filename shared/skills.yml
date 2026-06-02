@@ -75,7 +75,7 @@ skills:
       Interacts with live Hunk diff review sessions via CLI. Inspects review focus, navigates files and hunks,
       reloads session contents, and adds inline review comments. Use when the user has a Hunk session running or wants
       to review diffs interactively.
-    installer: npx-skills
+    installer: skills
   - name: thermo-nuclear-code-quality-review
     source: git
     repo: https://github.com/cursor/plugins
@@ -84,7 +84,7 @@ skills:
       Run an extremely strict maintainability review for abstraction quality, giant files, and spaghetti-condition
       growth. Use for a thermo-nuclear code quality review, thermonuclear review, deep code quality audit, or
       especially harsh maintainability review.
-    installer: npx-skills
+    installer: skills
   - name: openspec-apply-change
     source: local
     skill: openspec-apply-change
@@ -122,7 +122,7 @@ skills:
     description:
       Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
       existing PR after material changes.
-    installer: npx-skills
+    installer: skills
   - name: qmd
     source: git
     repo: https://github.com/tobi/qmd
@@ -130,7 +130,7 @@ skills:
     description:
       Search markdown knowledge bases, notes, and documentation using QMD. Use when users ask to search notes,
       find documents, or look up information.
-    installer: npx-skills
+    installer: skills
   - name: visual-explainer
     source: git
     repo: https://github.com/nicobailon/visual-explainer
@@ -140,7 +140,7 @@ skills:
       Use when the user asks for a diagram, architecture overview, diff review, plan review, project recap, comparison
       table, or any visual explanation of technical concepts. Also use proactively when you are about to render a
       complex ASCII table (4+ rows or 3+ columns) — present it as a styled HTML page instead.
-    installer: npx-skills
+    installer: skills
   - name: openai-docs
     source: git
     repo: https://github.com/openai/skills
@@ -150,7 +150,7 @@ skills:
       documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade
       guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any
       fallback browsing to official OpenAI domains.
-    installer: npx-skills
+    installer: skills
   - name: claude-code-docs
     source: local
     skill: claude-code-docs

@@ -4,11 +4,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { execa } from "execa";
 import {
-  buildNpxSkillsCommand,
-  buildNpxSkillsRemoveCommand,
-  buildNpxSkillsUpdateCommand,
+  buildSkillsCommand,
+  buildSkillsRemoveCommand,
+  buildSkillsUpdateCommand,
   listInstalledSkills
-} from "./npx-skills.js";
+} from "./skills-adapter.js";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
 
@@ -16,9 +16,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("buildNpxSkillsCommand", () => {
+describe("buildSkillsCommand", () => {
   it("builds local skill commands from repo skills directory", () => {
-    const command = buildNpxSkillsCommand(
+    const command = buildSkillsCommand(
       {
         root: "/repo",
         home: "/home/tester",
@@ -32,13 +32,12 @@ describe("buildNpxSkillsCommand", () => {
         source: "local",
         skill: "mise",
         description: "",
-        installer: "npx-skills"
+        installer: "skills"
       },
       "opencode"
     );
 
     expect(command).toEqual([
-      "npx",
       "skills",
       "add",
       "/repo/skills",
@@ -52,7 +51,7 @@ describe("buildNpxSkillsCommand", () => {
   });
 
   it("builds git skill install commands", () => {
-    const command = buildNpxSkillsCommand(
+    const command = buildSkillsCommand(
       {
         root: "/repo",
         home: "/home/tester",
@@ -67,13 +66,12 @@ describe("buildNpxSkillsCommand", () => {
         repo: "https://github.com/getsentry/skills",
         skill: "skill-writer",
         description: "",
-        installer: "npx-skills"
+        installer: "skills"
       },
       "opencode"
     );
 
     expect(command).toEqual([
-      "npx",
       "skills",
       "add",
       "https://github.com/getsentry/skills",
@@ -87,74 +85,73 @@ describe("buildNpxSkillsCommand", () => {
   });
 });
 
-describe("buildNpxSkillsUpdateCommand", () => {
+describe("buildSkillsUpdateCommand", () => {
   it("returns null for local skills", () => {
-    const command = buildNpxSkillsUpdateCommand({
+    const command = buildSkillsUpdateCommand({
       name: "mise",
       source: "local",
       skill: "mise",
       description: "",
-      installer: "npx-skills"
+        installer: "skills"
     });
 
     expect(command).toBeNull();
   });
 
   it("builds git skill update commands", () => {
-    const command = buildNpxSkillsUpdateCommand({
+    const command = buildSkillsUpdateCommand({
       name: "skill-writer",
       source: "git",
       repo: "https://github.com/getsentry/skills",
       skill: "skill-writer",
       description: "",
-      installer: "npx-skills"
+        installer: "skills"
     });
 
-    expect(command).toEqual(["npx", "skills", "update", "skill-writer", "-g", "-y"]);
+    expect(command).toEqual(["skills", "update", "skill-writer", "-g", "-y"]);
   });
 });
 
-describe("buildNpxSkillsRemoveCommand", () => {
+describe("buildSkillsRemoveCommand", () => {
   it("builds global remove command for a named skill", () => {
-    const command = buildNpxSkillsRemoveCommand({
+    const command = buildSkillsRemoveCommand({
       name: "mise",
       source: "local",
       skill: "mise",
       description: "",
-      installer: "npx-skills"
+        installer: "skills"
     });
 
-    expect(command).toEqual(["npx", "skills", "remove", "mise", "-g", "-y"]);
+    expect(command).toEqual(["skills", "remove", "mise", "-g", "-y"]);
   });
 
   it("builds remove command for git skill", () => {
-    const command = buildNpxSkillsRemoveCommand({
+    const command = buildSkillsRemoveCommand({
       name: "skill-writer",
       source: "git",
       repo: "https://github.com/getsentry/skills",
       skill: "skill-writer",
       description: "",
-      installer: "npx-skills"
+        installer: "skills"
     });
 
-    expect(command).toEqual(["npx", "skills", "remove", "skill-writer", "-g", "-y"]);
+    expect(command).toEqual(["skills", "remove", "skill-writer", "-g", "-y"]);
   });
 
   it("builds target-specific remove command for Claude Code", () => {
-    const command = buildNpxSkillsRemoveCommand(
+    const command = buildSkillsRemoveCommand(
       {
         name: "skill-writer",
         source: "git",
         repo: "https://github.com/getsentry/skills",
         skill: "skill-writer",
         description: "",
-        installer: "npx-skills"
+        installer: "skills"
       },
       "claude-code"
     );
 
     expect(command).toEqual([
-      "npx",
       "skills",
       "remove",
       "skill-writer",
