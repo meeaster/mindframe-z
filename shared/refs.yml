@@ -26,6 +26,9 @@ references:
   - name: datadog-documentation
     url: https://github.com/DataDog/documentation.git
     description: Hugo-based documentation site for Datadog, publishing the markdown in content/ to docs.datadoghq.com. The repo includes generated API docs under content/*/api, site data and partials under data/, and build scripts in package.json for local preview, checks, and deployment
+  - name: pup
+    url: https://github.com/DataDog/pup.git
+    description: "Rust-based CLI companion for Datadog observability with 200+ commands across many product areas. Main entrypoints include the `pup` CLI, `docs/COMMANDS.md`, `docs/OAUTH2.md`, and `docs/EXAMPLES.md`; the repo also ships agent skills, agents, and plugin manifests under `.agents/`, `.claude-plugin/`, `.codex-plugin/`, and `skills/`."
   - name: clack
     url: https://github.com/bombshell-dev/clack.git
     description: "TypeScript pnpm monorepo for building stylish, interactive CLI prompts. Two main packages: @clack/prompts (ready-to-use components: text inputs, selects, spinners, multiselects) and @clack/core (headless primitives for custom prompts)."

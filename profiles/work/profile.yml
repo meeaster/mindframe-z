@@ -13,6 +13,7 @@ references:
   - datadog-agent
   - integrations-core
   - datadog-documentation
+  - pup
 mcp:
   aws-knowledge:
     enabled: false
@@ -24,12 +25,22 @@ mcp:
     enabled: false
 opencode:
   config:
+    provider:
+      datadog:
+        name: Datadog AI
+        npm: "@ai-sdk/openai-compatible"
+        models:
+          datadog-ai:
+            name: Datadog AI Agent
+        options:
+          baseURL: http://127.0.0.1:9099
     agent:
       explore:
         model: github-copilot/gpt-5.4-mini
-        reasoningEffort: medium
+        reasoningEffort: high
       compaction:
         model: github-copilot/gpt-5.4-mini
+        reasoningEffort: high
 claude:
   settings:
     includeGitInstructions: false
