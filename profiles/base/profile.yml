@@ -97,7 +97,8 @@ opencode:
         "gh repo *": allow
         "gh run list*": allow
         "openspec *": allow
-        "opencode db * --format json": allow
+        "opencode db *": allow
+        "mise *": allow
         "*/.aws/*": deny
         "*/.dotfiles/secrets.zsh": deny
         "*ARTIFACTORY_TOKEN*": deny
@@ -118,3 +119,5 @@ opencode:
 extra_folders:
   - path: ~/.mindframe-z
     description: mindframe-z configuration and generated indexes — needed when looking up references, reading machine config, or inspecting extra folder permissions
+  - path: ~/.agent/diagrams
+    description: Agent diagram files and exports — needed for reviewing and updating local workflow diagrams
