@@ -51,3 +51,8 @@ servers:
     type: remote
     transport: http
     url: http://192.168.30.39:9583/{env:HA_MCP_SECRET_PATH}
+  x-docs:
+    description: X API documentation search MCP server (hosted).
+    type: remote
+    transport: http
+    url: https://docs.x.com/mcp
