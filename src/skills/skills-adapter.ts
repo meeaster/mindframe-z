@@ -60,7 +60,7 @@ function skillsCliEnv(paths: RuntimePaths): NodeJS.ProcessEnv {
 
 async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstalledSkill[]> {
   try {
-    const { stdout } = await execa("npx", ["skills", "list", "-g", "--json"], {
+    const { stdout } = await execa("skills", ["list", "-g", "--json"], {
       env: skillsCliEnv(paths),
       timeout: 30000
     });
@@ -70,7 +70,7 @@ async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstal
   }
 }
 
-export function buildNpxSkillsCommand(
+export function buildSkillsCommand(
   paths: RuntimePaths,
   skill: SkillEntry,
   target: ToolTarget
@@ -78,7 +78,6 @@ export function buildNpxSkillsCommand(
   const agent = target === "claude-code" ? "claude-code" : "opencode";
   if (skill.source === "local") {
     return [
-      "npx",
       "skills",
       "add",
       path.join(paths.root, "skills"),
@@ -91,7 +90,6 @@ export function buildNpxSkillsCommand(
   }
   if (!skill.repo) throw new Error(`Git skill ${skill.name} is missing repo`);
   return [
-    "npx",
     "skills",
     "add",
     skill.repo,
@@ -103,18 +101,18 @@ export function buildNpxSkillsCommand(
   ];
 }
 
-export function buildNpxSkillsRemoveCommand(
+export function buildSkillsRemoveCommand(
   skill: SkillEntry,
   target?: Extract<ToolTarget, "opencode" | "claude-code">
 ): string[] {
   const agent =
     target === "claude-code" ? "claude-code" : target === "opencode" ? "opencode" : null;
-  return ["npx", "skills", "remove", skill.name, "-g", ...(agent ? ["-a", agent] : []), "-y"];
+  return ["skills", "remove", skill.name, "-g", ...(agent ? ["-a", agent] : []), "-y"];
 }
 
-export function buildNpxSkillsUpdateCommand(skill: SkillEntry): string[] | null {
+export function buildSkillsUpdateCommand(skill: SkillEntry): string[] | null {
   if (skill.source === "local") return null;
-  return ["npx", "skills", "update", skill.name, "-g", "-y"];
+  return ["skills", "update", skill.name, "-g", "-y"];
 }
 
 export async function listInstalledSkills(
@@ -152,7 +150,7 @@ export async function applySkill(
   dryRun: boolean,
   installedSkills?: ReadonlySet<string>
 ): Promise<string> {
-  const command = buildNpxSkillsCommand(paths, skill, target);
+  const command = buildSkillsCommand(paths, skill, target);
   if (dryRun) return command.join(" ");
 
   if (target !== "opencode" && target !== "claude-code") {
@@ -173,7 +171,7 @@ export async function removeSkill(
   dryRun: boolean,
   installedSkills?: ReadonlySet<string>
 ): Promise<string> {
-  const command = buildNpxSkillsRemoveCommand(skill, target);
+  const command = buildSkillsRemoveCommand(skill, target);
   if (dryRun) return command.join(" ");
 
   if (target && !(installedSkills ?? (await listInstalledSkills(paths, target))).has(skill.name)) {
@@ -189,9 +187,9 @@ export async function updateSkill(
   target: ToolTarget,
   dryRun: boolean
 ): Promise<string> {
-  const updateCommand = buildNpxSkillsUpdateCommand(skill);
+  const updateCommand = buildSkillsUpdateCommand(skill);
   if (!updateCommand) {
-    const command = buildNpxSkillsCommand(paths, skill, target);
+    const command = buildSkillsCommand(paths, skill, target);
     if (dryRun) return command.join(" ");
     return runCommand(paths, command, "No skills command generated");
   }

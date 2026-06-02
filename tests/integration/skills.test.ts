@@ -63,7 +63,7 @@ describe("skill CLI integration", () => {
     expect(skillsYaml).toContain("skill: remote-skill");
     expect(skillsYaml).toContain("description: Remote test skill.");
     expect(skillsYaml).not.toContain("targets:");
-    expect(skillsYaml).toContain("installer: npx-skills");
+    expect(skillsYaml).toContain("installer: skills");
 
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),
@@ -83,7 +83,7 @@ describe("skill CLI integration", () => {
 
   it("sync installs missing skills and removes extra skills", async () => {
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    const addLines = result.stdout.split("\n").filter((line) => line.includes("npx skills add"));
+    const addLines = result.stdout.split("\n").filter((line) => line.includes("skills add"));
     expect(addLines).toHaveLength(5);
     expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
     expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(3);
@@ -106,7 +106,7 @@ describe("skill CLI integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    expect(result.stdout).toContain("npx skills add");
+    expect(result.stdout).toContain("skills add");
     expect(result.stdout).toContain("-a opencode -g -y");
   });
 

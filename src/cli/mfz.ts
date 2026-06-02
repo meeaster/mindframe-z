@@ -23,7 +23,7 @@ import {
   writeExtraFoldersIndex,
   writeReferenceIndex
 } from "../ref-store/references.js";
-import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/npx-skills.js";
+import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/skills-adapter.js";
 import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
@@ -272,7 +272,7 @@ program
 
 const skills = program
   .command("skills")
-  .description("Manage skills through npx skills")
+  .description("Manage skills through skills")
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
@@ -333,7 +333,7 @@ skills
   .command("sync")
   .description("Mirror installed global skills to match the resolved profile")
   .option("--agent <agent>", "opencode or claude-code")
-  .option("--dry-run", "print npx skills commands without running them")
+  .option("--dry-run", "print skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
@@ -361,7 +361,7 @@ skills
       profile.manifests.skills.find((skill) => skill.name === name) ?? {
         name,
         source: "git",
-        installer: "npx-skills",
+        installer: "skills",
         description: ""
       };
 
@@ -405,7 +405,7 @@ skills
   .command("upgrade")
   .description("Update profile-enabled git skills to latest versions")
   .option("--agent <agent>", "opencode or claude-code")
-  .option("--dry-run", "print npx skills commands without running them")
+  .option("--dry-run", "print skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);

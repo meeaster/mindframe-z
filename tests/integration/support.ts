@@ -54,15 +54,15 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "  - name: local-skill",
       "    source: local",
       "    description: Local test skill.",
-      "    installer: npx-skills",
+      "    installer: skills",
       "  - name: claude-skill",
       "    source: local",
       "    description: Claude test skill.",
-      "    installer: npx-skills",
+      "    installer: skills",
       "  - name: all-skill",
       "    source: local",
       "    description: All agents test skill.",
-      "    installer: npx-skills",
+      "    installer: skills",
       ""
     ].join("\n"),
     "utf8"

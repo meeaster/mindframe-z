@@ -666,8 +666,8 @@ describe("CLI integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    expect(result.stdout).toContain("npx skills remove extra-skill -g -y");
-    expect(result.stdout).toContain("npx skills add");
+    expect(result.stdout).toContain("skills remove extra-skill -g -y");
+    expect(result.stdout).toContain("skills add");
   });
 
   it("upgrade updates git skills for all configured targets", async () => {
@@ -680,7 +680,7 @@ describe("CLI integration", () => {
         "    repo: https://github.com/example/skills",
         "    skill: shared-git-skill",
         "    description: Shared git skill.",
-        "    installer: npx-skills",
+        "    installer: skills",
         ""
       ].join("\n"),
       "utf8"
@@ -692,9 +692,9 @@ describe("CLI integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["skills", "upgrade", "--dry-run"]);
-    const lines = result.stdout.split("\n").filter((line) => line.includes("npx skills update"));
+    const lines = result.stdout.split("\n").filter((line) => line.includes("skills update"));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("npx skills update shared-git-skill -g -y");
+    expect(lines[0]).toContain("skills update shared-git-skill -g -y");
   });
 
   it("deep merges inherited skill config", async () => {

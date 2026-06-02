@@ -38,7 +38,7 @@ export const skillSchema = z.object({
   repo: z.string().optional(),
   skill: z.string().optional(),
   description: z.string().default(""),
-  installer: z.literal("npx-skills").default("npx-skills")
+  installer: z.literal("skills").default("skills")
 });
 
 export const skillsManifestSchema = z.object({
