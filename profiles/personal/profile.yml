@@ -19,9 +19,13 @@ mcp:
     enabled: false
 opencode:
   config:
+    permission:
+      bash:
+        "*": allow
     agent:
       explore:
         model: opencode-go/deepseek-v4-flash
-        reasoningEffort: medium
+        reasoningEffort: max
       compaction:
         model: opencode-go/deepseek-v4-flash
+        reasoningEffort: max
