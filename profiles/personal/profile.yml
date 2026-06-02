@@ -17,6 +17,8 @@ mcp:
     enabled: false
   aws-knowledge:
     enabled: false
+  x-docs:
+    enabled: false
 opencode:
   config:
     permission:
