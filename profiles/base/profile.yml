@@ -70,41 +70,9 @@ opencode:
     permission:
       read:
         "~/.aws/**": deny
-        "~/.dotfiles/secrets.zsh": deny
       bash:
         "*": ask
-        "aws ec2 describe-instances *": allow
-        "git add*": allow
-        "pnpm *": allow
-        "npm *": allow
-        "git status --short*": allow
-        "git diff*": allow
-        "git log*": allow
-        "git branch --show-current": allow
-        "git branch -vv": allow
-        "git remote -v": allow
-        "git ls-files --others --exclude-standard": allow
-        "git rev-parse*": allow
-        "mkdir*": allow
-        "ls": allow
-        "ls *": allow
-        "jq *": allow
-        "rg *": allow
-        "uv lock*": allow
-        "pytest *": allow
-        "actionlint *": allow
-        "zizmor *": allow
-        "gh repo *": allow
-        "gh run list*": allow
-        "openspec *": allow
-        "opencode db *": allow
-        "mise *": allow
         "*/.aws/*": deny
-        "*/.dotfiles/secrets.zsh": deny
-        "*ARTIFACTORY_TOKEN*": deny
-        "*UV_INDEX_ARTIFACTORY_PASSWORD*": deny
-        "*DD_API_KEY*": deny
-        "*DD_APP_KEY*": deny
         "*EXA_API_KEY*": deny
         "*GITHUB_TOKEN*": deny
         "*GH_TOKEN*": deny
