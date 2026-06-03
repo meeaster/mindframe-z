@@ -19,9 +19,15 @@ mcp:
     enabled: false
   x-docs:
     enabled: false
+  exa-research:
+    enabled: false
 opencode:
   config:
     permission:
+      read:
+        "~/.xurl": deny
+      edit:
+        "~/.xurl": deny
       bash:
         "*": allow
     agent:

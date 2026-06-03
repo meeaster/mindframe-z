@@ -56,3 +56,17 @@ servers:
     type: remote
     transport: http
     url: https://docs.x.com/mcp
+  exa:
+    description: Exa AI web search MCP server (web_search_exa, web_fetch_exa).
+    type: remote
+    transport: http
+    url: https://mcp.exa.ai/mcp
+    headers:
+      x-api-key: "{env:EXA_API_KEY}"
+  exa-research:
+    description: Exa AI web search MCP server including web_search_advanced_exa tool.
+    type: remote
+    transport: http
+    url: https://mcp.exa.ai/mcp?tools=web_search_advanced_exa
+    headers:
+      x-api-key: "{env:EXA_API_KEY}"
