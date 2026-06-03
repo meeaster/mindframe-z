@@ -65,6 +65,8 @@ mcp:
 opencode:
   config:
     lsp: true
+    tools:
+      websearch: true
     reference:
       opencode: https://github.com/anomalyco/opencode
     permission:
