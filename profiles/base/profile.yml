@@ -20,7 +20,6 @@ skills:
     enabled: false
   opencode-db:
     enabled: true
-    targets: [opencode]
   openspec-apply-change:
     enabled: true
     toggleable: false
@@ -36,6 +35,9 @@ skills:
   openspec-sync-specs:
     enabled: true
     toggleable: false
+  openspec-verify-change:
+    enabled: true
+    toggleable: false
   skill-writer:
     enabled: true
   grill-with-docs:
@@ -49,8 +51,7 @@ skills:
   openai-docs:
     enabled: false
   claude-code-docs:
-    enabled: false
-    targets: [opencode]
+    enabled: true
 mcp:
   context7:
     enabled: true
@@ -81,10 +82,6 @@ opencode:
   plugins:
     - mindframe-z-example
   commands:
-    - opsx-archive
-    - opsx-apply
-    - opsx-explore
-    - opsx-propose
     - rmslop
 extra_folders:
   - path: ~/.mindframe-z

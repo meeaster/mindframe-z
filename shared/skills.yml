@@ -115,6 +115,12 @@ skills:
     description: >
       Sync delta specs from a change to main specs. Use when updating main specs with changes from a delta spec, without
       archiving the change.
+  - name: openspec-verify-change
+    source: local
+    skill: openspec-verify-change
+    description: >
+      Verify a change is ready for implementation. Use when checking if all required artifacts are complete and the
+      change can proceed to implementation.
   - name: pr-writer
     source: git
     repo: https://github.com/getsentry/skills
