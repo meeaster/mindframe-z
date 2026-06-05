@@ -1,7 +1,7 @@
 name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
-agents: [opencode]
+agents: [opencode, claude-code]
 references:
   - clack
   - ha-mcp
@@ -32,6 +32,9 @@ opencode:
         "*": allow
     agent:
       explore:
+        model: opencode-go/deepseek-v4-flash
+        reasoningEffort: max
+      scout:
         model: opencode-go/deepseek-v4-flash
         reasoningEffort: max
       compaction:
