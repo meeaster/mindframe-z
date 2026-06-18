@@ -35,3 +35,6 @@ references:
   - name: ha-mcp
     url: https://github.com/homeassistant-ai/ha-mcp.git
     description: "Python project (>=3.13, FastMCP-based) providing a Model Context Protocol interface for AI assistants to control Home Assistant. Exposes 89+ MCP tools for querying device states, executing services, and managing automations via natural language. Connects via Home Assistant WebSocket API with a Long-Lived Access Token."
+  - name: ponytail
+    url: https://github.com/DietrichGebert/ponytail.git
+    description: "JavaScript plugin and skills for AI agents (Claude Code, Codex, OpenCode, Gemini, Pi, Copilot) that enforces a YAGNI minimum-code ruleset via an always-on ladder (YAGNI -> stdlib -> native -> installed dep -> one line -> minimum). Main entrypoints are the OpenCode plugin at .opencode/plugins/ponytail.mjs, the rules in AGENTS.md, and the commands under commands/ (lite/full/ultra/off, review, audit, debt). Deferred shortcuts are marked inline with a `ponytail:` comment naming the upgrade path"

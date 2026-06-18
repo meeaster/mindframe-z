@@ -15,43 +15,94 @@ function toJsonc(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+async function copyDirContents(
+  src: string,
+  dest: string,
+  files: RenderResult["files"]
+): Promise<void> {
+  for (const entry of await readdir(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirContents(srcPath, destPath, files);
+    } else if (entry.isFile() && !/\.test\.[cm]?[jt]s$/.test(entry.name)) {
+      files.push({
+        path: destPath,
+        content: await readFile(srcPath, "utf8")
+      });
+    }
+  }
+}
+
 async function collectPluginFiles(
   root: string,
   configsOpencode: string,
   pluginNames: readonly string[]
-): Promise<RenderResult["files"]> {
+): Promise<{ files: RenderResult["files"]; entries: string[] }> {
   const sourceDir = path.join(root, "opencode", "plugins");
   try {
     await stat(sourceDir);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { files: [], entries: [] };
     throw error;
   }
 
-  const selected = new Set(pluginNames);
-  const includeAll = selected.size === 0;
-  const files: RenderResult["files"] = [];
-
-  async function walk(dir: string): Promise<void> {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const sourcePath = path.join(dir, entry.name);
+  let names: string[];
+  if (pluginNames.length > 0) {
+    names = [...pluginNames];
+  } else {
+    const dirEntries = await readdir(sourceDir, { withFileTypes: true });
+    const discovered = new Set<string>();
+    for (const entry of dirEntries) {
       if (entry.isDirectory()) {
-        await walk(sourcePath);
+        discovered.add(entry.name);
+      } else if (entry.isFile()) {
+        const match = entry.name.match(/^(.+)\.[cm]?[jt]s$/);
+        if (match) discovered.add(match[1]!);
+      }
+    }
+    names = [...discovered];
+  }
+
+  const files: RenderResult["files"] = [];
+  const entries: string[] = [];
+  const sourceExtensions = [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"];
+
+  for (const name of names) {
+    const dirPath = path.join(sourceDir, name);
+    let isDir = false;
+    try {
+      const s = await stat(dirPath);
+      isDir = s.isDirectory();
+    } catch {
+      // not a directory
+    }
+
+    if (isDir) {
+      await copyDirContents(dirPath, path.join(configsOpencode, "plugins", name), files);
+      entries.push(`file://${path.join(configsOpencode, "plugins", name)}`);
+      continue;
+    }
+
+    for (const ext of sourceExtensions) {
+      const filePath = path.join(sourceDir, `${name}${ext}`);
+      let content: string;
+      try {
+        content = await readFile(filePath, "utf8");
+      } catch {
         continue;
       }
-      if (!entry.isFile() || !/\.[cm]?[jt]s$/.test(entry.name)) continue;
-      const relative = path.relative(sourceDir, sourcePath);
-      const pluginName = relative.split(path.sep)[0]?.replace(/\.[cm]?[jt]s$/, "");
-      if (!includeAll && (!pluginName || !selected.has(pluginName))) continue;
+      const destRel = `${name}${ext}`;
       files.push({
-        path: path.join(configsOpencode, "plugins", relative),
-        content: await readFile(sourcePath, "utf8")
+        path: path.join(configsOpencode, "plugins", destRel),
+        content
       });
+      entries.push(`file://${path.join(configsOpencode, "plugins", destRel)}`);
+      break;
     }
   }
 
-  await walk(sourceDir);
-  return files;
+  return { files, entries };
 }
 
 async function collectCommandFiles(
@@ -91,12 +142,12 @@ export async function renderOpenCode(
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpencode = path.join(configsProfile, "opencode");
   const configPath = path.join(configsOpencode, "opencode.jsonc");
-  const pluginFiles = await collectPluginFiles(
+  const pluginResult = await collectPluginFiles(
     paths.root,
     configsOpencode,
     profile.profile.opencode.plugins
   );
-  const plugin = pluginFiles.map((file) => `file://${file.path}`);
+  const plugin = pluginResult.entries;
   const commandFiles = await collectCommandFiles(
     paths.root,
     configsOpencode,
@@ -179,18 +230,28 @@ export async function renderOpenCode(
   };
   const renderedConfig = mergeSkillOverrides("opencode", config, options.skillOverrides ?? {});
 
-  return {
-    files: [
-      ...pluginFiles,
-      ...commandFiles,
-      { path: configPath, content: toJsonc(renderedConfig) }
-    ],
-    links: [
-      { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
-      {
-        linkPath: path.join(paths.opencodeConfigDir, "commands"),
-        targetPath: path.join(configsOpencode, "commands")
-      }
-    ]
-  };
+  const files: RenderResult["files"] = [
+    ...pluginResult.files,
+    ...commandFiles,
+    { path: configPath, content: toJsonc(renderedConfig) }
+  ];
+  const links: RenderResult["links"] = [
+    { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "commands"),
+      targetPath: path.join(configsOpencode, "commands")
+    }
+  ];
+
+  const agentTask = profile.profile.opencode.agent_task;
+  if (agentTask) {
+    const agentTaskPath = path.join(configsOpencode, "agent-task.json");
+    files.push({ path: agentTaskPath, content: toJsonc(agentTask) });
+    links.push({
+      linkPath: path.join(paths.opencodeConfigDir, "agent-task.json"),
+      targetPath: agentTaskPath
+    });
+  }
+
+  return { files, links };
 }
