@@ -60,6 +60,14 @@ skills:
     description: >
       Use when safely inspecting or querying OpenCode's local database with `opencode db`, including sessions, messages,
       projects, workspaces, tool calls, skill/MCP usage, subagents, or prior assistant behavior.
+  - name: pdf
+    source: git
+    repo: https://github.com/anthropics/skills
+    skill: skills/pdf
+    description: >
+      Read, extract, summarize, and query PDF documents using AI. Use when the user wants to work with PDF files
+      — extracting text, parsing tables, answering questions from document content, or comparing documents.
+    installer: skills
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills
@@ -156,6 +164,15 @@ skills:
       documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade
       guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any
       fallback browsing to official OpenAI domains.
+    installer: skills
+  - name: improve
+    source: git
+    repo: https://github.com/shadcn/improve
+    skill: improve
+    description: >
+      Audit a codebase and write self-contained implementation plans for cheaper models to execute. Uses your most
+      capable model for understanding, judging, and specifying — then hands off execution. Use for full audits,
+      quick hotspot scans, focused category audits, branch-scoped PR reviews, or generating actionable specs.
     installer: skills
   - name: claude-code-docs
     source: local

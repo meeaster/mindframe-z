@@ -23,7 +23,12 @@ import {
   writeExtraFoldersIndex,
   writeReferenceIndex
 } from "../ref-store/references.js";
-import { applySkill, listInstalledSkills, removeSkill, updateSkill } from "../skills/skills-adapter.js";
+import {
+  applySkill,
+  listInstalledSkills,
+  removeSkill,
+  updateSkill
+} from "../skills/skills-adapter.js";
 import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";

@@ -87,7 +87,8 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
-      commands: dedupe([...base.opencode.commands, ...child.opencode.commands])
+      commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
+      agent_task: child.opencode.agent_task ?? base.opencode.agent_task
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     mise: {

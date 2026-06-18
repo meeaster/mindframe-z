@@ -78,10 +78,31 @@ const miseTomlSchema = z.object({
   settings: z.record(z.string(), z.unknown()).default({})
 });
 
+const agentTaskModelSchema = z.object({
+  name: z.string().min(1),
+  variants: z.array(z.string()).optional(),
+  default_variant: z.string().optional(),
+  providers: z.array(z.string()).min(1)
+});
+
+const agentTaskAgentSchema = z.object({
+  name: z.string().min(1),
+  model: z.string().min(1),
+  variant: z.string().optional()
+});
+
+const agentTaskSchema = z.object({
+  models: z.array(agentTaskModelSchema).default([]),
+  agents: z.array(agentTaskAgentSchema).default([])
+});
+
+export type AgentTaskConfig = z.infer<typeof agentTaskSchema>;
+
 const opencodeConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   plugins: z.array(z.string()).default([]),
-  commands: z.array(z.string()).default([])
+  commands: z.array(z.string()).default([]),
+  agent_task: agentTaskSchema.optional()
 });
 
 export const profileSchema = z

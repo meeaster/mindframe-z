@@ -92,7 +92,7 @@ describe("buildSkillsUpdateCommand", () => {
       source: "local",
       skill: "mise",
       description: "",
-        installer: "skills"
+      installer: "skills"
     });
 
     expect(command).toBeNull();
@@ -105,7 +105,7 @@ describe("buildSkillsUpdateCommand", () => {
       repo: "https://github.com/getsentry/skills",
       skill: "skill-writer",
       description: "",
-        installer: "skills"
+      installer: "skills"
     });
 
     expect(command).toEqual(["skills", "update", "skill-writer", "-g", "-y"]);
@@ -119,7 +119,7 @@ describe("buildSkillsRemoveCommand", () => {
       source: "local",
       skill: "mise",
       description: "",
-        installer: "skills"
+      installer: "skills"
     });
 
     expect(command).toEqual(["skills", "remove", "mise", "-g", "-y"]);
@@ -132,7 +132,7 @@ describe("buildSkillsRemoveCommand", () => {
       repo: "https://github.com/getsentry/skills",
       skill: "skill-writer",
       description: "",
-        installer: "skills"
+      installer: "skills"
     });
 
     expect(command).toEqual(["skills", "remove", "skill-writer", "-g", "-y"]);
@@ -151,15 +151,7 @@ describe("buildSkillsRemoveCommand", () => {
       "claude-code"
     );
 
-    expect(command).toEqual([
-      "skills",
-      "remove",
-      "skill-writer",
-      "-g",
-      "-a",
-      "claude-code",
-      "-y"
-    ]);
+    expect(command).toEqual(["skills", "remove", "skill-writer", "-g", "-a", "claude-code", "-y"]);
   });
 });
 
