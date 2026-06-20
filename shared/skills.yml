@@ -181,3 +181,12 @@ skills:
       Navigate and fetch Claude Code documentation. Use when answering questions about Claude Code features,
       configuration, capabilities, hooks, plugins, MCP servers, settings, CLI usage, deployment options, or
       troubleshooting.
+  - name: build-mcp-server
+    source: git
+    repo: https://github.com/anthropics/claude-plugins-official
+    skill: build-mcp-server
+    description: >
+      Design and build MCP servers for Claude. Use when the user asks to build an MCP server, create an MCP
+      integration, wrap an API for Claude, expose tools to Claude, or choose between remote HTTP, MCPB, and local
+      stdio deployment models.
+    installer: skills
