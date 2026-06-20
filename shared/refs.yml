@@ -17,6 +17,12 @@ references:
   - name: agent-vault
     url: https://github.com/Infisical/agent-vault.git
     description: "Go-based open-source HTTP credential proxy/vault (by Infisical) that sits between AI agents and APIs to eliminate credential exfiltration risk. Stores credentials server-side; MITM proxy on port 14322 injects them via HTTPS_PROXY. Management API/UI on port 14321."
+  - name: just-bash
+    url: https://github.com/vercel-labs/just-bash.git
+    description: "TypeScript virtual bash environment with an in-memory filesystem for AI agents. Provides a sandboxed shell with broad unix command support and optional curl, Python, JS/TS, and sqlite capabilities."
+  - name: executor
+    url: https://github.com/rhyssullivan/executor.git
+    description: "TypeScript integration layer for AI agents that catalogs tools across OpenAPI, GraphQL, MCP, Google Discovery, and custom JSON-schema-based integrations."
   - name: datadog-agent
     url: https://github.com/datadog/datadog-agent.git
     description: Go/Bazel monorepo for the Datadog Agent v6 and v7, including the agent runtime, component bundles, packaging, and developer docs. Main developer docs live under docs/dev and comp/README.md lists component packages and their pkg.go.dev entrypoints

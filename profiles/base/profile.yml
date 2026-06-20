@@ -10,6 +10,8 @@ references:
   - vercel-skills
   - agent-vault
   - ponytail
+  - just-bash
+  - executor
 skills:
   hunk-review:
     enabled: false
@@ -57,6 +59,8 @@ skills:
     enabled: true
   claude-code-docs:
     enabled: true
+  build-mcp-server:
+    enabled: true
 mcp:
   context7:
     enabled: true
@@ -68,6 +72,9 @@ mcp:
     enabled: true
   openai-docs:
     enabled: false
+  exa:
+    enabled: true
+    targets: [claude-code]
 opencode:
   config:
     lsp: true

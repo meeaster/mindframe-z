@@ -38,8 +38,6 @@ opencode:
       bash:
         "*ARTIFACTORY_TOKEN*": deny
         "*UV_INDEX_ARTIFACTORY_PASSWORD*": deny
-        "*DD_API_KEY*": deny
-        "*DD_APP_KEY*": deny
         "aws ec2 describe-instances *": allow
         "git add*": allow
         "pnpm *": allow
@@ -63,6 +61,8 @@ opencode:
         "zizmor *": allow
         "gh repo *": allow
         "gh run list*": allow
+        "gh pr view *": allow
+        "gh pr diff *": allow
         "openspec *": allow
         "opencode db *": allow
         "mise *": allow

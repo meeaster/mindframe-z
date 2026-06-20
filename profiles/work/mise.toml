@@ -1,5 +1,5 @@
 [tools]
-"github:DataDog/pup" = "0"
+"github:DataDog/pup" = "1"
 
 [env]
 FORCE_AGENT_MODE = "1"
