@@ -1,0 +1,5 @@
+[settings]
+minimum_release_age = "3d"
+
+[tools]
+node = "24"

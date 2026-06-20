@@ -1,0 +1,20 @@
+{
+  "$schema": "./schemas/mcp-broker.schema.json",
+  "basePort": 17301,
+  "shims": {
+    "jira": {
+      "oauth": {
+        "key": "JIRA_OAUTH",
+        "tokenUrl": "https://cf.mcp.atlassian.com/v1/token",
+        "accessTokenOnly": true
+      }
+    },
+    "confluence": {
+      "oauth": {
+        "key": "CONFLUENCE_OAUTH",
+        "tokenUrl": "https://cf.mcp.atlassian.com/v1/token",
+        "accessTokenOnly": true
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+vault: local-ai-dev-sandbox-mcp-jira
+services:
+  - name: jira-mcp
+    host: mcp.atlassian.com
+    auth:
+      type: bearer
+      token: JIRA_OAUTH
