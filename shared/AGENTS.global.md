@@ -81,3 +81,23 @@ Use MCP tools selectively and do not query multiple documentation MCPs in parall
 ## Code Conventions
 
 - Do not use `isRecord`-style guard helpers; understand the code path types directly, and when input shape is uncertain validate it once at the boundary with a schema instead of scattering guards through the logic.
+
+## WSL + Chrome/agent-browser
+
+This environment runs inside WSL2. Chrome runs on the Windows host. Use `--auto-connect` to discover and connect to it automatically.
+
+**If agent-browser cannot connect** — tell the user to run these on Windows (Command Prompt as Administrator):
+```
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=9222 connectaddress=127.0.0.1 connectport=9222
+netsh advfirewall firewall add rule name="WSL Chrome Debug" dir=in action=allow protocol=TCP localport=9222
+```
+
+Then start Chrome on Windows (CMD):
+```
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\chrome-devtools-profile"
+```
+
+Or if using PowerShell:
+```
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:TEMP\chrome-devtools-profile"
+```
