@@ -13,6 +13,8 @@ references:
   - just-bash
   - executor
 skills:
+  agent-browser:
+    enabled: true
   hunk-review:
     enabled: false
   thermo-nuclear-code-quality-review:
@@ -22,8 +24,6 @@ skills:
   mise:
     enabled: false
   opencode-db:
-    enabled: true
-  pdf:
     enabled: true
   openspec-apply-change:
     enabled: true
