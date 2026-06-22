@@ -67,6 +67,14 @@ skills:
     description: >
       Create, synthesize, and iteratively improve agent skills following the Agent Skills specification. Use when asked
       to create, write, synthesize, improve, update, or maintain skill docs and registration.
+  - name: writing-great-skills
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: writing-great-skills
+    description: >
+      Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
+      Use when creating, editing, or pruning a skill, diagnosing why a skill feels verbose or ineffective, or deciding
+      how to structure skill content.
   - name: hunk-review
     source: git
     repo: https://github.com/modem-dev/hunk
@@ -190,4 +198,13 @@ skills:
       Design and build MCP servers for Claude. Use when the user asks to build an MCP server, create an MCP
       integration, wrap an API for Claude, expose tools to Claude, or choose between remote HTTP, MCPB, and local
       stdio deployment models.
+    installer: skills
+  - name: xlsx
+    source: git
+    repo: https://github.com/anthropics/skills
+    skill: xlsx
+    description: >
+      Read, analyze, and create Excel (.xlsx) spreadsheets using Python and openpyxl. Use when the user asks
+      to inspect spreadsheet data, create/update Excel files, analyze tabular data, convert CSV to XLSX, or
+      work with Excel workbooks programmatically in Python.
     installer: skills

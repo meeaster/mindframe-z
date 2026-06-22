@@ -148,6 +148,68 @@
           "items": {
             "type": "string"
           }
+        },
+        "agent_task": {
+          "type": "object",
+          "properties": {
+            "models": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "variants": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "default_variant": {
+                    "type": "string"
+                  },
+                  "providers": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "providers"
+                ]
+              }
+            },
+            "agents": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "model"
+                ]
+              }
+            }
+          }
         }
       }
     },

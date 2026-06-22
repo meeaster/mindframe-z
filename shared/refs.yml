@@ -44,3 +44,6 @@ references:
   - name: ponytail
     url: https://github.com/DietrichGebert/ponytail.git
     description: "JavaScript plugin and skills for AI agents (Claude Code, Codex, OpenCode, Gemini, Pi, Copilot) that enforces a YAGNI minimum-code ruleset via an always-on ladder (YAGNI -> stdlib -> native -> installed dep -> one line -> minimum). Main entrypoints are the OpenCode plugin at .opencode/plugins/ponytail.mjs, the rules in AGENTS.md, and the commands under commands/ (lite/full/ultra/off, review, audit, debt). Deferred shortcuts are marked inline with a `ponytail:` comment naming the upgrade path"
+  - name: mattpocock-skills
+    url: https://github.com/mattpocock/skills.git
+    description: "Shell/markdown collection of composable AI coding agent skills by Matt Pocock (grill-me, grill-with-docs, tdd, diagnosing-bugs, triage, to-prd, improve-codebase-architecture, and more). Entrypoints under skills/engineering/, skills/productivity/, and skills/misc/. Installable via npx skills@latest add mattpocock/skills"
