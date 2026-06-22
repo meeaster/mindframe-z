@@ -12,6 +12,7 @@ references:
   - ponytail
   - just-bash
   - executor
+  - mattpocock-skills
 skills:
   agent-browser:
     enabled: true
@@ -44,6 +45,8 @@ skills:
     enabled: true
     toggleable: false
   skill-writer:
+    enabled: false
+  writing-great-skills:
     enabled: true
   grill-with-docs:
     enabled: false
@@ -60,6 +63,8 @@ skills:
   claude-code-docs:
     enabled: true
   build-mcp-server:
+    enabled: true
+  xlsx:
     enabled: true
 mcp:
   context7:
