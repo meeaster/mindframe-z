@@ -8,8 +8,10 @@ const sessionCommand = agent ? [agent, ...agentArgs] : ["zsh", "-il"];
 
 const workspace = process.env.WORKSPACE_DIR ?? "/workspace";
 const brokerConfigPath = process.env.SANDBOX_MCP_BROKER_CONFIG ?? `${workspace}/mcp-broker.json`;
-const opencodeConfigPath = process.env.SANDBOX_OPENCODE_SOURCE_CONFIG ?? `${workspace}/opencode.json`;
-const generatedOpencodeConfigPath = process.env.SANDBOX_OPENCODE_GENERATED_CONFIG ?? "/tmp/sandbox-opencode.json";
+const opencodeConfigPath =
+  process.env.SANDBOX_OPENCODE_SOURCE_CONFIG ?? `${workspace}/opencode.json`;
+const generatedOpencodeConfigPath =
+  process.env.SANDBOX_OPENCODE_GENERATED_CONFIG ?? "/tmp/sandbox-opencode.json";
 const logDir = process.env.SANDBOX_MCP_SHIM_LOG_DIR ?? `${workspace}/.cache/mcp-shims`;
 const shims = [];
 const children = [];
@@ -41,7 +43,7 @@ if (process.env.SANDBOX_MCP_BROKER_ENABLED !== "0" && fs.existsSync(brokerConfig
       type: server.type === "http" || server.type === "streamable-http" ? server.type : "remote",
       url: localUrl,
       headers: { ...(server.headers ?? {}), Authorization: "PLACEHOLDER" },
-      oauth: false,
+      oauth: false
     };
   }
 
@@ -66,8 +68,8 @@ for (const shim of shims) {
       MCP_SHIM_UPSTREAM: shim.upstream,
       MCP_SHIM_VAULT: shim.vault,
       MCP_SHIM_PROXY_HOST: process.env.MCP_SHIM_PROXY_HOST ?? "host.docker.internal",
-      MCP_SHIM_PROXY_PORT: process.env.MCP_SHIM_PROXY_PORT ?? "14322",
-    },
+      MCP_SHIM_PROXY_PORT: process.env.MCP_SHIM_PROXY_PORT ?? "14322"
+    }
   });
   child.stderr.pipe(fs.createWriteStream(`${logDir}/${shim.name}.log`, { flags: "a" }));
   children.push(child);
@@ -79,7 +81,7 @@ for (const shim of shims) {
 
 const session = spawn(sessionCommand[0], sessionCommand.slice(1), {
   stdio: "inherit",
-  env: process.env,
+  env: process.env
 });
 children.push(session);
 

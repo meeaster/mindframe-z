@@ -18,11 +18,11 @@ hanging off profile resolution that already exists.
 
 mindframe-z gains a third meaning:
 
-| Capability | Status |
-| --- | --- |
-| Config sync across terminals | today |
-| Agent config rendering (opencode, claude) | today |
-| Ephemeral sandboxes to work out of | the vision |
+| Capability                                | Status     |
+| ----------------------------------------- | ---------- |
+| Config sync across terminals              | today      |
+| Agent config rendering (opencode, claude) | today      |
+| Ephemeral sandboxes to work out of        | the vision |
 
 ## The Core Idea: profile × boundary-overlay
 
@@ -50,16 +50,16 @@ sandboxes come for free from the profiles you already keep.
 The container should feel like your WSL instance. The only differences are the
 security boundary — everything else is the same rendered profile.
 
-| | WSL | Sandbox |
-| --- | --- | --- |
-| zsh + p10k + plugins | yes | **same** |
-| mise dev deps | yes | **same** |
-| aliases, prompt, keybinds | yes | **same** |
-| opencode / claude / gh on PATH | yes | **same** |
-| credentials | reads real `~/.aws`, `~/.claude`, gh token | **brokered via Agent Vault** |
-| egress | open | **through MITM proxy** |
-| shell history | `~/.zsh_history` (secrets) | **fresh / none** |
-| home directory | full `$HOME` mounted | **only `/workspace` + rendered dotfiles** |
+|                                | WSL                                        | Sandbox                                   |
+| ------------------------------ | ------------------------------------------ | ----------------------------------------- |
+| zsh + p10k + plugins           | yes                                        | **same**                                  |
+| mise dev deps                  | yes                                        | **same**                                  |
+| aliases, prompt, keybinds      | yes                                        | **same**                                  |
+| opencode / claude / gh on PATH | yes                                        | **same**                                  |
+| credentials                    | reads real `~/.aws`, `~/.claude`, gh token | **brokered via Agent Vault**              |
+| egress                         | open                                       | **through MITM proxy**                    |
+| shell history                  | `~/.zsh_history` (secrets)                 | **fresh / none**                          |
+| home directory                 | full `$HOME` mounted                       | **only `/workspace` + rendered dotfiles** |
 
 Everything above the credential line is "your environment." Everything below is
 the boundary. If the sandbox feels different beyond those rows, the config is
@@ -70,13 +70,13 @@ wrong, not the design.
 What this repo proves out splits cleanly when it moves:
 
 | Folds into the profile (the "me" part) | Stays as the boundary (the real value) |
-| --- | --- |
-| `.zshrc`, `.p10k.zsh` | Agent Vault wiring |
-| `mise.toml` dev deps | bedrock-sigv4-proxy |
-| opencode / claude config | MITM egress + CA plumbing |
-| refs, aliases | placeholder env injection |
-| | mount-rejection / no-`$HOME` posture |
-| | MCP egress shims |
+| -------------------------------------- | -------------------------------------- |
+| `.zshrc`, `.p10k.zsh`                  | Agent Vault wiring                     |
+| `mise.toml` dev deps                   | bedrock-sigv4-proxy                    |
+| opencode / claude config               | MITM egress + CA plumbing              |
+| refs, aliases                          | placeholder env injection              |
+|                                        | mount-rejection / no-`$HOME` posture   |
+|                                        | MCP egress shims                       |
 
 The cheap `.zshrc` / `.p10k.zsh` / `mise.toml` written in Horizon 1 are explicit
 stand-ins for the profile part. The proxy / vault / shim machinery is the
@@ -88,10 +88,10 @@ mindframe-z today is personal — it carries specific refs, extra folders, and
 setups. Sharing the sandbox capability without sharing personal config implies a
 future split:
 
-| Repo | Contents |
-| --- | --- |
+| Repo                           | Contents                                          |
+| ------------------------------ | ------------------------------------------------- |
 | `mindframe-z-core` (shareable) | renderer engine, sandbox capability, base profile |
-| `mindframe-z-<user>` (private) | personal profiles, refs, extra folders |
+| `mindframe-z-<user>` (private) | personal profiles, refs, extra folders            |
 
 The sandbox **capability** belongs in core; a specific **sandbox profile** stays
 private. This argues for keeping the sandbox runner generic and profile-driven —
