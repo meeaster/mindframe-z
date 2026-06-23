@@ -935,4 +935,38 @@ describe("CLI integration", () => {
     expect(npmrc).toContain("minimum-release-age=4320");
     expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");
   });
+
+  it("renders and links nested dotfiles from profile subdirectories", async () => {
+    await mkdir(path.join(root, "profiles", "personal", ".config", "ccstatusline"), {
+      recursive: true
+    });
+    await writeFile(
+      path.join(root, "profiles", "personal", ".config", "ccstatusline", "settings.json"),
+      '{"version":3,"lines":[]}\n',
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+    expect(result.stdout).toContain("rendered");
+
+    const rendered = await readFile(
+      path.join(
+        root,
+        "configs",
+        "personal",
+        "dotfiles",
+        ".config",
+        "ccstatusline",
+        "settings.json"
+      ),
+      "utf8"
+    );
+    expect(rendered).toContain('"version":3');
+
+    await expect(
+      realpath(path.join(home, ".config", "ccstatusline", "settings.json"))
+    ).resolves.toBe(
+      path.join(root, "configs", "personal", "dotfiles", ".config", "ccstatusline", "settings.json")
+    );
+  });
 });

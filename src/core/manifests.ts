@@ -243,6 +243,24 @@ export async function validateManifests(
   return results;
 }
 
+async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[string, string]>> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const result: Array<[string, string]> = [];
+  for (const entry of entries) {
+    if (entry.name === "profile.yml" || entry.name === "mise.toml") continue;
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      for (const [childRel, content] of await readDotfileEntries(full, rel)) {
+        result.push([childRel, content]);
+      }
+    } else if (entry.isFile()) {
+      result.push([rel, await readFile(full, "utf8")]);
+    }
+  }
+  return result;
+}
+
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
   const refs = await readYaml(path.join(root, "shared", "refs.yml"), refsManifestSchema, {
     references: []
@@ -304,10 +322,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         }
       }
 
-      for (const f of await readdir(fullPath)) {
-        if (f === "profile.yml" || f === "mise.toml") continue;
-        const content = await readFile(path.join(fullPath, f), "utf8");
-        profile.dotfiles[f] = content;
+      for (const [rel, content] of await readDotfileEntries(fullPath)) {
+        profile.dotfiles[rel] = content;
       }
 
       profileMap.set(profile.name, profile);
