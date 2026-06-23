@@ -67,9 +67,9 @@ Claude Code `settings.json` is intentionally not symlinked. The rendered `config
 
 Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The rendered `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
 
-Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.zshrc.local` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
+Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.mindframe-z/.zshrc` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
 
-To migrate an existing `.zshrc`, move portable aliases, PATH setup, prompt selection, and shell framework configuration into `profiles/base/.zshrc` or a child profile `.zshrc`. Move secret exports such as API tokens to `~/.mindframe-z/secrets/zsh.env`, and move host-specific non-secret tweaks to `~/.zshrc.local`.
+To migrate an existing `.zshrc`, move portable aliases, PATH setup, prompt selection, and shell framework configuration into `profiles/base/.zshrc` or a child profile `.zshrc`. Move secret exports such as API tokens to `~/.mindframe-z/secrets/zsh.env`, and move host-specific non-secret tweaks to `~/.mindframe-z/.zshrc`.
 
 ### Sync (tools → profiles)
 

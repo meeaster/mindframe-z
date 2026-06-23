@@ -17,5 +17,5 @@ export function zshSecretsFile(paths: RuntimePaths): string {
 }
 
 export function zshLocalFile(paths: RuntimePaths): string {
-  return path.join(paths.home, ".zshrc.local");
+  return path.join(paths.home, ".mindframe-z", ".zshrc");
 }
