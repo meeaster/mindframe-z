@@ -51,6 +51,10 @@ async function readExistingClaudeJson(claudeJsonPath: string): Promise<Record<st
   }
 }
 
+function stripEnvRef(value: string): string {
+  return value.replace(/^\{env:(.+)\}$/, "$${$1}");
+}
+
 function renderClaudeMcpServer(
   server: ResolvedProfile["mcpServers"][number],
   home: string
@@ -59,7 +63,13 @@ function renderClaudeMcpServer(
     return {
       type: server.server.transport === "sse" ? "sse" : "http",
       url: server.server.url,
-      ...(server.server.headers ? { headers: server.server.headers } : {})
+      ...(server.server.headers
+        ? {
+            headers: Object.fromEntries(
+              Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v as string)])
+            )
+          }
+        : {})
     };
   }
 
