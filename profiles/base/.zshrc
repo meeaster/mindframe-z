@@ -26,6 +26,22 @@ fpath=(
 
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
+
+mfz_ensure_omz_plugin() {
+  local plugin_name="$1"
+  local plugin_repo="$2"
+  local plugin_dir="$HOME/.oh-my-zsh/custom/plugins/$plugin_name"
+
+  if [ -r "$plugin_dir/$plugin_name.plugin.zsh" ]; then
+    return
+  fi
+
+  if command -v git >/dev/null 2>&1; then
+    git clone --depth 1 "$plugin_repo" "$plugin_dir" >/dev/null 2>&1 || true
+  fi
+}
+
+mfz_ensure_omz_plugin fast-syntax-highlighting https://github.com/zdharma-continuum/fast-syntax-highlighting
 plugins=(git mise zsh-autosuggestions zsh-bat fast-syntax-highlighting)
 
 # Language/runtime managers that install shell environment files.
