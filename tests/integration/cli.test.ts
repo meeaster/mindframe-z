@@ -870,7 +870,7 @@ describe("CLI integration", () => {
     );
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
     expect(zshrc).toContain("alias gs='git status'");
-    expect(zshrc).toContain(path.join(home, ".zshrc.local"));
+    expect(zshrc).toContain(path.join(home, ".mindframe-z", ".zshrc"));
 
     await expect(realpath(path.join(home, ".zshrc"))).resolves.toBe(
       path.join(root, "configs", "personal", "dotfiles", ".zshrc")
