@@ -12,11 +12,15 @@ const dryRun = hasFlag("--dry-run");
 
 const brokerConfig = JSON.parse(fs.readFileSync(brokerConfigPath, "utf8"));
 const sourceTokens = readTokenSource(source);
-const targets = Object.entries(brokerConfig.shims ?? {}).filter(([name]) => !serverFilter || name === serverFilter);
+const targets = Object.entries(brokerConfig.shims ?? {}).filter(
+  ([name]) => !serverFilter || name === serverFilter
+);
 const controlSession = readAgentVaultControlSession();
 
 if (targets.length === 0) {
-  throw new Error(serverFilter ? `No shim mapping found for ${serverFilter}` : "No shim mappings found");
+  throw new Error(
+    serverFilter ? `No shim mapping found for ${serverFilter}` : "No shim mappings found"
+  );
 }
 
 for (const [name, options] of targets) {
@@ -48,7 +52,8 @@ for (const [name, options] of targets) {
     token_url: options.oauth?.accessTokenOnly ? "manual" : tokenUrl,
     client_id: clientId,
     client_secret: token.clientSecret ?? options.oauth?.clientSecret ?? "",
-    token_auth_method: token.clientSecret || options.oauth?.clientSecret ? "client_secret_basic" : "none",
+    token_auth_method:
+      token.clientSecret || options.oauth?.clientSecret ? "client_secret_basic" : "none"
   };
 
   if (dryRun) {
@@ -59,14 +64,16 @@ for (const [name, options] of targets) {
   const response = await fetch(new URL("/v1/credentials/oauth/tokens", agentVaultAddr), {
     method: "POST",
     headers: {
-      "authorization": `Bearer ${controlSession.token}`,
-      "content-type": "application/json",
+      authorization: `Bearer ${controlSession.token}`,
+      "content-type": "application/json"
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    throw new Error(`${name}: token upload failed: HTTP ${response.status} ${await response.text()}`);
+    throw new Error(
+      `${name}: token upload failed: HTTP ${response.status} ${await response.text()}`
+    );
   }
 
   console.log(`${name}: uploaded OAuth credential ${key} to vault ${vault}`);
@@ -77,7 +84,7 @@ function readTokenSource(name) {
   if (name === "json") return readNormalizedTokens(requireArg("--token-file"));
   if (name === "claude") {
     throw new Error(
-      "Claude Code does not document a stable local MCP OAuth token file. Export tokens to normalized JSON and run with --source json --token-file <path>.",
+      "Claude Code does not document a stable local MCP OAuth token file. Export tokens to normalized JSON and run with --source json --token-file <path>."
     );
   }
   throw new Error(`Unsupported source: ${name}`);
@@ -106,7 +113,7 @@ function readOpenCodeTokens() {
       accessToken: entry.tokens?.accessToken,
       refreshToken: entry.tokens?.refreshToken,
       clientId: entry.clientInfo?.clientId,
-      clientSecret: entry.clientInfo?.clientSecret,
+      clientSecret: entry.clientInfo?.clientSecret
     };
   }
   return result;
@@ -121,7 +128,7 @@ function readNormalizedTokens(filePath) {
       accessToken: entry.accessToken ?? entry.access_token,
       refreshToken: entry.refreshToken ?? entry.refresh_token,
       clientId: entry.clientId ?? entry.client_id,
-      clientSecret: entry.clientSecret ?? entry.client_secret,
+      clientSecret: entry.clientSecret ?? entry.client_secret
     };
   }
   return result;

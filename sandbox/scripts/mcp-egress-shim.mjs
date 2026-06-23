@@ -21,7 +21,13 @@ const upstreamPort = Number(upstream.port || "443");
 const proxyAuthorization = `Basic ${Buffer.from(`${vaultToken}:${vaultHint}`).toString("base64")}`;
 class AgentVaultTunnelAgent extends https.Agent {
   createConnection(_options, callback) {
-    log("connect", { proxyHost, proxyPort, upstreamHost: upstream.hostname, upstreamPort, vaultHint });
+    log("connect", {
+      proxyHost,
+      proxyPort,
+      upstreamHost: upstream.hostname,
+      upstreamPort,
+      vaultHint
+    });
     const proxy = net.connect(proxyPort, proxyHost);
     proxy.once("error", callback);
     proxy.once("connect", () => {
@@ -30,7 +36,7 @@ class AgentVaultTunnelAgent extends https.Agent {
           `Host: ${upstream.hostname}:${upstreamPort}\r\n` +
           `Proxy-Authorization: ${proxyAuthorization}\r\n` +
           "Connection: keep-alive\r\n" +
-          "\r\n",
+          "\r\n"
       );
     });
 
@@ -55,7 +61,7 @@ class AgentVaultTunnelAgent extends https.Agent {
 
       const tlsSocket = tls.connect({
         socket: proxy,
-        servername: upstream.hostname,
+        servername: upstream.hostname
       });
       tlsSocket.once("secureConnect", () => callback(null, tlsSocket));
       tlsSocket.once("error", callback);
@@ -69,7 +75,13 @@ const server = http.createServer((req, res) => {
   const targetPath = upstream.pathname + new URL(req.url ?? "/", "http://shim.local").search;
   const headers = filterHopByHopHeaders(req.headers);
   headers.host = upstream.host;
-  log("request", { method: req.method, url: req.url, targetPath, upstreamHost: upstream.hostname, vaultHint: vaultHint });
+  log("request", {
+    method: req.method,
+    url: req.url,
+    targetPath,
+    upstreamHost: upstream.hostname,
+    vaultHint: vaultHint
+  });
 
   const upstreamReq = https.request(
     {
@@ -78,17 +90,33 @@ const server = http.createServer((req, res) => {
       port: upstreamPort,
       method: req.method,
       path: targetPath,
-      headers,
+      headers
     },
     (upstreamRes) => {
-      log("response", { method: req.method, url: req.url, statusCode: upstreamRes.statusCode, upstreamHost: upstream.hostname, vaultHint });
-      res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.statusMessage, filterHopByHopHeaders(upstreamRes.headers));
+      log("response", {
+        method: req.method,
+        url: req.url,
+        statusCode: upstreamRes.statusCode,
+        upstreamHost: upstream.hostname,
+        vaultHint
+      });
+      res.writeHead(
+        upstreamRes.statusCode ?? 502,
+        upstreamRes.statusMessage,
+        filterHopByHopHeaders(upstreamRes.headers)
+      );
       upstreamRes.pipe(res);
-    },
+    }
   );
 
   upstreamReq.once("error", (error) => {
-    log("error", { method: req.method, url: req.url, message: error.message, upstreamHost: upstream.hostname, vaultHint });
+    log("error", {
+      method: req.method,
+      url: req.url,
+      message: error.message,
+      upstreamHost: upstream.hostname,
+      vaultHint
+    });
     if (res.headersSent) {
       res.destroy(error);
       return;
@@ -129,7 +157,7 @@ function filterHopByHopHeaders(headers) {
     "te",
     "trailer",
     "transfer-encoding",
-    "upgrade",
+    "upgrade"
   ]);
   const output = {};
   for (const [key, value] of Object.entries(headers)) {

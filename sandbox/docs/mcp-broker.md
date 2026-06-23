@@ -2,19 +2,19 @@
 
 The sandbox handles MCP servers by category:
 
-| Server type | Example | Handling rule |
-| --- | --- | --- |
-| Local CLI | `fff` | Run inside the agent container; no broker, shim, or external credential. |
-| Anonymous public | DeepWiki-style public docs | Connect directly without credential injection. |
-| Single-identity credentialed remote | Datadog | Use the normal Agent Vault proxy and the main sandbox vault. |
-| Same-host multi-identity remote | Jira and Confluence on Atlassian Rovo | Route through one local egress shim per logical server and one Agent Vault vault per site/org. |
+| Server type                         | Example                               | Handling rule                                                                                  |
+| ----------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Local CLI                           | `fff`                                 | Run inside the agent container; no broker, shim, or external credential.                       |
+| Anonymous public                    | DeepWiki-style public docs            | Connect directly without credential injection.                                                 |
+| Single-identity credentialed remote | Datadog                               | Use the normal Agent Vault proxy and the main sandbox vault.                                   |
+| Same-host multi-identity remote     | Jira and Confluence on Atlassian Rovo | Route through one local egress shim per logical server and one Agent Vault vault per site/org. |
 
 ## Shim Model
 
 `scripts/run-sandbox.sh` starts `scripts/run-with-mcp-shims.mjs` inside the agent container before launching the requested agent. The wrapper reads `mcp-broker.json`, finds matching MCP server names in the agent config, and starts one `scripts/mcp-egress-shim.mjs` process for each mapped server.
 
-| Logical server | Local URL | Upstream | Default vault hint |
-| --- | --- | --- | --- |
+| Logical server         | Local URL                                 | Upstream                    | Default vault hint                       |
+| ---------------------- | ----------------------------------------- | --------------------------- | ---------------------------------------- |
 | Any mapped server name | `http://127.0.0.1:<port>/<upstream-path>` | The server's configured URL | `local-ai-dev-sandbox-mcp-<server-name>` |
 
 Each shim is a streaming reverse proxy. It preserves MCP request/response headers, status codes, Streamable HTTP bodies, and long-lived SSE streams. It does not parse JSON-RPC, translate session IDs, or store provider credentials.
