@@ -41,6 +41,8 @@ mfz_ensure_omz_plugin() {
   fi
 }
 
+mfz_ensure_omz_plugin zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions
+mfz_ensure_omz_plugin zsh-bat https://github.com/fdellwing/zsh-bat
 mfz_ensure_omz_plugin fast-syntax-highlighting https://github.com/zdharma-continuum/fast-syntax-highlighting
 plugins=(git mise zsh-autosuggestions zsh-bat fast-syntax-highlighting)
 
