@@ -24,7 +24,7 @@ skills:
     enabled: false
   mise:
     enabled: false
-  opencode-db:
+  opencode-sessions:
     enabled: true
   openspec-apply-change:
     enabled: true
@@ -50,9 +50,15 @@ skills:
     enabled: true
   grill-with-docs:
     enabled: false
+  grill-me:
+    enabled: false
+  grilling:
+    enabled: false
   improve-codebase-architecture:
     enabled: false
   gpt-model-selection:
+    enabled: false
+  domain-modeling:
     enabled: false
   qmd:
     enabled: false
@@ -61,6 +67,8 @@ skills:
   improve:
     enabled: true
   claude-code-docs:
+    enabled: true
+  claude-code-sessions:
     enabled: true
   build-mcp-server:
     enabled: true

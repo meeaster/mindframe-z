@@ -1,0 +1,73 @@
+---
+name: opencode-sessions
+description: Use when the user wants to read or analyze OpenCode sessions — find a past session, trace its tool calls or subagents, reconstruct what happened — or otherwise query OpenCode's local SQLite database (`opencode db`) for messages, projects, or todos.
+---
+
+# OpenCode Sessions
+
+`opencode db` is the supported read path into OpenCode's local SQLite database. Two rules govern every run: treat the database as **read-only**, and **outline before you read** — pull cheap summaries first and drill into full rows only where the question needs them.
+
+## Read-only
+
+- Run only `SELECT` (and read-only PRAGMAs). Never `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, or `VACUUM` unless the user explicitly asks.
+- If you genuinely need `sqlite3` directly, operate on a copy, never the live file.
+- Don't surface secrets or private transcript content beyond what answers the question.
+
+## Locate and discover schema
+
+```bash
+opencode db path
+```
+
+`opencode db "<SQL>"` runs one query and exits; with no query it opens an interactive `sqlite3` shell. It takes **SQL, not sqlite dot commands** — `.tables` and `.schema` error; use `sqlite_master`. Pass `--format json` for structured output (default is `tsv`).
+
+The schema changes between OpenCode versions. Verify it live before trusting any column below:
+
+```bash
+opencode db "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" --format json
+opencode db "SELECT sql FROM sqlite_master WHERE type='table' AND name IN ('session','message','part') ORDER BY name" --format json
+```
+
+## Schema map
+
+A map to orient queries, not the source of truth — confirm columns against the live schema.
+
+| Table | Holds | Notes |
+| ----- | ----- | ----- |
+| `session` | one row per session | `id`, `title`, `slug`, `directory`, `path`, `project_id`, `parent_id`, `agent`, `model`, `cost`, `tokens_*`, `time_created`, `time_updated`, `time_archived`. `parent_id` set ⇒ subagent session. |
+| `message` | one row per turn | `data` JSON carries `role`, and for assistants `agent`, `model`, `cost`, `tokens`, `finish`. |
+| `part` | turn contents | `data` JSON `type` ∈ `text`/`reasoning`/`tool`/`step-start`/`step-finish`/`patch`/`subtask`. Tool parts add `tool`, `callID`, `state.status` (`completed`/`error`/`running`/`pending`), `state.input`, `state.output`, `state.error`. |
+| `session_message` | session-level event markers | The V2 event store, mid-rollout — today typically just `agent-switched`/`model-switched`. |
+| `project`, `workspace` | scope metadata | Where and in which worktree sessions ran. |
+| `todo` | per-session todo items | `status` ∈ `pending`/`in_progress`/`completed`/`cancelled`. |
+
+The transcript lives in **`message` + `part`** (V1) or **`session_message`** (V2), depending on version — V2 is rolling out and recent migrations reset it. Don't assume; count rows in both for the session, then analyze whichever holds the content (today that is `message`/`part`).
+
+## Outline, then drill down
+
+Cheap summaries first; full `data` columns only for the rows you've decided you need. This keeps queries fast and avoids dumping large JSON into context.
+
+- Never `SELECT *` on `message`/`part` across a session — select named columns, and outline with `length(data)` and `substr(data, 1, 160)` before fetching full `data`.
+- Use `LIMIT` while exploring; `json_extract(data, '$.path')` to pull single fields without the whole blob.
+
+Recent sessions:
+
+```bash
+opencode db "SELECT id, title, directory, agent, model, time_updated FROM session WHERE time_archived IS NULL ORDER BY time_updated DESC LIMIT 20" --format json
+```
+
+Search for a session:
+
+```bash
+opencode db "SELECT id, title, directory, time_updated FROM session WHERE title LIKE '%skill%' ORDER BY time_updated DESC LIMIT 50" --format json
+```
+
+Inspect one session:
+
+```bash
+opencode db "SELECT id, title, project_id, directory, parent_id, agent, model, cost, time_created, time_updated FROM session WHERE id = 'ses_xxx'" --format json
+```
+
+## Analyzing a prior session
+
+To reconstruct what happened in a session — its turns, tool calls, failures, and what to improve — follow [SESSIONS.md](SESSIONS.md) for the transcript drill-down recipes, the analysis workflow, and the reporting pattern.

@@ -6,6 +6,21 @@ skills:
     description: >
       Grill a codebase with questions about how something works, finding related code, or
       identifying patterns and anti-patterns in a codebase.
+  - name: grill-me
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: grill-me
+    description: >
+      Relentless interviewing skill that stress-tests plans and designs through systematic
+      questioning.
+  - name: grilling
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: grilling
+    description: >
+      Interview me relentlessly about every aspect of this plan until we reach a shared
+      understanding. Walk down each branch of the design tree, resolving dependencies between
+      decisions one-by-one. For each question, provide your recommended answer.
   - name: improve-codebase-architecture
     source: git
     repo: https://github.com/mattpocock/skills
@@ -13,6 +28,12 @@ skills:
     description: >
       Analyze a codebase architecture and suggest improvements, refactors, and structural changes
       to improve maintainability, performance, and code quality.
+  - name: domain-modeling
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: domain-modeling
+    description: >
+      Actively build and sharpen the project's domain model as you design.
   - name: home-assistant-best-practices
     source: git
     repo: https://github.com/homeassistant-ai/skills
@@ -54,12 +75,13 @@ skills:
     description: >
       Use when answering mise basics: installing or adding global tools, choosing a mise backend, managing global mise
       environment variables, checking mise config, or giving concise mise command guidance.
-  - name: opencode-db
+  - name: opencode-sessions
     source: local
-    skill: opencode-db
+    skill: opencode-sessions
     description: >
-      Use when safely inspecting or querying OpenCode's local database with `opencode db`, including sessions, messages,
-      projects, workspaces, tool calls, skill/MCP usage, subagents, or prior assistant behavior.
+      Use when reading or analyzing OpenCode sessions — finding a past session, tracing its tool calls or subagents,
+      reconstructing what happened — or otherwise querying OpenCode's local SQLite database (`opencode db`) for messages,
+      projects, or todos.
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills
@@ -190,6 +212,13 @@ skills:
       Navigate and fetch Claude Code documentation. Use when answering questions about Claude Code features,
       configuration, capabilities, hooks, plugins, MCP servers, settings, CLI usage, deployment options, or
       troubleshooting.
+  - name: claude-code-sessions
+    source: local
+    skill: claude-code-sessions
+    description: >
+      Use when reading or analyzing Claude Code sessions (Claude sessions) — finding a past session by prompt, project,
+      or recency, tracing its tool calls, subagents, or permission events, or reconstructing what happened — from the
+      local session files under `~/.claude`.
   - name: build-mcp-server
     source: git
     repo: https://github.com/anthropics/claude-plugins-official
