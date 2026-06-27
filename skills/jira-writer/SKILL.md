@@ -1,71 +1,87 @@
 ---
 name: jira-writer
-description: Creates clear, high-level Jira stories from notes, requirements, discovery, bug reports, or implementation ideas. Use when asked to draft a Jira story, create a Jira ticket, turn rough notes into Jira-ready work, or rewrite a story so it is concise and actionable.
+description: Draft, refine, and sync Jira stories as local markdown, then push to Jira on approval. Use when asked to write or update a Jira story, turn notes or a bug into a ticket, or rewrite a story to read clearly.
 ---
 
 # Jira Writer
 
-Use this skill to draft Jira stories that read like a short human narrative: why the work exists, what needs to change, and what scope or evidence a future reader needs to understand it.
+Author Jira stories that read like a short human narrative — **reader-first**: why the work exists, what changes, and the context a future reader needs. You draft in a local markdown file, refine it with the user, and only push to Jira once they approve.
 
-## Default Shape
+The skill is portable: it owns *what the story says* and *how it syncs*, not where the repo lives. It operates on the artifact file you point it at, or creates one under `.claude/artifacts/jira/`.
 
-Return a Jira-ready story with:
+## Process
 
-1. `Title`: short, action-oriented, and specific enough to find later.
-2. `Description`: a short top-to-bottom narrative covering the signal or problem, useful evidence, why the work matters, and the high-level solution direction.
-3. `Scope`: only when boundaries, environments, systems, or sequencing matter.
+### 1. Resolve the artifact
 
-Add `Value` only when the narrative does not already make the value clear. Add acceptance criteria only when the user asks for them or a checklist is needed to prevent ambiguity.
+- **New story** — create `.claude/artifacts/jira/DRAFT-<type>-<slug>.jira.md` with front matter (see below) and an empty `issue_key`.
+- **Existing story** — if given an issue key, find its file under `.claude/artifacts/jira/`. If none exists, fetch the issue (`getJiraIssue`) and write a local artifact from it before editing.
 
-## Workflow
+### 2. Draft the body in the file
 
-1. Identify the work being requested.
-2. Identify the context that explains why the story exists: observed signals, user impact, operational noise, rollout sequencing, or audit references.
-3. Preserve the facts and evidence that a future reader would need to understand or rediscover the reason for the work.
-4. Draft at the problem-and-solution level, not the step-by-step implementation level.
-5. Keep the value plain and proportional; do not over-explain obvious maintenance work.
-6. Inline evidence where it naturally supports the story. Put references at the end only when they are useful but would interrupt the narrative.
-7. Remove process residue, branch notes, PR housekeeping, tool usage, and AI workflow narration.
-8. If key information is missing, ask before drafting or mention the gap outside the Jira story. Do not put open questions inside the story by default.
+Write the story into the markdown body following **reader-first** doctrine below. Draft from the conversation context and any evidence already gathered; do not interview the user for fields they have not raised.
 
-## Evidence Rules
+**Done when:** the body is a coherent top-to-bottom narrative a teammate could read cold, with no section left as a placeholder.
 
-- Include diagnostic evidence and reference links when they explain why the story exists or make the work auditable later.
-- Prefer embedding links, timestamps, monitors, notebooks, Confluence pages, metric windows, or log queries in the narrative sentence that uses them.
-- Preserve exact log or error messages in fenced code blocks when the work is tied to that signal.
-- Summarize noisy evidence, but keep exact snippets that future readers may need to search for.
-- Do not dump unrelated investigation artifacts.
+### 3. Refine with the user
 
-## Writing Rules
+Show the drafted body and let the user react. Edit the file in place. Stay in this loop until they approve — do not push to Jira while refining.
 
-- Lead with the work to be done.
-- Keep the solution high level unless the user explicitly asks for more detail.
-- Prefer concise prose over rigid templates.
-- Use bullets only when they make scope or impacted areas easier to scan.
-- Include context that explains the why; exclude command-level steps and implementation play-by-play unless they materially define the requested work.
-- Do not invent business value; if the value is obvious or minimal, keep it simple.
-- Do not add acceptance criteria by default.
+### 4. Drift check, then push
 
-## Avoid
+Once approved, run the **drift check** before writing to Jira. Then:
+- **New** — `createJiraIssue`, then rename the file to `<type>-<KEY>-<slug>.jira.md` and write `issue_key`, `issue_id`, `issue_url` back into front matter.
+- **Existing** — `editJiraIssue` with the body.
 
-- open questions inside the Jira story
-- implementation plans or command-level steps
-- discovery chronology or development diary detail
-- AI-process narration
-- branch names, PR links, or review-state housekeeping
-- boilerplate acceptance criteria
-- inflated value statements for routine work
-- unrelated evidence dumps
+Write the current timestamp to `last_synced`. Report the issue URL.
 
-## Output
+## Reader-first doctrine
 
-Return only the Jira-ready artifact unless the user asks for explanation:
+The story addresses a **reader** — a teammate, or future-you rediscovering why this work happened. It never narrates its own creation.
 
-```md
-Title: <short action-oriented title>
+**Put in:**
+- The work to be done, stated first.
+- The *why* — the signal, problem, or impact that makes this worth doing. Proportional: explain what is not obvious, skip what is.
+- Exact log/error messages in fenced code blocks when the work is tied to that signal — future readers search for these.
+- Evidence (links, monitors, notebooks, timestamps) inlined in the sentence that uses it. Put references at the end only when they matter but would interrupt the narrative.
 
-<short narrative description with inline evidence when useful>
+**Form:**
+- Prose for the *why* and the narrative arc.
+- Bullets for enumerations — discrete changes, affected components, scope items.
 
-Scope:
-<short scope list, if useful>
+**Keep out** (these are the AI tells that make a story read like slop):
+- Acceptance criteria — unless the user explicitly asks. They get ignored.
+- Open questions — raise them *to the user*, not inside the story.
+- Implementation play-by-play, command-level steps.
+- Process meta-narration: branch names, PR housekeeping, "tests were not run", or anything that describes how the artifact was produced rather than the work itself.
+- Inflated value statements for routine work; unrelated evidence dumps.
+
+## Front matter
+
+Flat keys, identity only. No volatile Jira runtime state beyond what sync needs.
+
+```yaml
+---
+cloud_id: <atlassian cloud id>
+project_key: OBSERVE
+issue_type: Story
+summary: <title — short, specific, findable later>
+issue_key: OBSERVE-453   # empty until created
+issue_id: ""
+issue_url: ""
+parent: OBSERVE-305      # omit if none
+last_synced: ""          # ISO timestamp, written on every push
+---
 ```
+
+The markdown body *is* the Jira description. Keep it outward-facing so it reads correctly in Jira alone — no local-only links or notes in the body.
+
+## Drift check
+
+Jira issues carry a precise `updated` timestamp. Before pushing to an existing issue, guard against clobbering a coworker's edit:
+
+1. Fetch the issue (`searchJiraIssuesUsingJql` with `key = <KEY>`, or `getJiraIssue`) and read its `updated`.
+2. Compare against `last_synced` in front matter.
+3. If `updated` is **newer** than `last_synced`, someone edited the issue since you last synced. **Stop. Show the remote state and tell the user** — do not push. Let them decide.
+4. If not newer (or this is the first push of the session and you already read it), push freely.
+
+Within one session, trust the local file after the first check — do not re-guard every push.
