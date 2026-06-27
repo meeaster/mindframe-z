@@ -134,6 +134,35 @@ async function collectCommandFiles(
   return files;
 }
 
+async function collectAgentFiles(
+  root: string,
+  configsOpencode: string,
+  agentNames: readonly string[]
+): Promise<RenderResult["files"]> {
+  const sourceDir = path.join(root, "opencode", "agents");
+  const files: RenderResult["files"] = [];
+
+  for (const agentName of agentNames) {
+    const fileName = `${agentName}.md`;
+    const filePath = path.join(sourceDir, fileName);
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Unknown agent: ${agentName}`);
+      }
+      throw error;
+    }
+    files.push({
+      path: path.join(configsOpencode, "agents", fileName),
+      content
+    });
+  }
+
+  return files;
+}
+
 export async function renderOpenCode(
   paths: RuntimePaths,
   profile: ResolvedProfile,
@@ -152,6 +181,11 @@ export async function renderOpenCode(
     paths.root,
     configsOpencode,
     profile.enabledCommands
+  );
+  const agentFiles = await collectAgentFiles(
+    paths.root,
+    configsOpencode,
+    profile.enabledAgents
   );
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
@@ -233,6 +267,7 @@ export async function renderOpenCode(
   const files: RenderResult["files"] = [
     ...pluginResult.files,
     ...commandFiles,
+    ...agentFiles,
     { path: configPath, content: toJsonc(renderedConfig) }
   ];
   const links: RenderResult["links"] = [
@@ -240,6 +275,10 @@ export async function renderOpenCode(
     {
       linkPath: path.join(paths.opencodeConfigDir, "commands"),
       targetPath: path.join(configsOpencode, "commands")
+    },
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "agents"),
+      targetPath: path.join(configsOpencode, "agents")
     }
   ];
 

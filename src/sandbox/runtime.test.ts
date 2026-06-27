@@ -49,7 +49,7 @@ function profile(
       references: [],
       skills: {},
       mcp: {},
-      opencode: { config: {}, plugins: [], commands: [] },
+      opencode: { config: {}, plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       dotfiles: { ".zshrc": "zsh", ".p10k.zsh": "prompt" },
@@ -63,6 +63,7 @@ function profile(
     ],
     enabledSkills: [],
     enabledCommands: [],
+    enabledAgents: [],
     mcpServers: [],
     extraFolders: options.extraFolder
       ? [
