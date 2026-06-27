@@ -76,6 +76,8 @@ skills:
     enabled: true
   xlsx:
     enabled: true
+  handoff:
+    enabled: true
 mcp:
   context7:
     enabled: true
@@ -110,6 +112,7 @@ opencode:
     - agent-task
     - mindframe-z-example
   commands:
+    - apply-spec
     - rmslop
 extra_folders:
   - path: ~/.mindframe-z

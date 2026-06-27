@@ -249,3 +249,11 @@ skills:
       to inspect spreadsheet data, create/update Excel files, analyze tabular data, convert CSV to XLSX, or
       work with Excel workbooks programmatically in Python.
     installer: skills
+  - name: handoff
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: handoff
+    description: >
+      Summarize conversations into handoff documents for seamless agent-to-agent transitions.
+      Use when wrapping up a session and wanting to create a structured summary for a fresh
+      agent to continue the work.
