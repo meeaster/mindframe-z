@@ -35,6 +35,7 @@ function profile(
       : [],
     git: {},
     sandbox: { credentials },
+    thread: { destinations: [] },
     opencode: {}
   };
 
@@ -52,6 +53,7 @@ function profile(
       opencode: { config: {}, plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
+      thread: { destinations: [], defaults: { session_sources: ["claude-code", "opencode"] } },
       dotfiles: { ".zshrc": "zsh", ".p10k.zsh": "prompt" },
       extra_folders: []
     },

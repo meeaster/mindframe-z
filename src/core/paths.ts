@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,12 +85,45 @@ export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
+export async function pathExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function profileConfigsDir(paths: RuntimePaths, profileName: string): string {
   return path.join(paths.configsDir, profileName);
 }
 
 export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): string {
   return path.join(paths.home, ".mindframe-z", "skill-overrides", `${target}.json`);
+}
+
+export function threadStoreRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "threads");
+}
+
+export function threadDestinationRoot(paths: RuntimePaths, destination: string): string {
+  return path.join(paths.home, ".mindframe-z", "thread-destinations", destination);
+}
+
+export function threadPath(paths: RuntimePaths, slug: string): string {
+  return path.join(threadStoreRoot(paths), slug);
+}
+
+export function threadRunsRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "thread-runs", "runs");
+}
+
+export function threadRunPath(paths: RuntimePaths, runId: string): string {
+  return path.join(threadRunsRoot(paths), runId);
+}
+
+export function threadCliLogPath(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "thread-runs", "cli.log");
 }
 
 export function dedupe<T>(items: readonly T[]): T[] {

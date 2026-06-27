@@ -1,0 +1,17 @@
+FROM debian:12-slim
+
+RUN useradd --create-home --home-dir /home/sandbox sandbox \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl jq sqlite3 \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /home/sandbox/.claude /home/sandbox/.config/opencode /home/sandbox/.local/share/opencode \
+  && chown -R sandbox:sandbox /home/sandbox
+
+USER sandbox
+WORKDIR /home/sandbox
+ENV PATH="/home/sandbox/.local/bin:/home/sandbox/.claude/local:/home/sandbox/.opencode/bin:${PATH}"
+
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.195 \
+  && curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path --version 1.17.11
+
+COPY --chown=sandbox:sandbox src/thread/opencode.thread.json /home/sandbox/.config/opencode/opencode.json

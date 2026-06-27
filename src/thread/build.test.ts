@@ -1,0 +1,71 @@
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { createRuntimePaths } from "../core/paths.js";
+import { makeTempDir } from "../../tests/integration/support.js";
+import {
+  ensureThreadToolsImage,
+  threadToolsBuildHashLabel,
+  threadToolsImageBuildPlan
+} from "./build.js";
+
+async function writeThreadImageFixture(root: string): Promise<void> {
+  await mkdir(path.join(root, "src", "thread"), { recursive: true });
+  await writeFile(path.join(root, "Dockerfile.tools"), "FROM scratch\n", "utf8");
+  await writeFile(path.join(root, "src", "thread", "opencode.thread.json"), "{}\n", "utf8");
+}
+
+describe("thread tools image build", () => {
+  it("hashes the Dockerfile and container OpenCode config", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeThreadImageFixture(root);
+
+    const first = await threadToolsImageBuildPlan(createRuntimePaths({ root, home }));
+    await writeFile(
+      path.join(root, "src", "thread", "opencode.thread.json"),
+      '{"changed":true}\n',
+      "utf8"
+    );
+    const second = await threadToolsImageBuildPlan(createRuntimePaths({ root, home }));
+
+    expect(first.hash).not.toBe(second.hash);
+    expect(first.label).toBe(`${threadToolsBuildHashLabel}=${first.hash}`);
+  });
+
+  it("skips current images and builds stale images", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeThreadImageFixture(root);
+    const plan = await threadToolsImageBuildPlan(createRuntimePaths({ root, home }));
+    const binDir = path.join(home, "bin");
+    const logFile = path.join(home, "docker.log");
+    await mkdir(binDir, { recursive: true });
+    const docker = path.join(binDir, "docker");
+    await writeFile(
+      docker,
+      [
+        "#!/usr/bin/env sh",
+        `printf '%s\n' "$@" >> ${JSON.stringify(logFile)}`,
+        `if [ "$1" = image ]; then printf '%s\n' ${JSON.stringify(plan.hash)}; fi`,
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await chmod(docker, 0o755);
+
+    const oldPath = process.env.PATH;
+    process.env.PATH = `${binDir}:${oldPath ?? ""}`;
+    try {
+      await expect(ensureThreadToolsImage(plan)).resolves.toBe("current");
+      await expect(ensureThreadToolsImage(plan, { force: true })).resolves.toBe("built");
+    } finally {
+      process.env.PATH = oldPath;
+    }
+
+    const log = await readFile(logFile, "utf8");
+    expect(log).toContain("image\ninspect");
+    expect(log).toContain("build\n-t\nmindframe-z-thread-tools:latest");
+    expect(log).toContain(`--label\n${threadToolsBuildHashLabel}=${plan.hash}`);
+  });
+});

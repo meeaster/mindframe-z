@@ -98,6 +98,50 @@ const agentTaskSchema = z.object({
 
 export type AgentTaskConfig = z.infer<typeof agentTaskSchema>;
 
+export const threadHarnessSchema = z.enum(["claude-code", "opencode"]);
+
+// Bounded identifier for thread slugs and destination names: lowercase alnum
+// start, then alnum plus . _ - — no path separators, no leading dot. The
+// leading-alnum rule already excludes bare "." / ".." and any "/" or "\".
+export const threadIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(
+    /^[a-z0-9][a-z0-9._-]*$/,
+    "must be lowercase alphanumeric with . _ - and no path separators"
+  );
+
+export const threadDestinationSchema = z.object({
+  name: threadIdentifierSchema,
+  remote: z.string().optional(),
+  no_push: z.boolean().default(false),
+  default: z.boolean().default(false)
+});
+
+export const threadDefaultsSchema = z.object({
+  discover: z.string().optional(),
+  gather: z.string().optional(),
+  synthesize: z.string().optional(),
+  // Optional through parse/merge so an omitting child inherits the parent value
+  // instead of clobbering it with an auto-filled default. Defaulted at point of
+  // use in `resolveSessionSources`.
+  session_sources: z.array(threadHarnessSchema).optional()
+});
+
+const profileThreadSchema = z
+  .object({
+    destinations: z.array(threadDestinationSchema).default([]),
+    defaults: threadDefaultsSchema.default({})
+  })
+  .default({ destinations: [], defaults: {} });
+
+const machineThreadSchema = z
+  .object({
+    destinations: z.array(threadDestinationSchema).default([])
+  })
+  .default({ destinations: [] });
+
 const opencodeConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   plugins: z.array(z.string()).default([]),
@@ -141,6 +185,7 @@ export const profileSchema = z
         settings: z.record(z.string(), z.unknown()).default({})
       })
       .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
+    thread: profileThreadSchema,
     dotfiles: z.record(z.string(), z.string()).default({}),
     extra_folders: z.array(extraFolderSchema).default([])
   })
@@ -164,6 +209,7 @@ export const machineSchema = z.object({
       credentials: sandboxCredentialModeSchema.optional()
     })
     .default({}),
+  thread: machineThreadSchema,
   opencode: z.record(z.string(), z.unknown()).default({})
 });
 
@@ -176,6 +222,9 @@ export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
 export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
+export type ThreadDestination = z.infer<typeof threadDestinationSchema>;
+export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
+export type ThreadHarness = z.infer<typeof threadHarnessSchema>;
 
 export interface LoadedManifests {
   references: ReferenceEntry[];
@@ -298,6 +347,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         extra_folders: [],
         git: {},
         sandbox: {},
+        thread: { destinations: [] },
         opencode: {}
       })
     : {
@@ -305,6 +355,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         extra_folders: [],
         git: {},
         sandbox: {},
+        thread: { destinations: [] },
         opencode: {}
       };
   const profileMap = new Map<string, ProfileManifest>();
@@ -331,6 +382,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
+        thread: { destinations: [], defaults: {} },
         dotfiles: {},
         extra_folders: [],
         description: ""

@@ -14,6 +14,19 @@ references:
   - just-bash
   - executor
   - mattpocock-skills
+thread:
+  destinations:
+    - name: personal
+      default: true
+    - name: testing
+      remote: git@github.com:meeaster/thread-testing.git
+  defaults:
+    synthesize: opencode:opencode-go/deepseek-v4-pro@max
+    gather: opencode:opencode-go/deepseek-v4-flash@max
+    discover: opencode:opencode-go/deepseek-v4-flash@max
+    session_sources:
+      - claude-code
+      - opencode
 skills:
   agent-browser:
     enabled: true
@@ -27,7 +40,7 @@ skills:
     enabled: false
   opencode-sessions:
     enabled: true
-  thread-log:
+  threads:
     enabled: true
   openspec-apply-change:
     enabled: true

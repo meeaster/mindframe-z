@@ -10,16 +10,24 @@ description: Use when the user wants to read or analyze OpenCode sessions — fi
 ## Read-only
 
 - Run only `SELECT` (and read-only PRAGMAs). Never `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, or `VACUUM` unless the user explicitly asks.
-- If you genuinely need `sqlite3` directly, operate on a copy, never the live file.
+- For a database you don't own — a copy, a backup, or another machine's file — open it read-only with `sqlite3` (see below) so you can't write it even by mistake.
 - Don't surface secrets or private transcript content beyond what answers the question.
 
-## Locate and discover schema
+## Locate the database and pick a read path
 
 ```bash
 opencode db path
 ```
 
 `opencode db "<SQL>"` runs one query and exits; with no query it opens an interactive `sqlite3` shell. It takes **SQL, not sqlite dot commands** — `.tables` and `.schema` error; use `sqlite_master`. Pass `--format json` for structured output (default is `tsv`).
+
+`opencode db` only ever reaches **the standard local store**, and it opens the file **read-write** — it sets WAL mode and applies pending migrations on every open. So use it only for this machine's own live database. For a database in a **non-standard location** — a copy, a backup, a mounted volume, or another machine's or version's file — read it directly with `sqlite3`, so a version mismatch or a migration can't mutate it:
+
+```bash
+sqlite3 -json 'file:/path/to/opencode.db?mode=ro' "SELECT ..."
+```
+
+`sqlite3` takes the same SQL — only the locator and the `-json` flag differ from `opencode db`. Use `?mode=ro` for a normal file; use `?immutable=1` when the file is on a read-only filesystem or is a standalone snapshot without its `-wal`/`-shm` sidecars.
 
 The schema changes between OpenCode versions. Verify it live before trusting any column below:
 

@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "thread-readonly": {
+      "permission": {
+        "bash": {
+          "jq *": "allow",
+          "sqlite3 *": "allow"
+        },
+        "edit": "deny",
+        "write": "deny",
+        "list": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "read": "allow",
+        "task": "deny",
+        "todowrite": "deny",
+        "webfetch": "deny",
+        "websearch": "deny"
+      }
+    }
+  }
+}

@@ -68,7 +68,7 @@ Data that must not be stored:
 
 - The on-disk layout shifts between Claude Code versions; confirm files and fields live before relying on them.
 - The project-dir encoding is lossy (`/`, `.`, `_` all collapse to `-`), so the encoded name is not invertible — always glob and confirm against `cwd`.
-- Subagent depth is the caller's call: input/output sit cheaply in the parent transcript, while the full nested trace (`agent-*.jsonl`) is large and read only when the question is about *how* the subagent worked.
+- Subagent depth is the caller's call: input/output sit cheaply in the parent transcript, while the full nested trace (`agent-*.jsonl`) is large and read only when the question is about _how_ the subagent worked.
 
 ## Maintenance Notes
 

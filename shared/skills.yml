@@ -92,10 +92,22 @@ skills:
     source: local
     skill: thread-log
     description: >
-      Read, create, or update a thread-log — a cited, append-only record of work spanning many Claude Code
-      and OpenCode sessions, with a regenerated current-state digest. Use when the user asks to continue,
-      resume, or catch up on prior multi-session work, references an existing thread, or asks to start or
-      update a thread-log.
+      Hand-orchestrated thread-log workflow — read, create, or update a thread-log via subagents directly,
+      the pre-CLI path kept working alongside the `mfz thread` system. User-invoked.
+  - name: threads
+    source: local
+    skill: threads
+    description: >
+      Operate threads with the `mfz thread` CLI — load a thread's digest into context, or build and refresh
+      one by discovering and ingesting sessions. Use when the user references an existing thread, wants to
+      resume or catch up on prior multi-session work, or wants to ingest sessions into a thread.
+  - name: thread-contract
+    source: local
+    skill: thread-contract
+    description: >
+      The artifact contract for thread synthesis — the bucket taxonomy, citation form, and the exact shape
+      of a thread session file and of the current-state digest. Use when writing a thread session file from
+      a dossier or regenerating a thread digest from session files.
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills

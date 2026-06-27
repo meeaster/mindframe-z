@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "charter": {
+      "type": "string",
+      "minLength": 1
+    },
+    "destination": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessions": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "claude-code",
+              "opencode"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "extracted_by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source"
+        ]
+      }
+    },
+    "synthesis": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "discover": {
+          "type": "string"
+        },
+        "gather": {
+          "type": "string"
+        },
+        "synthesize": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "slug",
+    "charter",
+    "destination",
+    "created_at"
+  ]
+}

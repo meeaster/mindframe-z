@@ -80,6 +80,16 @@ Git identity is machine-local. During apply, mindframe-z writes `~/.mindframe-z/
 3. **Prompt or assign** — for each unmanaged key, prompt the user to assign it to `base` or the current profile (or skip). Can be automated with `--profile`.
 4. **Write back** — update the target `profile.yml` or `mise.toml` with the new key.
 
+### Threads (sessions → durable thread logs)
+
+`mfz thread` is a CLI-driven orchestration surface for cross-session thread logs. It is separate from rendering and does not require `mfz apply`: commands resolve the active profile and machine config at runtime, compose `thread.destinations`, and read/write thread state under `~/.mindframe-z/threads/`.
+
+Thread destinations are per-destination git working copies at `~/.mindframe-z/threads/<destination>/`; each thread lives under `<slug>/`. Profile config can declare public defaults, while machine config can add or override private destinations. A thread's `manifest.json` stores the charter, pinned destination, session membership, watermarks, and synthesis overrides. `runs.json` stores the durable append-only ingest ledger and travels with the thread repository.
+
+Dispatch uses `src/thread/runner.ts`, a lightweight `docker run --rm -i` runner separate from `mfz sandbox`. Claude Code runs as `claude -p --output-format stream-json`; OpenCode runs as `opencode run --format json` with a container-provided readonly agent config. Dispatch agents return text; TypeScript performs all disk writes. The synthesizer/digest artifact contract lives in `src/thread/contract.ts` and is injected into container prompts instead of being shipped as a normal profile skill.
+
+Operational state is machine-local: `~/.mindframe-z/threads/runs/<run-id>/status.json`, raw JSONL traces, dossier snapshots, and `~/.mindframe-z/threads/cli.log` are not pushed to destination repositories. `mfz thread runs` reads run folders for cross-thread live/crashed state, while `mfz thread runs --thread <slug>` reads the durable per-thread ledger.
+
 ## Directory Structure
 
 ```
@@ -127,6 +137,7 @@ mindframe-z/
 │   ├── renderers/             # Target-specific config generators (opencode, claude, mise, dotfiles)
 │   ├── sync/                  # Bidirectional sync: detect drift and promote to profiles
 │   ├── sandbox/               # Sandbox credential-mode and secrets-path helpers
+│   ├── thread/                # Thread storage, runner, CLI orchestration, and observability
 │   ├── ref-store/             # Git clone/update references, write reference index
 │   ├── skills/                # npx skills adapter
 │   └── cli/mfz.ts             # CLI: apply, doctor, status, sync, skills, refs
@@ -209,6 +220,7 @@ Features from the design that are not yet implemented:
 - Work overlay as a separate company-owned repository
 - `diff-runtime` command
 - Project-level `.claude/` and `.mcp.json` generation
+- Thread relationships, grouping, ChatGPT ingestion, eval suite, MCP/UI automation, and cross-machine session refresh
 
 ## Description Convention
 

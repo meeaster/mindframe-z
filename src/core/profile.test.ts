@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { profileSchema } from "./manifests.js";
+import { mergeProfiles } from "./profile.js";
+
+describe("mergeProfiles thread defaults", () => {
+  // Regression for the default-before-inheritance trap: `session_sources` used to
+  // carry an auto-filled default on every parsed profile, so a child that omitted
+  // it silently clobbered the parent's intentional value during the spread merge.
+  it("inherits session_sources when the child omits it", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      thread: { defaults: { session_sources: ["claude-code"] } }
+    });
+    const child = profileSchema.parse({ name: "child", extends: "base" });
+
+    expect(child.thread.defaults.session_sources).toBeUndefined();
+
+    const merged = mergeProfiles(base, child);
+    expect(merged.thread.defaults.session_sources).toEqual(["claude-code"]);
+  });
+
+  it("lets a child override session_sources when it sets its own", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      thread: { defaults: { session_sources: ["claude-code"] } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      thread: { defaults: { session_sources: ["opencode"] } }
+    });
+
+    expect(mergeProfiles(base, child).thread.defaults.session_sources).toEqual(["opencode"]);
+  });
+});
