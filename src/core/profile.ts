@@ -34,6 +34,7 @@ export interface ResolvedProfile {
   enabledReferences: ReferenceEntry[];
   enabledSkills: ResolvedSkill[];
   enabledCommands: string[];
+  enabledAgents: string[];
   mcpServers: ResolvedMcpServer[];
   extraFolders: ExtraFolder[];
 }
@@ -88,6 +89,7 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
       config: deepMerge(base.opencode.config, child.opencode.config),
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
+      agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
       agent_task: child.opencode.agent_task ?? base.opencode.agent_task
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
@@ -155,6 +157,7 @@ export async function resolveProfile(
     })
     .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
+  const enabledAgents = dedupe(profile.opencode.agents);
   const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled, targets }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
@@ -180,6 +183,7 @@ export async function resolveProfile(
     enabledReferences,
     enabledSkills,
     enabledCommands,
+    enabledAgents,
     mcpServers,
     extraFolders
   };

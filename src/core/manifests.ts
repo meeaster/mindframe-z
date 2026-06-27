@@ -102,6 +102,7 @@ const opencodeConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
+  agents: z.array(z.string()).default([]),
   agent_task: agentTaskSchema.optional()
 });
 
@@ -120,7 +121,12 @@ export const profileSchema = z
       )
       .default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
-    opencode: opencodeConfigSchema.default({ config: {}, plugins: [], commands: [] }),
+    opencode: opencodeConfigSchema.default({
+      config: {},
+      plugins: [],
+      commands: [],
+      agents: []
+    }),
     claude: z
       .object({
         model: z.string().optional(),
@@ -322,7 +328,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         references: [],
         skills: {},
         mcp: {},
-        opencode: { config: {}, plugins: [], commands: [] },
+        opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         dotfiles: {},
