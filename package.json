@@ -15,8 +15,18 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "schemas": "tsx src/core/generate-schemas.ts",
-    "test": "vitest run",
-    "test:integration": "vitest run tests/integration"
+    "test": "vitest run src opencode",
+    "test:all": "vitest run",
+    "test:apply": "vitest run tests/integration/apply.test.ts",
+    "test:doctor": "vitest run tests/integration/doctor.test.ts",
+    "test:dotfiles": "vitest run tests/integration/dotfiles.test.ts",
+    "test:integration": "vitest run tests/integration",
+    "test:mise": "vitest run tests/integration/mise.test.ts",
+    "test:plugins": "vitest run opencode",
+    "test:refs": "vitest run tests/integration/refs.test.ts",
+    "test:sandbox": "vitest run src/sandbox tests/integration/sandbox.test.ts",
+    "test:skills": "vitest run src/skills src/tui tests/integration/skills.test.ts tests/integration/skills-profile.test.ts",
+    "test:thread": "vitest run src/thread"
   },
   "dependencies": {
     "@clack/core": "1.4.2",

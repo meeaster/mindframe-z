@@ -6,16 +6,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRuntimePaths } from "../../src/core/paths.js";
 import { resolveProfile } from "../../src/core/profile.js";
 import { runSkillsTui } from "../../src/tui/skills-tui.js";
-import { cli, makeTempDir, sink, writeFixture } from "./support.js";
+import { cli, makeTempDir, setupIntegrationFixture, sink } from "./support.js";
 
 describe("skill CLI integration", () => {
   let root: string;
   let home: string;
 
   beforeEach(async () => {
-    root = await makeTempDir();
-    home = await makeTempDir();
-    await writeFixture(root, home);
+    ({ root, home } = await setupIntegrationFixture());
   });
 
   afterEach(() => {

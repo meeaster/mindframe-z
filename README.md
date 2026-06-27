@@ -13,12 +13,17 @@ pnpm dev -- doctor
 pnpm dev -- apply --profile personal --target all --dry-run
 pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
 pnpm dev -- refs list
+pnpm dev -- thread destinations
 mfz doctor
 ```
 
 By default, commands use `--root <path>`, `MFZ_ROOT`, `repo_path` from `~/.mindframe-z/config.yml`, then the current directory as the config root. Set `repo_path` when using the globally linked `mfz` command from outside this repository.
 
 `~/.mindframe-z/config.yml` may declare `extra_folders` for local directories agents should know about outside the workspace. `mfz apply` writes `~/.mindframe-z/extra_folders.md`, adds it to rendered agent instructions, grants OpenCode/Claude read access, and renders edit permissions from each entry. The configured `references_dir` is always readable by agents and edit-denied by default.
+
+`mfz thread` manages cross-session thread logs outside the public config repo. Destinations are resolved from profile and machine config at command time and stored under `~/.mindframe-z/threads/<destination>/<slug>/`. Use `mfz thread create <slug> --dest <destination> --charter "<lens>"`, `mfz thread discover "<prompt>"`, `mfz thread ingest <ids...> --thread <slug>`, `mfz thread list`, `mfz thread show <slug>`, `mfz thread runs`, and `mfz thread destinations`. Read commands default to condensed text and accept `--json` where structured output is useful.
+
+Thread ingestion uses a separate tools container (`Dockerfile.tools`) to run Claude Code or OpenCode headlessly. Agents are read-only text returners; TypeScript writes `manifest.json`, session files, `log.md`, `digest.md`, and `runs.json`. Raw traces and `cli.log` stay machine-local under `~/.mindframe-z/threads/`.
 
 Integration tests use temporary directories and do not touch `~/.config/opencode` or `~/.claude`.
 

@@ -123,7 +123,8 @@
       "default": {
         "config": {},
         "plugins": [],
-        "commands": []
+        "commands": [],
+        "agents": []
       },
       "type": "object",
       "properties": {
@@ -143,6 +144,13 @@
           }
         },
         "commands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agents": {
           "default": [],
           "type": "array",
           "items": {
@@ -289,6 +297,69 @@
             "type": "string"
           },
           "additionalProperties": {}
+        }
+      }
+    },
+    "thread": {
+      "default": {
+        "destinations": [],
+        "defaults": {}
+      },
+      "type": "object",
+      "properties": {
+        "destinations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "remote": {
+                "type": "string"
+              },
+              "no_push": {
+                "default": false,
+                "type": "boolean"
+              },
+              "default": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "defaults": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "discover": {
+              "type": "string"
+            },
+            "gather": {
+              "type": "string"
+            },
+            "synthesize": {
+              "type": "string"
+            },
+            "session_sources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "claude-code",
+                  "opencode"
+                ]
+              }
+            }
+          }
         }
       }
     },

@@ -9,13 +9,16 @@ import {
   refsManifestSchema,
   skillsManifestSchema
 } from "./manifests.js";
+import { threadManifestSchema, threadRunsSchema } from "../thread/schema.js";
 
 const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
   { schema: refsManifestSchema, filename: "refs.schema.json" },
   { schema: skillsManifestSchema, filename: "skills.schema.json" },
   { schema: mcpManifestSchema, filename: "mcp.schema.json" },
   { schema: profileSchema, filename: "profile.schema.json" },
-  { schema: machineSchema, filename: "machine.schema.json" }
+  { schema: machineSchema, filename: "machine.schema.json" },
+  { schema: threadManifestSchema, filename: "thread-manifest.schema.json" },
+  { schema: threadRunsSchema, filename: "thread-runs.schema.json" }
 ];
 
 export async function generateSchemas(root = process.cwd()): Promise<string[]> {

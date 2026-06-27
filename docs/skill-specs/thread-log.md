@@ -52,7 +52,7 @@ Per thread at `~/.claude/threads/<slug>/`. Exact file shapes are the contract in
 
 - `manifest.json` — **charter** (scope + the criterion the confirm step judges candidates against, stating out-of-scope explicitly), a two-state membership ledger (`sessions[]` included, each with a `high_water` offset for extraction idempotency; `excluded[]` rejected with a reason, for membership idempotency), and `runs[]`, the append-only per-invocation telemetry (model, wall-clock duration, turns, token usage, cost) — the thread's one place for run/process facts. Shape in `manifest.schema.json`.
 - `sessions/<id>.md` — the authored per-session extraction, the single source of truth. Slim provenance frontmatter (`title`, `thread_relevance`, `gaps`, `extracted_by` as `<model>-<version> <effort>`) over the bucket schema, every line cited.
-- `log.md` — regenerated whole each run: the five *event* buckets merged into one flat, strictly timestamp-ordered stream, every line tagged and cited. Supersessions surface as later events, never in-place edits.
+- `log.md` — regenerated whole each run: the five _event_ buckets merged into one flat, strictly timestamp-ordered stream, every line tagged and cited. Supersessions surface as later events, never in-place edits.
 - `digest.md` — regenerated whole each run from the session files: current state, optional ASCII design diagram, key decisions (supersession-pruned), open questions, Intent, Vision, Direction, and Sources. Stable section skeleton with explicit "None" for empty content sections; no process/meta narration.
 
 ## Validation

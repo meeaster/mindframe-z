@@ -64,7 +64,7 @@ export function deepMerge(
   return result;
 }
 
-function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileManifest {
+export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileManifest {
   const dotfiles: Record<string, string> = { ...base.dotfiles };
   for (const [key, value] of Object.entries(child.dotfiles)) {
     dotfiles[key] = key in dotfiles ? dotfiles[key] + "\n" + value : value;
@@ -101,6 +101,15 @@ function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileMa
       env: { ...base.mise.env, ...child.mise.env },
       tool_alias: { ...base.mise.tool_alias, ...child.mise.tool_alias },
       settings: { ...base.mise.settings, ...child.mise.settings }
+    },
+    thread: {
+      destinations: (() => {
+        const map = new Map<string, ProfileManifest["thread"]["destinations"][number]>();
+        for (const destination of base.thread.destinations) map.set(destination.name, destination);
+        for (const destination of child.thread.destinations) map.set(destination.name, destination);
+        return [...map.values()];
+      })(),
+      defaults: { ...base.thread.defaults, ...child.thread.defaults }
     },
     dotfiles
   };

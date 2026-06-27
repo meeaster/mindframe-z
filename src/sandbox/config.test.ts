@@ -32,6 +32,7 @@ function machine(credentials?: "bedrock" | "subscription"): MachineManifest {
     extra_folders: [],
     git: {},
     sandbox: credentials ? { credentials } : {},
+    thread: { destinations: [] },
     opencode: {}
   };
 }

@@ -40,6 +40,17 @@ import { runSync } from "../sync/index.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
 import { runSeedOpenai } from "../sandbox/seed-openai.js";
+import {
+  runThreadCreate,
+  runThreadDelete,
+  runThreadDestinations,
+  runThreadDiscover,
+  runThreadIngest,
+  runThreadList,
+  runThreadRuns,
+  runThreadShow,
+  runThreadSync
+} from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 
@@ -330,6 +341,119 @@ sandbox
   .command("seed-openai")
   .description("Seed the opencode ChatGPT OAuth credential (auto-refreshing) into the broker")
   .action(async () => runSeedOpenai(program.opts()));
+
+const thread = program
+  .command("thread")
+  .description("Create, ingest, read, and inspect thread logs");
+
+thread
+  .command("destinations")
+  .description("List resolved thread destinations")
+  .option("--json", "emit structured JSON")
+  .action(async (options) =>
+    runThreadDestinations({ ...program.opts(), json: Boolean(options.json) })
+  );
+
+thread
+  .command("create")
+  .description("Create a deterministic thread manifest")
+  .argument("<slug>", "thread slug")
+  .requiredOption("--charter <charter>", "synthesis lens for the thread")
+  .option("--dest <destination>", "thread destination")
+  .option("--discover-model <id>", "discover model (harness:model@effort)")
+  .option("--gather-model <id>", "gather model (harness:model@effort)")
+  .option("--synthesize-model <id>", "synthesize model (harness:model@effort)")
+  .action(async (slug, options) =>
+    runThreadCreate(slug, {
+      ...program.opts(),
+      dest: options.dest,
+      charter: options.charter,
+      discover: options.discoverModel,
+      gather: options.gatherModel,
+      synthesize: options.synthesizeModel
+    })
+  );
+
+thread
+  .command("discover")
+  .description("Find candidate sessions matching a prompt")
+  .argument("<prompt>", "free-text session search prompt")
+  .option("--model <id>", "model (harness:model@effort)")
+  .option("--sources <sources>", "comma-separated session sources: claude-code,opencode")
+  .option("--json", "emit structured JSON")
+  .action(async (prompt, options) =>
+    runThreadDiscover(prompt, {
+      ...program.opts(),
+      json: Boolean(options.json),
+      discover: options.model,
+      sources: options.sources?.split(",").map((s) => s.trim())
+    })
+  );
+
+thread
+  .command("ingest")
+  .description("Ingest sessions into an existing thread")
+  .argument("<ids...>", "session ids")
+  .requiredOption("--thread <slug>", "thread slug")
+  .option("--no-push", "commit locally without pushing")
+  .option("--gather-model <id>", "gather model (harness:model@effort)")
+  .option("--synthesize-model <id>", "synthesize model (harness:model@effort)")
+  .action(async (ids, options) =>
+    runThreadIngest(ids, {
+      ...program.opts(),
+      thread: options.thread,
+      noPush: !options.push,
+      gather: options.gatherModel,
+      synthesize: options.synthesizeModel
+    })
+  );
+
+thread
+  .command("list")
+  .description("List known threads")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runThreadList({ ...program.opts(), json: Boolean(options.json) }));
+
+thread
+  .command("show")
+  .description("Print a thread digest")
+  .argument("<slug>", "thread slug")
+  .action(async (slug) => runThreadShow(slug, program.opts()));
+
+thread
+  .command("runs")
+  .description("Inspect thread run state")
+  .argument("[run-id]", "run id")
+  .option("--thread <slug>", "show durable run ledger for one thread")
+  .option("--trace", "print raw trace for a run id")
+  .option("--json", "emit structured JSON")
+  .action(async (runId, options) =>
+    runThreadRuns({
+      ...program.opts(),
+      runId,
+      thread: options.thread,
+      trace: Boolean(options.trace),
+      json: Boolean(options.json)
+    })
+  );
+
+thread
+  .command("delete")
+  .description("Delete a thread locally and from its destination")
+  .argument("<slug>", "thread slug")
+  .option("--no-push", "commit deletion locally without pushing")
+  .action(async (slug, options) =>
+    runThreadDelete(slug, { ...program.opts(), noPush: !options.push })
+  );
+
+thread
+  .command("sync")
+  .description("Pull latest from thread destination remotes")
+  .argument("[slug...]", "thread slugs to sync")
+  .option("--all", "sync all thread destinations")
+  .action(async (slugs, options) =>
+    runThreadSync({ ...program.opts(), slugs, all: Boolean(options.all) })
+  );
 
 program
   .command("cc")

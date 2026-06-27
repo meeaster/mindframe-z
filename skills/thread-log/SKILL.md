@@ -1,6 +1,7 @@
 ---
 name: thread-log
-description: Read, create, or update a thread-log — a cited, append-only record of work spanning many Claude Code and OpenCode sessions, with a regenerated current-state digest. Use when the user asks to continue, resume, or catch up on prior multi-session work, references an existing thread, asks to start or update a thread-log, or asks to capture the current session into a thread.
+description: Hand-orchestrated thread-log workflow — read, create, or update a thread-log via subagents directly, the pre-CLI path kept working alongside the `mfz thread` system.
+disable-model-invocation: true
 ---
 
 # Thread-log

@@ -182,11 +182,7 @@ export async function renderOpenCode(
     configsOpencode,
     profile.enabledCommands
   );
-  const agentFiles = await collectAgentFiles(
-    paths.root,
-    configsOpencode,
-    profile.enabledAgents
-  );
+  const agentFiles = await collectAgentFiles(paths.root, configsOpencode, profile.enabledAgents);
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
     path.join(paths.home, ".mindframe-z", "references.md")

@@ -10,6 +10,15 @@ export async function makeTempDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-test-"));
 }
 
+// Fresh, isolated root + home temp dirs populated with the standard fixture. One
+// definition of "a fixture" so the integration suites don't drift apart.
+export async function setupIntegrationFixture(): Promise<{ root: string; home: string }> {
+  const root = await makeTempDir();
+  const home = await makeTempDir();
+  await writeFixture(root, home);
+  return { root, home };
+}
+
 export async function writeFixture(root: string, home?: string): Promise<void> {
   await mkdir(path.join(root, "shared"), { recursive: true });
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });

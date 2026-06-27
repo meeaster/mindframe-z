@@ -4,12 +4,22 @@
 
 ```sh
 pnpm build             # tsc -p tsconfig.json -> dist/
-pnpm test              # vitest run
+pnpm test              # fast source/plugin tests: src/ and opencode/
 pnpm test -- <file>    # focused Vitest run
-pnpm test:integration  # vitest run tests/integration
+pnpm test:all          # full Vitest suite, including integration
+pnpm test:integration  # integration suite only
+pnpm test:thread       # thread source tests
+pnpm test:sandbox      # sandbox source tests plus current sandbox CLI integration seams
+pnpm test:skills       # skills/TUI source tests plus skills CLI integration seams
+pnpm test:plugins      # OpenCode plugin tests
+pnpm test:apply        # broad apply/render/link CLI integration bucket
+pnpm test:doctor       # doctor/status manifest integration seams
+pnpm test:dotfiles     # dotfile/zsh/git identity integration seams
+pnpm test:mise         # mise integration seams
+pnpm test:refs         # reference integration seams
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
-pnpm check             # lint -> fmt:check -> build -> test
+pnpm check             # lint -> fmt:check -> build -> fast test
 pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
 pnpm dev -- doctor
 pnpm dev -- apply --profile personal --target all --dry-run
@@ -21,7 +31,9 @@ Use `pnpm dev -- ...` for source execution via `tsx`. The installed `mfz` binary
 
 ## Verification
 
-Use the narrowest command that proves the change while iterating. `pnpm check` is the full pre-merge gate; run it once at the end for broad changes, or skip it when its same parts (`pnpm lint`, `pnpm fmt:check`, `pnpm build`, `pnpm test`) have already passed after the final edit.
+Use the narrowest command that proves the change while iterating. Start with the matching focused command (`pnpm test:thread`, `pnpm test:sandbox`, `pnpm test:skills`, `pnpm test:plugins`, `pnpm test:dotfiles`, `pnpm test:mise`, or `pnpm test:refs`) plus `pnpm build` when types are affected. Use `pnpm check` for fast local confidence after a change. Use `pnpm test:integration` or `pnpm test:all` when touching broad CLI/apply/render behavior, shared integration support, or before handing off broad changes.
+
+Integration tests are split by feature file under `tests/integration/`. If a change crosses apply/render/profile seams, prefer `pnpm test:apply` or `pnpm test:integration` over a narrower feature script.
 
 When a verification command fails on unrelated existing issues, fix them if they are small and in-scope; otherwise report the exact failing command and diagnostics instead of ignoring the failure or rerunning unrelated suites.
 

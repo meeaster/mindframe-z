@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "runs": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "thread": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "finished_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sessions": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dispatches": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "discover",
+                    "gather",
+                    "synthesize",
+                    "digest"
+                  ]
+                },
+                "harness": {
+                  "type": "string",
+                  "enum": [
+                    "claude-code",
+                    "opencode"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "cost_usd": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "input_tokens": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "output_tokens": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reasoning_tokens": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "duration_ms": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "role",
+                "harness",
+                "model",
+                "cost_usd",
+                "input_tokens",
+                "output_tokens",
+                "reasoning_tokens",
+                "duration_ms"
+              ]
+            }
+          },
+          "total_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "thread",
+          "started_at",
+          "finished_at",
+          "total_cost_usd"
+        ]
+      }
+    }
+  }
+}
