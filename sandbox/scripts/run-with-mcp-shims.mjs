@@ -42,13 +42,13 @@ if (process.env.SANDBOX_MCP_BROKER_ENABLED !== "0" && fs.existsSync(brokerConfig
       ...server,
       type: server.type === "http" || server.type === "streamable-http" ? server.type : "remote",
       url: localUrl,
-      headers: { ...(server.headers ?? {}), Authorization: "PLACEHOLDER" },
+      headers: { ...server.headers, Authorization: "PLACEHOLDER" },
       oauth: false
     };
   }
 
   if (shims.length > 0) {
-    opencodeConfig.mcp = usesNestedServers ? { ...(opencodeConfig.mcp ?? {}), servers } : servers;
+    opencodeConfig.mcp = usesNestedServers ? { ...opencodeConfig.mcp, servers } : servers;
     const generatedConfig = `${JSON.stringify(opencodeConfig, null, 2)}\n`;
     fs.writeFileSync(generatedOpencodeConfigPath, generatedConfig, { mode: 0o600 });
     if (!process.env.OPENCODE_CONFIG_CONTENT) {
