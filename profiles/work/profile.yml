@@ -3,6 +3,8 @@ extends: base
 description: Work AI setup using OpenAI models.
 agents: [opencode, claude-code]
 skills:
+  confluence-writer:
+    enabled: true
   jira-writer:
     enabled: true
   pr-writer:

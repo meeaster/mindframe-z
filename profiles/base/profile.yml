@@ -26,6 +26,8 @@ skills:
     enabled: false
   opencode-sessions:
     enabled: true
+  thread-log:
+    enabled: true
   openspec-apply-change:
     enabled: true
     toggleable: false

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "thread-log manifest",
+  "description": "Charter and membership ledger for one thread-log at ~/.claude/threads/<slug>/manifest.json",
+  "type": "object",
+  "required": ["slug", "title", "charter", "sessions", "excluded"],
+  "properties": {
+    "slug": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "charter": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What this thread is and is not. Both the human-readable scope and the criterion the confirm step judges new candidates against. State out-of-scope explicitly."
+    },
+    "read_subagents": {
+      "type": "boolean",
+      "default": false,
+      "description": "Floor for subagent extraction depth. true reads the full nested subagent transcripts (subagents/agent-*.jsonl) for every session; false (default) reads only the parent's Agent input/output, keeping domain threads cheap. Set true for meta/process/skill-usage threads where HOW the work was done — which skills a subagent loaded, its tool sequence, querying efficiency — is the subject. Regardless of this floor, a session that exercises a skill reads deep — see INGEST.md worker step 4."
+    },
+    "sessions": {
+      "type": "array",
+      "description": "Approved members. Each is extracted into log.md up to its high_water offset.",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "high_water"],
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string", "enum": ["claude-code", "opencode"] },
+          "project": { "type": "string", "description": "Real project path (Claude Code) or directory (OpenCode)." },
+          "title": { "type": "string" },
+          "time_range": { "type": "string", "description": "First/last activity, for human scanning." },
+          "high_water": {
+            "description": "Last ingested offset, written ONLY by the worker after it reads to this point (the plan phase leaves it unset on new members). Claude Code: timestamp or record count. OpenCode: time_updated or message count. Re-runs read only past this point.",
+            "type": ["integer", "string"]
+          }
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "description": "Sessions ruled out of the thread. Kept so they never return to the approval gate.",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "reason"],
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string", "enum": ["claude-code", "opencode"] },
+          "title": { "type": "string" },
+          "reason": { "type": "string", "description": "Why it was rejected — e.g. 'cost work, separate thread'." }
+        }
+      }
+    },
+    "runs": {
+      "type": "array",
+      "description": "Telemetry ledger, one entry per worker invocation. The plan phase appends an entry after the worker returns, reading from the headless JSON result (the worker cannot see its own billed cost or duration). Append-only; the thread's one place for run/process facts, tracked over time.",
+      "items": {
+        "type": "object",
+        "required": ["at", "mode", "sessions", "model", "duration_ms", "num_turns", "usage", "cost_usd"],
+        "properties": {
+          "at": { "type": "string", "description": "ISO-8601 UTC timestamp of the run." },
+          "mode": { "type": "string", "enum": ["full-refresh", "incremental", "capture-self"] },
+          "sessions": { "type": "array", "items": { "type": "string" }, "description": "Session ids processed in this run (the work-list)." },
+          "model": { "type": "string", "description": "Synthesizer model and effort the worker ran with, format <model>-<version> <effort> (e.g. 'opus-4.8 high'). Taken from the --model/--effort the plan phase launched with, not the JSON result." },
+          "duration_ms": { "type": "integer", "description": "Wall-clock run duration from the headless JSON result's duration_ms — how long the worker ran." },
+          "num_turns": { "type": "integer", "description": "Number of turns the worker took, from the headless JSON result." },
+          "usage": {
+            "type": "object",
+            "description": "Token usage from the headless JSON result. Reveals WHY a run was expensive (a cache_read blowup is the failure the slim-runtime design fights) where cost_usd alone hides it.",
+            "properties": {
+              "input": { "type": "integer" },
+              "output": { "type": "integer" },
+              "cache_read": { "type": "integer" },
+              "cache_creation": { "type": "integer" }
+            }
+          },
+          "cost_usd": { "type": "number", "description": "total_cost_usd from the worker's headless JSON result." }
+        }
+      }
+    }
+  }
+}

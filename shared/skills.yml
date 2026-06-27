@@ -62,13 +62,19 @@ skills:
     description: >
       Use when designing, redesigning, shaping, critiquing, auditing, polishing, clarifying, hardening, optimizing,
       adapting, animating, colorizing, extracting, or otherwise improving a frontend interface.
+  - name: confluence-writer
+    source: local
+    skill: confluence-writer
+    description: >
+      Draft, refine, and sync Confluence pages as local markdown, then publish to Confluence on approval. Use when
+      asked to write or update a Confluence page, turn a design or thread into a shareable doc, or publish a page for
+      the team to read.
   - name: jira-writer
     source: local
     skill: jira-writer
     description: >
-      Create clear, high-level Jira stories from notes, requirements, discovery, bug reports, or implementation ideas.
-      Use when drafting a Jira story, creating a Jira ticket, turning rough notes into Jira-ready work, or rewriting a
-      story so it is concise and actionable.
+      Draft, refine, and sync Jira stories as local markdown, then push to Jira on approval. Use when asked to write
+      or update a Jira story, turn notes or a bug into a ticket, or rewrite a story to read clearly.
   - name: mise
     source: local
     skill: mise
@@ -82,6 +88,14 @@ skills:
       Use when reading or analyzing OpenCode sessions — finding a past session, tracing its tool calls or subagents,
       reconstructing what happened — or otherwise querying OpenCode's local SQLite database (`opencode db`) for messages,
       projects, or todos.
+  - name: thread-log
+    source: local
+    skill: thread-log
+    description: >
+      Read, create, or update a thread-log — a cited, append-only record of work spanning many Claude Code
+      and OpenCode sessions, with a regenerated current-state digest. Use when the user asks to continue,
+      resume, or catch up on prior multi-session work, references an existing thread, or asks to start or
+      update a thread-log.
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills
@@ -152,13 +166,11 @@ skills:
       Verify a change is ready for implementation. Use when checking if all required artifacts are complete and the
       change can proceed to implementation.
   - name: pr-writer
-    source: git
-    repo: https://github.com/getsentry/skills
+    source: local
     skill: pr-writer
-    description:
-      Create and update pull requests following Sentry conventions. Use when opening a PR or refreshing an
-      existing PR after material changes.
-    installer: skills
+    description: >
+      Write or refresh a GitHub PR title and description, then create or update the PR with gh on approval. Use when
+      opening a PR, writing or rewriting a PR title/body, or refreshing one after the branch changed.
   - name: qmd
     source: git
     repo: https://github.com/tobi/qmd
