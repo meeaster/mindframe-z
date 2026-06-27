@@ -20,7 +20,7 @@ Configuration is organized in three conceptual layers:
 
 - **Catalog** (`shared/*.yml`) — what exists: available references, skills, and MCP servers.
 - **Profile** (`profiles/*/profile.yml`) — what a context wants: which catalog items are enabled, plus tool-specific settings.
-- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: repo path, active profile, references directory, extra local folders, machine-specific overrides.
+- **Machine** (`~/.mindframe-z/config.yml`) — what this computer actually enables: repo path, active profile, references directory, extra local folders, git identity, sandbox credential mode, and machine-specific overrides.
 
 This separation prevents any single manifest from trying to encode every concern. The catalog is shared across all profiles; profiles select from it; the machine decides which profile is active.
 
@@ -60,7 +60,7 @@ machine config ────┤               claude,       claude/              
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
    - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`; a managed `.zshrc` also sources local secret and machine-local customization files when they exist
 4. **Write files** — rendered content is written to `configs/<profile>/`. `extra_folders` also writes the machine-local `~/.mindframe-z/extra_folders.md` index. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
-5. **Write local merged files** — targets that preserve machine-local state write merged runtime files directly, without symlinks.
+5. **Write machine-local managed files** — apply writes host-local files that must not enter rendered profile config, including `~/.mindframe-z/gitconfig` from machine git identity and target-specific merged runtime files.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
 
 Claude Code `settings.json` is intentionally not symlinked. The rendered `configs/<profile>/claude/settings.json` contains only profile-managed settings and generated machine-folder permissions. During apply, mindframe-z reads the existing machine-local `~/.claude/settings.json`, deep-merges managed settings on top, and writes the merged result back as a regular local file. This keeps machine- or employer-managed Bedrock/AWS/telemetry settings out of the repository while still letting profiles manage portable Claude preferences.
@@ -70,6 +70,8 @@ Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The r
 Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.mindframe-z/.zshrc` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
 
 To migrate an existing `.zshrc`, move portable aliases, PATH setup, prompt selection, and shell framework configuration into `profiles/base/.zshrc` or a child profile `.zshrc`. Move secret exports such as API tokens to `~/.mindframe-z/secrets/zsh.env`, and move host-specific non-secret tweaks to `~/.mindframe-z/.zshrc`.
+
+Git identity is machine-local. During apply, mindframe-z writes `~/.mindframe-z/gitconfig` from `git.name` and `git.email` in machine config, then ensures `~/.gitconfig` contains a native `[include] path = ~/.mindframe-z/gitconfig` entry. Existing host git config is preserved; identity is not rendered into `configs/<profile>/` or profile manifests.
 
 ### Sync (tools → profiles)
 
@@ -186,7 +188,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `mise.tool_alias`   | Shallow merge — child overrides parent                 |
 | `dotfiles`          | Concatenate with newline separator for same key        |
 
-Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific inputs such as references directory, extra folders, and OpenCode permission overrides.
+Resolution order: `base` → child profile (e.g., `personal` extends `base`). Machine-level config (`~/.mindframe-z/config.yml`) does not merge into the profile — it selects which profile is active and provides machine-specific inputs such as references directory, extra folders, git identity, sandbox credential mode, and OpenCode permission overrides.
 
 ## Evolution from Original Design
 

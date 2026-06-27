@@ -50,6 +50,31 @@
         ]
       }
     },
+    "git": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        }
+      }
+    },
+    "sandbox": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "credentials": {
+          "type": "string",
+          "enum": [
+            "bedrock",
+            "subscription"
+          ]
+        }
+      }
+    },
     "opencode": {
       "default": {},
       "type": "object",
