@@ -149,10 +149,12 @@ export function resolveAgentDefault(
 }
 
 export function parseAvailableModels(output: string): Set<string> {
+  const ansiColorPattern = new RegExp(`${String.fromCharCode(27)}\\[\\d*;?\\d*m`, "g");
+
   return new Set(
     output
       .split("\n")
-      .map((item) => item.replace(/\u001b\[\d*;?\d*m/g, "").trim())
+      .map((item) => item.replace(ansiColorPattern, "").trim())
       .filter((item) => parseModel(item) !== null)
   );
 }

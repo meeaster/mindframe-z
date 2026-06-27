@@ -19,6 +19,12 @@ pnpm dev -- refs list
 
 Use `pnpm dev -- ...` for source execution via `tsx`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz` or `npm link` behavior.
 
+## Verification
+
+Use the narrowest command that proves the change while iterating. `pnpm check` is the full pre-merge gate; run it once at the end for broad changes, or skip it when its same parts (`pnpm lint`, `pnpm fmt:check`, `pnpm build`, `pnpm test`) have already passed after the final edit.
+
+When a verification command fails on unrelated existing issues, fix them if they are small and in-scope; otherwise report the exact failing command and diagnostics instead of ignoring the failure or rerunning unrelated suites.
+
 ## Architecture
 
 Read `ARCHITECTURE.md` before architectural changes; update it in the same change when architecture or architectural principles change.
