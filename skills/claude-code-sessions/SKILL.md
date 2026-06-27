@@ -5,7 +5,7 @@ description: Use when the user wants to read or analyze Claude Code sessions (Cl
 
 # Claude Code Sessions
 
-Claude Code stores sessions as **JSONL files** under `~/.claude` — there is no database or query CLI. Inspect them with file tools plus `jq`. Two rules govern every run: treat the files as **read-only**, and **outline before you read** — pull cheap summaries (`history.jsonl`, titles, tool counts) first and read full transcript slices only where the question needs them.
+Claude Code stores sessions as **JSONL files** under `~/.claude` — there is no database or query CLI. Always inspect them with `jq`, never the Read tool: a session transcript routinely exceeds Read's size cap, and `jq` slices out only the records you need. Two rules govern every run: treat the files as **read-only**, and **outline before you read** — pull cheap summaries (`history.jsonl`, titles, tool counts) first and slice full transcript records only where the question needs them.
 
 ## Read-only
 
@@ -53,6 +53,17 @@ jq -rc 'select(.project=="/abs/project/path") | {timestamp, display, sessionId}'
 ```
 
 Match by first-prompt phrase + recency. An explicit `sessionId` beats everything; `gitBranch` or an edited file breaks ties. Treat a slash-command first line (`/model`, `/resume`) as weak — those repeat across sessions.
+
+**Lead with the structural key, not phrase regexes.** The `project + tail -20` query above is already a near-complete index — scan that list by eye and match on recency (and a `/clear` boundary, a strong session delimiter). Phrase is a *tiebreaker within that list*, not the primary filter: do not iterate `jq` regexes hunting for a phrase, because the user's words rarely match the stored `display` text verbatim and each miss costs a round-trip. When the user gives a temporal locator ("the last session I did", "yesterday's"), recency alone usually resolves it in one query.
+
+**Find sessions that loaded a skill** — a skill load is a `Skill` tool_use with `.input.skill == "<name>"`, in the main transcript *or* a subagent's. Prompt-phrase search misses these (the load is a tool call, not user text). Scan both layers with one grep on the literal JSON, then confirm:
+
+```bash
+grep -rl '"skill":"<name>"' ~/.claude/projects/*/*.jsonl ~/.claude/projects/*/*/subagents/*.jsonl
+# a subagents/ hit means a SUBAGENT loaded it — map back to the parent session by the dir name
+```
+
+A `~/.claude/projects/<encoded>/<sid>/subagents/agent-*.jsonl` hit belongs to parent session `<sid>`. Also catch user-typed slash invocations (`/<name>`) in `history.jsonl` — those are separate from `Skill` tool loads, so union both when "used a skill" means either.
 
 **Identify a session file** — title and metadata without reading the body:
 
