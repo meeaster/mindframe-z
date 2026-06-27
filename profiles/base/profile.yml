@@ -10,6 +10,7 @@ references:
   - vercel-skills
   - agent-vault
   - ponytail
+  - ccstatusline
   - just-bash
   - executor
   - mattpocock-skills
@@ -49,6 +50,8 @@ skills:
   skill-writer:
     enabled: false
   writing-great-skills:
+    enabled: true
+  audit-ai-writing:
     enabled: true
   grill-with-docs:
     enabled: false
@@ -114,8 +117,12 @@ opencode:
   commands:
     - apply-spec
     - rmslop
+  agents:
+    - research
 extra_folders:
   - path: ~/.mindframe-z
     description: mindframe-z configuration and generated indexes — needed when looking up references, reading machine config, or inspecting extra folder permissions
   - path: ~/.agent/diagrams
     description: Agent diagram files and exports — needed for reviewing and updating local workflow diagrams
+  - path: ~/.claude/threads
+    description: Thread-log archives — per-thread session extractions, state digests, and logs for multi-session work; needed when resuming or reviewing past threads
