@@ -208,6 +208,13 @@ skills:
       capable model for understanding, judging, and specifying — then hands off execution. Use for full audits,
       quick hotspot scans, focused category audits, branch-scoped PR reviews, or generating actionable specs.
     installer: skills
+  - name: audit-ai-writing
+    source: local
+    skill: audit-ai-writing
+    description: >
+      Audits prose for the tells of AI-generated writing — puffery, weasel attributions,
+      negative parallelisms, the rule of three, AI vocabulary, and formatting tics. Use when
+      asked to review or audit writing for AI signs, de-slop a draft, or strip ChatGPT-isms.
   - name: agent-browser
     source: git
     repo: https://github.com/vercel-labs/agent-browser
