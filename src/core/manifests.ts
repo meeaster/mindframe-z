@@ -290,6 +290,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
         references_dir: "~/references",
         extra_folders: [],
+        git: {},
+        sandbox: {},
         opencode: {}
       })
     : {

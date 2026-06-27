@@ -59,6 +59,51 @@ Review MCP broker setup and vault seeding:
 
 See `docs/mcp-broker.md` for the MCP server taxonomy, default shim ports, vault layout, and static/OAuth seeding procedures.
 
+## mindframe-z Sandbox Flow
+
+Initialize broker infrastructure once per machine:
+
+```bash
+mfz sandbox init
+```
+
+The command creates `~/.mindframe-z/secrets/sandbox.env` with restricted permissions, starts the Agent Vault service, and prints the path to back up. It does not print generated secret values and does not fabricate provider credentials.
+
+Seed provider credentials separately after init. Add only the providers needed on the machine:
+
+- OpenAI or ChatGPT OAuth for opencode.
+- GitHub token for `GH_TOKEN` brokering.
+- Bedrock/AWS credentials on Bedrock machines.
+- Claude subscription OAuth credential on subscription machines.
+
+Use Agent Vault grants scoped to the `local-ai-dev-sandbox` vault; Agent Vault injects the real provider credential at egress time. The container only ever holds placeholders: `GH_TOKEN=PLACEHOLDER`, dummy opencode OAuth tokens, and — in subscription mode — a placeholder `~/.claude/.credentials.json` that keeps Claude Code in subscription-OAuth mode so it emits a real Bearer request the broker rewrites.
+
+### Seed the Claude subscription credential
+
+On a subscription machine (after a host `claude` login), run:
+
+```bash
+mfz sandbox seed-claude
+```
+
+This reads the host's `~/.claude/.credentials.json`, upserts a `bearer` service for `api.anthropic.com` in the `local-ai-dev-sandbox` vault, and uploads the OAuth access + refresh tokens as an **auto-refreshing** Agent Vault credential (using Claude Code's public OAuth token URL and client ID). Agent Vault validates the refresh token immediately and thereafter refreshes the access token itself — no manual re-seeding when it expires. The broker swaps only the `Authorization` header, leaving Claude Code's own `anthropic-beta` headers intact.
+
+Set `sandbox.credentials: subscription` in `~/.mindframe-z/config.yml` (or let detection pick Bedrock from machine-local Claude settings).
+
+> Note: Agent Vault's first refresh rotates the OAuth refresh token into the vault, which invalidates the copy in the host's `~/.claude/.credentials.json`. After seeding, run Claude through the sandbox; if you also use Claude Code directly on the host, re-run `/login` there (and `mfz sandbox seed-claude` again if you want to re-seed from the host).
+
+### Seed the opencode ChatGPT credential
+
+For opencode through ChatGPT/Codex OAuth (after a host ChatGPT login in opencode), run:
+
+```bash
+mfz sandbox seed-openai
+```
+
+This reads the host's `~/.local/share/opencode/auth.json`, upserts a `custom` service for `chatgpt.com` that injects `Authorization: Bearer {{ OPENAI_OAUTH }}` plus `ChatGPT-Account-Id: {{ OPENAI_ACCOUNT_ID }}`, sets the account-id credential, and uploads the OAuth access + refresh tokens as an **auto-refreshing** credential (opencode's public Codex token URL + client ID). The sandbox auto-seeds a placeholder opencode `auth.json` so opencode follows its Codex request path; the broker swaps the bearer token and account header.
+
+> Note: as with Claude, the first refresh rotates the opencode refresh token into the vault; re-run the host ChatGPT login in opencode if you also use it on the host.
+
 ## Credential Boundary
 
 The agent container should not mount host credential stores such as `~/.aws`, `~/.agent-vault`, `~/.claude`, or `~/.config/gh`. The launcher rejects configured reference mounts that point at known credential-store paths.

@@ -144,17 +144,16 @@ dotfiles. Persisted state SHALL be seeded with sanitized defaults when absent.
 #### Scenario: Claude Code state persists without host home mounts
 
 - **WHEN** the sandbox launches
-- **THEN** `.cache/sandbox-home/claude` is mounted at `/home/node/.claude` and
-  `.cache/sandbox-home/claude.json` is mounted at `/home/node/.claude.json`
+- **THEN** sandbox-owned Claude state is mounted at `/home/sandbox/.claude` and
+  sandbox-owned `.claude.json` is mounted at `/home/sandbox/.claude.json`
 
 #### Scenario: opencode state persists without host home mounts
 
 - **WHEN** the sandbox launches
-- **THEN** `.cache/sandbox-home/opencode-config` is mounted at
-  `/home/node/.config/opencode`, `.cache/sandbox-home/opencode-data` is mounted
-  at `/home/node/.local/share/opencode`, and
-  `.cache/sandbox-home/opencode-state` is mounted at
-  `/home/node/.local/state/opencode`
+- **THEN** sandbox-rendered opencode config is mounted read-only under
+  `/home/sandbox/.config/opencode`, sandbox-owned opencode data is mounted at
+  `/home/sandbox/.local/share/opencode`, and sandbox-owned opencode state is mounted at
+  `/home/sandbox/.local/state/opencode`
 
 #### Scenario: Persisted state is seeded safely
 

@@ -126,6 +126,7 @@ mindframe-z/
 │   ├── core/                  # Manifest loading, profile resolution, rendering orchestration, symlinks
 │   ├── renderers/             # Target-specific config generators (opencode, claude, mise, dotfiles)
 │   ├── sync/                  # Bidirectional sync: detect drift and promote to profiles
+│   ├── sandbox/               # Sandbox credential-mode and secrets-path helpers
 │   ├── ref-store/             # Git clone/update references, write reference index
 │   ├── skills/                # npx skills adapter
 │   └── cli/mfz.ts             # CLI: apply, doctor, status, sync, skills, refs
@@ -273,6 +274,7 @@ CI build artifacts — needed for inspecting test failures (read: allow, edit: d
 - **MCP catalog vs profile targeting**: `shared/mcp.yml` defines how each MCP server connects. Profiles enable servers with `mcp.<name>.enabled`; optional `mcp.<name>.targets` narrows the agents for that server and otherwise defaults to the profile's `agents` list. OpenCode respects both resolved targets and `enabled`; Claude renders every Claude-targeted server into user-level `~/.claude.json#mcpServers`, and Claude itself manages per-project disable state.
 - **References as git clones**: Reference repositories are cloned to `~/references/` (configurable via `MFZ_REFERENCES_DIR`). Generated `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` indexes provide agents with discoverability without loading full content into context; both are machine-local and not committed. Rendered agent configs grant read access to the references directory and deny edits by default.
 - **Extra folders are machine-local**: `extra_folders` lives in `~/.mindframe-z/config.yml`, not profiles, because paths are host-specific. Apply writes `~/.mindframe-z/extra_folders.md`, imports it into agent instructions, and renders matching OpenCode and Claude Code folder permissions.
+- **Sandbox uses container-native runtime render**: `mfz sandbox` resolves the same active profile as host apply, then writes a sandbox runtime config layer under `~/.mindframe-z/sandbox/<profile>/runtime/` with container paths. The container user is `sandbox` (`/home/sandbox`), references mount at `/references`, extra folders mount under `/extra/<slug>`, and `/workspace` remains the project working tree. Host-rendered config remains host-path-valid; only the sandbox runtime layer rewrites paths.
 - **No backward compatibility**: This repo is in active development with no external users yet. Prefer the simplest direct design; do not add fallback behavior unless there is a concrete current need.
 - **Generated files are inspectable**: All rendered output is human-readable (JSONC, TOML, Markdown). No binary formats or opaque state files.
 - **OpenCode commands are profile-selected files**: Profiles list command names in `opencode.commands`; matching `opencode/commands/<name>.md` files render to `configs/<profile>/opencode/commands/` and are exposed through the global OpenCode commands directory symlink.

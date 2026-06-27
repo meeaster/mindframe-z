@@ -37,6 +37,9 @@ import {
 } from "../skills/skills-adapter.js";
 import type { SkillEntry } from "../core/manifests.js";
 import { runSync } from "../sync/index.js";
+import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
+import { runSeedClaude } from "../sandbox/seed-claude.js";
+import { runSeedOpenai } from "../sandbox/seed-openai.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 
@@ -289,6 +292,63 @@ program
       dryRun: options.dryRun,
       noLink: !options.link
     })
+  );
+
+const sandbox = program
+  .command("sandbox")
+  .description("Launch the active profile inside the credential-brokered sandbox")
+  .allowUnknownOption(true)
+  .option("--rebuild", "force rebuilding the sandbox image before launch")
+  .argument("[target]", "shell, cc, oc, or init", "shell")
+  .argument("[args...]", "arguments forwarded to the sandbox command")
+  .action(async (target, args, options) => {
+    const parsed = parseSandboxTarget(target);
+    const forwarded = target === "shell" || target === "cc" || target === "oc" ? args : [];
+    if (parsed.target === "init") {
+      await runSandboxInit(program.opts());
+      return;
+    }
+    await runSandboxLaunch({
+      ...program.opts(),
+      target: parsed.target,
+      args: forwarded,
+      rebuild: options.rebuild
+    });
+  });
+
+sandbox
+  .command("init")
+  .description("Initialize sandbox broker state if needed")
+  .action(async () => runSandboxInit(program.opts()));
+
+sandbox
+  .command("seed-claude")
+  .description("Seed the Claude subscription OAuth credential (auto-refreshing) into the broker")
+  .action(async () => runSeedClaude(program.opts()));
+
+sandbox
+  .command("seed-openai")
+  .description("Seed the opencode ChatGPT OAuth credential (auto-refreshing) into the broker")
+  .action(async () => runSeedOpenai(program.opts()));
+
+program
+  .command("cc")
+  .description("Launch Claude Code inside the sandbox")
+  .allowUnknownOption(true)
+  .option("--rebuild", "force rebuilding the sandbox image before launch")
+  .argument("[args...]", "arguments forwarded to Claude Code")
+  .action(async (args, options) =>
+    runSandboxLaunch({ ...program.opts(), target: "cc", args, rebuild: options.rebuild })
+  );
+
+program
+  .command("oc")
+  .description("Launch opencode inside the sandbox")
+  .allowUnknownOption(true)
+  .option("--rebuild", "force rebuilding the sandbox image before launch")
+  .argument("[args...]", "arguments forwarded to opencode")
+  .action(async (args, options) =>
+    runSandboxLaunch({ ...program.opts(), target: "oc", args, rebuild: options.rebuild })
   );
 
 const skills = program
