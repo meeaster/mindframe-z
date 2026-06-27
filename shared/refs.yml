@@ -47,3 +47,6 @@ references:
   - name: mattpocock-skills
     url: https://github.com/mattpocock/skills.git
     description: "Shell/markdown collection of composable AI coding agent skills by Matt Pocock (grill-me, grill-with-docs, tdd, diagnosing-bugs, triage, to-prd, improve-codebase-architecture, and more). Entrypoints under skills/engineering/, skills/productivity/, and skills/misc/. Installable via npx skills@latest add mattpocock/skills"
+  - name: ccstatusline
+    url: https://github.com/sirmalloc/ccstatusline.git
+    description: "TypeScript/Bun project for a highly customizable status line formatter for Claude Code CLI with Powerline support, themes, and 80+ widgets (model info, git branch, token usage, context, timers, usage limits, and more). Main entrypoints: src/ for the React/Ink TUI, and the ccstatusline CLI command."
