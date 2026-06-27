@@ -140,11 +140,24 @@ export const profileSchema = z
   })
   .strict();
 
+export const sandboxCredentialModeSchema = z.enum(["bedrock", "subscription"]);
+
 export const machineSchema = z.object({
   profile: z.string().optional(),
   repo_path: z.string().optional(),
   references_dir: z.string().default("~/references"),
   extra_folders: z.array(extraFolderSchema).default([]),
+  git: z
+    .object({
+      name: z.string().optional(),
+      email: z.string().optional()
+    })
+    .default({}),
+  sandbox: z
+    .object({
+      credentials: sandboxCredentialModeSchema.optional()
+    })
+    .default({}),
   opencode: z.record(z.string(), z.unknown()).default({})
 });
 
@@ -156,6 +169,7 @@ export type ProfileSkillTarget = z.infer<typeof skillTargetSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
+export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
 
 export interface LoadedManifests {
   references: ReferenceEntry[];
@@ -278,7 +292,13 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         extra_folders: [],
         opencode: {}
       })
-    : { references_dir: "~/references" as const, extra_folders: [], opencode: {} };
+    : {
+        references_dir: "~/references" as const,
+        extra_folders: [],
+        git: {},
+        sandbox: {},
+        opencode: {}
+      };
   const profileMap = new Map<string, ProfileManifest>();
   const profilesDir = path.join(root, "profiles");
   try {

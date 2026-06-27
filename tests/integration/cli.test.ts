@@ -117,6 +117,56 @@ describe("CLI integration", () => {
     expect(opencode).toContain(referencesDir);
   });
 
+  it("writes git identity fragment and preserves existing global git config", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "git:",
+        "  name: Test User",
+        "  email: test@example.com",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(home, ".gitconfig"),
+      ["[alias]", "\tco = checkout", ""].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    const fragmentPath = path.join(home, ".mindframe-z", "gitconfig");
+    const fragment = await readFile(fragmentPath, "utf8");
+    expect(fragment).toContain("[user]");
+    expect(fragment).toContain('name = "Test User"');
+    expect(fragment).toContain('email = "test@example.com"');
+
+    const gitconfig = await readFile(path.join(home, ".gitconfig"), "utf8");
+    expect(gitconfig).toContain("[alias]");
+    expect(gitconfig).toContain("\tco = checkout");
+    expect(gitconfig.split(`path = ${fragmentPath}`).length - 1).toBe(1);
+
+    const renderedProfile = await readFile(
+      path.join(root, "configs", "personal", "AGENTS.md"),
+      "utf8"
+    );
+    expect(renderedProfile).not.toContain("Test User");
+    expect(renderedProfile).not.toContain("test@example.com");
+  });
+
+  it("omits git identity fields when machine identity is absent", async () => {
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    const fragment = await readFile(path.join(home, ".mindframe-z", "gitconfig"), "utf8");
+    expect(fragment).not.toContain("[user]");
+    expect(fragment).not.toContain("name =");
+    expect(fragment).not.toContain("email =");
+  });
+
   it("writes extra_folders index to machine-local path", async () => {
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),

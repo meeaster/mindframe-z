@@ -6,6 +6,13 @@ profile: personal
 repo_path: ~/code/mindframe-z
 references_dir: ~/references
 
+# git:
+#   name: Your Name
+#   email: you@example.com
+
+# sandbox:
+#   credentials: subscription # or bedrock
+
 # extra_folders:
 #   - path: ~/code/work/my-work-repo
 #     description: Work project with customer-specific schemas, CI config, and deployment scripts — needed when modifying deploy logic or reading env-specific overrides

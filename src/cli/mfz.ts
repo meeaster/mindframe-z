@@ -16,6 +16,12 @@ import {
 } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
+import {
+  ensureGitConfigInclude,
+  gitIdentityFragmentPath,
+  globalGitConfigPath,
+  writeGitIdentityFragment
+} from "../core/git-config.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import {
   referenceRows,
@@ -78,6 +84,16 @@ async function applyConfig(options: {
     if (!options.dryRun) {
       await writeReferenceIndex(paths, profile);
       await writeExtraFoldersIndex(paths, profile);
+    }
+    if (!options.noLink) {
+      const fragmentPath = gitIdentityFragmentPath(paths);
+      const configPath = globalGitConfigPath(paths);
+      if (!options.dryRun) {
+        await writeGitIdentityFragment(paths, profile.manifests.machine);
+        await ensureGitConfigInclude(paths);
+      }
+      console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${fragmentPath}`);
+      console.log(`${options.dryRun ? "would update" : "updated"}\t${configPath}`);
     }
     for (const target of [
       ...agentList(options.agent, profile.agents),
