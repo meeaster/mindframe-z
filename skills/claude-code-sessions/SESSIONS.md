@@ -31,13 +31,22 @@ jq -rc 'select(.type=="user") | .message.content[]? | select(.type=="tool_result
 
 Interruption markers like `[Request interrupted by user for tool use]` arrive as plain `user` text records — also boundary, not failure.
 
-Trace subagents — read the `.meta.json` sidecars first; they link each subagent to the parent `Agent` call via `toolUseId`:
+Trace subagents — two levels of detail are available; the caller's question decides which:
 
-```bash
-for m in ~/.claude/projects/<encoded>/<session-id>/subagents/*.meta.json; do jq -rc '{agentType, description, toolUseId}' "$m"; done
-```
+- **Input and output, from the parent transcript.** The prompt sent is the `Agent` `tool_use.input`; the result the subagent returned is the matching `tool_result` (paired by `tool_use_id`). No nested file needed.
 
-Read a subagent transcript (`agent-<id>.jsonl`) only when the question is about its work. Identify which file edits happened without scanning prose via `file-history-snapshot` records (`snapshot.trackedFileBackups`).
+  ```bash
+  jq -rc 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="Agent") | {id, desc:.input.description, prompt:.input.prompt}' "$F"
+  jq -rc 'select(.type=="user") | .message.content[]? | select(.type=="tool_result") | {id:.tool_use_id, result:(.content|tostring)}' "$F"
+  ```
+
+- **Full internal trace, from the nested transcript** (`agent-<id>.jsonl`) — when the question is about *how* the subagent worked. Read its `.meta.json` sidecar first; it links the subagent to the parent `Agent` call via `toolUseId`.
+
+  ```bash
+  for m in ~/.claude/projects/<encoded>/<session-id>/subagents/*.meta.json; do jq -rc '{agentType, description, toolUseId}' "$m"; done
+  ```
+
+Identify which file edits happened without scanning prose via `file-history-snapshot` records (`snapshot.trackedFileBackups`).
 
 High-signal patterns worth surfacing: `Skill` tool calls (explicit skill loads), `mcp__*` tool names (MCP usage), and retry loops on a tool — for retries, extract the error pattern plus the final successful call shape, not the whole replay.
 
