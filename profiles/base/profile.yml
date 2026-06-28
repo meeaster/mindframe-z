@@ -93,6 +93,8 @@ skills:
     enabled: true
   xlsx:
     enabled: true
+  prototype:
+    enabled: true
   handoff:
     enabled: true
 mcp:
