@@ -268,6 +268,16 @@ skills:
       to inspect spreadsheet data, create/update Excel files, analyze tabular data, convert CSV to XLSX, or
       work with Excel workbooks programmatically in Python.
     installer: skills
+  - name: prototype
+    source: git
+    repo: https://github.com/mattpocock/skills
+    skill: prototype
+    description: >
+      Build a throwaway prototype to flesh out a design — a runnable terminal app for
+      state/business-logic questions, or several radically different UI variations toggleable
+      from one route. Use when exploring a design through executable code before committing
+      to an implementation.
+    installer: skills
   - name: handoff
     source: git
     repo: https://github.com/mattpocock/skills
