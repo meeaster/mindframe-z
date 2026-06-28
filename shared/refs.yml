@@ -50,3 +50,6 @@ references:
   - name: ccstatusline
     url: https://github.com/sirmalloc/ccstatusline.git
     description: "TypeScript/Bun project for a highly customizable status line formatter for Claude Code CLI with Powerline support, themes, and 80+ widgets (model info, git branch, token usage, context, timers, usage limits, and more). Main entrypoints: src/ for the React/Ink TUI, and the ccstatusline CLI command."
+  - name: dd-apm-test-agent
+    url: https://github.com/DataDog/dd-apm-test-agent.git
+    description: "Python DataDog APM test agent (aka lapdog) that acts as an observability proxy for AI coding agents. Captures hook events, LLM cost spans, and per-source hook APIs (Claude/Codex/Pi) for dashboard rendering. Key entrypoints: ddapm_test_agent/agent.py (CLI flags: --lapdog-mode, --web-ui-port), ddapm_test_agent/claude_hooks.py (/claude/hooks handler), plugins/lapdog/hooks/hooks.json (Claude Code hook plugin), lapdog/cli.py (liveness probe), lapdog/pi_lapdog_extension.ts (LAPDOG_URL env override)."
