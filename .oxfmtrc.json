@@ -8,6 +8,7 @@
     "schemas/**",
     ".opencode/**",
     "skills/**",
-    "openspec/**"
+    "openspec/**",
+    "*.md"
   ]
 }
