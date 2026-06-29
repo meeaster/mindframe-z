@@ -130,6 +130,12 @@ skills:
       The rendered forms a well-written skill takes on the page — frontmatter shapes, opening lines,
       step-and-criterion blocks, glossary entries, composition moves, prose habits. Use when writing or
       reviewing a SKILL.md, when another skill needs the authoring forms, or alongside the writing-great-skills doctrine.
+  - name: adversarial-code-review
+    source: local
+    skill: adversarial-code-review
+    description:
+      Adversarial code review — dispatch the current branch to a two-engine panel (Claude Opus + GPT-5.5),
+      each running the thermo-nuclear review, then chair the merge into consensus/split findings. User-invoked.
   - name: hunk-review
     source: git
     repo: https://github.com/modem-dev/hunk
