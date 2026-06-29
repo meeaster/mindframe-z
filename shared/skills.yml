@@ -123,6 +123,13 @@ skills:
       Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable.
       Use when creating, editing, or pruning a skill, diagnosing why a skill feels verbose or ineffective, or deciding
       how to structure skill content.
+  - name: skill-patterns
+    source: local
+    skill: skill-patterns
+    description: >
+      The rendered forms a well-written skill takes on the page — frontmatter shapes, opening lines,
+      step-and-criterion blocks, glossary entries, composition moves, prose habits. Use when writing or
+      reviewing a SKILL.md, when another skill needs the authoring forms, or alongside the writing-great-skills doctrine.
   - name: hunk-review
     source: git
     repo: https://github.com/modem-dev/hunk
