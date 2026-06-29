@@ -15,5 +15,5 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.195 \
   && curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path --version 1.17.11
 
 COPY --chown=sandbox:sandbox src/thread/opencode.thread.json /home/sandbox/.config/opencode/opencode.json
-COPY --chown=sandbox:sandbox src/thread/hooks.json /home/sandbox/.claude/hooks.json
+COPY --chown=sandbox:sandbox .generated/thread-tools/claude-settings.json /home/sandbox/.claude/settings.json
 COPY --chown=sandbox:sandbox opencode/plugins/lapdog.ts /home/sandbox/.opencode/plugin/lapdog.ts

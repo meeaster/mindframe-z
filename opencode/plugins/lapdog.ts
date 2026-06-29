@@ -19,25 +19,66 @@ async function postHook(body: Record<string, unknown>): Promise<void> {
   }
 }
 
-function sessionId(input: { sessionID: string }): string {
-  return input.sessionID;
+function textPartText(part: unknown): string {
+  if (
+    typeof part === "object" &&
+    part !== null &&
+    (part as { type?: unknown }).type === "text" &&
+    typeof (part as { text?: unknown }).text === "string"
+  ) {
+    return (part as { text: string }).text;
+  }
+  return "";
 }
 
-function sessionIdFromUnknown(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    "sessionID" in value &&
-    typeof (value as { sessionID: unknown }).sessionID === "string"
-  ) {
-    return (value as { sessionID: string }).sessionID;
+function permissionFields(input: unknown): {
+  sessionID: string;
+  tool: string;
+  metadata: unknown;
+} {
+  const value = input as { sessionID?: unknown; tool?: unknown; metadata?: unknown };
+  return {
+    sessionID: typeof value.sessionID === "string" ? value.sessionID : "unknown",
+    tool: typeof value.tool === "string" ? value.tool : "unknown",
+    metadata: value.metadata
+  };
+}
+
+const LIFECYCLE_EVENTS = new Set([
+  "session.created",
+  "session.updated",
+  "session.deleted",
+  "session.idle",
+  "session.status",
+  "session.compacted"
+]);
+
+const LIFECYCLE_HOOK_NAME: Record<
+  string,
+  "SessionStart" | "SessionEnd" | "Stop" | "Notification" | "PreCompact"
+> = {
+  "session.created": "SessionStart",
+  "session.updated": "Notification",
+  "session.deleted": "SessionEnd",
+  "session.idle": "Stop",
+  "session.status": "Notification",
+  "session.compacted": "PreCompact"
+};
+
+function sessionIdFromEvent(event: unknown): string {
+  if (typeof event !== "object" || event === null) return "unknown";
+  const properties = (event as { properties?: unknown }).properties;
+  if (typeof properties !== "object" || properties === null) return "unknown";
+  const props = properties as { sessionID?: unknown; info?: { id?: unknown } };
+  if (typeof props.sessionID === "string") return props.sessionID;
+  if (props.info && typeof props.info === "object" && typeof props.info.id === "string") {
+    return props.info.id;
   }
   return "unknown";
 }
 
 function eventType(event: unknown): string | undefined {
-  if (event === null || typeof event !== "object") return undefined;
+  if (typeof event !== "object" || event === null) return undefined;
   const type = (event as { type?: unknown }).type;
   return typeof type === "string" ? type : undefined;
 }
@@ -49,18 +90,18 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
     "tool.execute.before": async (input) => {
       await postHook({
         hook_event_name: "PreToolUse",
-        session_id: sessionId(input),
+        session_id: input.sessionID,
         tool_name: input.tool,
         tool_use_id: input.callID
       });
     },
 
     "tool.execute.after": async (input, output) => {
-      const metadata = (output.metadata ?? {}) as Record<string, unknown>;
+      const metadata = (output.metadata ?? {}) as { error?: unknown };
       const failed = metadata.error !== undefined && metadata.error !== null;
       await postHook({
         hook_event_name: failed ? "PostToolUseFailure" : "PostToolUse",
-        session_id: sessionId(input),
+        session_id: input.sessionID,
         tool_name: input.tool,
         tool_input: input.args,
         tool_use_id: input.callID,
@@ -71,26 +112,21 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
 
     "chat.message": async (input, output) => {
       if (output.message.role !== "user") return;
-      const text = (output.parts ?? [])
-        .map((part: unknown) =>
-          typeof part === "object" && part !== null && (part as { type?: string }).type === "text"
-            ? ((part as { text?: string }).text ?? "")
-            : ""
-        )
-        .join("");
+      const text = (output.parts ?? []).map(textPartText).join("");
       await postHook({
         hook_event_name: "UserPromptSubmit",
-        session_id: sessionId(input),
+        session_id: input.sessionID,
         prompt: text || JSON.stringify(output.message)
       });
     },
 
     "permission.ask": async (input, output) => {
+      const { sessionID, tool, metadata } = permissionFields(input);
       await postHook({
         hook_event_name: "PermissionRequest",
-        session_id: sessionIdFromUnknown(input),
-        tool_name: (input as { tool?: string }).tool ?? "unknown",
-        tool_input: (input as { metadata?: unknown }).metadata,
+        session_id: sessionID,
+        tool_name: tool,
+        tool_input: metadata,
         status: output.status
       });
     },
@@ -98,58 +134,19 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
     "experimental.session.compacting": async (input) => {
       await postHook({
         hook_event_name: "PreCompact",
-        session_id: sessionIdFromUnknown(input)
+        session_id: input.sessionID
       });
     },
 
     event: async (input) => {
       const type = eventType(input.event);
-      const sid = sessionIdFromUnknown(input.event);
-      switch (type) {
-        case "session.created":
-          await postHook({
-            hook_event_name: "SessionStart",
-            session_id: sid
-          });
-          return;
-        case "session.deleted":
-          await postHook({
-            hook_event_name: "SessionEnd",
-            session_id: sid
-          });
-          return;
-        case "session.idle":
-        case "session.next.text.ended":
-          await postHook({
-            hook_event_name: "Stop",
-            session_id: sid
-          });
-          return;
-        case "session.next.compaction.started":
-        case "session.compacted":
-          await postHook({
-            hook_event_name: "PreCompact",
-            session_id: sid
-          });
-          return;
-        case "session.status":
-          await postHook({
-            hook_event_name: "Notification",
-            session_id: sid
-          });
-          return;
-        default:
-          // OpenCode does not emit a dedicated SubagentStart/SubagentStop event;
-          // any event whose type starts with "subagent." is forwarded best-effort
-          // as a Notification so the lapdog dashboard still sees subagent traffic.
-          if (type !== undefined && type.startsWith("subagent.")) {
-            await postHook({
-              hook_event_name: "Notification",
-              session_id: sid,
-              subagent_event: type
-            });
-          }
-      }
+      if (!type || !LIFECYCLE_EVENTS.has(type)) return;
+      const hookEvent = LIFECYCLE_HOOK_NAME[type];
+      if (!hookEvent) return;
+      await postHook({
+        hook_event_name: hookEvent,
+        session_id: sessionIdFromEvent(input.event)
+      });
     }
   };
 }

@@ -31,12 +31,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function writeFakeDocker(home: string, _logFile: string): Promise<string> {
+async function writeFakeDocker(home: string): Promise<string> {
   const binDir = path.join(home, "bin");
   const stateDir = path.join(home, "fake-docker-state");
   await mkdir(binDir, { recursive: true });
   await mkdir(stateDir, { recursive: true });
   const docker = path.join(binDir, "docker");
+  const inspectJson = JSON.stringify({
+    State: { Running: true },
+    Config: { Image: lapdogImageRef },
+    NetworkSettings: { Networks: { [lapdogNetworkName]: null } }
+  });
   const lines = [
     "#!/usr/bin/env sh",
     "STATE=${FAKE_DOCKER_STATE_DIR:?FAKE_DOCKER_STATE_DIR not set}",
@@ -49,16 +54,23 @@ async function writeFakeDocker(home: string, _logFile: string): Promise<string> 
     '  touch "$STATE/network-exists"; exit 0',
     "fi",
     'if [ "$1" = inspect ] && [ "$2" = lapdog ]; then',
-    '  [ -f "$STATE/container-exists" ] && exit 0 || exit 1',
+    '  if [ -f "$STATE/container-running" ]; then',
+    `    printf '%s' '${inspectJson}'`,
+    "    exit 0",
+    "  fi",
+    '  if [ -f "$STATE/container-exists" ]; then',
+    "    exit 0",
+    "  fi",
+    "  exit 1",
     "fi",
     'if [ "$1" = run ]; then',
     "  shift",
     '  while [ "$1" != --name ] && [ $# -gt 0 ]; do shift; done',
     "  shift",
-    '  touch "$STATE/container-exists"; exit 0',
+    '  touch "$STATE/container-exists"; touch "$STATE/container-running"; exit 0',
     "fi",
     'if [ "$1" = rm ]; then',
-    '  rm -f "$STATE/container-exists"; exit 0',
+    '  rm -f "$STATE/container-exists" "$STATE/container-running"; exit 0',
     "fi",
     'if [ "$1" = network ] && [ "$2" = rm ]; then',
     '  rm -f "$STATE/network-exists"; exit 0',
@@ -68,7 +80,6 @@ async function writeFakeDocker(home: string, _logFile: string): Promise<string> 
   await writeFile(docker, lines.join("\n") + "\n", "utf8");
   await chmod(docker, 0o755);
   process.env.FAKE_DOCKER_STATE_DIR = stateDir;
-  // Pre-create the log file so the first test can read it without racing the docker invocation.
   await writeFile(path.join(stateDir, "docker.log"), "", "utf8");
   return stateDir;
 }
@@ -78,12 +89,18 @@ async function readFakeLog(stateDir: string): Promise<string> {
   return readFile(path.join(stateDir, "docker.log"), "utf8");
 }
 
+async function writeFakeDockerState(stateDir: string, files: string[]): Promise<void> {
+  for (const name of files) {
+    await writeFile(path.join(stateDir, name), "", "utf8");
+  }
+}
+
 async function withFakeDocker(
   body: (paths: ReturnType<typeof createRuntimePaths>, stateDir: string) => Promise<void>
 ): Promise<void> {
   const home = await makeTempDir();
   const root = await makeTempDir();
-  const stateDir = await writeFakeDocker(home, "");
+  const stateDir = await writeFakeDocker(home);
   process.env.PATH = `${path.join(home, "bin")}:${oldPath ?? ""}`;
   const paths = createRuntimePaths({ root, home });
   await body(paths, stateDir);
@@ -133,13 +150,24 @@ describe("startLapdogContainer", () => {
     });
   });
 
-  it("returns 'already_running' and does not re-run when the container exists", async () => {
+  it("returns 'already_running' when the running container matches the canonical image and network", async () => {
     await withFakeDocker(async (paths, stateDir) => {
-      await expect(startLapdogContainer(paths)).resolves.toBe("started");
+      await writeFakeDockerState(stateDir, ["container-running"]);
       await expect(startLapdogContainer(paths)).resolves.toBe("already_running");
       const log = await readFakeLog(stateDir);
       const runCalls = log.split("\n").filter((line) => line.startsWith("run "));
-      expect(runCalls).toHaveLength(1);
+      expect(runCalls).toHaveLength(0);
+    });
+  });
+
+  it("recreates the container when a stopped named container exists", async () => {
+    await withFakeDocker(async (paths, stateDir) => {
+      await writeFakeDockerState(stateDir, ["container-exists"]);
+      await expect(startLapdogContainer(paths)).resolves.toBe("started");
+      const log = await readFakeLog(stateDir);
+      const rmCalls = log.split("\n").filter((line) => line === "rm --force lapdog");
+      expect(rmCalls.length).toBeGreaterThanOrEqual(1);
+      expect(log).toContain("run");
     });
   });
 });
@@ -159,7 +187,7 @@ describe("stopLapdogContainer", () => {
       await stopLapdogContainer();
       await expect(stopLapdogContainer()).resolves.toBeUndefined();
       const log = await readFakeLog(stateDir);
-      const rmCalls = log.split("\n").filter((line) => line.startsWith("rm --force lapdog"));
+      const rmCalls = log.split("\n").filter((line) => line === "rm --force lapdog");
       expect(rmCalls.length).toBeGreaterThanOrEqual(2);
     });
   });

@@ -18,6 +18,7 @@ import {
   runThreadRuns,
   runThreadSync
 } from "./cli.js";
+import { lapdogImageRef, lapdogNetworkName } from "./lapdog.js";
 
 const oldPath = process.env.PATH;
 const oldStateDir = process.env.FAKE_DOCKER_STATE_DIR;
@@ -37,6 +38,11 @@ async function writeFakeDocker(home: string): Promise<string> {
   await mkdir(binDir, { recursive: true });
   await mkdir(stateDir, { recursive: true });
   const docker = path.join(binDir, "docker");
+  const inspectJson = JSON.stringify({
+    State: { Running: true },
+    Config: { Image: lapdogImageRef },
+    NetworkSettings: { Networks: { [lapdogNetworkName]: null } }
+  });
   const lines = [
     "#!/usr/bin/env sh",
     "STATE=${FAKE_DOCKER_STATE_DIR:?FAKE_DOCKER_STATE_DIR not set}",
@@ -49,7 +55,11 @@ async function writeFakeDocker(home: string): Promise<string> {
     '  touch "$STATE/network-exists"; exit 0',
     "fi",
     'if [ "$1" = inspect ] && [ "$2" = lapdog ]; then',
-    '  [ -f "$STATE/container-exists" ] && exit 0 || exit 1',
+    '  if [ -f "$STATE/container-exists" ]; then',
+    `    printf '%s' '${inspectJson}'`,
+    "    exit 0",
+    "  fi",
+    "  exit 1",
     "fi",
     'if [ "$1" = run ]; then',
     '  shift; while [ "$1" != --name ] && [ $# -gt 0 ]; do shift; done; shift',

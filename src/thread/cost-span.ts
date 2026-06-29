@@ -2,6 +2,13 @@ import { randomBytes } from "node:crypto";
 import { encode } from "@msgpack/msgpack";
 import type { ThreadHarness } from "../core/manifests.js";
 
+export interface TokenBreakdown {
+  nonCachedInput: number;
+  cacheReadInput: number;
+  cacheWriteInput: number;
+  output: number;
+}
+
 export interface CostSpanContext {
   readonly model: string;
   readonly modelProvider: string;
@@ -31,72 +38,40 @@ export function modelProvider(harness: ThreadHarness, model: string): string {
   return slash === -1 ? "unknown" : model.slice(0, slash);
 }
 
-export function buildClaudeMetrics(
-  rawUsage: Record<string, unknown> | null,
+export function buildMetrics(
+  breakdown: TokenBreakdown,
   costUsd: number | null
 ): CostSpanMetrics | null {
-  if (!rawUsage) return null;
-  const nonCached = numberField(rawUsage.input_tokens);
-  const cacheRead = numberField(rawUsage.cache_read_input_tokens);
-  const cacheWrite = numberField(rawUsage.cache_creation_input_tokens);
-  const output = numberField(rawUsage.output_tokens);
-  if (nonCached === null && cacheRead === null && cacheWrite === null && output === null) {
+  const { nonCachedInput, cacheReadInput, cacheWriteInput, output } = breakdown;
+  if (nonCachedInput === 0 && cacheReadInput === 0 && cacheWriteInput === 0 && output === 0) {
     return null;
   }
-  const actualNonCached = nonCached ?? 0;
-  const actualCacheRead = cacheRead ?? 0;
-  const actualCacheWrite = cacheWrite ?? 0;
-  const actualOutput = output ?? 0;
-  const inputTokens = actualNonCached + actualCacheRead + actualCacheWrite;
+  const inputTokens = nonCachedInput + cacheReadInput + cacheWriteInput;
   return {
     input_tokens: inputTokens,
-    output_tokens: actualOutput,
-    total_tokens: inputTokens + actualOutput,
-    non_cached_input_tokens: actualNonCached,
-    cache_read_input_tokens: actualCacheRead,
-    cache_write_input_tokens: actualCacheWrite,
-    ...nanodollarSplit(costUsd)
-  };
-}
-
-export function buildOpenCodeMetrics(
-  rawUsage: Record<string, unknown> | null,
-  costUsd: number | null
-): CostSpanMetrics | null {
-  if (!rawUsage) return null;
-  const input = numberField(rawUsage.input_tokens);
-  const output = numberField(rawUsage.output_tokens);
-  if (input === null && output === null) return null;
-  const actualInput = input ?? 0;
-  const actualOutput = output ?? 0;
-  return {
-    input_tokens: actualInput,
-    output_tokens: actualOutput,
-    total_tokens: actualInput + actualOutput,
-    non_cached_input_tokens: actualInput,
-    cache_read_input_tokens: 0,
-    cache_write_input_tokens: 0,
+    output_tokens: output,
+    total_tokens: inputTokens + output,
+    non_cached_input_tokens: nonCachedInput,
+    cache_read_input_tokens: cacheReadInput,
+    cache_write_input_tokens: cacheWriteInput,
     ...nanodollarSplit(costUsd)
   };
 }
 
 export function buildCostSpanPayload(
   harness: ThreadHarness,
-  rawUsage: Record<string, unknown> | null,
+  breakdown: TokenBreakdown,
   ctx: CostSpanContext
 ): Uint8Array | null {
-  const metrics =
-    harness === "claude-code"
-      ? buildClaudeMetrics(rawUsage, ctx.costUsd)
-      : buildOpenCodeMetrics(rawUsage, ctx.costUsd);
+  const metrics = buildMetrics(breakdown, ctx.costUsd);
   if (!metrics) return null;
 
   const startNs = ctx.startTimeMs * 1_000_000;
   const durationNs = Math.max(ctx.durationMs * 1_000_000, 1);
   // lapdog validates span_id/trace_id as msgpack ints; JS numbers are float64 and
-  // lose precision past 2^53, so we read 4 bytes and stay in the int32 range.
-  const spanId = readInt32(randomBytes(4));
-  const traceId = readInt32(randomBytes(4));
+  // lose precision past 2^53, so we read 4 bytes big-endian producing a uint32.
+  const spanId = readUint32(randomBytes(4));
+  const traceId = readUint32(randomBytes(4));
   const llmobsTraceId = bytesToHex(randomBytes(16));
 
   const llmobsEnvelope = {
@@ -167,17 +142,13 @@ function nanodollarSplit(
   return { estimated_total_cost: total, estimated_input_cost: 0, estimated_output_cost: total };
 }
 
-function numberField(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function bytesToHex(bytes: Uint8Array): string {
   let hex = "";
   for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
   return hex;
 }
 
-function readInt32(bytes: Uint8Array): number {
+function readUint32(bytes: Uint8Array): number {
   let result = 0;
   for (let i = 0; i < 4; i++) result = result * 256 + (bytes[i] ?? 0);
   return result;

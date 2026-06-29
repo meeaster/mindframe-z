@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { decode } from "@msgpack/msgpack";
 import {
-  buildClaudeMetrics,
   buildCostSpanPayload,
-  buildOpenCodeMetrics,
+  buildMetrics,
   emitCostSpan,
-  modelProvider
+  modelProvider,
+  type TokenBreakdown
 } from "./cost-span.js";
 
 const baseCtx = {
@@ -14,6 +14,27 @@ const baseCtx = {
   startTimeMs: 1_700_000_000_000,
   durationMs: 1234,
   costUsd: 0.0054
+};
+
+const zeroBreakdown: TokenBreakdown = {
+  nonCachedInput: 0,
+  cacheReadInput: 0,
+  cacheWriteInput: 0,
+  output: 0
+};
+
+const claudeBreakdown: TokenBreakdown = {
+  nonCachedInput: 500,
+  cacheReadInput: 100,
+  cacheWriteInput: 50,
+  output: 150
+};
+
+const opencodeBreakdown: TokenBreakdown = {
+  nonCachedInput: 100,
+  cacheReadInput: 0,
+  cacheWriteInput: 0,
+  output: 50
 };
 
 describe("modelProvider", () => {
@@ -32,25 +53,13 @@ describe("modelProvider", () => {
   });
 });
 
-describe("buildClaudeMetrics", () => {
-  it("returns null when usage is null", () => {
-    expect(buildClaudeMetrics(null, 0.01)).toBeNull();
-  });
-
-  it("returns null when usage has no token fields", () => {
-    expect(buildClaudeMetrics({}, 0.01)).toBeNull();
+describe("buildMetrics", () => {
+  it("returns null when all token fields are zero", () => {
+    expect(buildMetrics(zeroBreakdown, 0.01)).toBeNull();
   });
 
   it("keeps cache splits separate and reports summed input_tokens", () => {
-    const metrics = buildClaudeMetrics(
-      {
-        input_tokens: 500,
-        output_tokens: 150,
-        cache_read_input_tokens: 100,
-        cache_creation_input_tokens: 50
-      },
-      null
-    );
+    const metrics = buildMetrics(claudeBreakdown, null);
     expect(metrics).toEqual({
       input_tokens: 650,
       output_tokens: 150,
@@ -65,32 +74,25 @@ describe("buildClaudeMetrics", () => {
   });
 
   it("converts USD cost to integer nanodollars and splits it", () => {
-    const metrics = buildClaudeMetrics({ input_tokens: 1, output_tokens: 1 }, 0.0054);
+    const metrics = buildMetrics(
+      { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
+      0.0054
+    );
     expect(metrics?.estimated_total_cost).toBe(5_400_000);
     expect(metrics?.estimated_input_cost).toBe(0);
     expect(metrics?.estimated_output_cost).toBe(5_400_000);
   });
 
   it("emits zero estimated_*_cost when costUsd is null", () => {
-    const metrics = buildClaudeMetrics({ input_tokens: 1 }, null);
+    const metrics = buildMetrics(
+      { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 0 },
+      null
+    );
     expect(metrics?.estimated_total_cost).toBe(0);
   });
 
-  it("fills null token fields with zero rather than dropping the span", () => {
-    const metrics = buildClaudeMetrics({ input_tokens: 10 }, 0.01);
-    expect(metrics?.output_tokens).toBe(0);
-    expect(metrics?.non_cached_input_tokens).toBe(10);
-    expect(metrics?.cache_read_input_tokens).toBe(0);
-  });
-});
-
-describe("buildOpenCodeMetrics", () => {
-  it("returns null when usage is null", () => {
-    expect(buildOpenCodeMetrics(null, 0.01)).toBeNull();
-  });
-
-  it("reports non_cached_input_tokens equal to input_tokens and zeros the cache splits", () => {
-    const metrics = buildOpenCodeMetrics({ input_tokens: 100, output_tokens: 50 }, 0.02);
+  it("emits a span for opencode breakdowns by treating all input as non-cached", () => {
+    const metrics = buildMetrics(opencodeBreakdown, 0.02);
     expect(metrics).toEqual({
       input_tokens: 100,
       output_tokens: 50,
@@ -107,16 +109,10 @@ describe("buildOpenCodeMetrics", () => {
 
 describe("buildCostSpanPayload", () => {
   it("encodes a top-level traces array with one cost span and a msgpack _llmobs envelope", () => {
-    const payload = buildCostSpanPayload(
-      "claude-code",
-      {
-        input_tokens: 500,
-        output_tokens: 150,
-        cache_read_input_tokens: 100,
-        cache_creation_input_tokens: 50
-      },
-      { ...baseCtx, sessionId: "sess-abc" }
-    );
+    const payload = buildCostSpanPayload("claude-code", claudeBreakdown, {
+      ...baseCtx,
+      sessionId: "sess-abc"
+    });
     expect(payload).toBeInstanceOf(Uint8Array);
     const bytes = payload as Uint8Array;
 
@@ -144,15 +140,15 @@ describe("buildCostSpanPayload", () => {
     expect(envMetrics.cache_read_input_tokens).toBe(100);
   });
 
-  it("returns null when metrics would be empty for the harness", () => {
-    expect(buildCostSpanPayload("claude-code", null, baseCtx)).toBeNull();
-    expect(buildCostSpanPayload("opencode", null, baseCtx)).toBeNull();
+  it("returns null when the breakdown is zero", () => {
+    expect(buildCostSpanPayload("claude-code", zeroBreakdown, baseCtx)).toBeNull();
+    expect(buildCostSpanPayload("opencode", zeroBreakdown, baseCtx)).toBeNull();
   });
 
   it("clamps zero/negative durations to one nanosecond to satisfy lapdog's span shape", () => {
     const payload = buildCostSpanPayload(
       "claude-code",
-      { input_tokens: 1, output_tokens: 1 },
+      { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       { ...baseCtx, durationMs: 0 }
     );
     const bytes = payload as Uint8Array;
@@ -166,7 +162,7 @@ describe("buildCostSpanPayload", () => {
     for (let i = 0; i < 10; i++) {
       const payload = buildCostSpanPayload(
         "claude-code",
-        { input_tokens: 1, output_tokens: 1 },
+        { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
         { ...baseCtx, startTimeMs: 1_700_000_000_000 + i }
       );
       const bytes = payload as Uint8Array;
@@ -188,7 +184,7 @@ describe("emitCostSpan", () => {
 
     const payload = buildCostSpanPayload(
       "claude-code",
-      { input_tokens: 1, output_tokens: 1 },
+      { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       baseCtx
     );
     await emitCostSpan("http://localhost:8126", payload as Uint8Array);
@@ -215,7 +211,7 @@ describe("emitCostSpan", () => {
     );
     const payload = buildCostSpanPayload(
       "claude-code",
-      { input_tokens: 1, output_tokens: 1 },
+      { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       baseCtx
     );
     await expect(

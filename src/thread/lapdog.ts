@@ -36,6 +36,42 @@ export async function ensureLapdogNetwork(): Promise<"created" | "exists"> {
   }
 }
 
+interface LapdogContainerInspect {
+  State?: { Running?: boolean };
+  Config?: { Image?: string };
+  NetworkSettings?: { Networks?: Record<string, unknown> };
+}
+
+async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefined> {
+  try {
+    const result = await execa("docker", [
+      "inspect",
+      lapdogContainerName,
+      "--format",
+      "{{json .}}"
+    ]);
+    const parsed: unknown = JSON.parse(result.stdout);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    return parsed as LapdogContainerInspect;
+  } catch {
+    return undefined;
+  }
+}
+
+async function isLapdogContainerUsable(): Promise<boolean> {
+  const info = await inspectLapdogContainer();
+  if (!info) return false;
+  if (info.State?.Running !== true) return false;
+  if (info.Config?.Image !== lapdogImageRef) return false;
+  const networks = info.NetworkSettings?.Networks;
+  if (!networks || !(lapdogNetworkName in networks)) return false;
+  return true;
+}
+
+async function removeLapdogContainer(): Promise<void> {
+  await execa("docker", ["rm", "--force", lapdogContainerName], { reject: false });
+}
+
 export async function startLapdogContainer(
   paths: RuntimePaths
 ): Promise<"started" | "already_running"> {
@@ -43,36 +79,36 @@ export async function startLapdogContainer(
   const snapshotsDir = lapdogSnapshotsPath(paths);
   await mkdir(snapshotsDir, { recursive: true });
 
-  try {
-    await execa("docker", ["inspect", lapdogContainerName]);
+  if (await isLapdogContainerUsable()) {
     return "already_running";
-  } catch {
-    await execa("docker", [
-      "run",
-      "--rm",
-      "--detach",
-      "--name",
-      lapdogContainerName,
-      "--network",
-      lapdogNetworkName,
-      "--publish",
-      `${lapdogPort}:${lapdogPort}`,
-      "--publish",
-      `${lapdogWebUiPort}:${lapdogWebUiPort}`,
-      "--volume",
-      `${snapshotsDir}:${lapdogSnapshotDirInContainer}`,
-      lapdogImageRef,
-      "ddapm-test-agent",
-      "--lapdog-mode",
-      "--disable-llmobs-data-forwarding",
-      `--web-ui-port=${lapdogWebUiPort}`
-    ]);
-    return "started";
   }
+  await removeLapdogContainer();
+
+  await execa("docker", [
+    "run",
+    "--rm",
+    "--detach",
+    "--name",
+    lapdogContainerName,
+    "--network",
+    lapdogNetworkName,
+    "--publish",
+    `${lapdogPort}:${lapdogPort}`,
+    "--publish",
+    `${lapdogWebUiPort}:${lapdogWebUiPort}`,
+    "--volume",
+    `${snapshotsDir}:${lapdogSnapshotDirInContainer}`,
+    lapdogImageRef,
+    "ddapm-test-agent",
+    "--lapdog-mode",
+    "--disable-llmobs-data-forwarding",
+    `--web-ui-port=${lapdogWebUiPort}`
+  ]);
+  return "started";
 }
 
 export async function stopLapdogContainer(): Promise<void> {
-  await execa("docker", ["rm", "--force", lapdogContainerName], { reject: false });
+  await removeLapdogContainer();
   await execa("docker", ["network", "rm", lapdogNetworkName], { reject: false });
 }
 

@@ -1,18 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createRuntimePaths } from "../core/paths.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
   buildHarnessCommand,
   credentialMountArgsForTest,
-  emitLapdogCostSpan,
   lapdogDockerArgs,
   parseHarnessResult,
   sessionStoreMountArgsForTest,
   skillMountArgsForTest,
-  type AgentRunRequest,
-  type AgentRunResult
+  type AgentRunRequest
 } from "./runner.js";
 
 describe("thread runner", () => {
@@ -74,7 +72,7 @@ describe("thread runner", () => {
   });
 
   it("parses Claude result cost and usage from JSONL", () => {
-    const result = parseHarnessResult(
+    const { result } = parseHarnessResult(
       "claude-code",
       JSON.stringify({
         type: "result",
@@ -96,7 +94,7 @@ describe("thread runner", () => {
   });
 
   it("parses OpenCode text and per-step usage from JSONL", () => {
-    const result = parseHarnessResult(
+    const { result } = parseHarnessResult(
       "opencode",
       [
         JSON.stringify({ type: "text", part: { type: "text", text: "hello" } }),
@@ -120,6 +118,28 @@ describe("thread runner", () => {
       reasoning_tokens: 3
     });
     expect(result.durationMs).toBe(234);
+  });
+
+  it("preserves the cache split in the token breakdown even when usage.input_tokens is summed", () => {
+    const { breakdown } = parseHarnessResult(
+      "claude-code",
+      JSON.stringify({
+        type: "result",
+        usage: {
+          input_tokens: 5,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 20
+        }
+      }),
+      1
+    );
+
+    expect(breakdown).toEqual({
+      nonCachedInput: 5,
+      cacheReadInput: 10,
+      cacheWriteInput: 20,
+      output: 0
+    });
   });
 
   it("mounts Claude credentials into the sandbox user home", async () => {
@@ -178,70 +198,28 @@ describe("lapdogDockerArgs", () => {
   });
 });
 
-describe("emitLapdogCostSpan", () => {
-  const baseRequest: AgentRunRequest = {
-    role: "discover",
-    harness: "claude-code",
-    model: "claude-sonnet-4-6",
-    persona: "p.",
-    skills: [],
-    prompt: "hi"
-  };
-  const baseResult: AgentRunResult = {
-    text: "x",
-    rawTrace: "{}",
-    durationMs: 100,
-    rawUsage: { input_tokens: 10, output_tokens: 5 },
-    usage: {
-      cost_usd: 0.01,
-      input_tokens: 10,
-      output_tokens: 5,
-      reasoning_tokens: null
-    }
-  };
-
-  it("is a no-op when lapdog is not reachable", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(
-      emitLapdogCostSpan(false, baseRequest, baseResult, 1_000)
-    ).resolves.toBeUndefined();
-    expect(fetchMock).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
-  });
-
-  it("POSTs a cost span to localhost:8126 when lapdog is reachable", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      calls.push([String(input), init ?? {}]);
-      return new Response("", { status: 200 });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    await emitLapdogCostSpan(true, baseRequest, baseResult, 1_000);
-    expect(calls).toHaveLength(1);
-    const [url, init] = calls[0]!;
-    expect(url).toBe("http://localhost:8126/v0.4/traces");
-    expect(init.body).toBeInstanceOf(Uint8Array);
-    vi.unstubAllGlobals();
-  });
-
-  it("swallows fetch errors (fail-open) and resolves to undefined", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("ECONNREFUSED");
-      })
+describe("AgentRunResult shape", () => {
+  it("does not leak rawUsage into the public result type", () => {
+    const { result } = parseHarnessResult(
+      "claude-code",
+      JSON.stringify({ type: "result", result: "", usage: { input_tokens: 1 } }),
+      1
     );
-    await expect(emitLapdogCostSpan(true, baseRequest, baseResult, 1_000)).resolves.toBeUndefined();
-    vi.unstubAllGlobals();
+    expect(Object.keys(result)).toEqual(
+      expect.arrayContaining(["text", "rawTrace", "usage", "durationMs"])
+    );
+    expect("rawUsage" in result).toBe(false);
   });
 
-  it("does not POST when rawUsage has no token fields (metrics would be empty)", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const result: AgentRunResult = { ...baseResult, rawUsage: {} };
-    await emitLapdogCostSpan(true, baseRequest, result, 1_000);
-    expect(fetchMock).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+  it("never returns a typed AgentRunRequest that still requires rawUsage", () => {
+    const request: AgentRunRequest = {
+      role: "discover",
+      harness: "claude-code",
+      model: "claude-sonnet-4-6",
+      persona: "p.",
+      skills: [],
+      prompt: "hi"
+    };
+    expect(request).toBeDefined();
   });
 });

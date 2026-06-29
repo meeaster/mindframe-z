@@ -5,7 +5,10 @@ import { createRuntimePaths } from "../core/paths.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
   ensureThreadToolsImage,
+  materializeThreadToolsGeneratedFiles,
   threadToolsBuildHashLabel,
+  threadToolsClaudeSettingsPath,
+  threadToolsGeneratedDir,
   threadToolsImageBuildPlan
 } from "./build.js";
 
@@ -14,7 +17,6 @@ async function writeThreadImageFixture(root: string): Promise<void> {
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
   await writeFile(path.join(root, "Dockerfile.tools"), "FROM scratch\n", "utf8");
   await writeFile(path.join(root, "src", "thread", "opencode.thread.json"), "{}\n", "utf8");
-  await writeFile(path.join(root, "src", "thread", "hooks.json"), "{}\n", "utf8");
   await writeFile(
     path.join(root, "opencode", "plugins", "lapdog.ts"),
     "export default async () => ({});\n",
@@ -38,6 +40,37 @@ describe("thread tools image build", () => {
 
     expect(first.hash).not.toBe(second.hash);
     expect(first.label).toBe(`${threadToolsBuildHashLabel}=${first.hash}`);
+  });
+
+  it("materializes a claude-settings.json under .generated/thread-tools", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeThreadImageFixture(root);
+    const plan = await threadToolsImageBuildPlan(createRuntimePaths({ root, home }));
+
+    const rel = await materializeThreadToolsGeneratedFiles(plan);
+    expect(rel).toBe(path.join(threadToolsGeneratedDir, threadToolsClaudeSettingsPath));
+
+    const settings = await readFile(path.join(root, rel), "utf8");
+    const parsed = JSON.parse(settings) as { hooks: Record<string, unknown> };
+    expect(Object.keys(parsed.hooks).sort()).toEqual([
+      "Notification",
+      "PermissionRequest",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "PreCompact",
+      "PreToolUse",
+      "SessionEnd",
+      "SessionStart",
+      "Stop",
+      "SubagentStart",
+      "SubagentStop",
+      "UserPromptSubmit"
+    ]);
+    for (const entry of Object.values(parsed.hooks)) {
+      const block = (entry as Array<{ hooks: Array<{ command: string }> }>)[0]!;
+      expect(block.hooks[0]!.command).toContain("${LAPDOG_URL}/claude/hooks");
+    }
   });
 
   it("skips current images and builds stale images", async () => {
