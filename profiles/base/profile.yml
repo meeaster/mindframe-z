@@ -35,6 +35,8 @@ skills:
     enabled: false
   thermo-nuclear-code-quality-review:
     enabled: true
+  adversarial-code-review:
+    enabled: true
   impeccable:
     enabled: false
   mise:
@@ -64,6 +66,8 @@ skills:
   skill-writer:
     enabled: false
   writing-great-skills:
+    enabled: true
+  skill-patterns:
     enabled: true
   audit-ai-writing:
     enabled: true
