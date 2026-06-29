@@ -47,6 +47,9 @@ import {
   runThreadDiscover,
   runThreadIngest,
   runThreadList,
+  runThreadObserveDown,
+  runThreadObserveStatus,
+  runThreadObserveUp,
   runThreadRuns,
   runThreadShow,
   runThreadSync
@@ -453,6 +456,28 @@ thread
   .option("--all", "sync all thread destinations")
   .action(async (slugs, options) =>
     runThreadSync({ ...program.opts(), slugs, all: Boolean(options.all) })
+  );
+
+const observe = thread
+  .command("observe")
+  .description("Manage the optional lapdog dashboard overlay");
+
+observe
+  .command("up")
+  .description("Start the local lapdog container and mfz-net network")
+  .action(async () => runThreadObserveUp(program.opts()));
+
+observe
+  .command("down")
+  .description("Stop the lapdog container and remove the mfz-net network")
+  .action(async () => runThreadObserveDown(program.opts()));
+
+observe
+  .command("status")
+  .description("Report lapdog reachability from the /info probe")
+  .option("--json", "emit structured JSON")
+  .action(async (options) =>
+    runThreadObserveStatus({ ...program.opts(), json: Boolean(options.json) })
   );
 
 program
