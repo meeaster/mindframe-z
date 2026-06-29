@@ -6,6 +6,13 @@ import type { ThreadHarness } from "../core/manifests.js";
 import { pathExists, type RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
+import {
+  buildCostSpanPayload,
+  emitCostSpan,
+  modelProvider,
+  type TokenBreakdown
+} from "./cost-span.js";
+import { isLapdogReachable, lapdogContainerUrl, lapdogNetworkName, lapdogUrl } from "./lapdog.js";
 
 export interface AgentRunRequest {
   role: ThreadDispatchRun["role"];
@@ -38,6 +45,7 @@ export class DockerAgentRunner implements AgentRunner {
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
     assertSubscriptionAuth(request.harness);
     await ensureThreadToolsImage(await threadToolsImageBuildPlan(this.paths));
+    const probeReachable = await isLapdogReachable();
     const started = Date.now();
     const { tool, args, env } = buildHarnessCommand(request);
     const rawTrace = await runProcess(
@@ -52,13 +60,25 @@ export class DockerAgentRunner implements AgentRunner {
         ...skillMountArgs(this.paths, request.skills),
         "--volume",
         `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
+        ...lapdogDockerArgs(probeReachable),
         this.image,
         tool,
         ...args
       ],
       request.prompt
     );
-    return parseHarnessResult(request.harness, rawTrace, Date.now() - started);
+    const durationMs = Date.now() - started;
+    const parsed = parseHarnessResult(request.harness, rawTrace, durationMs);
+    if (probeReachable) {
+      void emitLapdogCostSpan(
+        request,
+        parsed.breakdown,
+        parsed.result.usage.cost_usd,
+        started,
+        durationMs
+      );
+    }
+    return parsed.result;
   }
 }
 
@@ -100,11 +120,16 @@ export function buildHarnessCommand(request: AgentRunRequest): {
   return { tool: "opencode", args, env: { OPENCODE_DISABLE_AUTOCOMPACT: "true" } };
 }
 
+interface ParsedHarnessResult {
+  result: AgentRunResult;
+  breakdown: TokenBreakdown;
+}
+
 export function parseHarnessResult(
   harness: ThreadHarness,
   rawTrace: string,
   durationMs: number
-): AgentRunResult {
+): ParsedHarnessResult {
   const events = parseEvents(rawTrace);
   return harness === "claude-code"
     ? parseClaudeResult(events, rawTrace, durationMs)
@@ -115,25 +140,33 @@ function parseClaudeResult(
   events: Record<string, unknown>[],
   rawTrace: string,
   durationMs: number
-): AgentRunResult {
+): ParsedHarnessResult {
   const result = [...events].reverse().find((event) => event.type === "result");
   const usage: Record<string, unknown> =
     typeof result?.usage === "object" && result.usage !== null
       ? (result.usage as Record<string, unknown>)
       : {};
+  const nonCached = numberField(usage.input_tokens) ?? 0;
+  const cacheRead = numberField(usage.cache_read_input_tokens) ?? 0;
+  const cacheWrite = numberField(usage.cache_creation_input_tokens) ?? 0;
+  const output = numberField(usage.output_tokens) ?? 0;
   return {
-    text: textField(result?.result),
-    rawTrace,
-    durationMs,
-    usage: {
-      cost_usd: numberField(result?.total_cost_usd),
-      input_tokens: sumNumbers(usage, [
-        "input_tokens",
-        "cache_read_input_tokens",
-        "cache_creation_input_tokens"
-      ]),
-      output_tokens: numberField(usage.output_tokens),
-      reasoning_tokens: null
+    result: {
+      text: textField(result?.result),
+      rawTrace,
+      durationMs,
+      usage: {
+        cost_usd: numberField(result?.total_cost_usd),
+        input_tokens: nonCached + cacheRead + cacheWrite,
+        output_tokens: output,
+        reasoning_tokens: null
+      }
+    },
+    breakdown: {
+      nonCachedInput: nonCached,
+      cacheReadInput: cacheRead,
+      cacheWriteInput: cacheWrite,
+      output
     }
   };
 }
@@ -142,7 +175,7 @@ function parseOpenCodeResult(
   events: Record<string, unknown>[],
   rawTrace: string,
   durationMs: number
-): AgentRunResult {
+): ParsedHarnessResult {
   const text = events
     .map((event) => {
       const part = event.part;
@@ -160,15 +193,25 @@ function parseOpenCodeResult(
         part !== null &&
         (part as Record<string, unknown>).type === "step-finish"
     );
+  const input = sumNullable(stepFinishes.map((part) => tokenField(part, "input"))) ?? 0;
+  const output = sumNullable(stepFinishes.map((part) => tokenField(part, "output"))) ?? 0;
   return {
-    text,
-    rawTrace,
-    durationMs,
-    usage: {
-      cost_usd: sumNullable(stepFinishes.map((part) => numberField(part.cost))),
-      input_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "input"))),
-      output_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "output"))),
-      reasoning_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "reasoning")))
+    result: {
+      text,
+      rawTrace,
+      durationMs,
+      usage: {
+        cost_usd: sumNullable(stepFinishes.map((part) => numberField(part.cost))),
+        input_tokens: input,
+        output_tokens: output,
+        reasoning_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "reasoning")))
+      }
+    },
+    breakdown: {
+      nonCachedInput: input,
+      cacheReadInput: 0,
+      cacheWriteInput: 0,
+      output
     }
   };
 }
@@ -304,11 +347,6 @@ function numberField(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function sumNumbers(source: object, keys: readonly string[]): number | null {
-  const values = keys.map((key) => numberField((source as Record<string, unknown>)[key]));
-  return sumNullable(values);
-}
-
 function sumNullable(values: Array<number | null>): number | null {
   const numbers = values.filter((value): value is number => value !== null);
   return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : null;
@@ -319,4 +357,30 @@ function tokenField(part: Record<string, unknown>, field: string): number | null
   return typeof tokens === "object" && tokens !== null
     ? numberField((tokens as Record<string, unknown>)[field])
     : null;
+}
+
+export function lapdogDockerArgs(reachable: boolean): string[] {
+  if (!reachable) return [];
+  return ["--network", lapdogNetworkName, "--env", `LAPDOG_URL=${lapdogContainerUrl()}`];
+}
+
+async function emitLapdogCostSpan(
+  request: AgentRunRequest,
+  breakdown: TokenBreakdown,
+  costUsd: number | null,
+  startedMs: number,
+  durationMs: number
+): Promise<void> {
+  try {
+    const payload = buildCostSpanPayload(request.harness, breakdown, {
+      model: request.model,
+      modelProvider: modelProvider(request.harness, request.model),
+      startTimeMs: startedMs,
+      durationMs,
+      costUsd
+    });
+    if (payload) await emitCostSpan(lapdogUrl(), payload);
+  } catch {
+    // fail-open: any throw from msgpack encode or fetch must never affect a dispatch.
+  }
 }

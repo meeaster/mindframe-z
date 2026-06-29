@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import type { RuntimePaths } from "../core/paths.js";
+import { buildClaudeSettingsJson } from "./claude-hooks.js";
 
 export const threadToolsImageName = "mindframe-z-thread-tools:latest";
 export const threadToolsBuildHashLabel = "dev.mindframe-z.thread-tools.build-hash";
+
+export const threadToolsGeneratedDir = ".generated/thread-tools";
+export const threadToolsClaudeSettingsPath = "claude-settings.json";
 
 export interface ThreadToolsImageBuildPlan {
   root: string;
@@ -23,8 +27,13 @@ export async function threadToolsImageBuildPlan(
     path.join(paths.root, "src", "thread", "opencode.thread.json"),
     "utf8"
   );
+  const claudeSettings = buildClaudeSettingsJson();
+  const lapdogPlugin = await readFile(
+    path.join(paths.root, "opencode", "plugins", "lapdog.ts"),
+    "utf8"
+  );
   const hash = createHash("sha256")
-    .update(JSON.stringify({ dockerfile, opencodeConfig }))
+    .update(JSON.stringify({ dockerfile, opencodeConfig, claudeSettings, lapdogPlugin }))
     .digest("hex");
   return {
     root: paths.root,
@@ -33,6 +42,16 @@ export async function threadToolsImageBuildPlan(
     hash,
     label: `${threadToolsBuildHashLabel}=${hash}`
   };
+}
+
+export async function materializeThreadToolsGeneratedFiles(
+  plan: ThreadToolsImageBuildPlan
+): Promise<string> {
+  const dir = path.join(plan.root, threadToolsGeneratedDir);
+  await mkdir(dir, { recursive: true });
+  const settingsPath = path.join(dir, threadToolsClaudeSettingsPath);
+  await writeFile(settingsPath, buildClaudeSettingsJson(), "utf8");
+  return path.join(threadToolsGeneratedDir, threadToolsClaudeSettingsPath);
 }
 
 export async function currentThreadToolsImageHash(
@@ -60,6 +79,7 @@ export async function ensureThreadToolsImage(
   const currentHash = await currentThreadToolsImageHash(plan.image);
   if (!options.force && currentHash === plan.hash) return "current";
 
+  await materializeThreadToolsGeneratedFiles(plan);
   await execa(
     "docker",
     [
