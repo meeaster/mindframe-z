@@ -6,9 +6,11 @@ import { makeTempDir } from "../../tests/integration/support.js";
 import {
   buildHarnessCommand,
   credentialMountArgsForTest,
+  lapdogDockerArgs,
   parseHarnessResult,
   sessionStoreMountArgsForTest,
-  skillMountArgsForTest
+  skillMountArgsForTest,
+  type AgentRunRequest
 } from "./runner.js";
 
 describe("thread runner", () => {
@@ -70,7 +72,7 @@ describe("thread runner", () => {
   });
 
   it("parses Claude result cost and usage from JSONL", () => {
-    const result = parseHarnessResult(
+    const { result } = parseHarnessResult(
       "claude-code",
       JSON.stringify({
         type: "result",
@@ -92,7 +94,7 @@ describe("thread runner", () => {
   });
 
   it("parses OpenCode text and per-step usage from JSONL", () => {
-    const result = parseHarnessResult(
+    const { result } = parseHarnessResult(
       "opencode",
       [
         JSON.stringify({ type: "text", part: { type: "text", text: "hello" } }),
@@ -116,6 +118,28 @@ describe("thread runner", () => {
       reasoning_tokens: 3
     });
     expect(result.durationMs).toBe(234);
+  });
+
+  it("preserves the cache split in the token breakdown even when usage.input_tokens is summed", () => {
+    const { breakdown } = parseHarnessResult(
+      "claude-code",
+      JSON.stringify({
+        type: "result",
+        usage: {
+          input_tokens: 5,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 20
+        }
+      }),
+      1
+    );
+
+    expect(breakdown).toEqual({
+      nonCachedInput: 5,
+      cacheReadInput: 10,
+      cacheWriteInput: 20,
+      output: 0
+    });
   });
 
   it("mounts Claude credentials into the sandbox user home", async () => {
@@ -160,5 +184,42 @@ describe("thread runner", () => {
     } finally {
       process.env.XDG_DATA_HOME = oldXdgDataHome;
     }
+  });
+});
+
+describe("lapdogDockerArgs", () => {
+  it("returns an empty arg list when lapdog is not reachable", () => {
+    expect(lapdogDockerArgs(false)).toEqual([]);
+  });
+
+  it("injects the network and LAPDOG_URL env when lapdog is reachable", () => {
+    const args = lapdogDockerArgs(true);
+    expect(args).toEqual(["--network", "mfz-net", "--env", "LAPDOG_URL=http://lapdog:8126"]);
+  });
+});
+
+describe("AgentRunResult shape", () => {
+  it("does not leak rawUsage into the public result type", () => {
+    const { result } = parseHarnessResult(
+      "claude-code",
+      JSON.stringify({ type: "result", result: "", usage: { input_tokens: 1 } }),
+      1
+    );
+    expect(Object.keys(result)).toEqual(
+      expect.arrayContaining(["text", "rawTrace", "usage", "durationMs"])
+    );
+    expect("rawUsage" in result).toBe(false);
+  });
+
+  it("never returns a typed AgentRunRequest that still requires rawUsage", () => {
+    const request: AgentRunRequest = {
+      role: "discover",
+      harness: "claude-code",
+      model: "claude-sonnet-4-6",
+      persona: "p.",
+      skills: [],
+      prompt: "hi"
+    };
+    expect(request).toBeDefined();
   });
 });
