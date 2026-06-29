@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../../tests/integration/support.js";
@@ -12,16 +12,65 @@ import {
   runThreadDiscover,
   runThreadIngest,
   runThreadList,
+  runThreadObserveDown,
+  runThreadObserveStatus,
+  runThreadObserveUp,
   runThreadRuns,
   runThreadSync
 } from "./cli.js";
 
-const logs: string[] = [];
+const oldPath = process.env.PATH;
+const oldStateDir = process.env.FAKE_DOCKER_STATE_DIR;
 
 afterEach(() => {
+  process.env.PATH = oldPath;
+  if (oldStateDir === undefined) delete process.env.FAKE_DOCKER_STATE_DIR;
+  else process.env.FAKE_DOCKER_STATE_DIR = oldStateDir;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   logs.length = 0;
 });
+
+async function writeFakeDocker(home: string): Promise<string> {
+  const binDir = path.join(home, "bin");
+  const stateDir = path.join(home, "fake-docker-state");
+  await mkdir(binDir, { recursive: true });
+  await mkdir(stateDir, { recursive: true });
+  const docker = path.join(binDir, "docker");
+  const lines = [
+    "#!/usr/bin/env sh",
+    "STATE=${FAKE_DOCKER_STATE_DIR:?FAKE_DOCKER_STATE_DIR not set}",
+    'log() { printf \'%s\\n\' "$*" >> "$STATE/docker.log"; }',
+    'log "$*"',
+    'if [ "$1" = network ] && [ "$2" = inspect ] && [ "$3" = mfz-net ]; then',
+    '  [ -f "$STATE/network-exists" ] && exit 0 || exit 1',
+    "fi",
+    'if [ "$1" = network ] && [ "$2" = create ] && [ "$3" = mfz-net ]; then',
+    '  touch "$STATE/network-exists"; exit 0',
+    "fi",
+    'if [ "$1" = inspect ] && [ "$2" = lapdog ]; then',
+    '  [ -f "$STATE/container-exists" ] && exit 0 || exit 1',
+    "fi",
+    'if [ "$1" = run ]; then',
+    '  shift; while [ "$1" != --name ] && [ $# -gt 0 ]; do shift; done; shift',
+    '  touch "$STATE/container-exists"; exit 0',
+    "fi",
+    'if [ "$1" = rm ]; then',
+    '  rm -f "$STATE/container-exists"; exit 0',
+    "fi",
+    'if [ "$1" = network ] && [ "$2" = rm ]; then',
+    '  rm -f "$STATE/network-exists"; exit 0',
+    "fi",
+    "exit 0"
+  ];
+  await writeFile(docker, lines.join("\n") + "\n", "utf8");
+  await chmod(docker, 0o755);
+  process.env.FAKE_DOCKER_STATE_DIR = stateDir;
+  await writeFile(path.join(stateDir, "docker.log"), "", "utf8");
+  return stateDir;
+}
+
+const logs: string[] = [];
 
 function captureConsole(): void {
   vi.spyOn(console, "log").mockImplementation((value?: unknown) => {
@@ -80,7 +129,8 @@ describe("thread cli", () => {
             input_tokens: null,
             output_tokens: null,
             reasoning_tokens: null
-          }
+          },
+          rawUsage: null
         };
       }
     };
@@ -141,7 +191,8 @@ describe("thread cli", () => {
             input_tokens: null,
             output_tokens: null,
             reasoning_tokens: null
-          }
+          },
+          rawUsage: null
         };
       }
     };
@@ -328,5 +379,91 @@ describe("thread cli", () => {
     await runThreadSync({ root, home, profile: "base", all: true });
 
     expect(logs).toContain("sync\tpersonal\tup to date");
+  });
+});
+
+describe("thread observe lifecycle", () => {
+  async function withFakeDocker<T>(
+    body: (paths: ReturnType<typeof createRuntimePaths>, stateDir: string) => Promise<T>
+  ): Promise<T> {
+    const home = await makeTempDir();
+    const root = process.cwd();
+    const stateDir = await writeFakeDocker(home);
+    process.env.PATH = `${path.join(home, "bin")}:${oldPath ?? ""}`;
+    const paths = createRuntimePaths({ root, home });
+    return body(paths, stateDir);
+  }
+
+  it("starts the lapdog container and reports the dashboard URL on a cold start", async () => {
+    captureConsole();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 }))
+    );
+    await withFakeDocker(async (paths) => {
+      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      expect(logs).toContain("lapdog\tstarted");
+      expect(logs).toContain("dashboard\thttp://localhost:8080");
+    });
+  });
+
+  it("reports 'already_running' on a second up when the container is present", async () => {
+    captureConsole();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 }))
+    );
+    await withFakeDocker(async (paths) => {
+      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      logs.length = 0;
+      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      expect(logs).toContain("lapdog\talready_running");
+    });
+  });
+
+  it("down is idempotent and tolerates a missing container", async () => {
+    captureConsole();
+    await withFakeDocker(async (paths) => {
+      await expect(
+        runThreadObserveDown({ root: process.cwd(), home: paths.home, profile: "base" })
+      ).resolves.toBeUndefined();
+      expect(logs).toContain("lapdog\tstopped");
+    });
+  });
+
+  it("status reports reachable=false and the dashboard URL when /info refuses", async () => {
+    captureConsole();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      })
+    );
+    await withFakeDocker(async (paths) => {
+      await runThreadObserveStatus({ root: process.cwd(), home: paths.home, profile: "base" });
+      expect(logs).toContain("reachable\tfalse");
+      expect(logs).toContain("dashboard\thttp://localhost:8080");
+    });
+  });
+
+  it("status emits JSON when --json is passed", async () => {
+    captureConsole();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      })
+    );
+    await withFakeDocker(async (paths) => {
+      await runThreadObserveStatus({
+        root: process.cwd(),
+        home: paths.home,
+        profile: "base",
+        json: true
+      });
+      const parsed = JSON.parse(logs[0]!) as { reachable: boolean; dashboardUrl: string };
+      expect(parsed.reachable).toBe(false);
+      expect(parsed.dashboardUrl).toBe("http://localhost:8080");
+    });
   });
 });

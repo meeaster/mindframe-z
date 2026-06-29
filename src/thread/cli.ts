@@ -14,6 +14,13 @@ import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
 import { ingestThread } from "./ingest.js";
 import {
+  lapdogDashboardUrl,
+  lapdogStatus,
+  startLapdogContainer,
+  stopLapdogContainer,
+  waitForLapdog
+} from "./lapdog.js";
+import {
   defaultThreadDestination,
   deleteThreadFromDestination,
   findThread,
@@ -273,6 +280,41 @@ export async function runThreadSync(
       } else {
         console.log(`synced\t${destName}\t${updated.join(", ")}`);
       }
+    }
+  });
+}
+
+export async function runThreadObserveUp(options: ThreadOptions): Promise<void> {
+  await withThreadLog(options, "thread observe up", async ({ paths }) => {
+    const result = await startLapdogContainer(paths);
+    console.log(`lapdog\t${result}`);
+    console.log(`dashboard\t${lapdogDashboardUrl()}`);
+    if (result === "started") {
+      const ready = await waitForLapdog();
+      if (!ready) {
+        console.log("warning: lapdog did not become reachable within the wait window");
+      }
+    }
+  });
+}
+
+export async function runThreadObserveDown(options: ThreadOptions): Promise<void> {
+  await withThreadLog(options, "thread observe down", async () => {
+    await stopLapdogContainer();
+    console.log("lapdog\tstopped");
+  });
+}
+
+export async function runThreadObserveStatus(
+  options: ThreadOptions & { json?: boolean }
+): Promise<void> {
+  await withThreadLog(options, "thread observe status", async () => {
+    const status = await lapdogStatus();
+    if (options.json) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      console.log(`reachable\t${status.reachable}`);
+      console.log(`dashboard\t${status.dashboardUrl}`);
     }
   });
 }

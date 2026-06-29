@@ -6,6 +6,8 @@ import type { ThreadHarness } from "../core/manifests.js";
 import { pathExists, type RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
+import { buildCostSpanPayload, emitCostSpan, modelProvider } from "./cost-span.js";
+import { isLapdogReachable, lapdogContainerUrl, lapdogNetworkName, lapdogUrl } from "./lapdog.js";
 
 export interface AgentRunRequest {
   role: ThreadDispatchRun["role"];
@@ -23,6 +25,7 @@ export interface AgentRunResult {
   rawTrace: string;
   usage: Omit<ThreadDispatchRun, "role" | "harness" | "model" | "duration_ms">;
   durationMs: number;
+  rawUsage: Record<string, unknown> | null;
 }
 
 export interface AgentRunner {
@@ -38,6 +41,7 @@ export class DockerAgentRunner implements AgentRunner {
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
     assertSubscriptionAuth(request.harness);
     await ensureThreadToolsImage(await threadToolsImageBuildPlan(this.paths));
+    const probeReachable = await isLapdogReachable();
     const started = Date.now();
     const { tool, args, env } = buildHarnessCommand(request);
     const rawTrace = await runProcess(
@@ -52,13 +56,16 @@ export class DockerAgentRunner implements AgentRunner {
         ...skillMountArgs(this.paths, request.skills),
         "--volume",
         `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
+        ...lapdogDockerArgs(probeReachable),
         this.image,
         tool,
         ...args
       ],
       request.prompt
     );
-    return parseHarnessResult(request.harness, rawTrace, Date.now() - started);
+    const result = parseHarnessResult(request.harness, rawTrace, Date.now() - started);
+    void emitLapdogCostSpan(probeReachable, request, result, started);
+    return result;
   }
 }
 
@@ -134,7 +141,8 @@ function parseClaudeResult(
       ]),
       output_tokens: numberField(usage.output_tokens),
       reasoning_tokens: null
-    }
+    },
+    rawUsage: usage
   };
 }
 
@@ -169,6 +177,10 @@ function parseOpenCodeResult(
       input_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "input"))),
       output_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "output"))),
       reasoning_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "reasoning")))
+    },
+    rawUsage: {
+      input_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "input"))),
+      output_tokens: sumNullable(stepFinishes.map((part) => tokenField(part, "output")))
     }
   };
 }
@@ -319,4 +331,26 @@ function tokenField(part: Record<string, unknown>, field: string): number | null
   return typeof tokens === "object" && tokens !== null
     ? numberField((tokens as Record<string, unknown>)[field])
     : null;
+}
+
+export function lapdogDockerArgs(reachable: boolean): string[] {
+  if (!reachable) return [];
+  return ["--network", lapdogNetworkName, "--env", `LAPDOG_URL=${lapdogContainerUrl()}`];
+}
+
+export async function emitLapdogCostSpan(
+  reachable: boolean,
+  request: AgentRunRequest,
+  result: AgentRunResult,
+  startedMs: number
+): Promise<void> {
+  if (!reachable) return;
+  const payload = buildCostSpanPayload(request.harness, result.rawUsage, {
+    model: request.model,
+    modelProvider: modelProvider(request.harness, request.model),
+    startTimeMs: startedMs,
+    durationMs: result.durationMs,
+    costUsd: result.usage.cost_usd
+  });
+  if (payload) await emitCostSpan(lapdogUrl(), payload);
 }

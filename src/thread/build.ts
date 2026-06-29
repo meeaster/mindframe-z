@@ -23,8 +23,13 @@ export async function threadToolsImageBuildPlan(
     path.join(paths.root, "src", "thread", "opencode.thread.json"),
     "utf8"
   );
+  const hooksConfig = await readFile(path.join(paths.root, "src", "thread", "hooks.json"), "utf8");
+  const lapdogPlugin = await readFile(
+    path.join(paths.root, "opencode", "plugins", "lapdog.ts"),
+    "utf8"
+  );
   const hash = createHash("sha256")
-    .update(JSON.stringify({ dockerfile, opencodeConfig }))
+    .update(JSON.stringify({ dockerfile, opencodeConfig, hooksConfig, lapdogPlugin }))
     .digest("hex");
   return {
     root: paths.root,

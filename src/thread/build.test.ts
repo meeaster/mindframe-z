@@ -11,8 +11,15 @@ import {
 
 async function writeThreadImageFixture(root: string): Promise<void> {
   await mkdir(path.join(root, "src", "thread"), { recursive: true });
+  await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
   await writeFile(path.join(root, "Dockerfile.tools"), "FROM scratch\n", "utf8");
   await writeFile(path.join(root, "src", "thread", "opencode.thread.json"), "{}\n", "utf8");
+  await writeFile(path.join(root, "src", "thread", "hooks.json"), "{}\n", "utf8");
+  await writeFile(
+    path.join(root, "opencode", "plugins", "lapdog.ts"),
+    "export default async () => ({});\n",
+    "utf8"
+  );
 }
 
 describe("thread tools image build", () => {
