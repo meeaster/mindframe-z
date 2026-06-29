@@ -8,12 +8,18 @@ Profile-aware AI tool configuration renderer. Reads YAML manifests from profiles
 pnpm install
 pnpm build
 pnpm test
+pnpm test:all
+pnpm test:integration
+pnpm lint
+pnpm fmt
+pnpm check
+pnpm schemas
 pnpm build && npm link
-pnpm dev -- doctor
-pnpm dev -- apply --profile personal --target all --dry-run
-pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
-pnpm dev -- refs list
-pnpm dev -- thread destinations
+pnpm dev doctor
+pnpm dev --profile personal apply --target all --dry-run
+pnpm dev --home /tmp/mindframe-z-home smoke-opencode
+pnpm dev refs list
+pnpm dev thread destinations
 mfz doctor
 ```
 
