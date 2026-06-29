@@ -21,13 +21,13 @@ pnpm lint              # oxlint
 pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
 pnpm check             # lint -> fmt:check -> build -> fast test
 pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
-pnpm dev -- doctor
-pnpm dev -- apply --profile personal --target all --dry-run
-pnpm dev -- smoke-opencode --home /tmp/mindframe-z-home
-pnpm dev -- refs list
+pnpm dev doctor
+pnpm dev --profile personal apply --target all --dry-run
+pnpm dev --home /tmp/mindframe-z-home smoke-opencode
+pnpm dev refs list
 ```
 
-Use `pnpm dev -- ...` for source execution via `tsx`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz` or `npm link` behavior.
+Use `pnpm dev <command>` for source execution via `tsx`; do not insert `--` before the command because this repo's script passes it through to Commander as a literal argument. Put global options before the subcommand, for example `pnpm dev --profile personal apply --target opencode --dry-run`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz`, `npm link`, or globally linked `mfz` behavior.
 
 ## Verification
 
@@ -50,6 +50,23 @@ Key entrypoints:
 - `src/core/profile.ts` resolves profile inheritance and merge semantics.
 - `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
 - `src/sync/` promotes unmanaged edits from rendered configs back into profile YAML/TOML.
+
+## File Path Discovery
+
+Do not guess repo paths. Before reading a path from memory or convention, confirm it with `fff_find_files`, `glob`, or a targeted grep. Common path traps in this repo:
+
+- Profiles live at `profiles/<name>/profile.yml`, not `profiles/<name>.yml`.
+- The references catalog is `shared/refs.yml`, not `shared/references.yml`.
+- Machine config uses `~/.mindframe-z/config.yml` and `machine-config.example.yml`; there is no `machine/` config directory.
+- Renderer keys are not always file names; for example, the `claude-code` renderer lives in `src/renderers/claude.ts`.
+- `configs/<profile>/` is rendered output, not profile source; change source files under `profiles/<profile>/`, `shared/`, `opencode/`, or `src/renderers/` instead.
+- OpenCode agents live under `opencode/agents/`; this repo does not use `.opencode/agents/` as source.
+- There is no in-repo `references/` directory. Reference repositories are external paths listed in `~/.mindframe-z/references.md`.
+- Integration test support is TypeScript at `tests/integration/support.ts`, not `support.js`.
+- Thread source files live in `src/thread/`; there is no `src/thread/broker.ts`.
+- Sandbox spike files are disposable. Locate them before assuming they still exist.
+
+If a read fails with "file not found", locate the path before retrying instead of trying nearby guesses.
 
 ## Manifest Model
 
