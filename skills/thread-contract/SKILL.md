@@ -25,9 +25,9 @@ Each carries a Title-Case header in the session file. Five are **events** — so
 | `## Mistakes Fixed` | event | Something done wrong then corrected — what was wrong *and* the fix. Boundary vs. Issue: a mistake was *resolved*. |
 | `## Issues` | event | A problem or blocker, resolved or open. Boundary: a state of the *work*, not a *question* about direction. |
 | `## Open Questions` | event | A question raised but unanswered — a lifecycle, so a later answer is a new event, not an edit. |
-| `## Intent & Vision` | state | The user's own voice, **near-verbatim**: the *why* (the problem, the reasoning they want kept) and their aspirational *vision*. Keep it even when it rambles — that thinking-aloud is what gets lost otherwise. |
+| `## Intent & Vision` | state | The user's own voice, **near-verbatim** — the whole brain dump, not only the why and vision: the *why* (the problem, the reasoning they want kept), the aspirational *vision*, and their *opinions, theories, frustrations, and taste*. Keep it even when it rambles and the ideas are disjointed — that thinking-aloud is the first thing lost, and this session file is its one complete home. |
 | `## Artifacts Touched` | state | Files, configs, docs, infra created or edited — the session's footprint. |
-| `## Sources` | state | External references consulted: docs, URLs, library/reference docs, tickets. |
+| `## Sources` | state | External references consulted: docs, URLs, library/reference docs, tickets. Boundary vs. Artifacts Touched: *consulted*, not *produced* — a file or change directory this session created is an artifact, never a source. |
 
 ## Session file
 
@@ -69,15 +69,22 @@ The current-state read model — the one file someone opens to pick the thread b
 ## Current State
 <where the thread stands now, in prose>
 
-## Design
-<ASCII diagram — only when the thread describes a structure; omit otherwise>
+## Components
+- **<work component>** — <what it is, in one line> · <where it stands>
+- **Cross-cutting** — <stance or principle spanning every component>
 
-## Key Decisions
-- <current decisions only>
+## Direction
+<concrete next steps>
 
 ## Open Questions
 - <only those still open>
 None.
+
+## Key Decisions
+- <current decisions only>
+
+## Design
+<ASCII diagram — only when the thread describes a structure; omit otherwise>
 
 ## Intent
 <the why, reconciled across sessions into one coherent account of the user's motivation>
@@ -85,13 +92,18 @@ None.
 ## Vision
 <where the user currently thinks this heads — their aspiration, not a commitment; note how it shifted>
 
-## Direction
-<concrete next steps>
+## Perspective
+<the user's standing opinions, theories, frustrations, and taste — their scattered thinking reorganized into one cohesive account; note where a view shifted>
+None.
 
 ## Sources
 - <every external reference, collated from all Sources buckets and deduplicated>
 ```
 
-- **Stable skeleton, explicit `None.`** Unlike the session file, the digest keeps every content section even when empty and writes `None.` — "no open questions" is itself informative, and a fixed section list keeps the digest scannable run to run. The one exception is `## Design`: the diagram is a *format*, not a bucket, so omit the whole section when there is nothing spatial to show.
+- **Stable skeleton, explicit `None.`** Unlike the session file, the digest keeps every content section even when empty and writes `None.` — "no open questions" is itself informative, and a fixed section list keeps the digest scannable run to run. Two sections are exceptions, omitted entirely rather than written empty: `## Design` (the diagram is a *format*, not a bucket — drop it when nothing is spatial) and `## Components` (drop it only when the thread is genuinely single-concern — a thread with more than one distinct part, even a feature plus the bug fix found building it, still groups).
+- **Action-first order, fixed every run.** The section order serves the reader picking the work back up: where it stands (Current State), how it breaks down (Components), what to do next (Direction), what is still unresolved (Open Questions), then the settled record (Key Decisions, Design) and the durable voice (Intent, Vision, Perspective), with Sources last. Hold this order every run — a predictable layout is what makes the digest scannable.
+- **Components group the work; they don't re-list it.** When the initiative decomposes into parts, `## Components` clusters them — each one line: **name** — what it is · where it stands. It is a map, not a second copy of Key Decisions: name the piece and its essence, and leave the detailed decisions in Key Decisions, the next steps in Direction. Close with a single **Cross-cutting** entry for the principles that span every component (a fail-open stance, a single-source-of-truth rule) rather than force-fitting them into one. Each component's state reconciles newest-wins like everything else. A component is a thing being **built or designed** — never the scaffolding that files it: a spec or change directory is a `## Direction` pointer, not a component, and its files and artifact counts are never inventoried here.
 - **Reconcile across sessions; newest wins.** Read the session files in time order. Where a later session overturns an earlier decision or answers an open question, the digest shows only the current state — the overturned decision drops from Key Decisions, the answered question drops from Open Questions. History is never lost: it stays in the session files; the digest is just the present.
-- **Intent vs. Vision vs. Direction.** Intent is the *why* (the problem, the motivation). Vision is *where the user thinks this heads* — an aspiration that may shift as the work lands, and the digest notes that shift. Direction is the *concrete next steps*. Do not harden Vision into a plan or collapse it into Direction.
+- **Intent vs. Vision vs. Perspective vs. Direction.** Intent is the *why* (the problem, the motivation). Vision is *where the user thinks this heads* — an aspiration that may shift as the work lands, and the digest notes that shift. Perspective is *how the user sees the work* — their opinions, theories, frustrations, and taste. Direction is the *concrete next steps*. Do not harden Vision into a plan or collapse it into Direction.
+- **Perspective reorganizes the ramble; it does not quote it.** Verbatim voice is the session file's job — the digest's `## Perspective` gathers the user's scattered, disjointed opinions, theories, frustrations, and taste across sessions and synthesizes them into one cohesive, readable account, grouped by theme where it helps. Accumulate rather than overturn — an opinion is not a decision; a genuinely changed view is a noted *shift*, not a deletion. Capture only what the sessions support; never invent a take to fill the section.
+- **Scaffolding gets one durable pointer, never an inventory.** Process scaffolding — a change or spec directory (e.g. OpenSpec), an ADR, a handoff doc, a working branch, a ticket — is *where the work is filed*, not the work itself. Name it once, in `## Direction`, as the resume point, abstracted to the artifact (e.g. `tasks live in <the change>/tasks.md`) — never its file tree, an artifact count, or a non-durable path (`/tmp/…`, a throwaway handoff). It never repeats across sections, and a file the thread *produced* never appears in `## Sources` — not even when a later session consults that same artifact as its ground truth; a thread's own output is cited once as the resume pointer, never laundered into a source.
