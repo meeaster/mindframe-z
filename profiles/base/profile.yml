@@ -22,9 +22,9 @@ thread:
     - name: testing
       remote: git@github.com:meeaster/thread-testing.git
   defaults:
-    synthesize: opencode:opencode-go/deepseek-v4-pro@max
-    gather: opencode:opencode-go/deepseek-v4-flash@max
-    discover: opencode:opencode-go/deepseek-v4-flash@max
+    synthesize: claude-code:sonnet@max
+    gather: claude-code:haiku@low
+    discover: claude-code:haiku@low
     session_sources:
       - claude-code
       - opencode
