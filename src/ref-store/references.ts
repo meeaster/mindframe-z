@@ -38,7 +38,13 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
   await mkdir(profile.referencesDir, { recursive: true });
   try {
     await access(destination);
-    await execa("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
+    try {
+      await pullReference(destination);
+    } catch (error) {
+      if (!isStaleRemoteRefError(error)) throw error;
+      await execa("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
+      await pullReference(destination);
+    }
     return `updated ${name} at ${destination}`;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -47,6 +53,19 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
     }
     throw error;
   }
+}
+
+function pullReference(destination: string): Promise<unknown> {
+  return execa("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
+}
+
+export function isStaleRemoteRefError(error: unknown): boolean {
+  const stderr = typeof error === "object" && error && "stderr" in error ? error.stderr : undefined;
+  return (
+    typeof stderr === "string" &&
+    stderr.includes("some local refs could not be updated") &&
+    stderr.includes("git remote prune origin")
+  );
 }
 
 export async function writeExtraFoldersIndex(
