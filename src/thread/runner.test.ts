@@ -171,6 +171,14 @@ describe("thread runner", () => {
     ]);
   });
 
+  it("mounts the scoped AWS creds directory in bedrock mode instead of the OAuth token", async () => {
+    const paths = createRuntimePaths({ root: "/repo", home: "/home/test" });
+
+    await expect(
+      credentialMountArgsForTest(paths, "claude-code", "/home/test/.mindframe-z/bedrock")
+    ).resolves.toEqual(["--volume", "/home/test/.mindframe-z/bedrock:/home/sandbox/.aws:ro"]);
+  });
+
   it("mounts only requested skills read-only at runtime", () => {
     const paths = createRuntimePaths({ root: "/repo", home: "/home/test" });
 

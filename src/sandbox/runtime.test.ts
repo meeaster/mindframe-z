@@ -53,7 +53,11 @@ function profile(
       opencode: { config: {}, plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
-      thread: { destinations: [], defaults: { session_sources: ["claude-code", "opencode"] } },
+      thread: {
+        destinations: [],
+        defaults: { session_sources: ["claude-code", "opencode"] },
+        credentials: "subscription"
+      },
       dotfiles: { ".zshrc": "zsh", ".p10k.zsh": "prompt" },
       extra_folders: []
     },

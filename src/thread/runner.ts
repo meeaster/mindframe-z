@@ -2,9 +2,15 @@ import { access } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { ThreadHarness } from "../core/manifests.js";
+import type { SandboxCredentialMode, ThreadHarness } from "../core/manifests.js";
 import { pathExists, type RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
+import {
+  bedrockContainerEnv,
+  readBedrockHostSettings,
+  refreshBedrockCredentials,
+  writeScopedBedrockCredentials
+} from "./bedrock.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
 import {
   buildCostSpanPayload,
@@ -36,14 +42,37 @@ export interface AgentRunner {
   run(request: AgentRunRequest): Promise<AgentRunResult>;
 }
 
+interface BedrockDispatchContext {
+  readonly env: Record<string, string>;
+  readonly credsDir: string;
+}
+
 export class DockerAgentRunner implements AgentRunner {
+  // Bedrock prep (SSO refresh + scoped credential write + OTEL header resolution)
+  // is shared across every dispatch in a batch: the first run primes it, the
+  // rest reuse it. Refreshing per-agent would stampede the credential process's
+  // :8400 port-lock and risk a redundant browser prompt.
+  private bedrockContext: Promise<BedrockDispatchContext> | undefined;
+
   constructor(
     private readonly paths: RuntimePaths,
+    private readonly credentialMode: SandboxCredentialMode = "subscription",
     private readonly image = process.env.MFZ_THREAD_TOOLS_IMAGE ?? "mindframe-z-thread-tools:latest"
   ) {}
 
+  private prepareBedrock(): Promise<BedrockDispatchContext> {
+    this.bedrockContext ??= (async () => {
+      const settings = await readBedrockHostSettings(this.paths);
+      await refreshBedrockCredentials(settings);
+      const credsDir = await writeScopedBedrockCredentials(this.paths, settings);
+      return { env: await bedrockContainerEnv(settings), credsDir };
+    })();
+    return this.bedrockContext;
+  }
+
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
-    assertSubscriptionAuth(request.harness);
+    const bedrock = this.credentialMode === "bedrock" ? await this.prepareBedrock() : undefined;
+    if (!bedrock) assertSubscriptionAuth(request.harness);
     await ensureThreadToolsImage(await threadToolsImageBuildPlan(this.paths));
     const probeReachable = await isLapdogReachable();
     const started = Date.now();
@@ -54,8 +83,8 @@ export class DockerAgentRunner implements AgentRunner {
         "run",
         "--rm",
         "-i",
-        ...dockerEnvArgs(env),
-        ...(await credentialMountArgs(this.paths, request.harness)),
+        ...dockerEnvArgs({ ...env, ...bedrock?.env }),
+        ...(await credentialMountArgs(this.paths, request.harness, bedrock?.credsDir)),
         ...(await sessionStoreMountArgs(this.paths)),
         ...skillMountArgs(this.paths, request.skills),
         "--volume",
@@ -252,7 +281,19 @@ function dockerEnvArgs(env: Record<string, string>): string[] {
   return Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`]);
 }
 
-async function credentialMountArgs(paths: RuntimePaths, harness: ThreadHarness): Promise<string[]> {
+async function credentialMountArgs(
+  paths: RuntimePaths,
+  harness: ThreadHarness,
+  bedrockCredsDir?: string
+): Promise<string[]> {
+  // Bedrock dispatch mounts the scoped ~/.aws DIRECTORY (not a single file) so
+  // the AWS SDK follows the credential process's atomic-rename refresh and reads
+  // fresh creds per request; the agent holds no static keys, only short-lived
+  // session creds. Claude Code reaches Bedrock via the SDK, so the subscription
+  // OAuth token is not mounted in this mode.
+  if (bedrockCredsDir) {
+    return ["--volume", `${bedrockCredsDir}:/home/sandbox/.aws:ro`];
+  }
   if (harness === "claude-code") {
     const file = path.join(paths.claudeDir, ".credentials.json");
     await assertExists(file);

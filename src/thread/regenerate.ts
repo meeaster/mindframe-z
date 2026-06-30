@@ -74,7 +74,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
   const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
     synthesize: req.synthesize
   });
-  const runner = req.runner ?? new DockerAgentRunner(paths);
+  const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
   const runId = `run-${Date.now()}`;
   const startedAt = new Date().toISOString();
   const status: ThreadRunStatus = {

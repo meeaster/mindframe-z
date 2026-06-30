@@ -53,7 +53,8 @@ function profile(): ResolvedProfile {
           gather: "claude-code:haiku@low",
           discover: "claude-code:sonnet@high",
           session_sources: ["claude-code"]
-        }
+        },
+        credentials: "subscription"
       },
       dotfiles: {},
       extra_folders: []

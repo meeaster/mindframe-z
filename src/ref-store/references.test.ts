@@ -18,7 +18,8 @@ describe("syncReference", () => {
     await mkdir(path.join(referencesDir, "datadog-agent"));
     const profile = makeProfile(referencesDir);
     const staleRefError = Object.assign(new Error("pull failed"), {
-      stderr: "error: some local refs could not be updated; try running\n 'git remote prune origin' to remove any old, conflicting branches"
+      stderr:
+        "error: some local refs could not be updated; try running\n 'git remote prune origin' to remove any old, conflicting branches"
     });
 
     vi.mocked(execa)
@@ -62,9 +63,9 @@ describe("isStaleRemoteRefError", () => {
   });
 
   it("does not match unrelated git failures", () => {
-    expect(isStaleRemoteRefError({ stderr: "fatal: Not possible to fast-forward, aborting." })).toBe(
-      false
-    );
+    expect(
+      isStaleRemoteRefError({ stderr: "fatal: Not possible to fast-forward, aborting." })
+    ).toBe(false);
   });
 });
 
