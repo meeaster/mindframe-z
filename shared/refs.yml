@@ -53,3 +53,6 @@ references:
   - name: dd-apm-test-agent
     url: https://github.com/DataDog/dd-apm-test-agent.git
     description: "Python DataDog APM test agent (aka lapdog) that acts as an observability proxy for AI coding agents. Captures hook events, LLM cost spans, and per-source hook APIs (Claude/Codex/Pi) for dashboard rendering. Key entrypoints: ddapm_test_agent/agent.py (CLI flags: --lapdog-mode, --web-ui-port), ddapm_test_agent/claude_hooks.py (/claude/hooks handler), plugins/lapdog/hooks/hooks.json (Claude Code hook plugin), lapdog/cli.py (liveness probe), lapdog/pi_lapdog_extension.ts (LAPDOG_URL env override)."
+  - name: sideshow
+    url: https://github.com/modem-dev/sideshow.git
+    description: "TypeScript live visual surface for terminal coding agents. Publishes browser-rendered surfaces for diagrams, UI sketches, markdown, diffs, terminal output, images, Mermaid, JSON, and code; see README.md and docs/connecting-agents.md for CLI, MCP, HTTP, and agent integration details."

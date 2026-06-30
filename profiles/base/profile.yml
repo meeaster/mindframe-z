@@ -15,10 +15,9 @@ references:
   - executor
   - mattpocock-skills
   - dd-apm-test-agent
+  - sideshow
 thread:
   destinations:
-    - name: personal
-      default: true
     - name: testing
       remote: git@github.com:meeaster/thread-testing.git
   defaults:
@@ -139,6 +138,14 @@ opencode:
     - rmslop
   agents:
     - research
+claude:
+  settings:
+    statusLine:
+      type: command
+      command: ccstatusline
+      padding: 0
+      refreshInterval: 10
+
 extra_folders:
   - path: ~/.mindframe-z
     description: mindframe-z configuration and generated indexes — needed when looking up references, reading machine config, or inspecting extra folder permissions

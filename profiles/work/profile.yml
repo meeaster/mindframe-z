@@ -26,6 +26,15 @@ mcp:
   datadog:
     enabled: false
 thread:
+  # Thread dispatch authenticates to Bedrock the same way interactive Claude
+  # Code does: the runner reads ~/.claude/settings.json for the AWS profile,
+  # region, and awsAuthRefresh binary, refreshes creds on the host before
+  # launch, and mounts a scoped, short-lived credential file into the container.
+  credentials: bedrock
+  destinations:
+    - name: personal
+      remote: git@github.com:meeaster/threads.git
+      default: false
   defaults:
     discover: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low
     gather: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low

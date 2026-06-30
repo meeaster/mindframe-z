@@ -1,6 +1,11 @@
 name: personal
 extends: base
 description: Personal AI setup with Home Assistant and DeepSeek models.
+thread:
+  destinations:
+    - name: personal
+      remote: git@github.com:meeaster/threads.git
+      default: true
 agents: [opencode, claude-code]
 references:
   - clack
@@ -59,10 +64,3 @@ opencode:
       - name: explore
         model: deepseek-v4-flash
         variant: max
-claude:
-  settings:
-    statusLine:
-      type: command
-      command: ccstatusline
-      padding: 0
-      refreshInterval: 10
