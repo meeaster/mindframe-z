@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -12,6 +12,7 @@ import {
   writeScopedBedrockCredentials
 } from "./bedrock.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
+import { backfillClaudeTranscript } from "./claude-backfill.js";
 import {
   buildCostSpanPayload,
   emitCostSpan,
@@ -19,6 +20,12 @@ import {
   type TokenBreakdown
 } from "./cost-span.js";
 import { isLapdogReachable, lapdogContainerUrl, lapdogNetworkName, lapdogUrl } from "./lapdog.js";
+
+// Container HOME is /home/sandbox; Claude writes transcripts under
+// ~/.claude/projects. We bind a fresh host dir here per dispatch so the
+// transcript survives `docker run --rm` teardown and can be replayed through
+// lapdog's backfill endpoint.
+const CONTAINER_CLAUDE_PROJECTS = "/home/sandbox/.claude/projects";
 
 export interface AgentRunRequest {
   role: ThreadDispatchRun["role"];
@@ -36,6 +43,11 @@ export interface AgentRunResult {
   rawTrace: string;
   usage: Omit<ThreadDispatchRun, "role" | "harness" | "model" | "duration_ms">;
   durationMs: number;
+  // Harness-reported session id, used to attribute the cost span to the same
+  // session the hook channel records. Undefined for harnesses that don't
+  // surface one (e.g. OpenCode), in which case the cost span falls back to
+  // "unknown".
+  sessionId?: string | undefined;
 }
 
 export interface AgentRunner {
@@ -77,37 +89,54 @@ export class DockerAgentRunner implements AgentRunner {
     const probeReachable = await isLapdogReachable();
     const started = Date.now();
     const { tool, args, env } = buildHarnessCommand(request);
-    const rawTrace = await runProcess(
-      "docker",
-      [
-        "run",
-        "--rm",
-        "-i",
-        ...dockerEnvArgs({ ...env, ...bedrock?.env }),
-        ...(await credentialMountArgs(this.paths, request.harness, bedrock?.credsDir)),
-        ...(await sessionStoreMountArgs(this.paths)),
-        ...skillMountArgs(this.paths, request.skills),
-        "--volume",
-        `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
-        ...lapdogDockerArgs(probeReachable),
-        this.image,
-        tool,
-        ...args
-      ],
-      request.prompt
-    );
-    const durationMs = Date.now() - started;
-    const parsed = parseHarnessResult(request.harness, rawTrace, durationMs);
-    if (probeReachable) {
-      void emitLapdogCostSpan(
-        request,
-        parsed.breakdown,
-        parsed.result.usage.cost_usd,
-        started,
-        durationMs
+    // Capture the transcript only when lapdog is up and the harness writes one
+    // we can replay (Claude Code). The dir is removed in `finally` regardless.
+    const transcriptDir =
+      probeReachable && request.harness === "claude-code"
+        ? await mkdtemp(path.join(os.tmpdir(), "mfz-claude-projects-"))
+        : undefined;
+    try {
+      const rawTrace = await runProcess(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "-i",
+          ...dockerEnvArgs({ ...env, ...bedrock?.env }),
+          ...(await credentialMountArgs(this.paths, request.harness, bedrock?.credsDir)),
+          ...(await sessionStoreMountArgs(this.paths)),
+          ...skillMountArgs(this.paths, request.skills),
+          "--volume",
+          `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
+          ...(transcriptDir ? ["--volume", `${transcriptDir}:${CONTAINER_CLAUDE_PROJECTS}`] : []),
+          ...lapdogDockerArgs(probeReachable),
+          this.image,
+          tool,
+          ...args
+        ],
+        request.prompt
       );
+      const durationMs = Date.now() - started;
+      const parsed = parseHarnessResult(request.harness, rawTrace, durationMs);
+      if (probeReachable) {
+        void emitLapdogCostSpan(
+          request,
+          parsed.breakdown,
+          parsed.result.usage.cost_usd,
+          started,
+          durationMs,
+          parsed.result.sessionId
+        );
+        // Replay the transcript before returning (and before `finally` removes
+        // the dir) so the per-inference span tree lands under the real session.
+        if (transcriptDir && parsed.result.sessionId) {
+          await backfillClaudeTranscript(lapdogUrl(), transcriptDir, parsed.result.sessionId);
+        }
+      }
+      return parsed.result;
+    } finally {
+      if (transcriptDir) await rm(transcriptDir, { recursive: true, force: true });
     }
-    return parsed.result;
   }
 }
 
@@ -180,11 +209,16 @@ function parseClaudeResult(
   const cacheRead = numberField(usage.cache_read_input_tokens) ?? 0;
   const cacheWrite = numberField(usage.cache_creation_input_tokens) ?? 0;
   const output = numberField(usage.output_tokens) ?? 0;
+  // Every stream-json event (system/assistant/result) carries the same
+  // session_id; take the first non-empty one so cost attribution survives a
+  // trace whose result event happens to omit it.
+  const sessionId = events.map((event) => textField(event.session_id)).find(Boolean);
   return {
     result: {
       text: textField(result?.result),
       rawTrace,
       durationMs,
+      sessionId,
       usage: {
         cost_usd: numberField(result?.total_cost_usd),
         input_tokens: nonCached + cacheRead + cacheWrite,
@@ -411,7 +445,8 @@ async function emitLapdogCostSpan(
   breakdown: TokenBreakdown,
   costUsd: number | null,
   startedMs: number,
-  durationMs: number
+  durationMs: number,
+  sessionId: string | undefined
 ): Promise<void> {
   try {
     const payload = buildCostSpanPayload(request.harness, breakdown, {
@@ -419,7 +454,8 @@ async function emitLapdogCostSpan(
       modelProvider: modelProvider(request.harness, request.model),
       startTimeMs: startedMs,
       durationMs,
-      costUsd
+      costUsd,
+      sessionId
     });
     if (payload) await emitCostSpan(lapdogUrl(), payload);
   } catch {
