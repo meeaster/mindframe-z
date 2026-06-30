@@ -61,19 +61,19 @@ Cheap summaries first; full `data` columns only for the rows you've decided you 
 Recent sessions:
 
 ```bash
-opencode db "SELECT id, title, directory, agent, model, time_updated FROM session WHERE time_archived IS NULL ORDER BY time_updated DESC LIMIT 20" --format json
+opencode db "SELECT id, title, directory, agent, model, strftime('%Y-%m-%d %H:%M', time_updated/1000, 'unixepoch') AS time_updated FROM session WHERE time_archived IS NULL ORDER BY time_updated DESC LIMIT 20" --format json
 ```
 
 Search for a session:
 
 ```bash
-opencode db "SELECT id, title, directory, time_updated FROM session WHERE title LIKE '%skill%' ORDER BY time_updated DESC LIMIT 50" --format json
+opencode db "SELECT id, title, directory, strftime('%Y-%m-%d %H:%M', time_updated/1000, 'unixepoch') AS time_updated FROM session WHERE title LIKE '%skill%' ORDER BY time_updated DESC LIMIT 50" --format json
 ```
 
 Inspect one session:
 
 ```bash
-opencode db "SELECT id, title, project_id, directory, parent_id, agent, model, cost, time_created, time_updated FROM session WHERE id = 'ses_xxx'" --format json
+opencode db "SELECT id, title, project_id, directory, parent_id, agent, model, cost, strftime('%Y-%m-%d %H:%M', time_created/1000, 'unixepoch') AS time_created, strftime('%Y-%m-%d %H:%M', time_updated/1000, 'unixepoch') AS time_updated FROM session WHERE id = 'ses_xxx'" --format json
 ```
 
 ## Analyzing a prior session

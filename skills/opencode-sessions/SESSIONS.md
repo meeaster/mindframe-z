@@ -35,11 +35,11 @@ opencode db "SELECT json_extract(data,'$.agent') agent, substr(json_extract(data
 opencode db "SELECT id, title, agent FROM session WHERE parent_id='ses_xxx'" --format json
 ```
 
-Fetch full `data` only for the specific rows the analysis needs, or read the session in bounded chunks when full fidelity is required:
+Fetch full `data` only for the specific rows the analysis needs, or read the session in bounded chunks when full fidelity is required. **`time_created`/`time_updated` are stored as epoch milliseconds** — always format them in SQL with `strftime('%Y-%m-%d %H:%M', time/1000, 'unixepoch')` and copy the result verbatim. Never hand a raw epoch to a timestamp or convert it yourself; models render epoch→calendar unreliably and will fabricate the wrong date.
 
 ```bash
-opencode db "SELECT id, message_id, data, time_created FROM part WHERE id IN ('prt_xxx','prt_yyy') ORDER BY time_created" --format json
-opencode db "SELECT id, message_id, data, time_created FROM part WHERE session_id='ses_xxx' ORDER BY message_id, id LIMIT 100 OFFSET 0" --format json
+opencode db "SELECT id, message_id, data, strftime('%Y-%m-%d %H:%M', time_created/1000, 'unixepoch') AS time_created FROM part WHERE id IN ('prt_xxx','prt_yyy') ORDER BY time_created" --format json
+opencode db "SELECT id, message_id, data, strftime('%Y-%m-%d %H:%M', time_created/1000, 'unixepoch') AS time_created FROM part WHERE session_id='ses_xxx' ORDER BY message_id, id LIMIT 100 OFFSET 0" --format json
 ```
 
 ## Analysis workflow
