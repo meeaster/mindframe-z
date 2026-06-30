@@ -1,6 +1,6 @@
 name: work
 extends: base
-description: Work AI setup using OpenAI models.
+description: Work AI setup using Bedrock-backed models.
 agents: [opencode, claude-code]
 skills:
   confluence-writer:
@@ -25,6 +25,11 @@ mcp:
     enabled: false
   datadog:
     enabled: false
+thread:
+  defaults:
+    discover: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low
+    gather: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low
+    synthesize: claude-code:us.anthropic.claude-sonnet-4-6@max
 opencode:
   config:
     provider:
