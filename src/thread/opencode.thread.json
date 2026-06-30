@@ -4,7 +4,10 @@
       "permission": {
         "bash": {
           "jq *": "allow",
-          "sqlite3 *": "allow"
+          "sqlite3 *": "allow",
+          "ls *": "allow",
+          "grep *": "allow",
+          "find *": "allow"
         },
         "edit": "deny",
         "write": "deny",
