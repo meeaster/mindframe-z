@@ -12,7 +12,7 @@ export interface TokenBreakdown {
 export interface CostSpanContext {
   readonly model: string;
   readonly modelProvider: string;
-  readonly sessionId?: string;
+  readonly sessionId?: string | undefined;
   readonly startTimeMs: number;
   readonly durationMs: number;
   readonly costUsd: number | null;
