@@ -81,6 +81,32 @@ async function writeFakeDocker(home: string): Promise<string> {
   return stateDir;
 }
 
+// A self-contained fixture root so these tests own their profile/destinations
+// instead of reading the live repo `profiles/`, where legitimate config edits
+// (adding/removing destinations) would otherwise break unrelated thread tests.
+async function makeFixtureRoot(): Promise<string> {
+  const root = await makeTempDir();
+  await mkdir(path.join(root, "shared"), { recursive: true });
+  await writeFile(path.join(root, "shared", "refs.yml"), "references: []\n", "utf8");
+  await writeFile(path.join(root, "shared", "skills.yml"), "skills: []\n", "utf8");
+  await writeFile(path.join(root, "shared", "mcp.yml"), "servers: {}\n", "utf8");
+  const profileDir = path.join(root, "profiles", "base");
+  await mkdir(profileDir, { recursive: true });
+  await writeFile(
+    path.join(profileDir, "profile.yml"),
+    [
+      "name: base",
+      "thread:",
+      "  destinations:",
+      "    - name: personal",
+      "      default: true",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  return root;
+}
+
 const logs: string[] = [];
 
 function captureConsole(): void {
@@ -93,7 +119,7 @@ describe("thread cli", () => {
   it("creates a thread without dispatch and lists it", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
 
     await runThreadCreate("thread-a", {
       root,
@@ -118,7 +144,12 @@ describe("thread cli", () => {
   it("prints configured destinations as JSON", async () => {
     captureConsole();
     const home = await makeTempDir();
-    await runThreadDestinations({ root: process.cwd(), home, profile: "base", json: true });
+    await runThreadDestinations({
+      root: await makeFixtureRoot(),
+      home,
+      profile: "base",
+      json: true
+    });
 
     const parsed = JSON.parse(logs[0]!) as { destinations: Array<{ name: string }> };
     expect(parsed.destinations).toEqual(
@@ -147,7 +178,7 @@ describe("thread cli", () => {
     };
 
     await runThreadDiscover("thread design", {
-      root: process.cwd(),
+      root: await makeFixtureRoot(),
       home,
       profile: "base",
       runner
@@ -169,7 +200,7 @@ describe("thread cli", () => {
   it("ingests two sessions: two-stage split, parallel, deterministic log, one digest", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
 
     // Each session's synthesized file carries one Decision; sess-b is timestamped
     // earlier than sess-a so the log can prove it sorts by timestamp, not id order.
@@ -279,7 +310,7 @@ describe("thread cli", () => {
   it("regenerate rebuilds views from existing sessions without re-gathering", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
 
     const synthFile =
       "# Session sess-a — Title A\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [2026-01-02 09:00] **Choice A** that wins. (sess-a · turn 1)\n";
@@ -349,7 +380,7 @@ describe("thread cli", () => {
     captureConsole();
     const home = await makeTempDir();
     const opts = {
-      root: process.cwd(),
+      root: await makeFixtureRoot(),
       home,
       profile: "base",
       dest: "personal",
@@ -405,7 +436,7 @@ describe("thread cli", () => {
   it("deletes a thread and reports the slug", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
 
     await runThreadCreate("to-delete", {
       root,
@@ -424,7 +455,7 @@ describe("thread cli", () => {
   it("rejects path-escaping or malformed slugs and accepts safe ones", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
     const base = { root, home, profile: "base", dest: "personal", charter: "C" } as const;
 
     for (const bad of ["../escape", "a/b", ".hidden", "Upper", "x".repeat(65)]) {
@@ -445,7 +476,7 @@ describe("thread cli", () => {
   it("syncs with no remote skips silently", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
 
     await runThreadCreate("sync-me", {
       root,
@@ -467,7 +498,7 @@ describe("thread observe lifecycle", () => {
     body: (paths: ReturnType<typeof createRuntimePaths>, stateDir: string) => Promise<T>
   ): Promise<T> {
     const home = await makeTempDir();
-    const root = process.cwd();
+    const root = await makeFixtureRoot();
     const stateDir = await writeFakeDocker(home);
     process.env.PATH = `${path.join(home, "bin")}:${oldPath ?? ""}`;
     const paths = createRuntimePaths({ root, home });
@@ -481,7 +512,7 @@ describe("thread observe lifecycle", () => {
       vi.fn(async () => new Response("{}", { status: 200 }))
     );
     await withFakeDocker(async (paths) => {
-      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      await runThreadObserveUp({ root: paths.root, home: paths.home, profile: "base" });
       expect(logs).toContain("lapdog\tstarted");
       expect(logs).toContain("dashboard\thttp://localhost:8080");
     });
@@ -494,9 +525,9 @@ describe("thread observe lifecycle", () => {
       vi.fn(async () => new Response("{}", { status: 200 }))
     );
     await withFakeDocker(async (paths) => {
-      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      await runThreadObserveUp({ root: paths.root, home: paths.home, profile: "base" });
       logs.length = 0;
-      await runThreadObserveUp({ root: process.cwd(), home: paths.home, profile: "base" });
+      await runThreadObserveUp({ root: paths.root, home: paths.home, profile: "base" });
       expect(logs).toContain("lapdog\talready_running");
     });
   });
@@ -505,7 +536,7 @@ describe("thread observe lifecycle", () => {
     captureConsole();
     await withFakeDocker(async (paths) => {
       await expect(
-        runThreadObserveDown({ root: process.cwd(), home: paths.home, profile: "base" })
+        runThreadObserveDown({ root: paths.root, home: paths.home, profile: "base" })
       ).resolves.toBeUndefined();
       expect(logs).toContain("lapdog\tstopped");
     });
@@ -520,7 +551,7 @@ describe("thread observe lifecycle", () => {
       })
     );
     await withFakeDocker(async (paths) => {
-      await runThreadObserveStatus({ root: process.cwd(), home: paths.home, profile: "base" });
+      await runThreadObserveStatus({ root: paths.root, home: paths.home, profile: "base" });
       expect(logs).toContain("reachable\tfalse");
       expect(logs).toContain("dashboard\thttp://localhost:8080");
     });
@@ -536,7 +567,7 @@ describe("thread observe lifecycle", () => {
     );
     await withFakeDocker(async (paths) => {
       await runThreadObserveStatus({
-        root: process.cwd(),
+        root: paths.root,
         home: paths.home,
         profile: "base",
         json: true
