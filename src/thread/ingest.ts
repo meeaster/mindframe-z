@@ -80,6 +80,15 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         skills: [`${source}-sessions`],
         prompt: `Read session ${bare}. Charter: ${manifest.charter}`
       });
+      // An empty dossier means gather never read the session (e.g. a denied read
+      // it failed to recover from). Synthesis would then have only the charter to
+      // work from and would launder it into invented session facts, so fail loudly
+      // here instead of writing a confident-but-fabricated session file.
+      if (gather.result.text.trim() === "") {
+        throw new Error(
+          `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
+        );
+      }
       const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
         role: "synthesize",
         harness: synthModel.harness,
@@ -87,7 +96,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         effort: synthModel.effort,
         persona: THREAD_PERSONAS.synthesize,
         skills: ["thread-contract"],
-        prompt: `Session: ${bare}\nCharter: ${manifest.charter}\n\nDossier:\n${gather.result.text}`
+        prompt: `Session: ${bare}\n\nThe charter is the thread's topic hint — what to look for. It is NOT a source of facts; never lift specifics from it. The dossier below is your only source material.\n\nCharter (topic hint, not a source): ${manifest.charter}\n\nDossier (your only source):\n${gather.result.text}`
       });
       await writeSessionFile(thread.dir, source, bare, synth.result.text);
       return {
@@ -122,7 +131,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     effort: synthModel.effort,
     persona: THREAD_PERSONAS.digest,
     skills: ["thread-contract"],
-    prompt: `Thread: ${manifest.slug}\nCharter: ${manifest.charter}\n\nSession files:\n${(await readSessionFiles(thread.dir)).join("\n")}`
+    prompt: `Thread: ${manifest.slug}\n\nThe charter is the thread's topic hint — what the thread is about. It is NOT a source of facts; never lift specifics from it. The session files below are your only source material.\n\nCharter (topic hint, not a source): ${manifest.charter}\n\nSession files (your only source):\n${(await readSessionFiles(thread.dir)).join("\n")}`
   });
   dispatches.push(digest.dispatch);
   await writeFile(path.join(thread.dir, "digest.md"), digest.result.text + "\n", "utf8");
