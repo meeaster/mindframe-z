@@ -96,6 +96,7 @@ export function buildHarnessCommand(request: AgentRunRequest): {
       "Bash(jq:*)",
       "Bash(ls:*)",
       "Bash(grep:*)",
+      "Bash(find:*)",
       "Bash(sqlite3:*)",
       "--disallowedTools",
       "Edit",
@@ -237,7 +238,7 @@ function skillPrompt(persona: string, skills: readonly string[]): string {
     persona,
     skills.length ? `Load skills: ${skills.join(", ")}.` : "No extra skills.",
     skills.includes("claude-code-sessions")
-      ? "When reading Claude Code sessions, use `/mnt/claude-sessions` as the read-only session store. Its `history.jsonl`, `projects/`, and `transcripts/` mirror the host Claude session files. Do not treat `/home/sandbox/.claude` as the host session store; it is only this dispatch's writable Claude runtime home."
+      ? "The Claude Code session store is the read-only mount `/mnt/claude-sessions`; its `history.jsonl`, `projects/`, and `transcripts/` mirror the host session files. Do not treat `/home/sandbox/.claude` as the host store; it is only this dispatch's writable Claude runtime home. Read the store with bash — `jq`, `ls`, `grep`, `find` — which is pre-authorized for this dispatch; run those commands directly instead of asking the operator for permission. Never use the `Read` or `glob` tools on `/mnt/claude-sessions`: those are denied for the store and will dead-end the dispatch with no dossier. If a command is denied, switch to a `jq`/`bash` form of the same read rather than giving up."
       : "",
     skills.includes("opencode-sessions")
       ? "The OpenCode database here is a read-only file at /mnt/opencode-data/opencode/opencode.db — a non-standard location, so follow the opencode-sessions skill's non-standard-location rule and read it with sqlite3, never `opencode db` (which opens the file read-write and would fail on the read-only mount or migrate it across versions). Run: sqlite3 -json 'file:/mnt/opencode-data/opencode/opencode.db?immutable=1' \"<SELECT ...>\". These read-only queries are pre-authorized for this dispatch; run them directly instead of asking the operator for permission."
