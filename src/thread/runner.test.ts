@@ -110,6 +110,29 @@ describe("thread runner", () => {
     expect(result.durationMs).toBe(123);
   });
 
+  it("captures the Claude session_id so the cost span attributes to the real session", () => {
+    const { result } = parseHarnessResult(
+      "claude-code",
+      [
+        JSON.stringify({ type: "system", subtype: "init", session_id: "sess-xyz" }),
+        JSON.stringify({ type: "result", result: "done", session_id: "sess-xyz" })
+      ].join("\n"),
+      1
+    );
+
+    expect(result.sessionId).toBe("sess-xyz");
+  });
+
+  it("leaves sessionId undefined when no event carries one", () => {
+    const { result } = parseHarnessResult(
+      "claude-code",
+      JSON.stringify({ type: "result", result: "done", usage: { input_tokens: 1 } }),
+      1
+    );
+
+    expect(result.sessionId).toBeUndefined();
+  });
+
   it("parses OpenCode text and per-step usage from JSONL", () => {
     const { result } = parseHarnessResult(
       "opencode",

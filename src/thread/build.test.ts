@@ -67,9 +67,14 @@ describe("thread tools image build", () => {
       "SubagentStop",
       "UserPromptSubmit"
     ]);
-    for (const entry of Object.values(parsed.hooks)) {
-      const block = (entry as Array<{ hooks: Array<{ command: string }> }>)[0]!;
+    for (const [event, entry] of Object.entries(parsed.hooks)) {
+      const block = (entry as Array<{ hooks: Array<{ command: string; async: boolean }> }>)[0]!;
       expect(block.hooks[0]!.command).toContain("${LAPDOG_URL}/claude/hooks");
+      // Terminal lifecycle events must run synchronously so the close event
+      // reaches lapdog before the `docker run --rm` container is reaped;
+      // every other event stays async (fire-and-forget) to avoid blocking.
+      const isTerminal = event === "Stop" || event === "SessionEnd";
+      expect(block.hooks[0]!.async).toBe(!isTerminal);
     }
   });
 
