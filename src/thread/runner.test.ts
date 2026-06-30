@@ -31,11 +31,28 @@ describe("thread runner", () => {
     expect(command.args).toContain("Edit");
     expect(command.args).toContain("Write");
     expect(command.args).toContain("Bash(sqlite3:*)");
+    expect(command.args).toContain("Bash(find:*)");
     expect(command.args).toContain("/mnt/claude-sessions");
     expect(command.args).toContain("/mnt/opencode-data");
     expect(command.args.join("\n")).toContain("/mnt/claude-sessions");
     expect(command.env).toEqual({});
     expect(command.args).toContain("--effort");
+  });
+
+  it("forces the gather to read the Claude store via bash, never the Read tool", () => {
+    const command = buildHarnessCommand({
+      role: "gather",
+      harness: "claude-code",
+      model: "haiku",
+      effort: "low",
+      persona: "gatherer.",
+      skills: ["claude-code-sessions"],
+      prompt: "read session"
+    });
+
+    const prompt = command.args.join("\n");
+    expect(prompt).toContain("pre-authorized for this dispatch");
+    expect(prompt).toContain("Never use the `Read` or `glob` tools on `/mnt/claude-sessions`");
   });
 
   it("tells Claude Code to read the non-standard OpenCode database with sqlite3", () => {
