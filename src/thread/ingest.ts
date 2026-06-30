@@ -1,17 +1,14 @@
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { ThreadHarness } from "../core/manifests.js";
-import { renderEventLog } from "./log.js";
 import { THREAD_PERSONAS } from "./personas.js";
 import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
+import { regenerateViews } from "./regenerate.js";
 import {
   appendThreadRun,
   commitThreadChanges,
   findThread,
-  readSessionFiles,
   readThreadManifest,
   recordSessions,
   resolveSynthesisDefaults,
@@ -117,24 +114,18 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     thread.dir,
     perSession.map((item) => item.entry)
   );
-  await writeFile(
-    path.join(thread.dir, "log.md"),
-    renderEventLog(await readSessionFiles(thread.dir)),
-    "utf8"
-  );
 
   await writeRunStatus(paths, { ...status, current_step: "digest" });
-  const digest = await dispatch(runner, paths, runId, "digest", {
-    role: "digest",
-    harness: synthModel.harness,
-    model: synthModel.model,
-    effort: synthModel.effort,
-    persona: THREAD_PERSONAS.digest,
-    skills: ["thread-contract"],
-    prompt: `Thread: ${manifest.slug}\n\nThe charter is the thread's topic hint — what the thread is about. It is NOT a source of facts; never lift specifics from it. The session files below are your only source material.\n\nCharter (topic hint, not a source): ${manifest.charter}\n\nSession files (your only source):\n${(await readSessionFiles(thread.dir)).join("\n")}`
+  const digestDispatch = await regenerateViews({
+    runner,
+    paths,
+    runId,
+    threadDir: thread.dir,
+    slug: manifest.slug,
+    charter: manifest.charter,
+    synthModel
   });
-  dispatches.push(digest.dispatch);
-  await writeFile(path.join(thread.dir, "digest.md"), digest.result.text + "\n", "utf8");
+  dispatches.push(digestDispatch);
 
   await writeRunDossiers(
     paths,

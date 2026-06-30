@@ -13,6 +13,7 @@ import { THREAD_PERSONAS } from "./personas.js";
 import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
 import { ingestThread } from "./ingest.js";
+import { regenerateThread } from "./regenerate.js";
 import {
   lapdogDashboardUrl,
   lapdogStatus,
@@ -195,6 +196,27 @@ export async function runThreadIngest(
       runner: options.runner
     });
     console.log(`ingested\t${result.slug}\t${result.sessionCount} sessions`);
+  });
+}
+
+export async function runThreadRegenerate(
+  slug: string,
+  options: ThreadOptions & {
+    noPush?: boolean | undefined;
+    synthesize?: string | undefined;
+    runner?: AgentRunner | undefined;
+  }
+): Promise<void> {
+  await withThreadLog(options, `thread regenerate ${slug}`, async ({ paths, profile }) => {
+    const result = await regenerateThread({
+      paths,
+      profile,
+      threadSlug: assertThreadSlug(slug),
+      noPush: Boolean(options.noPush),
+      synthesize: options.synthesize,
+      runner: options.runner
+    });
+    console.log(`regenerated\t${result.slug}\t$${result.totalCostUsd ?? "?"}`);
   });
 }
 
