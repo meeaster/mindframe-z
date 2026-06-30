@@ -58,7 +58,8 @@ function profile(machine: MachineManifest): ResolvedProfile {
           gather: "claude-code:haiku@low",
           discover: "claude-code:sonnet@high",
           session_sources: ["claude-code", "opencode"]
-        }
+        },
+        credentials: "subscription"
       },
       dotfiles: {},
       extra_folders: []

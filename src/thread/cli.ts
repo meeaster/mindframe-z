@@ -140,7 +140,8 @@ export async function runThreadDiscover(
     });
     const { harness, model, effort } = settings.discover;
     const sessionSources = resolveSessionSources(profile.profile.thread.defaults, options.sources);
-    const runner = options.runner ?? new DockerAgentRunner(paths);
+    const runner =
+      options.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
     const runId = `run-${Date.now()}`;
     const startedAt = new Date().toISOString();
     await writeRunStatus(paths, {

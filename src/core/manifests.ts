@@ -119,6 +119,8 @@ export const threadDestinationSchema = z.object({
   default: z.boolean().default(false)
 });
 
+export const sandboxCredentialModeSchema = z.enum(["bedrock", "subscription"]);
+
 export const threadDefaultsSchema = z.object({
   discover: z.string().optional(),
   gather: z.string().optional(),
@@ -132,9 +134,15 @@ export const threadDefaultsSchema = z.object({
 const profileThreadSchema = z
   .object({
     destinations: z.array(threadDestinationSchema).default([]),
-    defaults: threadDefaultsSchema.default({})
+    defaults: threadDefaultsSchema.default({}),
+    // How thread dispatch containers authenticate to the model provider.
+    // "subscription" mounts the Claude OAuth token (the default, unchanged
+    // behavior); "bedrock" runs the operator's credential-process refresh and
+    // mounts scoped AWS creds. Explicit per profile so it never silently
+    // changes based on ambient host state.
+    credentials: sandboxCredentialModeSchema.default("subscription")
   })
-  .default({ destinations: [], defaults: {} });
+  .default({ destinations: [], defaults: {}, credentials: "subscription" });
 
 const machineThreadSchema = z
   .object({
@@ -190,8 +198,6 @@ export const profileSchema = z
     extra_folders: z.array(extraFolderSchema).default([])
   })
   .strict();
-
-export const sandboxCredentialModeSchema = z.enum(["bedrock", "subscription"]);
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
@@ -382,7 +388,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
-        thread: { destinations: [], defaults: {} },
+        thread: { destinations: [], defaults: {}, credentials: "subscription" },
         dotfiles: {},
         extra_folders: [],
         description: ""

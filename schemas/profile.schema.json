@@ -303,7 +303,8 @@
     "thread": {
       "default": {
         "destinations": [],
-        "defaults": {}
+        "defaults": {},
+        "credentials": "subscription"
       },
       "type": "object",
       "properties": {
@@ -360,6 +361,14 @@
               }
             }
           }
+        },
+        "credentials": {
+          "default": "subscription",
+          "type": "string",
+          "enum": [
+            "bedrock",
+            "subscription"
+          ]
         }
       }
     },

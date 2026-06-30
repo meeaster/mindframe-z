@@ -48,7 +48,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   const gatherModel = settings.gather;
   const synthModel = settings.synthesize;
   const synthId = `${synthModel.harness}:${synthModel.model}@${synthModel.effort}`;
-  const runner = req.runner ?? new DockerAgentRunner(paths);
+  const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
   const runId = `run-${Date.now()}`;
   const startedAt = new Date().toISOString();
   const status: ThreadRunStatus = {
