@@ -15,6 +15,7 @@ import {
   runThreadObserveDown,
   runThreadObserveStatus,
   runThreadObserveUp,
+  runThreadRegenerate,
   runThreadRuns,
   runThreadSync
 } from "./cli.js";
@@ -273,6 +274,75 @@ describe("thread cli", () => {
     expect(digests[0]!.prompt).toContain("# Session sess-b");
 
     expect(logs).toContain("ingested\tt\t2 sessions");
+  });
+
+  it("regenerate rebuilds views from existing sessions without re-gathering", async () => {
+    captureConsole();
+    const home = await makeTempDir();
+    const root = process.cwd();
+
+    const synthFile =
+      "# Session sess-a — Title A\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [2026-01-02 09:00] **Choice A** that wins. (sess-a · turn 1)\n";
+    let calls: { role: string; prompt: string }[] = [];
+    const runner: AgentRunner = {
+      async run(request) {
+        calls.push({ role: request.role, prompt: request.prompt });
+        const text =
+          request.role === "gather"
+            ? "DOSSIER: material"
+            : request.role === "synthesize"
+              ? synthFile
+              : "# Digest — t\n\n## Current State\nregenerated body.\n";
+        return {
+          text,
+          rawTrace: "{}\n",
+          durationMs: 1,
+          usage: {
+            cost_usd: 0.02,
+            input_tokens: null,
+            output_tokens: null,
+            reasoning_tokens: null
+          },
+          rawUsage: null
+        };
+      }
+    };
+
+    await runThreadCreate("t", { root, home, profile: "base", dest: "personal", charter: "C" });
+    await runThreadIngest(["sess-a"], {
+      root,
+      home,
+      profile: "base",
+      thread: "t",
+      noPush: true,
+      synthesize: "claude-code:sonnet@high",
+      runner
+    });
+
+    // Discard ingest's dispatches — only the regenerate phase is under test now.
+    calls = [];
+    await runThreadRegenerate("t", {
+      root,
+      home,
+      profile: "base",
+      noPush: true,
+      synthesize: "claude-code:sonnet@high",
+      runner
+    });
+
+    // No re-gather, no re-synthesize: exactly one digest dispatch over the existing
+    // session file, proving regeneration re-pays only synthesis of the views.
+    expect(calls.map((c) => c.role)).toEqual(["digest"]);
+    expect(calls[0]!.prompt).toContain("# Session sess-a");
+
+    const threadDir = path.join(home, ".mindframe-z", "threads", "t");
+    await expect(readFile(path.join(threadDir, "digest.md"), "utf8")).resolves.toContain(
+      "regenerated body."
+    );
+    await expect(readFile(path.join(threadDir, "log.md"), "utf8")).resolves.toContain(
+      "decision (sess-a · turn 1)"
+    );
+    expect(logs).toContain("regenerated\tt\t$0.02");
   });
 
   it("pins synthesis overrides on create and refuses a duplicate", async () => {

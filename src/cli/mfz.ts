@@ -50,6 +50,7 @@ import {
   runThreadObserveDown,
   runThreadObserveStatus,
   runThreadObserveUp,
+  runThreadRegenerate,
   runThreadRuns,
   runThreadShow,
   runThreadSync
@@ -407,6 +408,20 @@ thread
       thread: options.thread,
       noPush: !options.push,
       gather: options.gatherModel,
+      synthesize: options.synthesizeModel
+    })
+  );
+
+thread
+  .command("regenerate")
+  .description("Rebuild a thread's log and digest from its existing session files (no re-gather)")
+  .argument("<slug>", "thread slug")
+  .option("--no-push", "commit locally without pushing")
+  .option("--synthesize-model <id>", "synthesize model (harness:model@effort)")
+  .action(async (slug, options) =>
+    runThreadRegenerate(slug, {
+      ...program.opts(),
+      noPush: !options.push,
       synthesize: options.synthesizeModel
     })
   );
