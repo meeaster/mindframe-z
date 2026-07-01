@@ -2,7 +2,7 @@
 
 Reconstruct what happened in a Claude Code session — its turns, tool calls, failures, subagents, and what to improve — from the session JSONL. All [read-only and outline-first rules from SKILL.md](SKILL.md) still apply: outline before reading full records.
 
-Set `F=~/.claude/projects/<encoded>/<session-id>.jsonl` for the recipes below.
+Resolve the store root as in [SKILL.md](SKILL.md) (`STORE="${CLAUDE_SESSIONS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"`), then set `F="$STORE/projects/<encoded>/<session-id>.jsonl"` for the recipes below.
 
 ## Drill-down recipes
 
@@ -43,7 +43,7 @@ Trace subagents — two levels of detail are available; the caller's question de
 - **Full internal trace, from the nested transcript** (`agent-<id>.jsonl`) — when the question is about *how* the subagent worked. Read its `.meta.json` sidecar first; it links the subagent to the parent `Agent` call via `toolUseId`.
 
   ```bash
-  for m in ~/.claude/projects/<encoded>/<session-id>/subagents/*.meta.json; do jq -rc '{agentType, description, toolUseId}' "$m"; done
+  for m in "$STORE"/projects/<encoded>/<session-id>/subagents/*.meta.json; do jq -rc '{agentType, description, toolUseId}' "$m"; done
   ```
 
 Identify which file edits happened without scanning prose via `file-history-snapshot` records (`snapshot.trackedFileBackups`).

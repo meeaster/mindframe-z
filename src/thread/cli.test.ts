@@ -240,7 +240,7 @@ describe("thread cli", () => {
     };
 
     await runThreadCreate("t", { root, home, profile: "base", dest: "personal", charter: "C" });
-    await runThreadIngest(["sess-a", "sess-b"], {
+    await runThreadIngest(["claude-code:sess-a", "claude-code:sess-b"], {
       root,
       home,
       profile: "base",
@@ -340,7 +340,7 @@ describe("thread cli", () => {
     };
 
     await runThreadCreate("t", { root, home, profile: "base", dest: "personal", charter: "C" });
-    await runThreadIngest(["sess-a"], {
+    await runThreadIngest(["claude-code:sess-a"], {
       root,
       home,
       profile: "base",
@@ -461,7 +461,13 @@ describe("thread cli", () => {
     for (const bad of ["../escape", "a/b", ".hidden", "Upper", "x".repeat(65)]) {
       await expect(runThreadCreate(bad, base)).rejects.toThrow();
       await expect(
-        runThreadIngest(["sess-a"], { root, home, profile: "base", thread: bad, noPush: true })
+        runThreadIngest(["claude-code:sess-a"], {
+          root,
+          home,
+          profile: "base",
+          thread: bad,
+          noPush: true
+        })
       ).rejects.toThrow();
       await expect(
         runThreadDelete(bad, { root, home, profile: "base", noPush: true })

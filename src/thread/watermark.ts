@@ -32,11 +32,14 @@ export async function readWatermark(
 }
 
 // Claude transcripts live at ~/.claude/projects/<encoded-project>/<id>.jsonl. The
-// project directory is not derivable from the id, so scan projects/ for the file.
-async function readClaudeWatermark(
+// project directory is not derivable from the id (lossy encoding), so scan projects/
+// for the file and return its store-relative subpath, or undefined when absent.
+// Ingest reuses this to hand gather the exact path instead of making it rediscover
+// the file — a weak model that has to search sometimes reads the wrong store.
+export async function locateClaudeTranscript(
   paths: RuntimePaths,
   id: string
-): Promise<Watermark | undefined> {
+): Promise<string | undefined> {
   const projectsDir = path.join(paths.claudeDir, "projects");
   let entries: string[];
   try {
@@ -45,10 +48,19 @@ async function readClaudeWatermark(
     return undefined;
   }
   for (const entry of entries) {
-    const file = path.join(projectsDir, entry, `${id}.jsonl`);
-    if (await pathExists(file)) return tailSignatureFromJsonl(await readFile(file, "utf8"));
+    if (await pathExists(path.join(projectsDir, entry, `${id}.jsonl`)))
+      return path.posix.join("projects", entry, `${id}.jsonl`);
   }
   return undefined;
+}
+
+async function readClaudeWatermark(
+  paths: RuntimePaths,
+  id: string
+): Promise<Watermark | undefined> {
+  const sub = await locateClaudeTranscript(paths, id);
+  if (sub === undefined) return undefined;
+  return tailSignatureFromJsonl(await readFile(path.join(paths.claudeDir, sub), "utf8"));
 }
 
 // A transcript line is a message turn when its `type` is user or assistant; other
