@@ -138,6 +138,15 @@ const profileThreadSchema = z
   .object({
     destinations: z.array(threadDestinationSchema).default([]),
     defaults: threadDefaultsSchema.default({}),
+    // How a changed session is refreshed during ingest. "full" re-reads and
+    // re-synthesizes the whole session (best fidelity, cheap even worst-case);
+    // "delta" reads only messages after the stored watermark and revises the
+    // prior session file. Behavior mode, not a model selection, so it sits
+    // beside `defaults` rather than inside them. Global-only for now.
+    // Left optional (no parse-time default) so a child profile that omits it
+    // inherits the parent's value rather than clobbering it with a filled-in
+    // default; the "full" default is applied at consumption in ingest.
+    update_strategy: z.enum(["full", "delta"]).optional(),
     // How thread dispatch containers authenticate to the model provider.
     // "subscription" mounts the Claude OAuth token (the default, unchanged
     // behavior); "bedrock" runs the operator's credential-process refresh and
@@ -145,7 +154,11 @@ const profileThreadSchema = z
     // changes based on ambient host state.
     credentials: sandboxCredentialModeSchema.default("subscription")
   })
-  .default({ destinations: [], defaults: {}, credentials: "subscription" });
+  .default({
+    destinations: [],
+    defaults: {},
+    credentials: "subscription"
+  });
 
 const machineThreadSchema = z
   .object({
@@ -391,7 +404,11 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
-        thread: { destinations: [], defaults: {}, credentials: "subscription" },
+        thread: {
+          destinations: [],
+          defaults: {},
+          credentials: "subscription"
+        },
         dotfiles: {},
         extra_folders: [],
         description: ""

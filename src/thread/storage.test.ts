@@ -12,6 +12,7 @@ import {
   prepareThreadDestination,
   readThreadManifest,
   readThreadRuns,
+  recordSessions,
   resolveSessionSources,
   resolveSynthesisDefaults,
   resolveThreadDestinations,
@@ -120,6 +121,80 @@ describe("thread storage", () => {
     expect(JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"))).toMatchObject({
       slug: "thread-a"
     });
+  });
+
+  it("persists watermark fields for an ingested session", async () => {
+    const dir = path.join(await makeTempDir(), "thread-wm");
+    await writeThreadManifest(dir, {
+      slug: "thread-wm",
+      charter: "Track watermarks.",
+      destination: "personal",
+      created_at: "2026-06-27T00:00:00.000Z",
+      sessions: [],
+      synthesis: {}
+    });
+
+    await recordSessions(dir, [
+      {
+        id: "session-1",
+        source: "claude-code",
+        extracted_by: "claude-code:sonnet@high",
+        message_count: 12,
+        last_message_id: "a1",
+        last_activity_at: "2026-06-27T01:00:00.000Z"
+      }
+    ]);
+
+    expect((await readThreadManifest(dir)).sessions[0]).toMatchObject({
+      id: "session-1",
+      message_count: 12,
+      last_message_id: "a1",
+      last_activity_at: "2026-06-27T01:00:00.000Z"
+    });
+  });
+
+  it("round-trips a session entry that has no watermark", async () => {
+    const dir = path.join(await makeTempDir(), "thread-no-wm");
+    await writeThreadManifest(dir, {
+      slug: "thread-no-wm",
+      charter: "Track watermarks.",
+      destination: "personal",
+      created_at: "2026-06-27T00:00:00.000Z",
+      sessions: [],
+      synthesis: {}
+    });
+
+    await recordSessions(dir, [
+      { id: "session-1", source: "opencode", extracted_by: "claude-code:sonnet@high" }
+    ]);
+
+    const session = (await readThreadManifest(dir)).sessions[0];
+    expect(session).toMatchObject({ id: "session-1", source: "opencode" });
+    expect(session?.message_count).toBeUndefined();
+    expect(session?.last_message_id).toBeUndefined();
+  });
+
+  it("keys the upsert by source:id so same-id sessions from different sources coexist", async () => {
+    const dir = path.join(await makeTempDir(), "thread-collide");
+    await writeThreadManifest(dir, {
+      slug: "thread-collide",
+      charter: "Track watermarks.",
+      destination: "personal",
+      created_at: "2026-06-27T00:00:00.000Z",
+      sessions: [],
+      synthesis: {}
+    });
+
+    await recordSessions(dir, [
+      { id: "shared", source: "claude-code", extracted_by: "claude-code:sonnet@high" },
+      { id: "shared", source: "opencode", extracted_by: "claude-code:sonnet@high" }
+    ]);
+
+    const sessions = (await readThreadManifest(dir)).sessions;
+    expect(sessions.map((s) => `${s.source}:${s.id}`).sort()).toEqual([
+      "claude-code:shared",
+      "opencode:shared"
+    ]);
   });
 
   it("resolves session sources: profile default, then validated flags", () => {

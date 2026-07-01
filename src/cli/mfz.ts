@@ -46,6 +46,7 @@ import {
   runThreadDestinations,
   runThreadDiscover,
   runThreadIngest,
+  runThreadRefresh,
   runThreadList,
   runThreadObserveDown,
   runThreadObserveStatus,
@@ -396,8 +397,8 @@ thread
 
 thread
   .command("ingest")
-  .description("Ingest sessions into an existing thread")
-  .argument("<ids...>", "session ids")
+  .description("Ingest named sessions, also refreshing any drifted existing sessions")
+  .argument("<ids...>", "session ids to ingest")
   .requiredOption("--thread <slug>", "thread slug")
   .option("--no-push", "commit locally without pushing")
   .option("--gather-model <id>", "gather model (harness:model@effort)")
@@ -406,6 +407,25 @@ thread
     runThreadIngest(ids, {
       ...program.opts(),
       thread: options.thread,
+      noPush: !options.push,
+      gather: options.gatherModel,
+      synthesize: options.synthesizeModel
+    })
+  );
+
+thread
+  .command("refresh")
+  .description("Refresh drifted sessions in a thread and rebuild its digest")
+  .requiredOption("--thread <slug>", "thread slug")
+  .option("--all", "force a full re-gather + re-synthesis of every session, ignoring watermarks")
+  .option("--no-push", "commit locally without pushing")
+  .option("--gather-model <id>", "gather model (harness:model@effort)")
+  .option("--synthesize-model <id>", "synthesize model (harness:model@effort)")
+  .action(async (options) =>
+    runThreadRefresh({
+      ...program.opts(),
+      thread: options.thread,
+      all: Boolean(options.all),
       noPush: !options.push,
       gather: options.gatherModel,
       synthesize: options.synthesizeModel

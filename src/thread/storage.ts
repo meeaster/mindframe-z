@@ -304,6 +304,23 @@ export async function writeSessionFile(
   await writeFile(path.join(sessionsDir, `${source}-${bareId}.md`), text + "\n", "utf8");
 }
 
+// The prior synthesized file for one session, or undefined if none exists yet. The
+// delta refresh path revises this file instead of regenerating it from scratch.
+export async function readSessionFile(
+  dir: string,
+  source: ThreadHarness,
+  bareId: string
+): Promise<string | undefined> {
+  try {
+    return await readFile(path.join(dir, "sessions", `${source}-${bareId}.md`), "utf8");
+  } catch (error) {
+    // Only a missing file means "no prior summary"; a permission or I/O fault is a real
+    // problem the operator should see, not silently a full-refresh fallback.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
 // Raw session-file contents in id order. Feeds the deterministic `log.md` render
 // and the digest dispatch (which reads the full files, never the derived log).
 export async function readSessionFiles(dir: string): Promise<string[]> {
@@ -321,6 +338,12 @@ export interface SessionLedgerEntry {
   source: ThreadHarness;
   title?: string | undefined;
   extracted_by: string;
+  // Tail signature of the host store as of this session's last synthesis. Absent on
+  // entries written before watermarks existed, and on any run where the store could
+  // not be read; the read-modify-write below leaves prior watermark fields intact.
+  message_count?: number | undefined;
+  last_message_id?: string | undefined;
+  last_activity_at?: string | undefined;
 }
 
 // Upsert this run's session ledger entries in one read-modify-write: membership
@@ -331,9 +354,12 @@ export async function recordSessions(
   entries: readonly SessionLedgerEntry[]
 ): Promise<void> {
   const manifest = await readThreadManifest(dir);
-  const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  const updated = manifest.sessions.map((session) => ({ ...session, ...byId.get(session.id) }));
-  const added = entries.filter((entry) => !manifest.sessions.some((s) => s.id === entry.id));
+  // Key on canonical `source:id` — the identity used for session files and refresh sets —
+  // so a claude and an opencode session that share a native id never overwrite each other.
+  const key = (s: { source: ThreadHarness; id: string }): string => `${s.source}:${s.id}`;
+  const byKey = new Map(entries.map((entry) => [key(entry), entry]));
+  const updated = manifest.sessions.map((session) => ({ ...session, ...byKey.get(key(session)) }));
+  const added = entries.filter((entry) => !manifest.sessions.some((s) => key(s) === key(entry)));
   await writeThreadManifest(dir, { ...manifest, sessions: [...updated, ...added] });
 }
 

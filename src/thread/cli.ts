@@ -196,7 +196,44 @@ export async function runThreadIngest(
       synthesize: options.synthesize,
       runner: options.runner
     });
+    if (result.refreshed.length > 0)
+      console.log(`refresh (changed):\t${result.refreshed.join("\t")}`);
+    if (result.vanished.length > 0)
+      console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
     console.log(`ingested\t${result.slug}\t${result.sessionCount} sessions`);
+  });
+}
+
+export async function runThreadRefresh(
+  options: ThreadOptions & {
+    thread: string;
+    all?: boolean | undefined;
+    noPush?: boolean | undefined;
+    gather?: string | undefined;
+    synthesize?: string | undefined;
+    runner?: AgentRunner | undefined;
+  }
+): Promise<void> {
+  await withThreadLog(options, `thread refresh ${options.thread}`, async ({ paths, profile }) => {
+    const result = await ingestThread({
+      paths,
+      profile,
+      threadSlug: assertThreadSlug(options.thread),
+      sessionIds: [],
+      refresh: true,
+      all: Boolean(options.all),
+      noPush: Boolean(options.noPush),
+      gather: options.gather,
+      synthesize: options.synthesize,
+      runner: options.runner
+    });
+    if (result.vanished.length > 0)
+      console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
+    if (result.sessionCount === 0) {
+      console.log(`up to date\t${result.slug}\tnothing drifted`);
+      return;
+    }
+    console.log(`refreshed\t${result.slug}\t${result.sessionCount} sessions`);
   });
 }
 

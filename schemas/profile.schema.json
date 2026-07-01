@@ -350,6 +350,9 @@
             "synthesize": {
               "type": "string"
             },
+            "digest": {
+              "type": "string"
+            },
             "session_sources": {
               "type": "array",
               "items": {
@@ -361,6 +364,13 @@
               }
             }
           }
+        },
+        "update_strategy": {
+          "type": "string",
+          "enum": [
+            "full",
+            "delta"
+          ]
         },
         "credentials": {
           "default": "subscription",
