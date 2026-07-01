@@ -102,6 +102,28 @@ class EmptyDossierRunner implements AgentRunner {
   }
 }
 
+// Gather returns a non-empty "session does not exist" refusal — the wrong-store read
+// the guard must catch before synthesis (which would otherwise write a fabricated file).
+class MissingSessionRunner implements AgentRunner {
+  readonly calls: { role: string }[] = [];
+  run(request: AgentRunRequest): Promise<AgentRunResult> {
+    this.calls.push({ role: request.role });
+    const text =
+      request.role === "gather"
+        ? "The target session does not exist in the local store."
+        : "# Session x — should not be reached\n\nbody";
+    return Promise.resolve({
+      text,
+      rawTrace: "",
+      durationMs: 0,
+      usage: { cost_usd: null, input_tokens: 0, output_tokens: 0, reasoning_tokens: null }
+    });
+  }
+  rolesNamed(role: string): number {
+    return this.calls.filter((call) => call.role === role).length;
+  }
+}
+
 // Records every dispatch and returns plausible, non-empty output per role so a full
 // ingest runs to completion. Gather returns a dossier; synthesize returns a titled
 // session file; digest returns digest text.
@@ -200,7 +222,7 @@ describe("ingestThread auto-refresh", () => {
       paths: runtime,
       profile: profile(),
       threadSlug: slug,
-      sessionIds: ["named-session"],
+      sessionIds: ["claude-code:named-session"],
       noPush: true,
       runner
     });
@@ -223,7 +245,7 @@ describe("ingestThread auto-refresh", () => {
       paths: runtime,
       profile: profile(),
       threadSlug: slug,
-      sessionIds: ["named-session"],
+      sessionIds: ["claude-code:named-session"],
       noPush: true,
       runner
     });
@@ -271,7 +293,7 @@ describe("ingestThread auto-refresh", () => {
       paths: runtime,
       profile: profile(),
       threadSlug: slug,
-      sessionIds: ["named-session"],
+      sessionIds: ["claude-code:named-session"],
       noPush: true,
       runner
     });
@@ -348,7 +370,9 @@ describe("ingestThread auto-refresh", () => {
     expect(await refreshedSessions(runtime, slug)).toEqual(["claude-code:steady-session"]);
     const gather = runner.calls.find((c) => c.role === "gather")!;
     const synth = runner.calls.find((c) => c.role === "synthesize")!;
-    expect(gather.prompt).toBe("Read session steady-session. Charter: Keep sessions fresh.");
+    expect(gather.prompt).toBe(
+      "Read session steady-session. Its transcript is the file /mnt/claude-sessions/projects/-tmp-project/steady-session.jsonl. Charter: Keep sessions fresh."
+    );
     expect(synth.prompt).not.toContain("Revise the existing");
     expect(runner.rolesNamed("digest")).toBe(1);
   });
@@ -383,7 +407,9 @@ describe("ingestThread update strategy", () => {
 
     const gather = runner.calls.find((c) => c.role === "gather")!;
     const synth = runner.calls.find((c) => c.role === "synthesize")!;
-    expect(gather.prompt).toBe("Read session grown-session. Charter: Keep sessions fresh.");
+    expect(gather.prompt).toBe(
+      "Read session grown-session. Its transcript is the file /mnt/claude-sessions/projects/-tmp-project/grown-session.jsonl. Charter: Keep sessions fresh."
+    );
     expect(synth.prompt).not.toContain("Revise the existing");
     expect(synth.prompt).toContain("Dossier (your only source)");
   });
@@ -433,7 +459,7 @@ describe("ingestThread update strategy", () => {
       paths: runtime,
       profile: withStrategy(profile(), "delta"),
       threadSlug: slug,
-      sessionIds: ["fresh-session"],
+      sessionIds: ["claude-code:fresh-session"],
       noPush: true,
       runner
     });
@@ -458,14 +484,16 @@ describe("ingestThread update strategy", () => {
       paths: runtime,
       profile: withStrategy(profile(), "delta"),
       threadSlug: slug,
-      sessionIds: ["steady-session"],
+      sessionIds: ["claude-code:steady-session"],
       noPush: true,
       runner
     });
 
     const gather = runner.calls.find((c) => c.role === "gather")!;
     const synth = runner.calls.find((c) => c.role === "synthesize")!;
-    expect(gather.prompt).toBe("Read session steady-session. Charter: Keep sessions fresh.");
+    expect(gather.prompt).toBe(
+      "Read session steady-session. Its transcript is the file /mnt/claude-sessions/projects/-tmp-project/steady-session.jsonl. Charter: Keep sessions fresh."
+    );
     expect(synth.prompt).not.toContain("Revise the existing");
   });
 });
@@ -489,10 +517,68 @@ describe("ingestThread", () => {
         paths: runtime,
         profile: profile(),
         threadSlug: slug,
-        sessionIds: ["a712ce9c-589a-46fc-b10f-e72c193e165c"],
+        sessionIds: ["claude-code:a712ce9c-589a-46fc-b10f-e72c193e165c"],
         noPush: true,
         runner: new EmptyDossierRunner()
       })
     ).rejects.toThrow(/empty dossier/);
+  });
+
+  it("hands gather the exact transcript path when the session exists host-side", async () => {
+    const home = await makeTempDir();
+    await writeClaudeTranscript(home, "here-session", 3);
+    const { runtime, slug } = await ingestFixture(home, []);
+    const runner = new RecordingRunner();
+
+    await ingestThread({
+      paths: runtime,
+      profile: profile(),
+      threadSlug: slug,
+      sessionIds: ["claude-code:here-session"],
+      noPush: true,
+      runner
+    });
+
+    const gather = runner.calls.find((c) => c.role === "gather")!;
+    expect(gather.prompt).toContain(
+      "/mnt/claude-sessions/projects/-tmp-project/here-session.jsonl"
+    );
+  });
+
+  it("aborts when gather reports a session missing though its transcript exists", async () => {
+    const home = await makeTempDir();
+    await writeClaudeTranscript(home, "real-session", 3);
+    const { runtime, slug } = await ingestFixture(home, []);
+    const runner = new MissingSessionRunner();
+
+    await expect(
+      ingestThread({
+        paths: runtime,
+        profile: profile(),
+        threadSlug: slug,
+        sessionIds: ["claude-code:real-session"],
+        noPush: true,
+        runner
+      })
+    ).rejects.toThrow(/read the wrong store/);
+    expect(runner.rolesNamed("synthesize")).toBe(0);
+  });
+
+  it("rejects an unqualified session id before dispatching", async () => {
+    const home = await makeTempDir();
+    const { runtime, slug } = await ingestFixture(home, []);
+    const runner = new RecordingRunner();
+
+    await expect(
+      ingestThread({
+        paths: runtime,
+        profile: profile(),
+        threadSlug: slug,
+        sessionIds: ["a712ce9c-589a-46fc-b10f-e72c193e165c"],
+        noPush: true,
+        runner
+      })
+    ).rejects.toThrow(/source-qualified/);
+    expect(runner.rolesNamed("gather")).toBe(0);
   });
 });

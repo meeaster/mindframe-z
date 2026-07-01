@@ -2,7 +2,7 @@ import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import { THREAD_PERSONAS } from "./personas.js";
-import { DockerAgentRunner, type AgentRunner } from "./runner.js";
+import { CONTAINER_SESSION_STORE, DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
 import { regenerateViews } from "./regenerate.js";
 import {
@@ -17,8 +17,9 @@ import {
   type ThreadDispatchRun
 } from "./storage.js";
 import { writeRunDossiers, writeRunStatus, type ThreadRunStatus } from "./observability.js";
-import { classifyWatermark, readWatermark } from "./watermark.js";
+import { classifyWatermark, locateClaudeTranscript, readWatermark } from "./watermark.js";
 import { dedupe } from "../core/paths.js";
+import path from "node:path";
 import type { ThreadManifest } from "./schema.js";
 
 export interface IngestRequest {
@@ -127,6 +128,14 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
           ? await readSessionFile(thread.dir, source, bare)
           : undefined;
       const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
+      // Resolve the transcript's exact mounted path host-side and hand it to gather so
+      // it reads a known file instead of rediscovering it — the discovery step is where
+      // a weak gather model wandered into its own ~/.claude and declared the session
+      // missing. A defined path also proves the session is host-readable (the guard below).
+      const transcript =
+        source === "claude-code" ? await locateClaudeTranscript(paths, bare) : undefined;
+      const transcriptPath =
+        transcript !== undefined ? path.posix.join(CONTAINER_SESSION_STORE, transcript) : undefined;
 
       const gather = await dispatch(runner, paths, runId, `${id}-gather`, {
         role: "gather",
@@ -135,7 +144,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         effort: gatherModel.effort,
         persona: THREAD_PERSONAS.gather,
         skills: [`${source}-sessions`],
-        prompt: gatherPrompt(bare, manifest.charter, cursor)
+        prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
       });
       // An empty dossier means gather never read the session (e.g. a denied read
       // it failed to recover from). Synthesis would then have only the charter to
@@ -144,6 +153,15 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       if (gather.result.text.trim() === "") {
         throw new Error(
           `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
+        );
+      }
+      // The host located this transcript, yet gather reported it missing: the agent read
+      // the wrong store rather than the file we named. Abort before synthesis so a
+      // fabricated "session does not exist" refusal is never written, watermarked, or
+      // pushed (it would then read as "unchanged" and never self-heal on a plain refresh).
+      if (transcriptPath !== undefined && dossierReportsMissing(gather.result.text)) {
+        throw new Error(
+          `Gather reported ${id} missing though its transcript exists at ${transcriptPath} (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
         );
       }
       const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
@@ -271,10 +289,27 @@ export async function resolveRefreshSet(
 
 // Gather prompt. With a cursor (delta), read only messages after it; otherwise the whole
 // session. The cursor message is already summarized, so it is excluded.
-function gatherPrompt(bare: string, charter: string, cursor: string | undefined): string {
+function gatherPrompt(
+  bare: string,
+  charter: string,
+  cursor: string | undefined,
+  transcriptPath: string | undefined
+): string {
+  // Name the exact transcript file when we resolved it, so gather reads it directly
+  // instead of searching the store (where a weak model can pick the wrong root).
+  const at = transcriptPath !== undefined ? ` Its transcript is the file ${transcriptPath}.` : "";
   return cursor !== undefined
-    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized. Charter: ${charter}`
-    : `Read session ${bare}. Charter: ${charter}`;
+    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} Charter: ${charter}`
+    : `Read session ${bare}.${at} Charter: ${charter}`;
+}
+
+// Markers of a gather that failed to read the session and reported it absent rather
+// than summarizing it. Paired with a host-confirmed transcript, these mean the agent
+// read the wrong store — a fabricated refusal, not a real dossier.
+function dossierReportsMissing(dossier: string): boolean {
+  return /does not exist|could not be (located|retrieved|found)|unable to locate|no source material|no transcript for|not found in the (local )?store/i.test(
+    dossier
+  );
 }
 
 // Synthesize prompt. With a prior file (delta), revise it in place by folding in the delta
@@ -293,21 +328,23 @@ function synthesizePrompt(
 
 // Session identity: qualified `source:id` or bare id.
 //
-// Qualified   — `source` from the prefix, `bare` is the store-native identifier.
-// Unqualified — `source` from the `ses_` heuristic, `bare` is the raw id.
+// `source` from the required prefix, `bare` is the store-native identifier.
 interface SessionId {
   source: ThreadHarness;
   bare: string;
 }
 
+// Session ids must be source-qualified as `claude-code:<id>` or `opencode:<id>` —
+// the form `discover` emits and the manifest keys on. Requiring it keeps a mistyped
+// or ambiguous id a loud error instead of a silent guess at the wrong store.
 function parseSessionId(id: string): SessionId {
   const colon = id.indexOf(":");
-  if (colon !== -1) {
-    const source = id.slice(0, colon);
-    if (source === "claude-code" || source === "opencode")
-      return { source, bare: id.slice(colon + 1) };
-  }
-  return { source: id.startsWith("ses_") ? "opencode" : "claude-code", bare: id };
+  const source = colon === -1 ? "" : id.slice(0, colon);
+  const bare = colon === -1 ? "" : id.slice(colon + 1);
+  if ((source === "claude-code" || source === "opencode") && bare !== "") return { source, bare };
+  throw new Error(
+    `Session id "${id}" must be source-qualified — pass claude-code:<id> or opencode:<id>.`
+  );
 }
 
 // The session file's title lives only in its H1 (`# Session <id> — <title>`),
