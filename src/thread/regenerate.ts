@@ -25,7 +25,7 @@ export interface RegenerateViewsRequest {
   threadDir: string;
   slug: string;
   charter: string;
-  synthModel: ParsedModelId;
+  digestModel: ParsedModelId;
 }
 
 // Rebuild the two derived views from the immutable session files on disk: log.md
@@ -33,14 +33,14 @@ export interface RegenerateViewsRequest {
 // session files). Shared by ingest — which calls it after new sessions land — and
 // the regenerate command, which calls it alone with no re-gather/re-synthesize.
 export async function regenerateViews(req: RegenerateViewsRequest): Promise<ThreadDispatchRun> {
-  const { runner, paths, runId, threadDir, slug, charter, synthModel } = req;
+  const { runner, paths, runId, threadDir, slug, charter, digestModel } = req;
   const sessions = await readSessionFiles(threadDir);
   await writeFile(path.join(threadDir, "log.md"), renderEventLog(sessions), "utf8");
   const digest = await dispatch(runner, paths, runId, "digest", {
     role: "digest",
-    harness: synthModel.harness,
-    model: synthModel.model,
-    effort: synthModel.effort,
+    harness: digestModel.harness,
+    model: digestModel.model,
+    effort: digestModel.effort,
     persona: THREAD_PERSONAS.digest,
     skills: ["thread-contract"],
     prompt: `Thread: ${slug}\n\nThe charter is the thread's topic hint — what the thread is about. It is NOT a source of facts; never lift specifics from it. The session files below are your only source material.\n\nCharter (topic hint, not a source): ${charter}\n\nSession files (your only source):\n${sessions.join("\n")}`
@@ -55,6 +55,7 @@ export interface RegenerateRequest {
   threadSlug: string;
   noPush: boolean;
   synthesize?: string | undefined;
+  digest?: string | undefined;
   runner?: AgentRunner | undefined;
 }
 
@@ -72,7 +73,8 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
   const thread = await findThread(paths, profile, req.threadSlug);
   const manifest = await readThreadManifest(thread.dir);
   const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
-    synthesize: req.synthesize
+    synthesize: req.synthesize,
+    digest: req.digest
   });
   const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
   const runId = `run-${Date.now()}`;
@@ -95,7 +97,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
     threadDir: thread.dir,
     slug: manifest.slug,
     charter: manifest.charter,
-    synthModel: settings.synthesize
+    digestModel: settings.digest
   });
 
   const finishedAt = new Date().toISOString();

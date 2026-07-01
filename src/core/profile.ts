@@ -110,6 +110,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
         return [...map.values()];
       })(),
       defaults: { ...base.thread.defaults, ...child.thread.defaults },
+      update_strategy: child.thread.update_strategy ?? base.thread.update_strategy,
       credentials: child.thread.credentials ?? base.thread.credentials
     },
     dotfiles

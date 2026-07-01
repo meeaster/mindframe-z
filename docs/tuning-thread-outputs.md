@@ -17,11 +17,21 @@ Every stage has two independent levers:
 
 - **Prompt** — the persona/instructions for that stage (`src/thread/personas.ts`), plus
   any reader skill it loads (`opencode-sessions`, `claude-code-sessions`).
-- **Model + effort** — `harness:model@effort` (`profiles/base/profile.yml` defaults, or
-  `--gather-model` / `--synthesize-model` overrides).
+- **Model + effort** — `harness:model@effort` (`profiles/<name>/profile.yml` `thread.defaults`,
+  or per-thread `synthesis` overrides). Each of `gather`, `synthesize`, and `digest` is an
+  independent default; an unset `digest` inherits the resolved `synthesize` id.
 
 A fourth lever is the **reader skill** the gather loads — it controls what the gather
 even sees (e.g. whether timestamps arrive pre-formatted or as raw epoch).
+
+**Effort is not one lever — it behaves differently at each stage**, because its cost and its
+quality effect both depend on the stage's shape (see the effort × stage findings below):
+
+- **gather** runs a *tool loop* (reads the session store turn by turn), so higher effort means
+  more turns and the input/cache tokens multiply — effort is a *strong* cost lever here.
+- **synthesize** and **digest** are *single-shot* over an in-prompt input, so higher effort only
+  adds thinking tokens to one turn — effort is a *weak* cost lever, and `max` can blow the output
+  ceiling and fail the dispatch outright.
 
 ## Method
 
@@ -86,15 +96,43 @@ shapes). Patterns that keep an experiment honest and cheap:
 
 The defaults these experiments produced. Update this table when a new experiment overturns one.
 
-| Stage | Default | High-value tier | Why |
+| Stage | Default | Higher tier | Why |
 | --- | --- | --- | --- |
-| gather | `haiku@low` + human-dynamics prompt | `sonnet@high` | Prompt unlocks voice on any model; sonnet captures ~3× the verbatim ramble for ~5× the gather cost. |
-| synthesize | `sonnet@max` | `opus@high` | Capture is within noise across models; opus@high better preserves the reasoning *journey*. `opus@max` over-fragments and overpays — avoid. |
-| digest | separate dispatch (the default) | — | A combined synth+digest with raw dossier context was *worse*: the `session.md` is a useful distillation funnel that surfaces signal for the digest. |
+| gather | `haiku@low` + human-dynamics prompt (budget) | `claude-sonnet-5@low` | Choose by *model, not effort*. Sonnet 5 over haiku buys auditable `msg_`/`prt_` citations, an explicit read-coverage disclosure, and capture of discarded branches and tool-call errors that haiku omits. Effort above `low` only multiplies gather's tool-loop cost for diminishing polish. |
+| synthesize | `claude-sonnet-5@low` (or `@medium`) | — | Effort barely moves cost (single-shot, fixed input) but higher effort *compresses* — it captures fewer decisions. Synthesize feeds the digest, so preserve recall here and let the digest compress. Avoid `@high` (over-compresses) and `@max` (blows the output ceiling, fails the dispatch). |
+| digest | `claude-sonnet-5@low`/`@medium` | `claude-sonnet-5@high` | Independent lever now (unset inherits `synthesize`). Cheap single-shot. `low`/`medium` are content-complete but their *presentation* varies run to run (the architecture diagram / component breakdown appear inconsistently); `@high` reliably includes the full structure and, since digest *is* the compression stage, adds polish without the over-compression penalty synthesize suffers. Defensible to spend up here — it is the final, human-read artifact. |
 | timestamps | deterministic SQL in the reader skill | — | Models convert epoch-ms→date unreliably; format with `strftime` in the query and copy verbatim. |
+
+The `personal` profile uses `gather: haiku@low`, `synthesize: claude-sonnet-5@low`, `digest: claude-sonnet-5@high`.
 
 ## Findings log
 
+- **Sonnet 5 effort × stage (two trials each, one dossier/thread held constant).** Ran
+  `claude-sonnet-5` at `low`/`medium`/`high` on each stage, plus a haiku baseline on gather.
+  The dominant result: **effort's cost and quality effects are stage-shaped, not uniform.**
+  - *Cost.* On gather (tool loop) effort scaled cost steeply and reproducibly — `low` to `high`
+    roughly doubled-to-tripled it as the loop took more turns and re-sent context. On synthesize
+    and digest (single-shot) effort barely moved cost; input is a fixed majority of the bill and
+    only thinking tokens grow. `sonnet5@max` on synthesize streamed ~20k thinking tokens and then
+    **failed** (`docker exited with status 1`) — it blew the model's output ceiling. Do not use
+    `@max` on the single-shot stages.
+  - *Gather quality — model ≫ effort.* The quote-count proxy was misleading (it swung ~2× between
+    identical haiku runs — measure cost and read the text instead). Reading the dossiers, the real
+    jump is haiku → Sonnet 5 at *any* effort: Sonnet 5 produces auditable per-turn `msg_`/`prt_`
+    citations, discloses how much of the session it read, and captures discarded design branches
+    and tool-call failures that haiku silently drops. `sonnet5@low` already delivers that;
+    `medium`/`high` add only marginal completeness for a steep tool-loop cost premium.
+  - *Synthesize quality — recall vs compression.* Higher effort captured *fewer* decisions in both
+    trials (it merges and compresses); `low`/`medium` preserved the most. Because the dossier is
+    already distilled and synthesize feeds the digest, the compression at `high` is actively
+    counterproductive — keep synthesize low.
+  - *Digest quality — flat content, variable presentation.* All efforts captured the same key
+    decisions both trials; `low`/`medium` sometimes dropped the architecture diagram / component
+    breakdown, while `high` reliably kept the full structure. Digest is cheap and the final
+    human-read artifact, so spending up to `@high` is the one place it pays.
+- **Haiku has no effort levels.** `--effort` is a no-op on Haiku (the trace shows flat per-turn
+  thinking regardless of the flag), so `haiku@low` and `haiku@high` are the same config — any
+  difference between them is run-to-run variance, not an effort effect.
 - **Gather prompt (highest leverage, ~free).** The original gather produced a sterile
   technical dossier with zero user quotes. Adding "capture the human dynamics — pushback,
   overrides, mind-changes, frustration — and quote their words" took Haiku from 0 → 11
