@@ -32,4 +32,25 @@ describe("mergeProfiles thread defaults", () => {
 
     expect(mergeProfiles(base, child).thread.defaults.session_sources).toEqual(["opencode"]);
   });
+
+  // Same trap, one level up on the `thread` object: `update_strategy` must stay optional
+  // (no parse-time default) or a child that omits it would clobber a parent's `delta`.
+  it("inherits update_strategy when the child omits it", () => {
+    const base = profileSchema.parse({ name: "base", thread: { update_strategy: "delta" } });
+    const child = profileSchema.parse({ name: "child", extends: "base" });
+
+    expect(child.thread.update_strategy).toBeUndefined();
+    expect(mergeProfiles(base, child).thread.update_strategy).toBe("delta");
+  });
+
+  it("lets a child override update_strategy when it sets its own", () => {
+    const base = profileSchema.parse({ name: "base", thread: { update_strategy: "delta" } });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      thread: { update_strategy: "full" }
+    });
+
+    expect(mergeProfiles(base, child).thread.update_strategy).toBe("full");
+  });
 });

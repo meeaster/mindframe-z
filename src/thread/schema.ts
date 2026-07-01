@@ -6,7 +6,13 @@ export const threadSessionSchema = z.object({
   title: z.string().optional(),
   // The synthesizer that produced this session's file, as `<harness>:<model>@<effort>`.
   // TS owns it — the dispatch knows the truth; the agent only guesses.
-  extracted_by: z.string().optional()
+  extracted_by: z.string().optional(),
+  // Watermark: a tail signature of the host session store as of this session's last
+  // synthesis, computed deterministically by TS (see thread/watermark.ts). All three
+  // are optional so manifests written before watermarks were introduced still parse.
+  message_count: z.number().optional(),
+  last_message_id: z.string().optional(),
+  last_activity_at: z.string().optional()
 });
 
 export const threadManifestSchema = z.object({
@@ -19,7 +25,8 @@ export const threadManifestSchema = z.object({
     .object({
       discover: z.string().optional(),
       gather: z.string().optional(),
-      synthesize: z.string().optional()
+      synthesize: z.string().optional(),
+      digest: z.string().optional()
     })
     .default({})
 });
