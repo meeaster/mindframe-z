@@ -31,7 +31,15 @@ Folds sessions into a thread. **Ingestion dispatches read-only agents and costs 
 
 3. **Ingest.** `mfz thread ingest <id...> --thread <slug>`
 
-   Runs gather → synthesize → digest and commits the result to the thread's destination repo. Add `--no-push` to commit locally without pushing. Done when the run shows complete in `mfz thread runs --thread <slug>`.
+   Folds the named sessions in — runs gather → synthesize → digest and commits the result to the thread's destination repo. Add `--no-push` to commit locally without pushing. Requires at least one id. Done when the run shows complete in `mfz thread runs --thread <slug>`.
+
+   **Ingest also auto-refreshes drift.** Before dispatching, it recomputes a per-session watermark for every session already in the thread — free, no agent call — and folds any that grew since the last ingest into this run alongside the ids you named, then digests once. It reports the refresh set, noting any session that vanished or shrank (which it leaves untouched). A session that was never watermarked is left alone until you name it in an ingest once.
+
+## Refresh
+
+`mfz thread refresh --thread <slug>` brings a thread up to date without naming new sessions: it recomputes every session's watermark and re-synthesizes only the ones that drifted, then digests once. Finding nothing drifted is a successful no-op, not an error. Add `--all` to force a full re-gather + re-synthesis of **every** session regardless of watermark — the way to rebuild after changing the charter or models (this also captures a watermark for any session that never had one).
+
+`update_strategy` in the profile's `thread` config picks how a drifted session is refreshed: `full` (default) re-synthesizes the whole session; `delta` reads only the messages past the watermark and revises the existing file. Global; set once. `--all` always re-synthesizes in full.
 
 ## Inspect
 

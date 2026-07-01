@@ -40,6 +40,15 @@
           },
           "extracted_by": {
             "type": "string"
+          },
+          "message_count": {
+            "type": "number"
+          },
+          "last_message_id": {
+            "type": "string"
+          },
+          "last_activity_at": {
+            "type": "string"
           }
         },
         "required": [
@@ -59,6 +68,9 @@
           "type": "string"
         },
         "synthesize": {
+          "type": "string"
+        },
+        "digest": {
           "type": "string"
         }
       }

@@ -6,6 +6,11 @@ thread:
     - name: personal
       remote: git@github.com:meeaster/threads.git
       default: true
+  defaults:
+    discover: claude-code:haiku@low
+    gather: claude-code:haiku@low
+    synthesize: claude-code:claude-sonnet-5@low
+    digest: claude-code:claude-sonnet-5@high
 agents: [opencode, claude-code]
 references:
   - clack
