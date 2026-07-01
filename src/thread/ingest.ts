@@ -123,7 +123,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     threadDir: thread.dir,
     slug: manifest.slug,
     charter: manifest.charter,
-    synthModel
+    digestModel: settings.digest
   });
   dispatches.push(digestDispatch);
 

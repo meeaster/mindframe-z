@@ -19,7 +19,8 @@ export const threadManifestSchema = z.object({
     .object({
       discover: z.string().optional(),
       gather: z.string().optional(),
-      synthesize: z.string().optional()
+      synthesize: z.string().optional(),
+      digest: z.string().optional()
     })
     .default({})
 });

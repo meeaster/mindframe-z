@@ -36,6 +36,7 @@ export interface ResolvedSynthesisDefaults {
   discover: ParsedModelId;
   gather: ParsedModelId;
   synthesize: ParsedModelId;
+  digest: ParsedModelId;
 }
 
 export type ResolvedThreadDestination = ThreadDestination & { path: string };
@@ -138,14 +139,23 @@ export function resolveSynthesisDefaults(
       discover?: string | undefined;
       gather?: string | undefined;
       synthesize?: string | undefined;
+      digest?: string | undefined;
     };
   },
   flags: {
     discover?: string | undefined;
     gather?: string | undefined;
     synthesize?: string | undefined;
+    digest?: string | undefined;
   } = {}
 ): ResolvedSynthesisDefaults {
+  // Resolve the synthesize id first so an unset digest can inherit it, preserving
+  // the prior behavior where the digest dispatch reused the synthesize model.
+  const synthesize =
+    flags.synthesize ??
+    manifest.synthesis.synthesize ??
+    profileDefaults.synthesize ??
+    FALLBACK_SYNTHESIZE;
   return {
     discover: parseModelId(
       flags.discover ?? manifest.synthesis.discover ?? profileDefaults.discover ?? FALLBACK_DISCOVER
@@ -153,11 +163,9 @@ export function resolveSynthesisDefaults(
     gather: parseModelId(
       flags.gather ?? manifest.synthesis.gather ?? profileDefaults.gather ?? FALLBACK_GATHER
     ),
-    synthesize: parseModelId(
-      flags.synthesize ??
-        manifest.synthesis.synthesize ??
-        profileDefaults.synthesize ??
-        FALLBACK_SYNTHESIZE
+    synthesize: parseModelId(synthesize),
+    digest: parseModelId(
+      flags.digest ?? manifest.synthesis.digest ?? profileDefaults.digest ?? synthesize
     )
   };
 }

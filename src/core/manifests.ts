@@ -125,6 +125,9 @@ export const threadDefaultsSchema = z.object({
   discover: z.string().optional(),
   gather: z.string().optional(),
   synthesize: z.string().optional(),
+  // Omitted digest inherits the resolved synthesize model (see
+  // resolveSynthesisDefaults) so existing profiles keep their current behavior.
+  digest: z.string().optional(),
   // Optional through parse/merge so an omitting child inherits the parent value
   // instead of clobbering it with an auto-filled default. Defaulted at point of
   // use in `resolveSessionSources`.

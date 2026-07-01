@@ -170,7 +170,29 @@ describe("thread storage", () => {
     ).toEqual({
       discover: { harness: "claude-code", model: "sonnet", effort: "high" },
       gather: { harness: "claude-code", model: "haiku", effort: "low" },
-      synthesize: { harness: "claude-code", model: "sonnet", effort: "max" }
+      synthesize: { harness: "claude-code", model: "sonnet", effort: "max" },
+      // digest unset everywhere → inherits the resolved synthesize id
+      digest: { harness: "claude-code", model: "sonnet", effort: "max" }
+    });
+  });
+
+  it("resolves digest independently of synthesize when set", () => {
+    const resolved = resolveSynthesisDefaults(
+      {
+        synthesize: "claude-code:claude-sonnet-5@low",
+        digest: "claude-code:claude-sonnet-5@high"
+      },
+      { synthesis: {} }
+    );
+    expect(resolved.synthesize).toEqual({
+      harness: "claude-code",
+      model: "claude-sonnet-5",
+      effort: "low"
+    });
+    expect(resolved.digest).toEqual({
+      harness: "claude-code",
+      model: "claude-sonnet-5",
+      effort: "high"
     });
   });
 
