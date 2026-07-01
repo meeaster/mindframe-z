@@ -35,11 +35,11 @@ describe("thread runner", () => {
     expect(command.args).toContain("/mnt/claude-sessions");
     expect(command.args).toContain("/mnt/opencode-data");
     expect(command.args.join("\n")).toContain("/mnt/claude-sessions");
-    expect(command.env).toEqual({});
+    expect(command.env).toEqual({ CLAUDE_SESSIONS_DIR: "/mnt/claude-sessions" });
     expect(command.args).toContain("--effort");
   });
 
-  it("forces the gather to read the Claude store via bash, never the Read tool", () => {
+  it("points the gather at the mounted store root, never the writable ~/.claude", () => {
     const command = buildHarnessCommand({
       role: "gather",
       harness: "claude-code",
@@ -51,8 +51,11 @@ describe("thread runner", () => {
     });
 
     const prompt = command.args.join("\n");
+    expect(command.env.CLAUDE_SESSIONS_DIR).toBe("/mnt/claude-sessions");
+    expect(prompt).toContain("`CLAUDE_SESSIONS_DIR` is already set");
+    expect(prompt).toContain("never read `~/.claude` directly");
     expect(prompt).toContain("pre-authorized for this dispatch");
-    expect(prompt).toContain("Never use the `Read` or `glob` tools on `/mnt/claude-sessions`");
+    expect(prompt).toContain("Never use the `Read` or `glob` tools on the store");
   });
 
   it("tells Claude Code to read the non-standard OpenCode database with sqlite3", () => {

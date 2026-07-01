@@ -398,7 +398,7 @@ thread
 thread
   .command("ingest")
   .description("Ingest named sessions, also refreshing any drifted existing sessions")
-  .argument("<ids...>", "session ids to ingest")
+  .argument("<ids...>", "source-qualified session ids (claude-code:<id> or opencode:<id>)")
   .requiredOption("--thread <slug>", "thread slug")
   .option("--no-push", "commit locally without pushing")
   .option("--gather-model <id>", "gather model (harness:model@effort)")

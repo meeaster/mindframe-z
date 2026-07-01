@@ -23,15 +23,15 @@ Folds sessions into a thread. **Ingestion dispatches read-only agents and costs 
 
 1. **Discover the sessions.** `mfz thread discover "<prompt>" --json`
 
-   Returns candidate session ids, each with its source and a one-line rationale. Done when you have the ids to ingest, or discovery reports no match.
+   Returns candidate ids in the `source:id` form ingest expects (e.g. `claude-code:<uuid>`, `opencode:ses_<id>`), each with a one-line rationale. Done when you have the ids to ingest, or discovery reports no match.
 
 2. **Create the thread** (first time only). `mfz thread create <slug> --charter "<lens>" [--dest <destination>]`
 
    The **charter** is the synthesis lens — what this thread filters for and emphasizes; spend care on it, since every synthesis reads through it. Done when the command reports the thread created; skip when the thread already exists.
 
-3. **Ingest.** `mfz thread ingest <id...> --thread <slug>`
+3. **Ingest.** `mfz thread ingest <source:id...> --thread <slug>`
 
-   Folds the named sessions in — runs gather → synthesize → digest and commits the result to the thread's destination repo. Add `--no-push` to commit locally without pushing. Requires at least one id. Done when the run shows complete in `mfz thread runs --thread <slug>`.
+   Folds the named sessions in — runs gather → synthesize → digest and commits the result to the thread's destination repo. Add `--no-push` to commit locally without pushing. Each id must be **source-qualified** (`claude-code:<id>` or `opencode:<id>`) — the form `discover` emits; a bare id is rejected. Requires at least one id. Done when the run shows complete in `mfz thread runs --thread <slug>`.
 
    **Ingest also auto-refreshes drift.** Before dispatching, it recomputes a per-session watermark for every session already in the thread — free, no agent call — and folds any that grew since the last ingest into this run alongside the ids you named, then digests once. It reports the refresh set, noting any session that vanished or shrank (which it leaves untouched). A session that was never watermarked is left alone until you name it in an ingest once.
 

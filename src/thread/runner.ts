@@ -27,6 +27,12 @@ import { isLapdogReachable, lapdogContainerUrl, lapdogNetworkName, lapdogUrl } f
 // lapdog's backfill endpoint.
 const CONTAINER_CLAUDE_PROJECTS = "/home/sandbox/.claude/projects";
 
+// Where the read-only host session store is mounted inside the dispatch container —
+// distinct from the container's own writable ~/.claude. The claude-code-sessions
+// skill resolves its store root from this (via CLAUDE_SESSIONS_DIR), and ingest
+// builds the exact transcript path it hands gather from the same root.
+export const CONTAINER_SESSION_STORE = "/mnt/claude-sessions";
+
 export interface AgentRunRequest {
   role: ThreadDispatchRun["role"];
   harness: ThreadHarness;
@@ -169,7 +175,11 @@ export function buildHarnessCommand(request: AgentRunRequest): {
       "--mcp-config",
       '{"mcpServers":{}}'
     );
-    return { tool: "claude", args, env: {} };
+    // Point the claude-code-sessions skill at the read-only store mount instead of
+    // the container's own writable ~/.claude (which holds only this dispatch's
+    // transcript). A separate var from CLAUDE_CONFIG_DIR so Claude Code's own runtime
+    // home stays writable while the skill reads the mounted host store.
+    return { tool: "claude", args, env: { CLAUDE_SESSIONS_DIR: CONTAINER_SESSION_STORE } };
   }
 
   const args = ["run", "--format", "json", "--agent", "thread-readonly", "--model", request.model];
@@ -301,7 +311,7 @@ function skillPrompt(persona: string, skills: readonly string[]): string {
     persona,
     skills.length ? `Load skills: ${skills.join(", ")}.` : "No extra skills.",
     skills.includes("claude-code-sessions")
-      ? "The Claude Code session store is the read-only mount `/mnt/claude-sessions`; its `history.jsonl`, `projects/`, and `transcripts/` mirror the host session files. Do not treat `/home/sandbox/.claude` as the host store; it is only this dispatch's writable Claude runtime home. Read the store with bash — `jq`, `ls`, `grep`, `find` — which is pre-authorized for this dispatch; run those commands directly instead of asking the operator for permission. Never use the `Read` or `glob` tools on `/mnt/claude-sessions`: those are denied for the store and will dead-end the dispatch with no dossier. If a command is denied, switch to a `jq`/`bash` form of the same read rather than giving up."
+      ? "`CLAUDE_SESSIONS_DIR` is already set to the read-only store mount; follow the claude-code-sessions skill, which resolves the store root from it — never read `~/.claude` directly, as that is only this dispatch's own writable runtime home. Read the store with bash — `jq`, `ls`, `grep`, `find` — which is pre-authorized for this dispatch; run those commands directly instead of asking the operator for permission. Never use the `Read` or `glob` tools on the store: those are denied and will dead-end the dispatch with no dossier. If a command is denied, switch to a `jq`/`bash` form of the same read rather than giving up."
       : "",
     skills.includes("opencode-sessions")
       ? "The OpenCode database here is a read-only file at /mnt/opencode-data/opencode/opencode.db — a non-standard location, so follow the opencode-sessions skill's non-standard-location rule and read it with sqlite3, never `opencode db` (which opens the file read-write and would fail on the read-only mount or migrate it across versions). Run: sqlite3 -json 'file:/mnt/opencode-data/opencode/opencode.db?immutable=1' \"<SELECT ...>\". These read-only queries are pre-authorized for this dispatch; run them directly instead of asking the operator for permission."
