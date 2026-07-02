@@ -498,6 +498,112 @@ describe("ingestThread update strategy", () => {
   });
 });
 
+describe("ingestThread digest anchoring", () => {
+  it("anchors the digest prompt on the prior digest when one exists", async () => {
+    const home = await makeTempDir();
+    const wm = await writeClaudeTranscript(home, "steady-session", 3);
+    const { runtime, slug } = await ingestFixture(home, [
+      { id: "steady-session", source: "claude-code", ...wm }
+    ]);
+    await writeFile(
+      path.join(threadPath(runtime, slug), "digest.md"),
+      "# Digest — prior rendering\n",
+      "utf8"
+    );
+    const runner = new RecordingRunner();
+
+    await ingestThread({
+      paths: runtime,
+      profile: profile(),
+      threadSlug: slug,
+      sessionIds: ["claude-code:steady-session"],
+      noPush: true,
+      runner
+    });
+
+    const digest = runner.calls.find((c) => c.role === "digest")!;
+    expect(digest.prompt).toContain("Previous digest");
+    expect(digest.prompt).toContain("# Digest — prior rendering");
+  });
+
+  it("hands the digest a repo lookup so reference and extra-folder paths resolve to URLs", async () => {
+    const home = await makeTempDir();
+    const wm = await writeClaudeTranscript(home, "steady-session", 3);
+    const { runtime, slug } = await ingestFixture(home, [
+      { id: "steady-session", source: "claude-code", ...wm }
+    ]);
+    const withRepos: ResolvedProfile = {
+      ...profile(),
+      referencesDir: "/home/mark/references",
+      enabledReferences: [
+        { name: "opencode", url: "https://github.com/sst/opencode", description: "" }
+      ],
+      extraFolders: [
+        {
+          path: "/home/mark/work/ps-watchtower",
+          url: "https://github.example.com/ps-watchtower",
+          description: "",
+          read: "allow",
+          edit: "allow"
+        },
+        // no url → skipped
+        { path: "/mnt/c/vaults/wiki", description: "", read: "allow", edit: "allow" }
+      ]
+    };
+    const runner = new RecordingRunner();
+
+    await ingestThread({
+      paths: runtime,
+      profile: withRepos,
+      threadSlug: slug,
+      sessionIds: ["claude-code:steady-session"],
+      noPush: true,
+      runner
+    });
+
+    const digest = runner.calls.find((c) => c.role === "digest")!;
+    expect(digest.prompt).toContain("Local repos");
+    // A session may cite a repo by name or a differently-mounted path, so the lookup
+    // resolves on either — not the host path alone.
+    expect(digest.prompt).toContain("cited by its name or by any path ending in that name");
+    expect(digest.prompt).toContain(
+      "opencode — /home/mark/references/opencode → https://github.com/sst/opencode"
+    );
+    expect(digest.prompt).toContain(
+      "ps-watchtower — /home/mark/work/ps-watchtower → https://github.example.com/ps-watchtower"
+    );
+    expect(digest.prompt).not.toContain("wiki");
+  });
+
+  it("withholds the prior digest under --all so form drift flushes", async () => {
+    const home = await makeTempDir();
+    const wm = await writeClaudeTranscript(home, "steady-session", 3);
+    const { runtime, slug } = await ingestFixture(home, [
+      { id: "steady-session", source: "claude-code", ...wm }
+    ]);
+    await writeFile(
+      path.join(threadPath(runtime, slug), "digest.md"),
+      "# Digest — prior rendering\n",
+      "utf8"
+    );
+    const runner = new RecordingRunner();
+
+    await ingestThread({
+      paths: runtime,
+      profile: profile(),
+      threadSlug: slug,
+      sessionIds: [],
+      refresh: true,
+      all: true,
+      noPush: true,
+      runner
+    });
+
+    const digest = runner.calls.find((c) => c.role === "digest")!;
+    expect(digest.prompt).not.toContain("Previous digest");
+  });
+});
+
 describe("ingestThread", () => {
   it("aborts before synthesis when a gather yields an empty dossier", async () => {
     const home = await makeTempDir();

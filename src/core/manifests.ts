@@ -67,6 +67,9 @@ const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown(
 export const extraFolderSchema = z.object({
   path: z.string().min(1),
   description: z.string().default(""),
+  // Upstream URL when the folder is a git clone — surfaced in a thread digest's Sources so a
+  // reader can reopen it. Optional: many extra folders (mounts, config dirs) have no upstream.
+  url: z.string().optional(),
   read: z.enum(["allow", "ask", "deny"]).default("allow"),
   edit: z.enum(["allow", "ask", "deny"]).default("allow")
 });

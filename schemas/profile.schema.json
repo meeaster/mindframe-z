@@ -406,6 +406,9 @@
             "default": "",
             "type": "string"
           },
+          "url": {
+            "type": "string"
+          },
           "read": {
             "default": "allow",
             "type": "string",
