@@ -4,7 +4,7 @@ import type { ThreadHarness } from "../core/manifests.js";
 import { THREAD_PERSONAS } from "./personas.js";
 import { CONTAINER_SESSION_STORE, DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
-import { regenerateViews } from "./regenerate.js";
+import { readPreviousDigest, regenerateViews, repoLocators } from "./regenerate.js";
 import {
   appendThreadRun,
   commitThreadChanges,
@@ -206,7 +206,11 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     threadDir: thread.dir,
     slug: manifest.slug,
     charter: manifest.charter,
-    digestModel: settings.digest
+    digestModel: settings.digest,
+    // `--all` is a clean rebuild — withhold the prior digest so accumulated form drift
+    // flushes; every other run anchors to it to keep an unchanged thread's digest stable.
+    previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
+    repos: repoLocators(profile)
   });
   dispatches.push(digestDispatch);
 
