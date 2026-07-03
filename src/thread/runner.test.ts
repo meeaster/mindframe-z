@@ -52,8 +52,9 @@ describe("thread runner", () => {
 
     const prompt = command.args.join("\n");
     expect(command.env.CLAUDE_SESSIONS_DIR).toBe("/mnt/claude-sessions");
-    expect(prompt).toContain("`CLAUDE_SESSIONS_DIR` is already set");
-    expect(prompt).toContain("never read `~/.claude` directly");
+    expect(prompt).toContain("mounted read-only at /mnt/claude-sessions");
+    expect(prompt).toContain("Do not rely on expanding `$CLAUDE_SESSIONS_DIR`");
+    expect(prompt).toContain("holds none of the sessions you are searching");
     expect(prompt).toContain("pre-authorized for this dispatch");
     expect(prompt).toContain("Never use the `Read` or `glob` tools on the store");
   });
