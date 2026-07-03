@@ -1,8 +1,13 @@
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import type { ThreadHarness } from "../core/manifests.js";
+import type { Archive, ThreadHarness } from "../core/manifests.js";
 import { THREAD_PERSONAS } from "./personas.js";
-import { CONTAINER_SESSION_STORE, DockerAgentRunner, type AgentRunner } from "./runner.js";
+import {
+  CONTAINER_ARCHIVE_CACHE,
+  CONTAINER_SESSION_STORE,
+  DockerAgentRunner,
+  type AgentRunner
+} from "./runner.js";
 import { dispatch } from "./dispatch.js";
 import { readPreviousDigest, regenerateViews, repoLocators } from "./regenerate.js";
 import {
@@ -17,8 +22,15 @@ import {
   type ThreadDispatchRun
 } from "./storage.js";
 import { writeRunDossiers, writeRunStatus, type ThreadRunStatus } from "./observability.js";
-import { classifyWatermark, locateClaudeTranscript, readWatermark } from "./watermark.js";
-import { dedupe } from "../core/paths.js";
+import {
+  classifyWatermark,
+  locateClaudeTranscript,
+  readWatermark,
+  type WatermarkStatus
+} from "./watermark.js";
+import { cachedSessionPath, primaryRelPath } from "../sessions/archive.js";
+import { hydrateSession } from "../sessions/hydrate.js";
+import { dedupe, pathExists } from "../core/paths.js";
 import path from "node:path";
 import type { ThreadManifest } from "./schema.js";
 
@@ -56,7 +68,12 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   const thread = await findThread(paths, profile, req.threadSlug);
   const manifest = await readThreadManifest(thread.dir);
 
-  const detected = await resolveRefreshSet(paths, manifest, sessionIds);
+  const detected = await resolveRefreshSet(
+    paths,
+    manifest,
+    sessionIds,
+    profile.manifests.machine.archives
+  );
   const { refreshed, vanished } = detected;
   // `--all` forces every present session (skipping only those vanished from the store);
   // otherwise the work set is the named ids plus the sessions that drifted.
@@ -128,14 +145,13 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
           ? await readSessionFile(thread.dir, source, bare)
           : undefined;
       const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
-      // Resolve the transcript's exact mounted path host-side and hand it to gather so
-      // it reads a known file instead of rediscovering it — the discovery step is where
-      // a weak gather model wandered into its own ~/.claude and declared the session
-      // missing. A defined path also proves the session is host-readable (the guard below).
-      const transcript =
-        source === "claude-code" ? await locateClaudeTranscript(paths, bare) : undefined;
-      const transcriptPath =
-        transcript !== undefined ? path.posix.join(CONTAINER_SESSION_STORE, transcript) : undefined;
+      // Resolve the session's exact mounted path host-side and hand it to gather so it
+      // reads a known file instead of rediscovering it — the discovery step is where a
+      // weak gather model wandered into its own ~/.claude and declared the session
+      // missing. A defined path also proves the session is host-readable (the guard
+      // below). Present OpenCode sessions keep today's sqlite-discovery path (no
+      // explicit path); only a hydrated cache copy gets one, for either harness.
+      const transcriptPath = await resolveTranscriptPath(paths, source, bare);
 
       const gather = await dispatch(runner, paths, runId, `${id}-gather`, {
         role: "gather",
@@ -264,6 +280,36 @@ export interface RefreshSet {
   vanished: string[];
 }
 
+// Classify one session, attempting hydration when it's genuinely absent (`vanished`,
+// not merely `shrank`) before writing it off — the archive is consulted only for this
+// case, never for `shrank` (present, just below its stored cursor). A successful
+// hydration is re-classified against the now-cached copy: it may turn out `changed`
+// (recoverable, folded into the refresh) or `unchanged` (recovered, nothing new) — or
+// still fail the count check (`shrank`), the "stale-recover" edge where the last
+// archived backup predates the ledger cursor, which is accepted as-is and warned once.
+async function classifySession(
+  paths: RuntimePaths,
+  session: ThreadManifest["sessions"][number],
+  archives: readonly Archive[],
+  hydrate: typeof hydrateSession
+): Promise<WatermarkStatus> {
+  const current = await readWatermark(paths, { source: session.source, id: session.id });
+  const status = classifyWatermark(session, current);
+  if (status !== "vanished" || archives.length === 0) return status;
+
+  const hydrated = await hydrate(paths, archives, session.source, session.id);
+  if (!hydrated) return status;
+
+  const rehydrated = await readWatermark(paths, { source: session.source, id: session.id });
+  const rehydratedStatus = classifyWatermark(session, rehydrated);
+  if (rehydratedStatus === "shrank") {
+    console.warn(
+      `session ${session.source}:${session.id} hydrated from archive, but its tail predates the ledger cursor (stale-recover) — left untouched`
+    );
+  }
+  return rehydratedStatus;
+}
+
 // Free, dispatch-free staleness detection: recompute each existing session's watermark
 // host-side and partition, then merge the drifted set with the explicitly-named ids (both
 // normalized to canonical `source:id`), de-duplicated. `vanished` sessions are reported
@@ -271,24 +317,44 @@ export interface RefreshSet {
 export async function resolveRefreshSet(
   paths: RuntimePaths,
   manifest: ThreadManifest,
-  sessionIds: string[]
+  sessionIds: string[],
+  archives: readonly Archive[] = [],
+  hydrate: typeof hydrateSession = hydrateSession
 ): Promise<RefreshSet> {
   const statuses = await Promise.all(
     manifest.sessions.map(async (session) => ({
       key: `${session.source}:${session.id}`,
-      status: classifyWatermark(
-        session,
-        await readWatermark(paths, { source: session.source, id: session.id })
-      )
+      status: await classifySession(paths, session, archives, hydrate)
     }))
   );
   const refreshed = statuses.filter((s) => s.status === "changed").map((s) => s.key);
-  const vanished = statuses.filter((s) => s.status === "vanished").map((s) => s.key);
+  const vanished = statuses
+    .filter((s) => s.status === "vanished" || s.status === "shrank")
+    .map((s) => s.key);
   const named = sessionIds.map((id) => {
     const { source, bare } = parseSessionId(id);
     return `${source}:${bare}`;
   });
   return { workSet: dedupe([...named, ...refreshed]), refreshed, vanished };
+}
+
+// The explicit-path seam, generalized across harnesses: a live Claude transcript is
+// preferred; otherwise, a hydrated archive-cache copy is used for either harness
+// (present OpenCode sessions have no live-store equivalent path — they keep today's
+// sqlite-discovery route, per the opencode-sessions skill).
+async function resolveTranscriptPath(
+  paths: RuntimePaths,
+  source: ThreadHarness,
+  id: string
+): Promise<string | undefined> {
+  if (source === "claude-code") {
+    const local = await locateClaudeTranscript(paths, id);
+    if (local !== undefined) return path.posix.join(CONTAINER_SESSION_STORE, local);
+  }
+  if (await pathExists(cachedSessionPath(paths, source, id))) {
+    return path.posix.join(CONTAINER_ARCHIVE_CACHE, source, primaryRelPath(source, id));
+  }
+  return undefined;
 }
 
 // Gather prompt. With a cursor (delta), read only messages after it; otherwise the whole

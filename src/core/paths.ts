@@ -106,6 +106,26 @@ export function threadStoreRoot(paths: RuntimePaths): string {
   return path.join(paths.home, ".mindframe-z", "threads");
 }
 
+// Read-only, write-once cache of sessions hydrated from an S3 archive because they
+// vanished from their live harness store. Gitignored; mounted read-only into the
+// thread tools container (as a subtree of the existing whole-~/.mindframe-z mount).
+export function archiveCacheRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "archive-cache");
+}
+
+// OpenCode resolves its own data directory via `XDG_DATA_HOME` (falling back to
+// `<home>/.local/share`) — the same precedence the `xdg-basedir` package it depends on
+// uses internally. Mirrored here so mfz's direct db reads and its `opencode export`
+// shell-out always agree with the real `opencode` binary on the same on-disk database,
+// even under mfz's own --home/MFZ_HOME override (used by tests and sandboxed runs).
+export function opencodeDataHome(paths: RuntimePaths): string {
+  return process.env.XDG_DATA_HOME ?? path.join(paths.home, ".local", "share");
+}
+
+export function opencodeDbPath(paths: RuntimePaths): string {
+  return path.join(opencodeDataHome(paths), "opencode", "opencode.db");
+}
+
 export function threadDestinationRoot(paths: RuntimePaths, destination: string): string {
   return path.join(paths.home, ".mindframe-z", "thread-destinations", destination);
 }

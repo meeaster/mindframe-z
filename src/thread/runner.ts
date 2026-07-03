@@ -33,6 +33,12 @@ const CONTAINER_CLAUDE_PROJECTS = "/home/sandbox/.claude/projects";
 // builds the exact transcript path it hands gather from the same root.
 export const CONTAINER_SESSION_STORE = "/mnt/claude-sessions";
 
+// Where the read-only archive-cache is visible inside the dispatch container — a
+// subtree of the existing whole-~/.mindframe-z RO mount below, so hydrated sessions
+// need no dedicated volume. Shared by both harnesses; the cached artifact's own
+// filename (<id>.jsonl or <id>.json) disambiguates format.
+export const CONTAINER_ARCHIVE_CACHE = "/home/sandbox/.mindframe-z/archive-cache";
+
 export interface AgentRunRequest {
   role: ThreadDispatchRun["role"];
   harness: ThreadHarness;
