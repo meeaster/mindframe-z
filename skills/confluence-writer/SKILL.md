@@ -5,7 +5,7 @@ description: Draft, refine, and sync Confluence pages as local markdown, then pu
 
 # Confluence Writer
 
-Author Confluence pages that read **reader-first** for an audience who wasn't in the room — a teammate finding this page later. You draft in a local markdown file, refine it with the user, and only publish to Confluence once they approve. This avoids the failure where the MCP pushes a page before you've seen what it will write.
+Author Confluence pages that read **reader-first** for an audience who wasn't in the room — a teammate finding this page later. You draft in a local markdown file, refine it with the user, and push to Confluence only through an explicit **gate** they re-open for every write. This avoids the failure where the MCP pushes a page before the user has approved what it will write — including the trap where one approval is read as license to keep pushing.
 
 The skill is portable: it owns *what the page says* and *how it syncs*, not where the repo lives. It operates on the artifact file you point it at, or creates one under `.claude/artifacts/confluence/`.
 
@@ -13,7 +13,7 @@ The skill is portable: it owns *what the page says* and *how it syncs*, not wher
 
 ### 1. Resolve the artifact
 
-- **New page** — create `.claude/artifacts/confluence/DRAFT-<slug>.confluence.md` with front matter (see below) and an empty `page_id`.
+- **New page** — create `.claude/artifacts/confluence/DRAFT-<slug>.confluence.md` with front matter (see below) and an empty `page_id`. Resolve `cloud_id` now rather than leaving it silently empty; if you can't yet, tell the user it stays empty until first publish.
 - **Existing page** — if given a page id or title, find its file under `.claude/artifacts/confluence/`. If none exists, fetch the page (`getConfluencePage`) and write a local artifact from it before editing.
 
 ### 2. Draft the body in the file
@@ -26,9 +26,15 @@ Write the page into the markdown body following **reader-first** doctrine below.
 
 Show the drafted body and let the user react. Edit the file in place. Stay in this loop until they approve — do not publish while refining.
 
-### 4. Drift check, then publish
+When an edit to one section has **ripple** effects on others — reweighting motivations, reframing a summary, cutting a subject referenced elsewhere — surface the affected sections rather than leaving the user to catch the inconsistency.
 
-Once approved, run the **drift check** before writing to Confluence. Then:
+### 4. Ask at the gate, drift check, then push
+
+Confluence is audience-facing, so every push is a **gate** the user must re-open. Ask before *each* write — "Ready to push these changes?" — and wait for a fresh yes. Publishing once is never a standing license: the first `createConfluencePage` and every later `updateConfluencePage`, however minor the edit, each need their own go-ahead.
+
+**Done when:** you have an explicit yes for *this* push — not a yes carried over from a previous one.
+
+Once through the gate, run the **drift check** before writing to Confluence. Then:
 - **New** — `createConfluencePage`, then rename the file to `<page_id>-<slug>.confluence.md` and write `page_id`, `page_url` back into front matter.
 - **Existing** — `updateConfluencePage` with the body.
 

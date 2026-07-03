@@ -70,3 +70,8 @@ servers:
     url: https://mcp.exa.ai/mcp?tools=web_search_advanced_exa
     headers:
       x-api-key: "{env:EXA_API_KEY}"
+  forge:
+    description: Tyler Forge design system MCP server (components, design tokens, icons, API validation).
+    type: local
+    transport: stdio
+    command: [npx, -y, "@tylertech/forge-mcp@latest"]

@@ -25,6 +25,8 @@ mcp:
     enabled: false
   datadog:
     enabled: false
+  forge:
+    enabled: true
 thread:
   # Thread dispatch authenticates to Bedrock the same way interactive Claude
   # Code does: the runner reads ~/.claude/settings.json for the AWS profile,
@@ -38,7 +40,8 @@ thread:
   defaults:
     discover: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low
     gather: claude-code:us.anthropic.claude-haiku-4-5-20251001-v1:0@low
-    synthesize: claude-code:us.anthropic.claude-sonnet-4-6@max
+    synthesize: claude-code:us.anthropic.claude-sonnet-5@low
+    digest: claude-code:us.anthropic.claude-sonnet-5@high
 opencode:
   config:
     provider:
