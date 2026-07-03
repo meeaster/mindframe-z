@@ -2,8 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RuntimePaths } from "../core/paths.js";
-import { threadPath } from "../core/paths.js";
-import type { MachineManifest } from "../core/manifests.js";
+import { archiveCacheRoot, threadPath } from "../core/paths.js";
+import type { Archive, MachineManifest } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
@@ -13,8 +13,10 @@ import {
   writeSessionFile,
   writeThreadManifest
 } from "./storage.js";
-import { ingestThread } from "./ingest.js";
+import { ingestThread, resolveRefreshSet } from "./ingest.js";
 import type { AgentRunner, AgentRunRequest, AgentRunResult } from "./runner.js";
+import type { ThreadManifest } from "./schema.js";
+import type { hydrateSession } from "../sessions/hydrate.js";
 
 function paths(home: string): RuntimePaths {
   return {
@@ -34,6 +36,7 @@ function machine(): MachineManifest {
     git: {},
     sandbox: {},
     thread: { destinations: [] },
+    archives: [],
     opencode: {}
   };
 }
@@ -173,6 +176,124 @@ async function writeClaudeTranscript(
   const last = lines[lines.length - 1]!;
   return { message_count: turns, last_message_id: last.uuid, last_activity_at: last.timestamp };
 }
+
+// Simulate a hydrated cache copy directly (bypassing hydrateSession/S3), so
+// resolveRefreshSet's re-classification-after-hydration logic can be tested without
+// a real archive.
+async function writeCachedClaudeTranscript(home: string, id: string, turns: number): Promise<void> {
+  const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
+  await mkdir(dir, { recursive: true });
+  const lines = Array.from({ length: turns }, (_, i) => ({
+    type: i % 2 === 0 ? "user" : "assistant",
+    uuid: `${id}-m${i}`,
+    timestamp: `2026-06-27T00:00:${String(i).padStart(2, "0")}.000Z`,
+    sessionId: id
+  }));
+  await writeFile(
+    path.join(dir, `${id}.jsonl`),
+    lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+    "utf8"
+  );
+}
+
+function manifestFixture(sessions: ThreadManifest["sessions"]): ThreadManifest {
+  return {
+    slug: "hydrate-test",
+    charter: "test",
+    destination: "personal",
+    created_at: "2026-06-27T00:00:00.000Z",
+    sessions,
+    synthesis: {}
+  };
+}
+
+const oneArchive: Archive[] = [
+  { name: "default", bucket: "test-bucket", region: "us-east-1", prefix: "", default: true }
+];
+
+describe("resolveRefreshSet hydration", () => {
+  it("does not consult the archive for a shrank-but-present session", async () => {
+    const home = await makeTempDir();
+    await writeClaudeTranscript(home, "shrank-session", 1);
+    const manifest = manifestFixture([
+      { id: "shrank-session", source: "claude-code", message_count: 3, last_message_id: "old" }
+    ]);
+    let hydrateCalled = false;
+    const spyHydrate: typeof hydrateSession = async () => {
+      hydrateCalled = true;
+      return true;
+    };
+
+    const result = await resolveRefreshSet(paths(home), manifest, [], oneArchive, spyHydrate);
+
+    expect(hydrateCalled).toBe(false);
+    expect(result.vanished).toEqual(["claude-code:shrank-session"]);
+    expect(result.refreshed).toEqual([]);
+  });
+
+  it("recoverable: a hydrated session with a newer tail than the cursor is folded into refreshed", async () => {
+    const home = await makeTempDir();
+    const manifest = manifestFixture([
+      { id: "recoverable", source: "claude-code", message_count: 1, last_message_id: "old" }
+    ]);
+    const spyHydrate: typeof hydrateSession = async (p) => {
+      await writeCachedClaudeTranscript(p.home, "recoverable", 3);
+      return true;
+    };
+
+    const result = await resolveRefreshSet(paths(home), manifest, [], oneArchive, spyHydrate);
+
+    expect(result.refreshed).toEqual(["claude-code:recoverable"]);
+    expect(result.vanished).toEqual([]);
+  });
+
+  it("stale-recover: a hydrated session whose archived tail predates the cursor stays vanished", async () => {
+    const home = await makeTempDir();
+    const manifest = manifestFixture([
+      { id: "stale", source: "claude-code", message_count: 5, last_message_id: "old" }
+    ]);
+    const spyHydrate: typeof hydrateSession = async (p) => {
+      // The archive's last backup predates the ledger cursor — fewer messages than stored.
+      await writeCachedClaudeTranscript(p.home, "stale", 2);
+      return true;
+    };
+
+    const result = await resolveRefreshSet(paths(home), manifest, [], oneArchive, spyHydrate);
+
+    expect(result.vanished).toEqual(["claude-code:stale"]);
+    expect(result.refreshed).toEqual([]);
+  });
+
+  it("unrecoverable: no archive holds the session, so it stays vanished with no error", async () => {
+    const home = await makeTempDir();
+    const manifest = manifestFixture([
+      { id: "lost", source: "claude-code", message_count: 3, last_message_id: "old" }
+    ]);
+    const spyHydrate: typeof hydrateSession = async () => false;
+
+    const result = await resolveRefreshSet(paths(home), manifest, [], oneArchive, spyHydrate);
+
+    expect(result.vanished).toEqual(["claude-code:lost"]);
+    expect(result.refreshed).toEqual([]);
+  });
+
+  it("skips the hydration attempt entirely when no archives are configured", async () => {
+    const home = await makeTempDir();
+    const manifest = manifestFixture([
+      { id: "lost", source: "claude-code", message_count: 3, last_message_id: "old" }
+    ]);
+    let hydrateCalled = false;
+    const spyHydrate: typeof hydrateSession = async () => {
+      hydrateCalled = true;
+      return true;
+    };
+
+    const result = await resolveRefreshSet(paths(home), manifest, [], [], spyHydrate);
+
+    expect(hydrateCalled).toBe(false);
+    expect(result.vanished).toEqual(["claude-code:lost"]);
+  });
+});
 
 async function ingestFixture(
   home: string,

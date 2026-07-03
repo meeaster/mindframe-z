@@ -2,9 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { RuntimePaths } from "../core/paths.js";
+import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
 import { makeTempDir } from "../../tests/integration/support.js";
-import { classifyWatermark, readWatermark, type Watermark } from "./watermark.js";
+import {
+  classifyWatermark,
+  readWatermark,
+  tailSignatureFromExport,
+  type Watermark
+} from "./watermark.js";
 
 function paths(home: string): RuntimePaths {
   return {
@@ -95,6 +100,32 @@ describe("readWatermark", () => {
     });
   });
 
+  it("keeps the db-backed reader and tailSignatureFromExport in parity for equivalent data", async () => {
+    // Guards against the two readers drifting apart: the db-backed reader derives
+    // count/last-id via COUNT(*)/ORDER BY, tailSignatureFromExport via array length/last
+    // element. Same underlying rows must produce the same {message_count, last_message_id}.
+    const home = await makeTempDir();
+    const id = "ses_parity";
+    const rows = [
+      { id: "msg_1", time_created: 1000 },
+      { id: "msg_2", time_created: 3000 },
+      { id: "msg_3", time_created: 2000 }
+    ];
+    await writeOpencodeDb(home, id, rows);
+
+    const fromDb = await readWatermark(paths(home), { source: "opencode", id });
+
+    const exportJson = {
+      info: { id },
+      messages: [...rows]
+        .sort((a, b) => a.time_created - b.time_created)
+        .map((row) => ({ info: { id: row.id, time: { created: row.time_created } } }))
+    };
+    const fromExport = tailSignatureFromExport(JSON.stringify(exportJson));
+
+    expect(fromExport).toEqual(fromDb);
+  });
+
   it("returns undefined when an opencode session has no messages", async () => {
     const home = await makeTempDir();
     await writeOpencodeDb(home, "ses_present", [{ id: "msg_a", time_created: 1 }]);
@@ -126,6 +157,90 @@ describe("readWatermark", () => {
 
     expect(wm).toBeUndefined();
   });
+
+  it("falls back to a hydrated archive-cache copy for a claude-code session absent locally", async () => {
+    const home = await makeTempDir();
+    const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
+    await mkdir(dir, { recursive: true });
+    const lines = [
+      { type: "user", uuid: "u1", timestamp: "2026-06-04T17:06:36.796Z" },
+      { type: "assistant", uuid: "a1", timestamp: "2026-06-04T17:06:48.203Z" }
+    ];
+    await writeFile(
+      path.join(dir, "cached-session.jsonl"),
+      lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
+      "utf8"
+    );
+
+    const wm = await readWatermark(paths(home), { source: "claude-code", id: "cached-session" });
+
+    expect(wm).toEqual({
+      message_count: 2,
+      last_message_id: "a1",
+      last_activity_at: "2026-06-04T17:06:48.203Z"
+    });
+  });
+
+  it("falls back to a hydrated archive-cache copy for an opencode session absent from the db", async () => {
+    const home = await makeTempDir();
+    const dir = path.join(archiveCacheRoot(paths(home)), "opencode");
+    await mkdir(dir, { recursive: true });
+    const exportJson = {
+      info: { id: "ses_cached" },
+      messages: [
+        { info: { id: "msg_1", time: { created: 1000 } } },
+        { info: { id: "msg_2", time: { created: 2000 } } }
+      ]
+    };
+    await writeFile(path.join(dir, "ses_cached.json"), JSON.stringify(exportJson), "utf8");
+
+    const wm = await readWatermark(paths(home), { source: "opencode", id: "ses_cached" });
+
+    expect(wm).toEqual({
+      message_count: 2,
+      last_message_id: "msg_2",
+      last_activity_at: new Date(2000).toISOString()
+    });
+  });
+
+  it("prefers the live claude-code store over a stale archive-cache copy", async () => {
+    const home = await makeTempDir();
+    const id = "both-present";
+    await writeClaudeTranscript(home, id);
+    const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, `${id}.jsonl`), "should not be read", "utf8");
+
+    const wm = await readWatermark(paths(home), { source: "claude-code", id });
+
+    expect(wm?.message_count).toBe(2);
+  });
+});
+
+describe("tailSignatureFromExport", () => {
+  it("reads message_count and the last message's id/time from an opencode export artifact", () => {
+    const content = JSON.stringify({
+      info: { id: "ses_x" },
+      messages: [
+        { info: { id: "msg_a", time: { created: 100 } } },
+        { info: { id: "msg_b", time: { created: 200 } } }
+      ]
+    });
+
+    expect(tailSignatureFromExport(content)).toEqual({
+      message_count: 2,
+      last_message_id: "msg_b",
+      last_activity_at: new Date(200).toISOString()
+    });
+  });
+
+  it("returns undefined for an export with no messages", () => {
+    expect(tailSignatureFromExport(JSON.stringify({ info: {}, messages: [] }))).toBeUndefined();
+  });
+
+  it("returns undefined for malformed JSON", () => {
+    expect(tailSignatureFromExport("not json")).toBeUndefined();
+  });
 });
 
 describe("classifyWatermark", () => {
@@ -155,9 +270,9 @@ describe("classifyWatermark", () => {
     expect(classifyWatermark(stored, undefined)).toBe("vanished");
   });
 
-  it("is vanished when the current count shrank below the stored count", () => {
+  it("is shrank (not vanished) when a present session's count dropped below stored", () => {
     expect(classifyWatermark(stored, wm({ message_count: 1, last_message_id: "u1" }))).toBe(
-      "vanished"
+      "shrank"
     );
   });
 
