@@ -122,6 +122,20 @@ export const threadDestinationSchema = z.object({
   default: z.boolean().default(false)
 });
 
+// A session archive: an S3 destination for raw, full-fidelity session backups,
+// sibling to thread `destinations` (which back up the *synthesized* store). Exactly
+// one archive is `default: true` and writable; the rest are read-only sources a
+// consumer may hydrate from. Creds resolve via the SDK default provider chain,
+// optionally pinned to a named `profile`. mfz never stores a secret here.
+export const archiveSchema = z.object({
+  name: threadIdentifierSchema,
+  bucket: z.string().min(1),
+  region: z.string().min(1),
+  profile: z.string().optional(),
+  prefix: z.string().default(""),
+  default: z.boolean().default(false)
+});
+
 export const sandboxCredentialModeSchema = z.enum(["bedrock", "subscription"]);
 
 export const threadDefaultsSchema = z.object({
@@ -235,6 +249,7 @@ export const machineSchema = z.object({
     })
     .default({}),
   thread: machineThreadSchema,
+  archives: z.array(archiveSchema).default([]),
   opencode: z.record(z.string(), z.unknown()).default({})
 });
 
@@ -246,6 +261,7 @@ export type ProfileSkillTarget = z.infer<typeof skillTargetSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
+export type Archive = z.infer<typeof archiveSchema>;
 export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
 export type ThreadDestination = z.infer<typeof threadDestinationSchema>;
 export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
@@ -373,6 +389,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         git: {},
         sandbox: {},
         thread: { destinations: [] },
+        archives: [],
         opencode: {}
       })
     : {
@@ -381,6 +398,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         git: {},
         sandbox: {},
         thread: { destinations: [] },
+        archives: [],
         opencode: {}
       };
   const profileMap = new Map<string, ProfileManifest>();

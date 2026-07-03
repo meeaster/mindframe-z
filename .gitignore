@@ -6,3 +6,4 @@ machine/machine.yml
 configs/
 .generated/
 *.log
+archive-cache/

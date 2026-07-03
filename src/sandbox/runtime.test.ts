@@ -36,6 +36,7 @@ function profile(
     git: {},
     sandbox: { credentials },
     thread: { destinations: [] },
+    archives: [],
     opencode: {}
   };
 
