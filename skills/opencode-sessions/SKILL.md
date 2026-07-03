@@ -79,3 +79,22 @@ opencode db "SELECT id, title, project_id, directory, parent_id, agent, model, c
 ## Analyzing a prior session
 
 To reconstruct what happened in a session — its turns, tool calls, failures, and what to improve — follow [SESSIONS.md](SESSIONS.md) for the transcript drill-down recipes, the analysis workflow, and the reporting pattern.
+
+## Archived export JSON
+
+A session that vanished from the local store can be hydrated from an S3 archive into a read-only cache. A hydrated OpenCode session is **not** a sqlite database — it's the JSON that `opencode export <id>` produces, one file at `<cache-root>/opencode/<id>.json` holding the whole session:
+
+```json
+{ "info": { "id": "ses_...", "title": "...", "time": { "created": ..., "updated": ... }, ... },
+  "messages": [ { "info": { "id": "msg_...", "role": "user" | "assistant", "time": { "created": ... }, ... }, "parts": [ ... ] } ] }
+```
+
+When you're handed a path like this directly (e.g. `Its transcript is the file /mnt/.../archive-cache/opencode/<id>.json`), **read the file with `jq` or a text tool — do not run `opencode db` or `sqlite3` against it.** It's a plain JSON document: `info` mirrors the `session` table's row, and each `messages[].info`/`messages[].parts` pair mirrors one `message`/`part` row pair from the live schema above. `messages` is already in chronological order — the last entry is the tail.
+
+```bash
+jq '.info' <path>
+jq '.messages | length' <path>
+jq '.messages[-1].info' <path>
+```
+
+This is the only case where you read OpenCode session content from a file instead of the database — because the database it came from no longer has this session.

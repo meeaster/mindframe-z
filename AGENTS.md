@@ -64,6 +64,7 @@ Do not guess repo paths. Before reading a path from memory or convention, confir
 - There is no in-repo `references/` directory. Reference repositories are external paths listed in `~/.mindframe-z/references.md`.
 - Integration test support is TypeScript at `tests/integration/support.ts`, not `support.js`.
 - Thread source files live in `src/thread/`; there is no `src/thread/broker.ts`.
+- Session backup/hydration source files live in `src/sessions/`; `archives` (raw sessions, S3) is distinct from thread `destinations` (synthesized store, git remote).
 - Sandbox spike files are disposable. Locate them before assuming they still exist.
 
 If a read fails with "file not found", locate the path before retrying instead of trying nearby guesses.

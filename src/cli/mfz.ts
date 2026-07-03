@@ -40,6 +40,7 @@ import { runSync } from "../sync/index.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
 import { runSeedOpenai } from "../sandbox/seed-openai.js";
+import { runSessionsBackup } from "../sessions/backup.js";
 import {
   runThreadCreate,
   runThreadDelete,
@@ -346,6 +347,15 @@ sandbox
   .command("seed-openai")
   .description("Seed the opencode ChatGPT OAuth credential (auto-refreshing) into the broker")
   .action(async () => runSeedOpenai(program.opts()));
+
+const sessions = program
+  .command("sessions")
+  .description("Back up and restore raw harness sessions");
+
+sessions
+  .command("backup")
+  .description("Upload local Claude and OpenCode sessions to the default archive (skip-unchanged)")
+  .action(async () => runSessionsBackup(program.opts()));
 
 const thread = program
   .command("thread")

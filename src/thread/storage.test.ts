@@ -84,6 +84,7 @@ function machine(destinations: MachineManifest["thread"]["destinations"]): Machi
     git: {},
     sandbox: {},
     thread: { destinations },
+    archives: [],
     opencode: {}
   };
 }
