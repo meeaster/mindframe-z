@@ -40,7 +40,7 @@ A map to orient lookups, not a guaranteed schema — confirm against the live fi
 
 | Path | Holds | Notes |
 | ---- | ----- | ----- |
-| `$STORE/history.jsonl` | every prompt, all projects | One line per prompt: `display`, `timestamp`, `project` (real path), `sessionId`. The cheapest cross-project lookup layer. |
+| `$STORE/history.jsonl` | interactively-typed prompts, all projects | One line per typed prompt: `display`, `timestamp`, `project` (real path), `sessionId`. A fast label cache, **not** the session index — a session launched non-interactively (remote control, `claude -p`, headless or programmatic dispatch) writes a transcript but no history line, so it is absent here entirely. The transcript glob below is the authoritative session set. |
 | `~/.claude.json` | global metadata | Project list, trust/onboarding flags, recent session ids. Peer of the store root, not inside it; may be absent when the store is a mounted subset. |
 | `$STORE/projects/<encoded>/<session-id>.jsonl` | one session transcript | The main artifact. Record `type` ∈ `user`/`assistant`/`system`/`ai-title`/`last-prompt`/`mode`/`permission-mode`/`attachment`/`file-history-snapshot`. |
 | `.../<session-id>/subagents/agent-*.jsonl` | subagent transcripts | Each has a sibling `agent-*.meta.json` with `agentType`, `description`, and `toolUseId` linking back to the parent's `Agent` tool call. |
@@ -52,15 +52,18 @@ Inside a session JSONL: session metadata (`cwd`, `gitBranch`, `version`, `sessio
 
 Cheapest path that answers the question; full transcript reads only when needed. Most requests stop at the first two steps.
 
-**Find a session** — start from `history.jsonl`, filtering by the real project path:
+**Find a session** — the authoritative session set is the **transcript glob**, one file per session. `history.jsonl` is only a fast label cache over it and misses every non-interactively-launched session, so never treat it as the index. List the project's transcripts newest-first and label each by its `ai-title` — the signal that survives on programmatic sessions, where the first typed prompt does not:
 
 ```bash
-jq -rc 'select(.project=="/abs/project/path") | {timestamp, display, sessionId}' "$STORE"/history.jsonl | tail -20
+ls -t "$STORE"/projects/<encoded>/*.jsonl | head -20 | while read -r f; do
+  printf '%s\t%s\n' "$(basename "$f" .jsonl)" \
+    "$(jq -rc 'select(.type=="ai-title") | .aiTitle' "$f" | tail -1)"
+done
 ```
 
-Match by first-prompt phrase + recency. An explicit `sessionId` beats everything; `gitBranch` or an edited file breaks ties. Treat a slash-command first line (`/model`, `/resume`) as weak — those repeat across sessions.
+Match by `ai-title` + recency. An explicit `sessionId` beats everything; `gitBranch` or an edited file breaks ties. A session's first typed prompt is an unreliable label: a `.` (a remote-control model-set placeholder), a slash command (`/model`, `/resume`), or a `<command-message>` skill header all mean "look past this to the `ai-title` or a later prompt," not "no match." A session too short to have an `ai-title` falls back to its first substantive `type=="user"` prompt.
 
-**Lead with the structural key, not phrase regexes.** The `project + tail -20` query above is already a near-complete index — scan that list by eye and match on recency (and a `/clear` boundary, a strong session delimiter). Phrase is a *tiebreaker within that list*, not the primary filter: do not iterate `jq` regexes hunting for a phrase, because the user's words rarely match the stored `display` text verbatim and each miss costs a round-trip. When the user gives a temporal locator ("the last session I did", "yesterday's"), recency alone usually resolves it in one query.
+**Match on the structural key, not phrase regexes.** The newest-first list above is the index — scan it by eye and match on recency (and a `/clear` boundary, a strong session delimiter). Phrase is a *tiebreaker within that list*, not the primary filter: do not iterate `jq` regexes hunting for a phrase, because the user's words rarely match a session's stored label verbatim and each miss costs a round-trip. When the user gives a temporal locator ("the last session I did", "yesterday's"), recency alone usually resolves it in one query.
 
 **Find sessions that loaded a skill** — a skill load is a `Skill` tool_use with `.input.skill == "<name>"`, in the main transcript *or* a subagent's. Prompt-phrase search misses these (the load is a tool call, not user text). Scan both layers with one grep on the literal JSON, then confirm:
 
