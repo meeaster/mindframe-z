@@ -26,7 +26,7 @@ The thread ingest pipeline dispatches a gather → synthesize pair per session (
 
 3. **Delta refreshes extend or append, never rewrite.** A delta gather sees only messages past the cursor, so it reports phases *of the delta*; the synthesize contract folds them in: if the first delta phase continues the file's last phase, extend that phase's end; otherwise append. Prior phases are immutable — same append-only spirit as the log.
 
-4. **Irrelevant-delta sentinel: exact-match single token.** In delta mode, when nothing past the cursor is charter-relevant, gather outputs exactly `NO_CHARTER_RELEVANT_ACTIVITY` and nothing else. Ingest recognizes it by `dossier.trim() === "NO_CHARTER_RELEVANT_ACTIVITY"` — checked before the empty-dossier abort guard, and only when a cursor was in play (delta engaged). Exact whole-output match keeps a dossier that merely *mentions* the token from short-circuiting, and keeps the sentinel distinguishable from a gather failure (empty output still aborts). Alternative rejected: a host-side relevance classifier — that's a second dispatch to answer a question the gather dispatch already answered.
+4. **Irrelevant-delta sentinel: exact-match single token.** In delta mode, when nothing past the cursor is charter-relevant, gather outputs exactly `NO_CHARTER_RELEVANT_ACTIVITY` and nothing else. Ingest recognizes it by `dossier.trim() === "NO_CHARTER_RELEVANT_ACTIVITY"` — checked before the empty-dossier abort guard, and only when a cursor was in play (delta engaged). Exact whole-output match keeps a dossier that merely *mentions* the token from short-circuiting, and keeps the sentinel distinguishable from a gather failure (empty output still aborts). On a full (non-cursor) gather an exact-sentinel dossier is never legitimate — the persona forbids it without a cursor — so ingest aborts before synthesis as a contract violation rather than synthesizing a garbage file and watermarking it (the same freeze failure the refusal guard prevents). Alternative rejected: a host-side relevance classifier — that's a second dispatch to answer a question the gather dispatch already answered.
 
 5. **Short-circuit semantics.** On sentinel: skip synthesize, leave the session file untouched, advance the ledger watermark to the store's current tail (so the same noise never re-triggers), keep the existing `title`/`extracted_by`. The gather dispatch is still recorded in `runs[]` and its dossier in the run's observability dossiers — the spend was real and the trace explains the skip.
 
@@ -38,12 +38,12 @@ The thread ingest pipeline dispatches a gather → synthesize pair per session (
 
 - **Gather wrongly rules a relevant delta irrelevant** → the watermark advances and that growth is never synthesized. Mitigation: the sentinel is restricted to delta mode (one delta at stake, not the session), the persona demands the sentinel only when *nothing* past the cursor serves the charter, and `refresh --all` rebuilds from scratch.
 - **Off-charter growth leaves no phase trace** (file untouched on short-circuit) → accepted; the run dossier records what was skipped and why.
-- **Sentinel compliance drift** (model wraps the token in prose) → exact-match recognition fails closed: the output is treated as a normal dossier and synthesized, costing what today already costs — never a wrong skip.
+- **Sentinel compliance drift** (model wraps the token in prose) → exact-match recognition fails closed: an embedded token is treated as a normal dossier and synthesized, costing what today already costs — never a wrong skip. An *exact* sentinel on a full gather also fails closed, the other way: it aborts before synthesis (a contract violation, never real content) instead of writing a garbage file.
 - **Phase wording churn across full refreshes** → phases are framing prose with no downstream consumers; churn is cosmetic by design.
 
 ## Migration Plan
 
-Prompt/contract/guard changes only — no data migration. Existing session files without `## Phases` gain one on their next synthesis. Rollback is reverting the commit.
+Prompt/contract/guard changes only — no data migration. Existing session files without `## Phases` gain one on their next synthesis: delta never revises a pre-Phases file — its first drifted refresh falls back to a full re-synthesis, which backfills the complete section. Rollback is reverting the commit.
 
 ## Open Questions
 

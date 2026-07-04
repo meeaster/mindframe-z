@@ -4,7 +4,7 @@
 
 ### Requirement: Irrelevant-delta short-circuit
 
-Under `update_strategy: delta`, when the gather role finds no charter-relevant activity past the stored cursor, it SHALL output exactly the sentinel `NO_CHARTER_RELEVANT_ACTIVITY` and nothing else. On receiving a dossier whose trimmed content equals the sentinel for a delta-engaged session, ingest SHALL skip the synthesize dispatch, leave the session file untouched, advance the session's ledger watermark to the store's current tail, and preserve the entry's existing `title` and `extracted_by`. The sentinel SHALL be recognized only when a delta cursor was in play; an empty dossier SHALL still abort as a gather failure. The gather dispatch SHALL still be recorded in the run ledger and its dossier in the run's observability artifacts. When every session in a run's work set short-circuits, the digest SHALL NOT be regenerated; when at least one session file is written, the digest SHALL run exactly once as today.
+Under `update_strategy: delta`, when the gather role finds no charter-relevant activity past the stored cursor, it SHALL output exactly the sentinel `NO_CHARTER_RELEVANT_ACTIVITY` and nothing else. On receiving a dossier whose trimmed content equals the sentinel for a delta-engaged session, ingest SHALL skip the synthesize dispatch, leave the session file untouched, advance the session's ledger watermark to the store's current tail, and preserve the entry's existing `title` and `extracted_by`. The short-circuit SHALL be recognized only when a delta cursor was in play; a full (non-delta) gather whose trimmed dossier equals the sentinel SHALL abort before synthesis as a gather contract violation, and an empty dossier SHALL still abort as a gather failure. The gather dispatch SHALL still be recorded in the run ledger and its dossier in the run's observability artifacts. When every session in a run's work set short-circuits, the digest SHALL NOT be regenerated; when at least one session file is written, the digest SHALL run exactly once as today.
 
 #### Scenario: Off-charter delta growth advances the watermark without synthesis
 
@@ -15,6 +15,11 @@ Under `update_strategy: delta`, when the gather role finds no charter-relevant a
 
 - **WHEN** a delta dossier contains the sentinel token alongside other content
 - **THEN** the session is synthesized normally
+
+#### Scenario: Exact sentinel on a full gather aborts
+
+- **WHEN** a full (non-delta) gather returns a dossier whose trimmed content is exactly the sentinel
+- **THEN** ingest aborts before synthesis as a gather contract violation, with an error naming the session and run
 
 #### Scenario: All-sentinel run skips the digest
 

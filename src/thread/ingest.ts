@@ -1,7 +1,7 @@
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { Archive, ThreadHarness } from "../core/manifests.js";
-import { THREAD_PERSONAS } from "./personas.js";
+import { IRRELEVANT_DELTA_SENTINEL, THREAD_PERSONAS } from "./personas.js";
 import {
   CONTAINER_ARCHIVE_CACHE,
   CONTAINER_SESSION_STORE,
@@ -26,6 +26,7 @@ import {
   classifyWatermark,
   locateClaudeTranscript,
   readWatermark,
+  type Watermark,
   type WatermarkStatus
 } from "./watermark.js";
 import { cachedSessionPath, primaryRelPath } from "../sessions/archive.js";
@@ -140,10 +141,15 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       // has a stored cursor, and has a prior file to revise. A named-but-unchanged
       // session has no messages past the cursor, so a delta gather would return an empty
       // dossier and trip the abort guard below — those fall back to a full re-synthesis.
-      const priorFile =
+      const revisable =
         strategy === "delta" && changedSet.has(key) && prior?.last_message_id !== undefined
           ? await readSessionFile(thread.dir, source, bare)
           : undefined;
+      // A pre-Phases prior file also falls back to full: a delta gather only sees past
+      // the cursor, so revising it could only backfill a silently partial `## Phases`
+      // section. One full re-synthesis rewrites the file with complete phases; every
+      // later refresh delta-revises as normal.
+      const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
       const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
       // Resolve the session's exact mounted path host-side and hand it to gather so it
       // reads a known file instead of rediscovering it — the discovery step is where a
@@ -168,46 +174,21 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       // ingest can tell whether it has grown. Read before synthesize — which never
       // touches the store — so the guards see it; a store we can't read leaves it absent.
       const watermark = await readWatermark(paths, { source, id: bare });
-      // Irrelevant-delta short-circuit: under delta, gather emits the exact sentinel when
-      // nothing past the cursor serves the charter. Recognized only with a cursor in play
-      // and only on a whole-output exact match (a dossier that merely mentions the token
-      // still synthesizes), and checked before the empty-dossier guard. Skip synthesize
-      // and the file write, advance the watermark to the current tail so the same noise
-      // never re-triggers, and preserve the prior title/extracted_by (recordSessions keeps
-      // the fields this entry omits). The gather spend was real, so its dispatch and
-      // dossier are still recorded.
-      if (cursor !== undefined && gather.result.text.trim() === "NO_CHARTER_RELEVANT_ACTIVITY") {
+      // Irrelevant-delta short-circuit (classifyGather threw on any fabricated dossier):
+      // skip synthesize and the file write, advance the watermark to the current tail so
+      // the same noise never re-triggers, and preserve the prior title/extracted_by
+      // (recordSessions keeps the fields this entry omits). The gather spend was real,
+      // so its dispatch and dossier are still recorded.
+      if (
+        classifyGather(gather.result.text, { cursor, watermark, transcriptPath, id, runId }) ===
+        "short-circuit"
+      ) {
         return {
           dossier: { source, id: bare, text: gather.result.text },
           entry: { id: bare, source, ...watermark },
           dispatches: [gather.dispatch],
           wrote: false
         };
-      }
-      // An empty dossier means gather never read the session (e.g. a denied read
-      // it failed to recover from). Synthesis would then have only the charter to
-      // work from and would launder it into invented session facts, so fail loudly
-      // here instead of writing a confident-but-fabricated session file.
-      if (gather.result.text.trim() === "") {
-        throw new Error(
-          `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
-        );
-      }
-      // The host confirms this session exists — a transcript path was resolved, or its
-      // watermark is readable from the store (covers a present OpenCode session via the
-      // sqlite route) — yet gather reported it missing: the agent read the wrong store
-      // rather than the file we named. Abort before synthesis so a fabricated "session
-      // does not exist" refusal is never written, watermarked, or pushed (it would then
-      // read as "unchanged" and never self-heal on a plain refresh).
-      if (
-        (transcriptPath !== undefined || watermark !== undefined) &&
-        dossierReportsMissing(gather.result.text)
-      ) {
-        throw new Error(
-          `Gather reported ${id} missing though the host confirms it exists${
-            transcriptPath !== undefined ? ` (transcript at ${transcriptPath})` : ""
-          } (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
-        );
       }
       const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
         role: "synthesize",
@@ -400,22 +381,78 @@ function gatherPrompt(
   // instead of searching the store (where a weak model can pick the wrong root).
   const at = transcriptPath !== undefined ? ` Its transcript is the file ${transcriptPath}.` : "";
   return cursor !== undefined
-    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} If nothing in that range is charter-relevant, output exactly NO_CHARTER_RELEVANT_ACTIVITY and nothing else. Charter: ${charter}`
+    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} If nothing in that range is charter-relevant, output exactly ${IRRELEVANT_DELTA_SENTINEL} and nothing else. Charter: ${charter}`
     : `Read session ${bare}.${at} Charter: ${charter}`;
 }
+
+// The one gate between gather and synthesize: classify the dossier as an irrelevant-delta
+// short-circuit or a real dossier to proceed with, throwing on the three fabrications a
+// weak gather produces — an exact sentinel outside delta, an empty dossier, and a
+// missing-session refusal the host contradicts. Pure, so each branch is testable and the
+// per-session closure stays a straight gather → classify → branch pipeline.
+function classifyGather(
+  dossier: string,
+  ctx: {
+    cursor: string | undefined;
+    watermark: Watermark | undefined;
+    transcriptPath: string | undefined;
+    id: string;
+    runId: string;
+  }
+): "short-circuit" | "proceed" {
+  const { cursor, watermark, transcriptPath, id, runId } = ctx;
+  // The sentinel is recognized only on a whole-output exact match — a dossier that merely
+  // mentions the token still synthesizes — and checked before the empty-dossier guard.
+  if (dossier.trim() === IRRELEVANT_DELTA_SENTINEL) {
+    if (cursor !== undefined) return "short-circuit";
+    // On a full gather the persona forbids the sentinel — the whole session cannot be
+    // "nothing new". Synthesizing it would write a garbage file and watermark it — the
+    // same freeze the refusal guard prevents — so abort as a contract violation.
+    throw new Error(
+      `Gather returned the ${IRRELEVANT_DELTA_SENTINEL} sentinel for ${id} on a full (non-delta) gather (see run ${runId} trace) — a contract violation, not a real dossier. Aborting before synthesis.`
+    );
+  }
+  // An empty dossier means gather never read the session (e.g. a denied read
+  // it failed to recover from). Synthesis would then have only the charter to
+  // work from and would launder it into invented session facts, so fail loudly
+  // here instead of writing a confident-but-fabricated session file.
+  if (dossier.trim() === "") {
+    throw new Error(
+      `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
+    );
+  }
+  // The host confirms this session exists — a transcript path was resolved, or its
+  // watermark is readable from the store (covers a present OpenCode session via the
+  // sqlite route) — yet gather reported it missing: the agent read the wrong store
+  // rather than the file we named. Abort before synthesis so a fabricated "session
+  // does not exist" refusal is never written, watermarked, or pushed (it would then
+  // read as "unchanged" and never self-heal on a plain refresh).
+  if ((transcriptPath !== undefined || watermark !== undefined) && dossierReportsMissing(dossier)) {
+    throw new Error(
+      `Gather reported ${id} missing though the host confirms it exists${
+        transcriptPath !== undefined ? ` (transcript at ${transcriptPath})` : ""
+      } (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
+    );
+  }
+  return "proceed";
+}
+
+// A refusal is a short apology, never a substantive extraction: both fabricated refusals
+// observed live were ~1.0–1.1 KB, while genuine dossiers run several KB. 2000 chars sits
+// ~2× above the largest observed refusal and ~½ below the smallest observed valid
+// dossier, so both misreads have margin.
+const REFUSAL_MAX_CHARS = 2000;
 
 // Markers of a gather that failed to read the session and reported it absent rather
 // than summarizing it. Paired with a host-confirmed transcript, these mean the agent
 // read the wrong store — a fabricated refusal, not a real dossier. Recognition is
-// shape-based, not marker-only: a real refusal is a short apology — both fabricated
-// refusals observed live were ~1.0–1.1 KB — while a genuine dossier runs several KB
-// and may legitimately *quote* a marker phrase (observed live: a 4.2 KB charter-relevant
-// dossier quoting a commit message containing "does not exist" was discarded by the
-// marker-only check). 2000 chars sits ~2× above the largest observed refusal and ~½
-// below the smallest observed valid dossier, so both misreads have margin.
+// shape-based, not marker-only: a genuine dossier may legitimately *quote* a marker
+// phrase (observed live: a 4.2 KB charter-relevant dossier quoting a commit message
+// containing "does not exist" was discarded by the marker-only check), so the markers
+// count only in refusal-sized output.
 function dossierReportsMissing(dossier: string): boolean {
   return (
-    dossier.trim().length < 2000 &&
+    dossier.trim().length < REFUSAL_MAX_CHARS &&
     /does not exist|could not be (located|retrieved|found)|unable to locate|no source material|no transcript for|not found in the (local )?store/i.test(
       dossier
     )

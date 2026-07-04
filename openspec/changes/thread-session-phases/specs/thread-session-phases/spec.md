@@ -37,7 +37,7 @@ The gather role SHALL segment the session into phases keyed off the user's prose
 
 ### Requirement: Delta refreshes extend or append phases
 
-Under `update_strategy: delta`, the synthesize role SHALL fold the delta's phases into the existing `## Phases` section: when the delta's first phase continues the file's last phase, that phase's end SHALL be extended; otherwise new phase lines SHALL be appended. Phases already in the file SHALL never be rewritten or removed by a delta refresh.
+Under `update_strategy: delta`, the synthesize role SHALL fold the delta's phases into the existing `## Phases` section: when the delta's first phase continues the file's last phase, that phase's end SHALL be extended; otherwise new phase lines SHALL be appended. Phases already in the file SHALL never be rewritten or removed by a delta refresh. Delta SHALL engage only when the prior file already carries a `## Phases` section; a pre-Phases prior file SHALL fall back to a full re-synthesis for that refresh.
 
 #### Scenario: Continuing activity extends the last phase
 
@@ -48,3 +48,8 @@ Under `update_strategy: delta`, the synthesize role SHALL fold the delta's phase
 
 - **WHEN** a delta refresh gathers activity that is a different task from the file's last phase
 - **THEN** a new phase line is appended and all prior phase lines are unchanged
+
+#### Scenario: Prior file without Phases triggers full re-synthesis
+
+- **WHEN** a delta refresh targets a drifted session whose existing file has no `## Phases` section
+- **THEN** the session is re-gathered and re-synthesized in full — a delta revision could only supply post-cursor phases, leaving the section silently partial — and the rewritten file gains a complete `## Phases` section

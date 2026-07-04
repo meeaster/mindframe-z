@@ -131,18 +131,23 @@ class MissingSessionRunner implements AgentRunner {
 }
 
 // Records every dispatch and returns plausible, non-empty output per role so a full
-// ingest runs to completion. Gather returns a dossier; synthesize returns a titled
-// session file; digest returns digest text.
+// ingest runs to completion. Gather returns the given dossier text — a function of the
+// prompt when one run must mix outcomes per session (e.g. one sentinel, one real);
+// synthesize returns a titled session file; digest returns digest text.
 class RecordingRunner implements AgentRunner {
   readonly calls: { role: string; prompt: string }[] = [];
-  constructor(private readonly gatherText: string = "dossier content") {}
+  constructor(
+    private readonly gatherText: string | ((prompt: string) => string) = "dossier content"
+  ) {}
   run(request: AgentRunRequest): Promise<AgentRunResult> {
     this.calls.push({ role: request.role, prompt: request.prompt });
     const text =
       request.role === "synthesize"
         ? "# Session x — Recorded\n\nbody"
         : request.role === "gather"
-          ? this.gatherText
+          ? typeof this.gatherText === "function"
+            ? this.gatherText(request.prompt)
+            : this.gatherText
           : "digest content";
     return Promise.resolve({
       text,
@@ -347,41 +352,22 @@ async function writeOpencodeDb(home: string, sessionId: string, turns: number): 
   db.close();
 }
 
-// Gather returns text derived from the prompt (so one run can mix a short-circuiting
-// session with a synthesized one); synthesize and digest return plausible output that
-// must not be reached on a short-circuit.
-class ScriptedRunner implements AgentRunner {
-  readonly calls: { role: string; prompt: string }[] = [];
-  constructor(private readonly gatherText: (prompt: string) => string) {}
-  run(request: AgentRunRequest): Promise<AgentRunResult> {
-    this.calls.push({ role: request.role, prompt: request.prompt });
-    const text =
-      request.role === "gather"
-        ? this.gatherText(request.prompt)
-        : request.role === "synthesize"
-          ? "# Session x — Synth\n\nbody"
-          : "digest content";
-    return Promise.resolve({
-      text,
-      rawTrace: "",
-      durationMs: 0,
-      usage: { cost_usd: null, input_tokens: 0, output_tokens: 0, reasoning_tokens: null }
-    });
-  }
-  rolesNamed(role: string): number {
-    return this.calls.filter((call) => call.role === role).length;
-  }
-}
-
 // Set up a delta-engaged session: it grew past its stored cursor (so it classifies as
 // changed) and has a prior file to revise, so ingest reads only messages past the cursor.
+// The prior includes a `## Phases` section — delta only engages when one is present
+// (a pre-Phases file falls back to full so the section is never backfilled partially).
 async function deltaSession(
   runtime: RuntimePaths,
   slug: string,
   id: string,
   prior: string
 ): Promise<void> {
-  await writeSessionFile(threadPath(runtime, slug), "claude-code", id, prior);
+  await writeSessionFile(
+    threadPath(runtime, slug),
+    "claude-code",
+    id,
+    `${prior}\n\n## Phases\n\n- [2026-06-27 00:00 → 00:01] Prior work — earlier activity. (turns 1–3)`
+  );
 }
 
 // Session ids recorded on the run's ledger — i.e. the resolved refresh work set.
@@ -606,12 +592,7 @@ describe("ingestThread update strategy", () => {
         last_message_id: "old-cursor"
       }
     ]);
-    await writeSessionFile(
-      threadPath(runtime, slug),
-      "claude-code",
-      "grown-session",
-      "# Session grown-session — Prior"
-    );
+    await deltaSession(runtime, slug, "grown-session", "# Session grown-session — Prior");
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -629,6 +610,45 @@ describe("ingestThread update strategy", () => {
     expect(gather.prompt).toContain("only the messages after message id old-cursor");
     expect(synth.prompt).toContain("Revise the existing session summary");
     expect(synth.prompt).toContain("# Session grown-session — Prior");
+  });
+
+  it("delta falls back to full when the prior file has no Phases section", async () => {
+    const home = await makeTempDir();
+    // The session drifted (store has 5 turns past a 3-turn cursor), but its prior file
+    // predates the Phases contract. A delta revision could only supply post-cursor
+    // phases — a silently partial section — so this refresh must re-gather in full.
+    await writeClaudeTranscript(home, "pre-phases-session", 5);
+    const { runtime, slug } = await ingestFixture(home, [
+      {
+        id: "pre-phases-session",
+        source: "claude-code",
+        message_count: 3,
+        last_message_id: "old-cursor"
+      }
+    ]);
+    await writeSessionFile(
+      threadPath(runtime, slug),
+      "claude-code",
+      "pre-phases-session",
+      "# Session pre-phases-session — Prior"
+    );
+    const runner = new RecordingRunner();
+
+    await ingestThread({
+      paths: runtime,
+      profile: withStrategy(profile(), "delta"),
+      threadSlug: slug,
+      sessionIds: [],
+      refresh: true,
+      noPush: true,
+      runner
+    });
+
+    const gather = runner.calls.find((c) => c.role === "gather")!;
+    const synth = runner.calls.find((c) => c.role === "synthesize")!;
+    expect(gather.prompt).not.toContain("only the messages after");
+    expect(synth.prompt).not.toContain("Revise the existing");
+    expect(runner.rolesNamed("synthesize")).toBe(1);
   });
 
   it("delta falls back to full for a named session with no prior watermark", async () => {
@@ -903,7 +923,7 @@ describe("ingestThread refusal guard", () => {
     const dossier = [
       "## Dossier — quoting-session",
       "",
-      '- [2026-07-01 15:03] Commit ec4f429 quotes the prior failure: the sandboxed gather "nondeterministically reported sessions as \'does not exist\'" before the store-root fix. (quoting-session · turn 2)',
+      "- [2026-07-01 15:03] Commit ec4f429 quotes the prior failure: the sandboxed gather \"nondeterministically reported sessions as 'does not exist'\" before the store-root fix. (quoting-session · turn 2)",
       ...Array.from(
         { length: 20 },
         (_, i) =>
@@ -965,7 +985,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
       "claude-code",
       "noisy-session"
     );
-    const runner = new ScriptedRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
+    const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
 
     await ingestThread({
       paths: runtime,
@@ -1003,7 +1023,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
-    const runner = new ScriptedRunner(
+    const runner = new RecordingRunner(
       () => "Real delta work happened.\n\nNO_CHARTER_RELEVANT_ACTIVITY appears mid-dossier."
     );
 
@@ -1021,27 +1041,30 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     expect(runner.rolesNamed("digest")).toBe(1);
   });
 
-  it("does not short-circuit when a full (non-delta) gather emits the sentinel", async () => {
+  it("aborts when a full (non-delta) gather emits the exact sentinel", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-session", 5);
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
-    const runner = new ScriptedRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
+    const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
 
-    await ingestThread({
-      paths: runtime,
-      profile: profile(), // full: no cursor, so the token is an ordinary dossier
-      threadSlug: slug,
-      sessionIds: [],
-      refresh: true,
-      noPush: true,
-      runner
-    });
-
-    expect(runner.rolesNamed("synthesize")).toBe(1);
-    expect(runner.rolesNamed("digest")).toBe(1);
+    // Full gather: no cursor, so the persona forbids the sentinel — an exact-sentinel
+    // dossier is a contract violation, never legitimate content. Synthesizing it would
+    // write a garbage file and watermark it, so ingest must abort before synthesis.
+    await expect(
+      ingestThread({
+        paths: runtime,
+        profile: profile(),
+        threadSlug: slug,
+        sessionIds: [],
+        refresh: true,
+        noPush: true,
+        runner
+      })
+    ).rejects.toThrow(/contract violation/);
+    expect(runner.rolesNamed("synthesize")).toBe(0);
   });
 
   it("still aborts on an empty delta dossier", async () => {
@@ -1075,7 +1098,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     ]);
     await deltaSession(runtime, slug, "noisy-a", "# Session noisy-a — Prior");
     await deltaSession(runtime, slug, "noisy-b", "# Session noisy-b — Prior");
-    const runner = new ScriptedRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
+    const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
 
     const result = await ingestThread({
       paths: runtime,
@@ -1102,7 +1125,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     ]);
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
     await deltaSession(runtime, slug, "real-session", "# Session real-session — Prior");
-    const runner = new ScriptedRunner((prompt) =>
+    const runner = new RecordingRunner((prompt) =>
       prompt.includes("noisy-session") ? "NO_CHARTER_RELEVANT_ACTIVITY" : "real delta activity"
     );
 
