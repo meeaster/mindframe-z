@@ -36,6 +36,8 @@ skills:
     enabled: true
   adversarial-code-review:
     enabled: true
+  quality-garden:
+    enabled: true
   impeccable:
     enabled: false
   mise:
