@@ -406,10 +406,19 @@ function gatherPrompt(
 
 // Markers of a gather that failed to read the session and reported it absent rather
 // than summarizing it. Paired with a host-confirmed transcript, these mean the agent
-// read the wrong store — a fabricated refusal, not a real dossier.
+// read the wrong store — a fabricated refusal, not a real dossier. Recognition is
+// shape-based, not marker-only: a real refusal is a short apology — both fabricated
+// refusals observed live were ~1.0–1.1 KB — while a genuine dossier runs several KB
+// and may legitimately *quote* a marker phrase (observed live: a 4.2 KB charter-relevant
+// dossier quoting a commit message containing "does not exist" was discarded by the
+// marker-only check). 2000 chars sits ~2× above the largest observed refusal and ~½
+// below the smallest observed valid dossier, so both misreads have margin.
 function dossierReportsMissing(dossier: string): boolean {
-  return /does not exist|could not be (located|retrieved|found)|unable to locate|no source material|no transcript for|not found in the (local )?store/i.test(
-    dossier
+  return (
+    dossier.trim().length < 2000 &&
+    /does not exist|could not be (located|retrieved|found)|unable to locate|no source material|no transcript for|not found in the (local )?store/i.test(
+      dossier
+    )
   );
 }
 

@@ -135,13 +135,14 @@ class MissingSessionRunner implements AgentRunner {
 // session file; digest returns digest text.
 class RecordingRunner implements AgentRunner {
   readonly calls: { role: string; prompt: string }[] = [];
+  constructor(private readonly gatherText: string = "dossier content") {}
   run(request: AgentRunRequest): Promise<AgentRunResult> {
     this.calls.push({ role: request.role, prompt: request.prompt });
     const text =
       request.role === "synthesize"
         ? "# Session x — Recorded\n\nbody"
         : request.role === "gather"
-          ? "dossier content"
+          ? this.gatherText
           : "digest content";
     return Promise.resolve({
       text,
@@ -889,6 +890,39 @@ describe("ingestThread refusal guard", () => {
       })
     ).rejects.toThrow(/read the wrong store/);
     expect(runner.rolesNamed("synthesize")).toBe(0);
+  });
+
+  it("synthesizes a rich dossier that merely quotes a missing-report phrase", async () => {
+    const home = await makeTempDir();
+    await writeClaudeTranscript(home, "quoting-session", 3);
+    const { runtime, slug } = await ingestFixture(home, []);
+    // A substantive dossier can legitimately quote a marker phrase from the session's
+    // own content (observed live: a 4.2 KB dossier citing a commit message containing
+    // "does not exist" was discarded as a refusal). Shape-based recognition keys the
+    // guard on refusal-sized output, so this dossier must reach synthesis.
+    const dossier = [
+      "## Dossier — quoting-session",
+      "",
+      '- [2026-07-01 15:03] Commit ec4f429 quotes the prior failure: the sandboxed gather "nondeterministically reported sessions as \'does not exist\'" before the store-root fix. (quoting-session · turn 2)',
+      ...Array.from(
+        { length: 20 },
+        (_, i) =>
+          `- [2026-07-01 15:0${i % 10}] Charter-relevant finding ${i}: watermark drift detection compares message_count and last_message_id host-side before any dispatch. (quoting-session · turn ${i + 3})`
+      )
+    ].join("\n");
+    expect(dossier.length).toBeGreaterThan(2000);
+    const runner = new RecordingRunner(dossier);
+
+    await ingestThread({
+      paths: runtime,
+      profile: profile(),
+      threadSlug: slug,
+      sessionIds: ["claude-code:quoting-session"],
+      noPush: true,
+      runner
+    });
+
+    expect(runner.rolesNamed("synthesize")).toBe(1);
   });
 
   it("does not trip for a genuinely absent session (no path, no watermark)", async () => {

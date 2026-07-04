@@ -28,12 +28,17 @@ Under `update_strategy: delta`, when the gather role finds no charter-relevant a
 
 ### Requirement: Refusal guard for host-confirmed-present sessions
 
-When a gather dossier reports the session missing (matching the missing-report markers) but the host has confirmed the session exists — a transcript path was resolved, or a current watermark is readable from the host store — ingest SHALL abort before synthesis for both harnesses, so a fabricated refusal is never synthesized, written, watermarked, or pushed.
+When a gather dossier is refusal-shaped — it matches the missing-report markers AND is short enough to be a refusal rather than a substantive dossier — but the host has confirmed the session exists (a transcript path was resolved, or a current watermark is readable from the host store), ingest SHALL abort before synthesis for both harnesses, so a fabricated refusal is never synthesized, written, watermarked, or pushed. A substantive dossier that merely quotes a marker phrase from the session's content SHALL NOT be treated as a refusal.
 
 #### Scenario: Refusal for a present OpenCode session aborts
 
 - **WHEN** gather reports an OpenCode session missing while its watermark is readable from the OpenCode database
 - **THEN** ingest aborts before synthesis with an error naming the session and run
+
+#### Scenario: A rich dossier quoting a missing-report phrase is not a refusal
+
+- **WHEN** gather returns a substantive, charter-relevant dossier that quotes a missing-report phrase from the session's own content (e.g. a commit message containing "does not exist")
+- **THEN** the guard does not fire and the session is synthesized normally
 
 #### Scenario: Refusal for a genuinely absent session is not blocked by this guard
 
