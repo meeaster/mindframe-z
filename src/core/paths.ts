@@ -8,7 +8,6 @@ import { machineSchema } from "./manifests.js";
 export type AgentName = "opencode" | "claude-code";
 export type ToolTarget = "opencode" | "claude-code" | "mise" | "dotfiles";
 export type InfraTarget = "mise" | "dotfiles";
-export type ApplyTarget = ToolTarget | "all";
 export type ApplyAgent = AgentName | "all";
 
 export interface RuntimePaths {
@@ -148,10 +147,6 @@ export function threadCliLogPath(paths: RuntimePaths): string {
 
 export function dedupe<T>(items: readonly T[]): T[] {
   return [...new Set(items)];
-}
-
-export function targetList(target: ApplyTarget): ToolTarget[] {
-  return target === "all" ? ["opencode", "claude-code", "mise", "dotfiles"] : [target];
 }
 
 export function infraTargetList(target: InfraTarget | "all"): InfraTarget[] {
