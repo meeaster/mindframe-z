@@ -8,24 +8,12 @@ import {
   type S3Client
 } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
-import { makeTempDir } from "../../tests/integration/support.js";
-import type { RuntimePaths } from "../core/paths.js";
+import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import { defaultArchive, harnessPrefix, objectKey, resolveDefaultArchive } from "./archive.js";
 import { listOpencodeItems } from "./opencode-source.js";
 import { assertBucketHardened } from "./preflight.js";
 import { backupHarness, needsUpload } from "./backup.js";
 import type { BackupItem } from "./backup-item.js";
-
-function paths(home: string): RuntimePaths {
-  return {
-    root: home,
-    home,
-    configsDir: path.join(home, "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode"),
-    claudeDir: path.join(home, ".claude"),
-    miseConfigDir: path.join(home, ".config", "mise")
-  };
-}
 
 const bucketArchive = {
   name: "work",
@@ -282,7 +270,7 @@ describe("listOpencodeItems", () => {
     const home = await makeTempDir();
     await writeDb(home, [{ id: "ses_a", time_updated: 1000 }], []);
 
-    const items = await listOpencodeItems(paths(home));
+    const items = await listOpencodeItems(testRuntimePaths(home));
 
     expect(items).toHaveLength(1);
     expect(items[0]?.relPath).toBe("ses_a.json");
@@ -300,7 +288,7 @@ describe("listOpencodeItems", () => {
       ]
     );
 
-    const items = await listOpencodeItems(paths(home));
+    const items = await listOpencodeItems(testRuntimePaths(home));
 
     expect(items[0]?.sourceMs).toBe(2000);
   });
@@ -315,7 +303,7 @@ describe("listOpencodeItems", () => {
       [{ id: "m1", session_id: "ses_a", time_created: 999_999 }]
     );
 
-    const items = await listOpencodeItems(paths(home));
+    const items = await listOpencodeItems(testRuntimePaths(home));
 
     expect(items[0]?.sourceMs).toBe(999_999);
   });
@@ -324,13 +312,13 @@ describe("listOpencodeItems", () => {
     const home = await makeTempDir();
     await writeDb(home, [{ id: "ses_a", time_updated: 4242 }], []);
 
-    const items = await listOpencodeItems(paths(home));
+    const items = await listOpencodeItems(testRuntimePaths(home));
 
     expect(items[0]?.sourceMs).toBe(4242);
   });
 
   it("returns no items when opencode.db does not exist", async () => {
     const home = await makeTempDir();
-    expect(await listOpencodeItems(paths(home))).toEqual([]);
+    expect(await listOpencodeItems(testRuntimePaths(home))).toEqual([]);
   });
 });
