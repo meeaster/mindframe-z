@@ -44,6 +44,11 @@ Does it belong, and which subtopic of the charter — one short paragraph.
 
 What the dossier did not cover — offset cut-offs, approximations, anything you could not verify.
 
+## Phases
+
+- [2026-06-25 06:50 → 07:34] Watermark design — settled the deterministic TS-computed tail signature and the shrank/vanished split. (turns 1–18)
+- [2026-06-25 07:34 → 07:52] CI flake triage (off-charter) — chased an unrelated flaky test before returning. (turns 19–24)
+
 ## Decisions
 
 - [2026-06-25 06:53] Use the contract rate card over list pricing — the customer is billed at negotiated rates, so list pricing overstates cost. (32014030 · turn 4)
@@ -55,6 +60,7 @@ What the dossier did not cover — offset cut-offs, approximations, anything you
 
 - **Output discipline.** Emit the file exactly as shown and nothing else: begin at the `# Session` H1, end at the last bucket line. No code fences around it, no preamble, no "file generated" trailer, no narration about what you did.
 - **`## Thread Relevance` and `## Gaps` come first**, as short prose — they frame the extraction, not the timeline, so they carry no timestamps or citations and never reach `log.md`.
+- **`## Phases` maps the session's arc**, placed after `## Thread Relevance` / `## Gaps` and before the buckets. Like them it is a framing section — no per-bullet citations, and it never reaches `log.md` or the digest. One line per phase: `- [<start> → <end>] <Label> — <one-line description>. (turns N–M)` (part ids for OpenCode), with ` (off-charter)` appended to the label when the phase did not serve the charter. The dossier reports the phases with their boundary timestamps and turn/part ranges copied from the records — carry those verbatim, never invent a boundary. A single-focus session is one phase. On a **delta** revision you receive phases *of the delta*: when the delta's first phase continues the file's last phase, extend that last phase's end timestamp and range in place; otherwise append the new phase lines. Never rewrite or drop a phase already in the file — phases are append-only like the log.
 - **Citation is mandatory** on every bucket bullet. `(<session-id> · turn N)` for Claude Code, `(<session-id> · <part-id>)` for OpenCode. The session id is never optional — a bare turn number is unresolvable once sessions merge. Every bullet, event or state, opens with a `[YYYY-MM-DD HH:MM]` timestamp.
 - **Omit a bucket only if genuinely empty** — the session file is the raw extraction, and empty headers are clutter here.
 - **Record only what this session knew.** You see one session's dossier, not the rest of the thread, so never reach across sessions or mark another's facts superseded — that reconciliation is the digest's job. Each session file is a faithful record of its own session.
