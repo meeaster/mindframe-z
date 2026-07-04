@@ -2,25 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
-import { makeTempDir } from "../../tests/integration/support.js";
+import { archiveCacheRoot } from "../core/paths.js";
+import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import {
   classifyWatermark,
   readWatermark,
   tailSignatureFromExport,
   type Watermark
 } from "./watermark.js";
-
-function paths(home: string): RuntimePaths {
-  return {
-    root: home,
-    home,
-    configsDir: path.join(home, "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode"),
-    claudeDir: path.join(home, ".claude"),
-    miseConfigDir: path.join(home, ".config", "mise")
-  };
-}
 
 // A claude transcript with two message turns wrapped in non-message lines, so the
 // reader must count only user/assistant turns and read the last turn's uuid/timestamp.
@@ -64,7 +53,7 @@ describe("readWatermark", () => {
     const id = "d134c87c-3233-4b80-94a5-9f96a1571cdd";
     await writeClaudeTranscript(home, id);
 
-    const wm = await readWatermark(paths(home), { source: "claude-code", id });
+    const wm = await readWatermark(testRuntimePaths(home), { source: "claude-code", id });
 
     expect(wm).toEqual({
       message_count: 2,
@@ -77,7 +66,10 @@ describe("readWatermark", () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "present-id");
 
-    const wm = await readWatermark(paths(home), { source: "claude-code", id: "missing-id" });
+    const wm = await readWatermark(testRuntimePaths(home), {
+      source: "claude-code",
+      id: "missing-id"
+    });
 
     expect(wm).toBeUndefined();
   });
@@ -91,7 +83,7 @@ describe("readWatermark", () => {
       { id: "msg_c", time_created: 1777414500000 }
     ]);
 
-    const wm = await readWatermark(paths(home), { source: "opencode", id });
+    const wm = await readWatermark(testRuntimePaths(home), { source: "opencode", id });
 
     expect(wm).toEqual({
       message_count: 3,
@@ -113,7 +105,7 @@ describe("readWatermark", () => {
     ];
     await writeOpencodeDb(home, id, rows);
 
-    const fromDb = await readWatermark(paths(home), { source: "opencode", id });
+    const fromDb = await readWatermark(testRuntimePaths(home), { source: "opencode", id });
 
     const exportJson = {
       info: { id },
@@ -130,7 +122,10 @@ describe("readWatermark", () => {
     const home = await makeTempDir();
     await writeOpencodeDb(home, "ses_present", [{ id: "msg_a", time_created: 1 }]);
 
-    const wm = await readWatermark(paths(home), { source: "opencode", id: "ses_absent" });
+    const wm = await readWatermark(testRuntimePaths(home), {
+      source: "opencode",
+      id: "ses_absent"
+    });
 
     expect(wm).toBeUndefined();
   });
@@ -138,7 +133,7 @@ describe("readWatermark", () => {
   it("returns undefined when the opencode db does not exist", async () => {
     const home = await makeTempDir();
 
-    const wm = await readWatermark(paths(home), { source: "opencode", id: "ses_x" });
+    const wm = await readWatermark(testRuntimePaths(home), { source: "opencode", id: "ses_x" });
 
     expect(wm).toBeUndefined();
   });
@@ -153,14 +148,14 @@ describe("readWatermark", () => {
     db.exec("CREATE TABLE message (id TEXT PRIMARY KEY, payload TEXT)");
     db.close();
 
-    const wm = await readWatermark(paths(home), { source: "opencode", id: "ses_x" });
+    const wm = await readWatermark(testRuntimePaths(home), { source: "opencode", id: "ses_x" });
 
     expect(wm).toBeUndefined();
   });
 
   it("falls back to a hydrated archive-cache copy for a claude-code session absent locally", async () => {
     const home = await makeTempDir();
-    const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
+    const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code");
     await mkdir(dir, { recursive: true });
     const lines = [
       { type: "user", uuid: "u1", timestamp: "2026-06-04T17:06:36.796Z" },
@@ -172,7 +167,10 @@ describe("readWatermark", () => {
       "utf8"
     );
 
-    const wm = await readWatermark(paths(home), { source: "claude-code", id: "cached-session" });
+    const wm = await readWatermark(testRuntimePaths(home), {
+      source: "claude-code",
+      id: "cached-session"
+    });
 
     expect(wm).toEqual({
       message_count: 2,
@@ -183,7 +181,7 @@ describe("readWatermark", () => {
 
   it("falls back to a hydrated archive-cache copy for an opencode session absent from the db", async () => {
     const home = await makeTempDir();
-    const dir = path.join(archiveCacheRoot(paths(home)), "opencode");
+    const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "opencode");
     await mkdir(dir, { recursive: true });
     const exportJson = {
       info: { id: "ses_cached" },
@@ -194,7 +192,10 @@ describe("readWatermark", () => {
     };
     await writeFile(path.join(dir, "ses_cached.json"), JSON.stringify(exportJson), "utf8");
 
-    const wm = await readWatermark(paths(home), { source: "opencode", id: "ses_cached" });
+    const wm = await readWatermark(testRuntimePaths(home), {
+      source: "opencode",
+      id: "ses_cached"
+    });
 
     expect(wm).toEqual({
       message_count: 2,
@@ -207,11 +208,11 @@ describe("readWatermark", () => {
     const home = await makeTempDir();
     const id = "both-present";
     await writeClaudeTranscript(home, id);
-    const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
+    const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code");
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, `${id}.jsonl`), "should not be read", "utf8");
 
-    const wm = await readWatermark(paths(home), { source: "claude-code", id });
+    const wm = await readWatermark(testRuntimePaths(home), { source: "claude-code", id });
 
     expect(wm?.message_count).toBe(2);
   });
