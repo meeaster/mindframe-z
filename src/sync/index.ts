@@ -12,31 +12,69 @@ import { syncClaude } from "./claude.js";
 import { syncSkills, type UnknownSkill } from "./skills.js";
 import type { SyncCandidate } from "./types.js";
 
+type ProfileChoice =
+  | { kind: "profile"; name: string }
+  | { kind: "skip" }
+  | { kind: "unknown"; answer: string };
+
+function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+  const existing = parent[key];
+  if (typeof existing === "object" && existing !== null && !Array.isArray(existing)) {
+    return existing as Record<string, unknown>;
+  }
+  const next: Record<string, unknown> = {};
+  parent[key] = next;
+  return next;
+}
+
 function setNested(
   obj: Record<string, unknown>,
   prefix: string,
   key: string,
   value: unknown
 ): void {
-  const parts = prefix.split(".");
+  const parts = prefix.split(".").filter(Boolean);
+  const leaf = parts.pop();
+  if (!leaf) return;
+
   let current = obj;
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part) continue;
-    if (i === parts.length - 1) {
-      const inner = current[part];
-      if (typeof inner === "object" && inner !== null && !Array.isArray(inner)) {
-        (inner as Record<string, unknown>)[key] = value;
-      } else {
-        current[part] = { [key]: value };
-      }
-    } else {
-      if (!current[part] || typeof current[part] !== "object" || Array.isArray(current[part])) {
-        current[part] = {};
-      }
-      current = current[part] as Record<string, unknown>;
-    }
+  for (const part of parts) {
+    current = ensureRecord(current, part);
   }
+  ensureRecord(current, leaf)[key] = value;
+}
+
+export function parseProfileChoice(answer: string, profileNames: readonly string[]): ProfileChoice {
+  const trimmed = answer.trim().toLowerCase();
+  if (trimmed === "skip" || trimmed === "" || trimmed === "s") return { kind: "skip" };
+  if (profileNames.includes(trimmed)) return { kind: "profile", name: trimmed };
+  const match = profileNames.find((name) => name.startsWith(trimmed));
+  return match ? { kind: "profile", name: match } : { kind: "unknown", answer: trimmed };
+}
+
+async function readProfileYaml(
+  root: string,
+  targetProfile: string
+): Promise<Record<string, unknown>> {
+  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
+  try {
+    const parsed = YAML.parse(await readFile(yamlPath, "utf8")) as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Missing or unreadable profile YAML starts from the minimum profile shape.
+  }
+  return { name: targetProfile };
+}
+
+async function writeProfileYaml(
+  root: string,
+  targetProfile: string,
+  doc: Record<string, unknown>
+): Promise<void> {
+  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
+  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
 }
 
 function miseTomlSection(candidate: SyncCandidate): string {
@@ -54,57 +92,53 @@ async function writeMiseToml(root: string, targetProfile: string, candidate: Syn
     // File doesn't exist — start fresh
   }
   const section = miseTomlSection(candidate);
-  if (!doc[section] || typeof doc[section] !== "object" || Array.isArray(doc[section])) {
-    doc[section] = {};
-  }
-  (doc[section] as Record<string, unknown>)[candidate.key] = candidate.value;
+  ensureRecord(doc, section)[candidate.key] = candidate.value;
   await writeFile(tomlPath, stringify(doc), "utf8");
+}
+
+async function promptProfileChoice(
+  message: string,
+  profileNames: string[],
+  quoteProfiles = false
+): Promise<string | null> {
+  const rl = readline.createInterface({ input: processStdin, output: processStdout });
+  try {
+    const options = profileNames.map((name) => (quoteProfiles ? `"${name}"` : name)).join(", ");
+    const choice = parseProfileChoice(
+      await rl.question(`${message}\n  Add to [${options}, skip]: `),
+      profileNames
+    );
+    if (choice.kind === "profile") return choice.name;
+    if (choice.kind === "unknown") {
+      console.log(`  Unknown profile "${choice.answer}". Use: ${options}, skip`);
+    }
+    return null;
+  } finally {
+    rl.close();
+  }
 }
 
 async function promptUser(
   candidate: SyncCandidate,
   profileNames: string[]
 ): Promise<string | null> {
-  const rl = readline.createInterface({ input: processStdin, output: processStdout });
-  try {
-    const formatted =
-      typeof candidate.value === "string" ? candidate.value : JSON.stringify(candidate.value);
-    const options = profileNames.map((n) => `"${n}"`).join(", ");
-    const answer = await rl.question(
-      `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}\n  Add to [${options}, skip]: `
-    );
-    const trimmed = answer.trim().toLowerCase();
-    if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
-    if (profileNames.includes(trimmed)) return trimmed;
-    const match = profileNames.find((n) => n.startsWith(trimmed));
-    if (match) return match;
-    console.log(`  Unknown profile "${trimmed}". Use: ${options}, skip`);
-    return null;
-  } finally {
-    rl.close();
-  }
+  const formatted =
+    typeof candidate.value === "string" ? candidate.value : JSON.stringify(candidate.value);
+  return promptProfileChoice(
+    `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}`,
+    profileNames,
+    true
+  );
 }
 
 async function promptSkillUser(
   skill: UnknownSkill,
   profileNames: string[]
 ): Promise<string | null> {
-  const rl = readline.createInterface({ input: processStdin, output: processStdout });
-  try {
-    const options = profileNames.join(", ");
-    const answer = await rl.question(
-      `Unmanaged skill: ${skill.name} (${skill.entry.repo ?? ""})\n  Add to [${options}, skip]: `
-    );
-    const trimmed = answer.trim().toLowerCase();
-    if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
-    if (profileNames.includes(trimmed)) return trimmed;
-    const match = profileNames.find((n) => n.startsWith(trimmed));
-    if (match) return match;
-    console.log(`  Unknown profile "${trimmed}". Use: ${options}, skip`);
-    return null;
-  } finally {
-    rl.close();
-  }
+  return promptProfileChoice(
+    `Unmanaged skill: ${skill.name} (${skill.entry.repo ?? ""})`,
+    profileNames
+  );
 }
 
 async function writeSkillsCatalog(root: string, skills: UnknownSkill[]): Promise<void> {
@@ -136,19 +170,10 @@ async function writeSkillsCatalog(root: string, skills: UnknownSkill[]): Promise
 }
 
 async function enableSkillInProfile(root: string, targetProfile: string, skillName: string) {
-  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
-  let doc: Record<string, unknown>;
-  try {
-    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
-  } catch {
-    doc = { name: targetProfile };
-  }
-  if (typeof doc.skills !== "object" || doc.skills === null || Array.isArray(doc.skills)) {
-    doc.skills = {};
-  }
-  const profileSkills = doc.skills as Record<string, unknown>;
+  const doc = await readProfileYaml(root, targetProfile);
+  const profileSkills = ensureRecord(doc, "skills");
   if (!(skillName in profileSkills)) profileSkills[skillName] = ["opencode"];
-  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
+  await writeProfileYaml(root, targetProfile, doc);
 }
 
 interface UnknownCommand {
@@ -178,38 +203,16 @@ async function promptCommandUser(
   command: UnknownCommand,
   profileNames: string[]
 ): Promise<string | null> {
-  const rl = readline.createInterface({ input: processStdin, output: processStdout });
-  try {
-    const options = profileNames.join(", ");
-    const answer = await rl.question(
-      `Unmanaged command: ${command.name}\n  Add to [${options}, skip]: `
-    );
-    const trimmed = answer.trim().toLowerCase();
-    if (trimmed === "skip" || trimmed === "" || trimmed === "s") return null;
-    if (profileNames.includes(trimmed)) return trimmed;
-    const match = profileNames.find((n) => n.startsWith(trimmed));
-    if (match) return match;
-    console.log(`  Unknown profile "${trimmed}". Use: ${options}, skip`);
-    return null;
-  } finally {
-    rl.close();
-  }
+  return promptProfileChoice(`Unmanaged command: ${command.name}`, profileNames);
 }
 
 async function enableCommandInProfile(root: string, targetProfile: string, commandName: string) {
-  const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
-  let doc: Record<string, unknown>;
-  try {
-    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
-  } catch {
-    doc = { name: targetProfile };
-  }
-  if (typeof doc.opencode !== "object" || doc.opencode === null) doc.opencode = {};
-  const oc = doc.opencode as Record<string, unknown>;
+  const doc = await readProfileYaml(root, targetProfile);
+  const oc = ensureRecord(doc, "opencode");
   if (!Array.isArray(oc.commands)) oc.commands = [];
   const profileCommands = oc.commands as unknown[];
   if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
-  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
+  await writeProfileYaml(root, targetProfile, doc);
 }
 
 export async function runSync(
@@ -307,19 +310,11 @@ export async function runSync(
         `  Updated ${targetProfile}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`
       );
     } else {
-      const yamlPath = path.join(paths.root, "profiles", targetProfile, "profile.yml");
-      let doc: Record<string, unknown>;
-      try {
-        const raw = await readFile(yamlPath, "utf8");
-        doc = YAML.parse(raw) as Record<string, unknown>;
-      } catch {
-        doc = { name: targetProfile };
-      }
+      const doc = await readProfileYaml(paths.root, targetProfile);
 
       setNested(doc, candidate.yamlPrefix, candidate.key, candidate.value);
 
-      const yaml = YAML.stringify(doc, { lineWidth: 120 });
-      await writeFile(yamlPath, yaml, "utf8");
+      await writeProfileYaml(paths.root, targetProfile, doc);
       console.log(
         `  Updated ${targetProfile}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`
       );

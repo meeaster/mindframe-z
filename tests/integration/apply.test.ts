@@ -220,6 +220,30 @@ describe("apply integration", () => {
     expect(config.permission.edit[`${path.join(home, "references")}/**`]).toBe("deny");
   });
 
+  it("sync promotes unmanaged rendered OpenCode config keys to the chosen profile", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const opencodePath = path.join(root, "configs", "personal", "opencode", "opencode.jsonc");
+    const opencode = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    opencode.small_model = "test/small-model";
+    await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
+
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
+    expect(syncResult.stdout).toContain(
+      "Updated personal/profile.yml: opencode.config.small_model"
+    );
+
+    const profileYaml = await readFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "utf8"
+    );
+    expect(profileYaml).toContain("small_model: test/small-model");
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    const rerendered = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    expect(rerendered.small_model).toBe("test/small-model");
+  });
+
   it("merges Claude settings into the machine-local file without linking", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
