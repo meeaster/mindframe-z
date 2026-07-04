@@ -55,6 +55,7 @@ The brief must require:
 - A one-sentence target statement before editing.
 - The behavior contract that must remain unchanged.
 - Isolated integration or behavior-level proof wherever practical.
+- If the behavior lacks isolated integration coverage, prefer making the garden pass close that test gap before refactoring production code.
 - A draft PR with branch, verification results, and residual risk returned to the chair.
 
 Prefer these garden categories:
@@ -105,11 +106,14 @@ Done when the gardener knows the current branch, base branch, worktree state, an
 
 Use the thermo-nuclear quality lens to find one target with high leverage and low behavior risk. Explore only enough code to choose the target.
 
+Test confidence is part of target selection. If the attractive refactor has no isolated integration coverage, usually pivot the garden target to the test gap first. A garden PR that adds the missing integration seam or behavior test is a successful pass even if the production refactor is deferred.
+
 Do not edit until you can state:
 
 - The target in one sentence.
 - The files likely involved.
 - The behavior that must stay fixed.
+- The integration or behavior-level proof that will catch regressions.
 - Why this is the best small garden cut.
 
 Done when the target is narrow enough that the PR can be reviewed as one coherent maintenance change.
@@ -122,6 +126,8 @@ Integration tests must be safe to run in isolation from the user's live setup. T
 
 Treat missing test isolation as a garden target. If a real behavior cannot be tested without affecting local state, the correct maintenance change may be adding a CLI flag, environment variable, dry-run path, dependency injection seam, or fixture helper that lets integration tests exercise the behavior safely.
 
+Do not perform a refactor just because it looks maintainable if you cannot prove the behavior still works. First try to add isolated coverage. If adding coverage is bigger than the refactor, make the PR about the coverage gap and explain the deferred follow-up refactor.
+
 Use this order:
 
 1. Existing integration test that exercises the public behavior.
@@ -129,7 +135,7 @@ Use this order:
 3. Source-level test only when the behavior has no practical integration seam.
 4. Build, lint, or typecheck only as supporting evidence, not the main proof.
 
-If no meaningful isolated test can be added in scope, say that explicitly in the PR body and keep the code change smaller.
+If no meaningful isolated test can be added in scope, say that explicitly in the PR body and keep the code change smaller. The PR should make the missing proof obvious enough that the reviewer can decide whether to hold the change.
 
 Done when the behavior contract is named and either covered by an isolated test or consciously documented as a residual risk.
 
@@ -199,7 +205,7 @@ Return:
 - Verdict: Merge / Hold
 - Confidence: 1-5
 - Findings: blocking issues first, with file references
-- Test confidence: whether the isolated integration or behavior-level proof is enough
+- Test confidence: what verifies the changed behavior, whether the isolated integration or behavior-level proof is enough, and what regressions it would catch
 - Residual risk: what the human should consider before approving
 ```
 
@@ -214,6 +220,7 @@ Check especially:
 - Behavior stayed unchanged.
 - The target stayed scoped.
 - The isolated integration or behavior-level proof is enough.
+- If isolated proof is missing, the PR is usually Hold unless it is explicitly a testability-enabling change or the production change is tiny and low risk.
 - The change improved maintainability, seams, deletion, DX, or performance.
 - The PR did not add fallback paths, speculative abstraction, or unrelated cleanup.
 
