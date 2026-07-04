@@ -5,16 +5,6 @@ import { profileConfigsDir } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 
-function miseToolsToToml(
-  tools: Record<string, string | Record<string, unknown>>
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(tools)) {
-    result[key] = value;
-  }
-  return result;
-}
-
 export async function renderMise(
   paths: RuntimePaths,
   profile: ResolvedProfile
@@ -25,7 +15,7 @@ export async function renderMise(
 
   const { tools, env, tool_alias, settings } = profile.profile.mise;
   const managed = {
-    ...(Object.keys(tools).length > 0 ? { tools: miseToolsToToml(tools) } : {}),
+    ...(Object.keys(tools).length > 0 ? { tools } : {}),
     ...(Object.keys(env).length > 0 ? { env } : {}),
     ...(Object.keys(tool_alias).length > 0 ? { tool_alias } : {}),
     ...(Object.keys(settings).length > 0 ? { settings } : {})
