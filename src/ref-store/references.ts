@@ -38,13 +38,7 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
   await mkdir(profile.referencesDir, { recursive: true });
   try {
     await access(destination);
-    try {
-      await pullReference(destination);
-    } catch (error) {
-      if (!isStaleRemoteRefError(error)) throw error;
-      await execa("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
-      await pullReference(destination);
-    }
+    await updateReference(destination);
     return `updated ${name} at ${destination}`;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -55,8 +49,18 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
   }
 }
 
-function pullReference(destination: string): Promise<unknown> {
-  return execa("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
+async function updateReference(destination: string): Promise<void> {
+  try {
+    await pullReference(destination);
+  } catch (error) {
+    if (!isStaleRemoteRefError(error)) throw error;
+    await execa("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
+    await pullReference(destination);
+  }
+}
+
+async function pullReference(destination: string): Promise<void> {
+  await execa("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
 }
 
 export function isStaleRemoteRefError(error: unknown): boolean {
