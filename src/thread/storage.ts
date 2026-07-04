@@ -337,10 +337,13 @@ export interface SessionLedgerEntry {
   id: string;
   source: ThreadHarness;
   title?: string | undefined;
-  extracted_by: string;
-  // Tail signature of the host store as of this session's last synthesis. Absent on
-  // entries written before watermarks existed, and on any run where the store could
-  // not be read; the read-modify-write below leaves prior watermark fields intact.
+  // Required on a real synthesis; omitted by an irrelevant-delta short-circuit, which
+  // writes no file and preserves the prior provenance via the merge below.
+  extracted_by?: string | undefined;
+  // Tail signature of the host store, captured at gather time on this session's last
+  // ingest run. Absent on entries written before watermarks existed, and on any run
+  // where the store could not be read; the read-modify-write below leaves prior
+  // watermark fields intact.
   message_count?: number | undefined;
   last_message_id?: string | undefined;
   last_activity_at?: string | undefined;
