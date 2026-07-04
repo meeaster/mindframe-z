@@ -162,6 +162,28 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         skills: [`${source}-sessions`],
         prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
       });
+      // Capture the store's current tail once, host-side. It serves three readers below:
+      // it confirms the session is present (refusal guard), lets an irrelevant-delta
+      // short-circuit advance the ledger, and becomes this entry's watermark so a later
+      // ingest can tell whether it has grown. Read before synthesize — which never
+      // touches the store — so the guards see it; a store we can't read leaves it absent.
+      const watermark = await readWatermark(paths, { source, id: bare });
+      // Irrelevant-delta short-circuit: under delta, gather emits the exact sentinel when
+      // nothing past the cursor serves the charter. Recognized only with a cursor in play
+      // and only on a whole-output exact match (a dossier that merely mentions the token
+      // still synthesizes), and checked before the empty-dossier guard. Skip synthesize
+      // and the file write, advance the watermark to the current tail so the same noise
+      // never re-triggers, and preserve the prior title/extracted_by (recordSessions keeps
+      // the fields this entry omits). The gather spend was real, so its dispatch and
+      // dossier are still recorded.
+      if (cursor !== undefined && gather.result.text.trim() === "NO_CHARTER_RELEVANT_ACTIVITY") {
+        return {
+          dossier: { source, id: bare, text: gather.result.text },
+          entry: { id: bare, source, ...watermark },
+          dispatches: [gather.dispatch],
+          wrote: false
+        };
+      }
       // An empty dossier means gather never read the session (e.g. a denied read
       // it failed to recover from). Synthesis would then have only the charter to
       // work from and would launder it into invented session facts, so fail loudly
@@ -171,13 +193,20 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
           `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
         );
       }
-      // The host located this transcript, yet gather reported it missing: the agent read
-      // the wrong store rather than the file we named. Abort before synthesis so a
-      // fabricated "session does not exist" refusal is never written, watermarked, or
-      // pushed (it would then read as "unchanged" and never self-heal on a plain refresh).
-      if (transcriptPath !== undefined && dossierReportsMissing(gather.result.text)) {
+      // The host confirms this session exists — a transcript path was resolved, or its
+      // watermark is readable from the store (covers a present OpenCode session via the
+      // sqlite route) — yet gather reported it missing: the agent read the wrong store
+      // rather than the file we named. Abort before synthesis so a fabricated "session
+      // does not exist" refusal is never written, watermarked, or pushed (it would then
+      // read as "unchanged" and never self-heal on a plain refresh).
+      if (
+        (transcriptPath !== undefined || watermark !== undefined) &&
+        dossierReportsMissing(gather.result.text)
+      ) {
         throw new Error(
-          `Gather reported ${id} missing though its transcript exists at ${transcriptPath} (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
+          `Gather reported ${id} missing though the host confirms it exists${
+            transcriptPath !== undefined ? ` (transcript at ${transcriptPath})` : ""
+          } (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
         );
       }
       const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
@@ -190,10 +219,6 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         prompt: synthesizePrompt(bare, manifest.charter, gather.result.text, priorFile)
       });
       await writeSessionFile(thread.dir, source, bare, synth.result.text);
-      // Capture the store's tail signature now that this session is synthesized, so a
-      // later ingest can tell whether it has grown. A store we can't read leaves the
-      // watermark absent rather than failing the synthesis we already paid for.
-      const watermark = await readWatermark(paths, { source, id: bare });
       return {
         dossier: { source, id: bare, text: gather.result.text },
         entry: {
@@ -203,7 +228,8 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
           extracted_by: synthId,
           ...watermark
         },
-        dispatches: [gather.dispatch, synth.dispatch]
+        dispatches: [gather.dispatch, synth.dispatch],
+        wrote: true
       };
     })
   );
@@ -214,21 +240,26 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     perSession.map((item) => item.entry)
   );
 
-  await writeRunStatus(paths, { ...status, current_step: "digest" });
-  const digestDispatch = await regenerateViews({
-    runner,
-    paths,
-    runId,
-    threadDir: thread.dir,
-    slug: manifest.slug,
-    charter: manifest.charter,
-    digestModel: settings.digest,
-    // `--all` is a clean rebuild — withhold the prior digest so accumulated form drift
-    // flushes; every other run anchors to it to keep an unchanged thread's digest stable.
-    previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
-    repos: repoLocators(profile)
-  });
-  dispatches.push(digestDispatch);
+  // The digest reads only the session files, so if every session short-circuited on the
+  // sentinel — nothing actually drifted onto disk — regenerating it would be pure spend.
+  // Run it exactly once when at least one file was written this run, as today.
+  if (perSession.some((item) => item.wrote)) {
+    await writeRunStatus(paths, { ...status, current_step: "digest" });
+    const digestDispatch = await regenerateViews({
+      runner,
+      paths,
+      runId,
+      threadDir: thread.dir,
+      slug: manifest.slug,
+      charter: manifest.charter,
+      digestModel: settings.digest,
+      // `--all` is a clean rebuild — withhold the prior digest so accumulated form drift
+      // flushes; every other run anchors to it to keep an unchanged thread's digest stable.
+      previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
+      repos: repoLocators(profile)
+    });
+    dispatches.push(digestDispatch);
+  }
 
   await writeRunDossiers(
     paths,
@@ -369,7 +400,7 @@ function gatherPrompt(
   // instead of searching the store (where a weak model can pick the wrong root).
   const at = transcriptPath !== undefined ? ` Its transcript is the file ${transcriptPath}.` : "";
   return cursor !== undefined
-    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} Charter: ${charter}`
+    ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} If nothing in that range is charter-relevant, output exactly NO_CHARTER_RELEVANT_ACTIVITY and nothing else. Charter: ${charter}`
     : `Read session ${bare}.${at} Charter: ${charter}`;
 }
 
@@ -392,7 +423,7 @@ function synthesizePrompt(
   priorFile: string | undefined
 ): string {
   return priorFile !== undefined
-    ? `Session: ${bare}\n\nRevise the existing session summary below by folding in the new activity from the delta dossier. Keep everything still accurate; do not regenerate from scratch or drop prior detail. The charter is a topic hint, not a source of facts; never lift specifics from it.\n\nCharter (topic hint, not a source): ${charter}\n\nExisting session summary (revise this):\n${priorFile}\n\nDelta dossier (new activity since the last summary — your only new source):\n${dossier}`
+    ? `Session: ${bare}\n\nRevise the existing session summary below by folding in the new activity from the delta dossier. Keep everything still accurate; do not regenerate from scratch or drop prior detail. The charter is a topic hint, not a source of facts; never lift specifics from it. For the \`## Phases\` section, fold the delta's phases in: when the delta's first phase continues the same work as the file's last phase, extend that last phase's end timestamp and range instead of adding a line; otherwise append the delta's phases as new lines. Never rewrite or remove a phase already in the file.\n\nCharter (topic hint, not a source): ${charter}\n\nExisting session summary (revise this):\n${priorFile}\n\nDelta dossier (new activity since the last summary — your only new source):\n${dossier}`
     : `Session: ${bare}\n\nThe charter is the thread's topic hint — what to look for. It is NOT a source of facts; never lift specifics from it. The dossier below is your only source material.\n\nCharter (topic hint, not a source): ${charter}\n\nDossier (your only source):\n${dossier}`;
 }
 
