@@ -145,8 +145,7 @@ mindframe-z/
 ├── opencode/
 │   ├── plugins/               # OpenCode plugin source files
 │   └── commands/              # OpenCode slash command markdown files
-├── skills/                    # Local skill source directories
-└── machine/                   # Per-machine overrides (gitignored)
+└── skills/                    # Local skill source directories
 ```
 
 ## YAML Schema Workflow

@@ -9,6 +9,7 @@ pnpm test -- <file>    # focused Vitest run
 pnpm test:all          # full Vitest suite, including integration
 pnpm test:integration  # integration suite only
 pnpm test:thread       # thread source tests
+pnpm test:sessions     # session backup/hydration source tests
 pnpm test:sandbox      # sandbox source tests plus current sandbox CLI integration seams
 pnpm test:skills       # skills/TUI source tests plus skills CLI integration seams
 pnpm test:plugins      # OpenCode plugin tests
@@ -31,7 +32,7 @@ Use `pnpm dev <command>` for source execution via `tsx`; do not insert `--` befo
 
 ## Verification
 
-Use the narrowest command that proves the change while iterating. Start with the matching focused command (`pnpm test:thread`, `pnpm test:sandbox`, `pnpm test:skills`, `pnpm test:plugins`, `pnpm test:dotfiles`, `pnpm test:mise`, or `pnpm test:refs`) plus `pnpm build` when types are affected. Use `pnpm check` for fast local confidence after a change. Use `pnpm test:integration` or `pnpm test:all` when touching broad CLI/apply/render behavior, shared integration support, or before handing off broad changes.
+Use the narrowest command that proves the change while iterating. Start with the matching focused command (`pnpm test:thread`, `pnpm test:sessions`, `pnpm test:sandbox`, `pnpm test:skills`, `pnpm test:plugins`, `pnpm test:dotfiles`, `pnpm test:mise`, or `pnpm test:refs`) plus `pnpm build` when types are affected. Use `pnpm check` for fast local confidence after a change. Use `pnpm test:integration` or `pnpm test:all` when touching broad CLI/apply/render behavior, shared integration support, or before handing off broad changes.
 
 Integration tests are split by feature file under `tests/integration/`. If a change crosses apply/render/profile seams, prefer `pnpm test:apply` or `pnpm test:integration` over a narrower feature script.
 
