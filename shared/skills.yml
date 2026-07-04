@@ -136,6 +136,12 @@ skills:
     description:
       Adversarial code review — dispatch the current branch to a two-engine panel (Claude Opus + GPT-5.5),
       each running the thermo-nuclear review, then chair the merge into consensus/split findings. User-invoked.
+  - name: quality-garden
+    source: local
+    skill: quality-garden
+    description: >
+      Quality garden - coordinate one behavior-preserving maintenance PR with separate gardener and reviewer roles.
+      User-invoked.
   - name: hunk-review
     source: git
     repo: https://github.com/modem-dev/hunk
