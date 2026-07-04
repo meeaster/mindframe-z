@@ -10,6 +10,7 @@ pnpm build
 pnpm test
 pnpm test:all
 pnpm test:integration
+pnpm test:sessions
 pnpm lint
 pnpm fmt
 pnpm check
@@ -35,11 +36,11 @@ Thread ingestion uses a separate tools container (`Dockerfile.tools`) to run Cla
 
 Integration tests use temporary directories and do not touch `~/.config/opencode` or `~/.claude`.
 
-OpenCode plugins can be developed in `opencode/plugins/`. Enabled plugins are copied into `.runtime/opencode/plugins/` and referenced from rendered `opencode.jsonc` with `file://` plugin entries. This avoids taking ownership of an existing global `~/.config/opencode/plugins` directory.
+OpenCode plugins can be developed in `opencode/plugins/`. Enabled plugins are copied into `configs/<profile>/opencode/plugins/` and referenced from rendered `opencode.jsonc` with `file://` plugin entries. This avoids taking ownership of an existing global `~/.config/opencode/plugins` directory.
 
-Skills are installed by `npx skills`/skills.sh into agent-owned locations such as `~/.agents/skills`; OpenCode auto-loads that directory. The renderer does not create or point OpenCode at `.runtime/opencode/skills`.
+Skills are installed by `npx skills`/skills.sh into agent-owned locations such as `~/.agents/skills`; OpenCode auto-loads that directory. The renderer does not create or point OpenCode at a rendered skills directory.
 
-`smoke-opencode` renders OpenCode config into `.runtime/opencode` and runs `opencode debug config` with `OPENCODE_CONFIG_DIR` pointed at that runtime directory. It also redirects XDG config/data/cache/state paths under the provided `--home` directory so the check does not touch normal OpenCode state. If the `opencode` binary is unavailable, the check is skipped.
+`smoke-opencode` renders OpenCode config into `configs/<profile>/opencode` and runs `opencode debug config` with `OPENCODE_CONFIG_DIR` pointed at that rendered directory. It also redirects XDG config/data/cache/state paths under the provided `--home` directory so the check does not touch normal OpenCode state. If the `opencode` binary is unavailable, the check is skipped.
 
 ## Pre-commit
 

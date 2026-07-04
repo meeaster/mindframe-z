@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "npm run lint && npm run fmt:check && npm run build && npm test",
+    "check": "pnpm lint && pnpm fmt:check && pnpm build && pnpm test",
     "dev": "tsx src/cli/mfz.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
@@ -25,6 +25,7 @@
     "test:plugins": "vitest run opencode",
     "test:refs": "vitest run tests/integration/refs.test.ts",
     "test:sandbox": "vitest run src/sandbox tests/integration/sandbox.test.ts",
+    "test:sessions": "vitest run src/sessions",
     "test:skills": "vitest run src/skills src/tui tests/integration/skills.test.ts tests/integration/skills-profile.test.ts",
     "test:thread": "vitest run src/thread"
   },
