@@ -3,11 +3,23 @@ import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { execa } from "execa";
+import type { RuntimePaths } from "../../src/core/paths.js";
 
 export const projectRoot = path.resolve(import.meta.dirname, "../..");
 
 export async function makeTempDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-test-"));
+}
+
+export function testRuntimePaths(home: string, root = home): RuntimePaths {
+  return {
+    root,
+    home,
+    configsDir: path.join(root, "configs"),
+    opencodeConfigDir: path.join(home, ".config", "opencode"),
+    claudeDir: path.join(home, ".claude"),
+    miseConfigDir: path.join(home, ".config", "mise")
+  };
 }
 
 // Fresh, isolated root + home temp dirs populated with the standard fixture. One

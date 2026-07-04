@@ -2,21 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { GetObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
-import { makeTempDir } from "../../tests/integration/support.js";
+import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import type { Archive } from "../core/manifests.js";
-import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
+import { archiveCacheRoot } from "../core/paths.js";
 import { hydrateSession, isHydrated } from "./hydrate.js";
-
-function paths(home: string): RuntimePaths {
-  return {
-    root: home,
-    home,
-    configsDir: path.join(home, "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode"),
-    claudeDir: path.join(home, ".claude"),
-    miseConfigDir: path.join(home, ".config", "mise")
-  };
-}
 
 function archive(name: string, prefix = ""): Archive {
   return {
@@ -69,7 +58,7 @@ describe("hydrateSession", () => {
     const fake = new FakeArchiveS3(objects);
 
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "sess-1",
@@ -77,7 +66,7 @@ describe("hydrateSession", () => {
     );
 
     expect(ok).toBe(true);
-    const root = archiveCacheRoot(paths(home));
+    const root = archiveCacheRoot(testRuntimePaths(home));
     await expect(readFile(path.join(root, "claude-code", "sess-1.jsonl"), "utf8")).resolves.toBe(
       "main transcript"
     );
@@ -88,13 +77,13 @@ describe("hydrateSession", () => {
 
   it("is write-once: a cache hit performs no archive read", async () => {
     const home = await makeTempDir();
-    const root = archiveCacheRoot(paths(home));
+    const root = archiveCacheRoot(testRuntimePaths(home));
     await mkdir(path.join(root, "claude-code"), { recursive: true });
     await writeFile(path.join(root, "claude-code", "cached.jsonl"), "already here", "utf8");
 
     let called = false;
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "cached",
@@ -110,11 +99,11 @@ describe("hydrateSession", () => {
 
   it("reports the session as hydrated once cached", async () => {
     const home = await makeTempDir();
-    expect(await isHydrated(paths(home), "opencode", "ses_1")).toBe(false);
-    const root = archiveCacheRoot(paths(home));
+    expect(await isHydrated(testRuntimePaths(home), "opencode", "ses_1")).toBe(false);
+    const root = archiveCacheRoot(testRuntimePaths(home));
     await mkdir(path.join(root, "opencode"), { recursive: true });
     await writeFile(path.join(root, "opencode", "ses_1.json"), "{}", "utf8");
-    expect(await isHydrated(paths(home), "opencode", "ses_1")).toBe(true);
+    expect(await isHydrated(testRuntimePaths(home), "opencode", "ses_1")).toBe(true);
   });
 
   it("returns false and leaves the session vanished when no archive holds it", async () => {
@@ -122,7 +111,7 @@ describe("hydrateSession", () => {
     const fake = new FakeArchiveS3(new Map());
 
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "missing",
@@ -130,7 +119,7 @@ describe("hydrateSession", () => {
     );
 
     expect(ok).toBe(false);
-    expect(await isHydrated(paths(home), "claude-code", "missing")).toBe(false);
+    expect(await isHydrated(testRuntimePaths(home), "claude-code", "missing")).toBe(false);
   });
 
   it("falls through to the next archive when the first is unreachable", async () => {
@@ -141,7 +130,7 @@ describe("hydrateSession", () => {
     );
 
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("primary"), archive("secondary")],
       "claude-code",
       "sess-2",
@@ -153,7 +142,10 @@ describe("hydrateSession", () => {
 
     expect(ok).toBe(true);
     await expect(
-      readFile(path.join(archiveCacheRoot(paths(home)), "claude-code", "sess-2.jsonl"), "utf8")
+      readFile(
+        path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code", "sess-2.jsonl"),
+        "utf8"
+      )
     ).resolves.toBe("content");
   });
 
@@ -171,7 +163,7 @@ describe("hydrateSession", () => {
     );
 
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "sess-3",
@@ -179,9 +171,12 @@ describe("hydrateSession", () => {
     );
 
     expect(ok).toBe(false);
-    expect(await isHydrated(paths(home), "claude-code", "sess-3")).toBe(false);
+    expect(await isHydrated(testRuntimePaths(home), "claude-code", "sess-3")).toBe(false);
     await expect(
-      readFile(path.join(archiveCacheRoot(paths(home)), "claude-code", "sess-3.jsonl"), "utf8")
+      readFile(
+        path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code", "sess-3.jsonl"),
+        "utf8"
+      )
     ).rejects.toThrow();
   });
 
@@ -190,7 +185,7 @@ describe("hydrateSession", () => {
     const unreachable = new FakeArchiveS3("unreachable");
 
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "sess-4",
@@ -199,7 +194,10 @@ describe("hydrateSession", () => {
 
     expect(ok).toBe(false);
     await expect(
-      readFile(path.join(archiveCacheRoot(paths(home)), "claude-code", "sess-4.absent"), "utf8")
+      readFile(
+        path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code", "sess-4.absent"),
+        "utf8"
+      )
     ).rejects.toThrow();
   });
 
@@ -208,7 +206,7 @@ describe("hydrateSession", () => {
     const empty = new FakeArchiveS3(new Map());
 
     const first = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "sess-5",
@@ -218,7 +216,7 @@ describe("hydrateSession", () => {
 
     let called = false;
     const second = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [archive("default")],
       "claude-code",
       "sess-5",
@@ -242,7 +240,7 @@ describe("hydrateSession", () => {
 
     let pinnedClientConstructed = false;
     const ok = await hydrateSession(
-      paths(home),
+      testRuntimePaths(home),
       [pinned, archive("secondary")],
       "claude-code",
       "sess-6",
@@ -262,15 +260,24 @@ describe("hydrateSession", () => {
     pinned.profile = "work-sso";
 
     let called = false;
-    const ok = await hydrateSession(paths(home), [pinned], "claude-code", "sess-7", () => {
-      called = true;
-      throw new Error("must not construct a client for a profile-pinned archive");
-    });
+    const ok = await hydrateSession(
+      testRuntimePaths(home),
+      [pinned],
+      "claude-code",
+      "sess-7",
+      () => {
+        called = true;
+        throw new Error("must not construct a client for a profile-pinned archive");
+      }
+    );
 
     expect(ok).toBe(false);
     expect(called).toBe(false);
     await expect(
-      readFile(path.join(archiveCacheRoot(paths(home)), "claude-code", "sess-7.absent"), "utf8")
+      readFile(
+        path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code", "sess-7.absent"),
+        "utf8"
+      )
     ).rejects.toThrow();
   });
 });
