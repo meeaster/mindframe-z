@@ -29,20 +29,9 @@ function mergeClaudePermissions(
   return merged;
 }
 
-async function readExistingSettings(settingsPath: string): Promise<Record<string, unknown>> {
+async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
   try {
-    const parsed = JSON.parse(await readFile(settingsPath, "utf8")) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-async function readExistingClaudeJson(claudeJsonPath: string): Promise<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(await readFile(claudeJsonPath, "utf8")) as unknown;
+    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
@@ -187,9 +176,9 @@ export async function renderClaude(
   const managedClaudeServerNames = new Set(profile.mcpServers.map((server) => server.name));
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
-  const mergedSettings = deepMerge(await readExistingSettings(localSettingsPath), settings);
+  const mergedSettings = deepMerge(await readJsonObject(localSettingsPath), settings);
   const mergedClaudeJson = mergeClaudeMcp(
-    await readExistingClaudeJson(localClaudeJsonPath),
+    await readJsonObject(localClaudeJsonPath),
     managedClaudeMcp,
     managedClaudeServerNames
   );
