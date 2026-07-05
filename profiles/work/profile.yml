@@ -88,10 +88,10 @@ opencode:
     agent:
       explore:
         model: github-copilot/gpt-5.4-mini
-        reasoningEffort: high
+        variant: high
       compaction:
         model: github-copilot/gpt-5.4-mini
-        reasoningEffort: high
+        variant: high
 claude:
   settings:
     includeGitInstructions: false
