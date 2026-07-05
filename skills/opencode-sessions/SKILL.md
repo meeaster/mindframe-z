@@ -70,6 +70,28 @@ Search for a session:
 opencode db "SELECT id, title, directory, strftime('%Y-%m-%d %H:%M', time_updated/1000, 'unixepoch') AS time_updated FROM session WHERE title LIKE '%skill%' ORDER BY time_updated DESC LIMIT 50" --format json
 ```
 
+Check compact boundaries when a session may have changed scope. A `compaction` part is often followed by a user message that acts like a fresh opening prompt inside the same session:
+
+```bash
+opencode db "SELECT m.id AS message_id, strftime('%Y-%m-%d %H:%M', m.time_created/1000, 'unixepoch') AS time_created, json_extract(p.data,'$.type') AS part_type, substr(json_extract(p.data,'$.text'),1,260) AS text FROM message m JOIN part p ON p.message_id = m.id WHERE m.session_id = 'ses_xxx' AND json_extract(p.data,'$.type') IN ('compaction','text') ORDER BY m.time_created" --format json
+```
+
+For discovery, scan the first substantive user text after each `compaction` marker before deciding a long session is unrelated. Users often compact after one task closes, then continue with a different artifact or target in the same transcript.
+
+Search by evidence alongside intent. User prompts and titles explain why a session happened; tool traces prove what it touched. Start with title/first-message searches, then use the cheapest evidence query that can prove or expand the candidate set:
+
+- **File change** — finding work that created or modified a file, feature, spec, or skill. Search `write`, `edit`, and `apply_patch` inputs for the path or catalog entry.
+- **Skill usage** — finding sessions that used a skill. Search tool inputs/results for the skill name or `skills/<name>/SKILL.md` reads, then confirm the session actually used it rather than edited docs about it.
+- **Tool/integration usage** — finding sessions involving an MCP server, CLI, API, or integration. Search tool names, arguments, and outputs for the concrete server/tool/command name.
+
+For file changes:
+
+```bash
+opencode db "SELECT s.id, s.title, s.directory, strftime('%Y-%m-%d %H:%M', s.time_created/1000, 'unixepoch') AS time_created, json_extract(p.data,'$.tool') AS tool, substr(json_extract(p.data,'$.state.input.patchText'),1,220) AS patch_snippet, json_extract(p.data,'$.state.input.filePath') AS file_path FROM part p JOIN session s ON s.id = p.session_id WHERE json_extract(p.data,'$.type')='tool' AND json_extract(p.data,'$.tool') IN ('write','edit','apply_patch') AND p.data LIKE '%skills/<name>/SKILL.md%' ORDER BY s.time_created DESC LIMIT 50" --format json
+```
+
+Replace the path fragment with the strongest proof you have: `skills/<name>/SKILL.md`, `shared/skills.yml`, an OpenSpec change id, an MCP server name, or the target source file. Confirm the snippet before trusting the match; a session can mention a path without doing the work. If evidence search is empty, keep searching prompts/titles and recent sessions — absence of one tool trace is not proof the work did not happen.
+
 Inspect one session:
 
 ```bash
