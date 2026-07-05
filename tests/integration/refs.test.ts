@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, setupIntegrationFixture } from "./support.js";
@@ -52,6 +52,47 @@ describe("refs integration", () => {
       "utf8"
     );
     expect(claudeMd).not.toContain("extra_folders.md");
+  });
+
+  it("writes an extra folders index from machine config", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        "  - path: ~/code/work",
+        "    description: Work code",
+        "  - path: ~/code/restricted",
+        "    read: deny",
+        "    edit: deny",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const index = await readFile(path.join(home, ".mindframe-z", "extra_folders.md"), "utf8");
+    expect(index).toContain("# Extra Folders");
+    expect(index).toContain(
+      `- \`${path.join(home, "code", "work")}\` - Work code (read: allow, edit: allow)`
+    );
+    expect(index).toContain(
+      `- \`${path.join(home, "code", "restricted")}\` (read: deny, edit: deny)`
+    );
+
+    const opencode = await readFile(
+      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    expect(opencode).toContain("extra_folders.md");
+
+    const claudeMd = await readFile(
+      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      "utf8"
+    );
+    expect(claudeMd).toContain("extra_folders.md");
   });
 
   it("writes a reference index from profile references", async () => {
