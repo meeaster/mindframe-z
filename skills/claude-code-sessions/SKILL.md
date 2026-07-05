@@ -61,7 +61,13 @@ ls -t "$STORE"/projects/<encoded>/*.jsonl | head -20 | while read -r f; do
 done
 ```
 
-Match by `ai-title` + recency. An explicit `sessionId` beats everything; `gitBranch` or an edited file breaks ties. A session's first typed prompt is an unreliable label: a `.` (a remote-control model-set placeholder), a slash command (`/model`, `/resume`), or a `<command-message>` skill header all mean "look past this to the `ai-title` or a later prompt," not "no match." A session too short to have an `ai-title` falls back to its first substantive `type=="user"` prompt.
+Match by `ai-title` + recency. An explicit `sessionId` beats everything; `gitBranch` or an edited file breaks ties. A session's first typed prompt is an unreliable label: a `.` (a remote-control model-set placeholder), a slash command (`/model`, `/resume`, `/compact`), or a `<command-message>` skill header all mean "look past this to the `ai-title` or a later prompt," not "no match." A session too short to have an `ai-title` falls back to its first substantive `type=="user"` prompt.
+
+When a session contains `/compact`, treat the next substantive queued/user message as a fresh opening prompt for a new phase. Users often compact after one scope closes, then continue in the same session with a different target. For discovery, scan these post-compact prompts before deciding the session is unrelated.
+
+```bash
+jq -r 'select(.type=="queue-operation" and .operation=="enqueue") | [.timestamp, (.content|gsub("\n";" ")|.[0:220])] | @tsv' "$STORE"/projects/<encoded>/<sid>.jsonl
+```
 
 **Match on the structural key, not phrase regexes.** The newest-first list above is the index — scan it by eye and match on recency (and a `/clear` boundary, a strong session delimiter). Phrase is a *tiebreaker within that list*, not the primary filter: do not iterate `jq` regexes hunting for a phrase, because the user's words rarely match a session's stored label verbatim and each miss costs a round-trip. When the user gives a temporal locator ("the last session I did", "yesterday's"), recency alone usually resolves it in one query.
 
