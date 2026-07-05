@@ -32,7 +32,7 @@
 
 - [x] 4.1 Author the gather, synthesize, digest, and explore personas (thin; leading words; output discipline for text-return)
 - [x] 4.2 Author the new `skills/thread-contract/` skill (buckets, digest sections, citation format, session-file layout, append/supersede rules) — the artifact spec
-- [x] 4.3 Wire explore + gather dispatches to load the existing `claude-code-sessions` / `opencode-sessions` reader skills, dynamically selected based on `sessionSources`
+- [x] 4.3 Wire explore + gather dispatches to load the `agent-sessions` reader skill, with provider branches selected based on `sessionSources`
 - [x] 4.4 Author the new slim `skills/threads/` operator skill (load-into-context branch first, then build/refresh, sync, delete), and demote `skills/thread-log/` to user-invoked
 - [x] 4.5 Register both new skills in `shared/skills.yml` and profile skill targets; assert `skills/thread-log/` is untouched
 - [x] 4.6 Update discover persona to output qualified `source:id` candidates

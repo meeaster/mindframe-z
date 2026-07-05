@@ -10,7 +10,7 @@ A unit of work — an investigation, a feature, a design — sprawls across many
 
 The model is **event sourcing**. The sessions are the immutable event source. The log is the append-only projection — never rewritten; when something is invalidated, the invalidation is *appended*. The digest is the materialized current-state view — disposable, rebuilt from the log every run.
 
-This skill **reads sessions only through** the [`claude-code-sessions`](../claude-code-sessions/SKILL.md) and [`opencode-sessions`](../opencode-sessions/SKILL.md) skills. It does not reimplement their storage knowledge — load the relevant one **with the Skill tool, never by Read-ing its `SKILL.md`** (the links above are references, not a fetch instruction), and use its recipes. This holds in the main session as much as in a subagent. It only ever **reads** sessions.
+This skill **reads sessions only through** the [`agent-sessions`](../agent-sessions/SKILL.md) skill. It does not reimplement storage knowledge — load it **with the Skill tool, never by Read-ing its `SKILL.md`** (the link above is a reference, not a fetch instruction), choose the Claude Code or OpenCode branch, and use its recipes. This holds in the main session as much as in a subagent. It only ever **reads** sessions.
 
 ## Modes
 
@@ -74,7 +74,7 @@ The plan phase does as little as possible: it judges and hands off the token-hea
      --output-format json
    ```
 
-   The `CLAUDE_CODE_DISABLE_*` env vars and `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` strip the worker to a **slim runtime** — no CLAUDE.md/AGENTS.md memory, no auto-memory, no bundled skills, no MCP servers — so the fat system prompt is not re-billed as cache-read on every one of the worker's many turns. It keeps your `~/.claude/skills/` (so `thread-log` and the session skills still load via the Skill tool — unlike `--bare`, which would disable them) and the thread store under `--add-dir ~/.claude`. This is the single largest cost lever after synthesis discipline; keep it local — no container, no Vercel sandbox.
+   The `CLAUDE_CODE_DISABLE_*` env vars and `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` strip the worker to a **slim runtime** — no CLAUDE.md/AGENTS.md memory, no auto-memory, no bundled skills, no MCP servers — so the fat system prompt is not re-billed as cache-read on every one of the worker's many turns. It keeps your `~/.claude/skills/` (so `thread-log` and `agent-sessions` still load via the Skill tool — unlike `--bare`, which would disable them) and the thread store under `--add-dir ~/.claude`. This is the single largest cost lever after synthesis discipline; keep it local — no container, no Vercel sandbox.
 
 ### Worker phase — steps 4–6 (invoked headless with `ingest <slug>: …`)
 

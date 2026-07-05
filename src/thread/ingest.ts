@@ -165,7 +165,8 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         model: gatherModel.model,
         effort: gatherModel.effort,
         persona: THREAD_PERSONAS.gather,
-        skills: [`${source}-sessions`],
+        skills: ["agent-sessions"],
+        sessionSources: [source],
         prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
       });
       // Capture the store's current tail once, host-side. It serves three readers below:
@@ -352,8 +353,8 @@ export async function resolveRefreshSet(
 
 // The explicit-path seam, generalized across harnesses: a live Claude transcript is
 // preferred; otherwise, a hydrated archive-cache copy is used for either harness
-// (present OpenCode sessions have no live-store equivalent path — they keep today's
-// sqlite-discovery route, per the opencode-sessions skill).
+  // (present OpenCode sessions have no live-store equivalent path — they keep today's
+  // sqlite-discovery route, per the agent-sessions OpenCode branch).
 async function resolveTranscriptPath(
   paths: RuntimePaths,
   source: ThreadHarness,
