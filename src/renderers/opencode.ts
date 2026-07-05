@@ -105,57 +105,30 @@ async function collectPluginFiles(
   return { files, entries };
 }
 
-async function collectCommandFiles(
+async function collectMarkdownFiles(
   root: string,
   configsOpencode: string,
-  commandNames: readonly string[]
+  kind: "commands" | "agents",
+  names: readonly string[]
 ): Promise<RenderResult["files"]> {
-  const sourceDir = path.join(root, "opencode", "commands");
+  const sourceDir = path.join(root, "opencode", kind);
   const files: RenderResult["files"] = [];
+  const label = kind === "commands" ? "command" : "agent";
 
-  for (const commandName of commandNames) {
-    const fileName = `${commandName}.md`;
+  for (const name of names) {
+    const fileName = `${name}.md`;
     const filePath = path.join(sourceDir, fileName);
     let content: string;
     try {
       content = await readFile(filePath, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`Unknown command: ${commandName}`);
+        throw new Error(`Unknown ${label}: ${name}`);
       }
       throw error;
     }
     files.push({
-      path: path.join(configsOpencode, "commands", fileName),
-      content
-    });
-  }
-
-  return files;
-}
-
-async function collectAgentFiles(
-  root: string,
-  configsOpencode: string,
-  agentNames: readonly string[]
-): Promise<RenderResult["files"]> {
-  const sourceDir = path.join(root, "opencode", "agents");
-  const files: RenderResult["files"] = [];
-
-  for (const agentName of agentNames) {
-    const fileName = `${agentName}.md`;
-    const filePath = path.join(sourceDir, fileName);
-    let content: string;
-    try {
-      content = await readFile(filePath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`Unknown agent: ${agentName}`);
-      }
-      throw error;
-    }
-    files.push({
-      path: path.join(configsOpencode, "agents", fileName),
+      path: path.join(configsOpencode, kind, fileName),
       content
     });
   }
@@ -177,12 +150,18 @@ export async function renderOpenCode(
     profile.profile.opencode.plugins
   );
   const plugin = pluginResult.entries;
-  const commandFiles = await collectCommandFiles(
+  const commandFiles = await collectMarkdownFiles(
     paths.root,
     configsOpencode,
+    "commands",
     profile.enabledCommands
   );
-  const agentFiles = await collectAgentFiles(paths.root, configsOpencode, profile.enabledAgents);
+  const agentFiles = await collectMarkdownFiles(
+    paths.root,
+    configsOpencode,
+    "agents",
+    profile.enabledAgents
+  );
   const instructions = [
     path.join(configsProfile, "AGENTS.md"),
     path.join(paths.home, ".mindframe-z", "references.md")
