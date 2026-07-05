@@ -158,7 +158,8 @@ export async function runThreadDiscover(
       model,
       effort,
       persona: THREAD_PERSONAS.discover,
-      skills: sessionSources.map((source) => `${source}-sessions`),
+      skills: ["agent-sessions"],
+      sessionSources,
       prompt: `Sessions to search: ${sessionSources.join(", ")}.\n\n${prompt}`
     });
     await writeRunStatus(paths, {

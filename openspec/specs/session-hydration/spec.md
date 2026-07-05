@@ -85,7 +85,7 @@ When every reachable, non-profile-pinned archive is queried for a session's pref
 
 ### Requirement: Gather reads the cached artifact
 
-Gather SHALL read a hydrated session from the archive-cache via the explicit-path seam rather than rediscovering it in the host store, for both harnesses. For OpenCode, the gather agent SHALL read the archived `opencode export` JSON (`{ info, messages }`) directly, per updated `opencode-sessions` skill guidance, because its format differs from the native store.
+Gather SHALL read a hydrated session from the archive-cache via the explicit-path seam rather than rediscovering it in the host store, for both harnesses. For OpenCode, the gather agent SHALL read the archived `opencode export` JSON (`{ info, messages }`) directly, per updated `agent-sessions` OpenCode guidance, because its format differs from the native store.
 
 #### Scenario: Claude cached session gathered by path
 
@@ -95,4 +95,4 @@ Gather SHALL read a hydrated session from the archive-cache via the explicit-pat
 #### Scenario: OpenCode cached export gathered directly
 
 - **WHEN** a hydrated OpenCode session is gathered
-- **THEN** the gather agent reads the archived `opencode export` JSON directly following the `opencode-sessions` skill's archived-export guidance
+- **THEN** the gather agent reads the archived `opencode export` JSON directly following the `agent-sessions` OpenCode archived-export guidance

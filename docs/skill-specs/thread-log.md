@@ -17,7 +17,7 @@ In scope:
 
 Out of scope:
 
-- Reimplementing session storage mechanics — delegated entirely to `claude-code-sessions` and `opencode-sessions`.
+- Reimplementing session storage mechanics — delegated entirely to `agent-sessions`.
 - Writing to or mutating any session store.
 - Cross-thread membership suggestion (designed-for via per-thread charters, deferred until more than one thread exists).
 - A separate design document — forward-looking intent lives in the digest's **Direction** section.
@@ -43,8 +43,8 @@ Model-invoked (no `disable-model-invocation`). The deciding factor is the **Read
 
 ## Dependencies
 
-- Hard dependency on `claude-code-sessions` and `opencode-sessions`. The skill loads the relevant one per session and uses its recipes; it holds no storage knowledge of its own. If a use case needs better support, improve the session skill rather than duplicate its mechanics here.
-- Discovery reuses the session skills' "find a session" recipes, topic-scoped instead of project-scoped — a filter change on documented recipes, not a missing capability, so the session skills need no change to support thread-log today.
+- Hard dependency on `agent-sessions`. The skill loads it and uses the relevant provider branch per session; it holds no storage knowledge of its own. If a use case needs better support, improve `agent-sessions` rather than duplicate its mechanics here.
+- Discovery reuses the `agent-sessions` "find a session" recipes, topic-scoped instead of project-scoped — a filter change on documented recipes, not a missing capability, so `agent-sessions` needs no change to support thread-log today.
 
 ## Data Model
 

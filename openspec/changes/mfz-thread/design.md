@@ -87,10 +87,9 @@ Each dispatched agent is assembled from:
 - **Persona** (Claude Code `--system-prompt`; OpenCode prompt prefix with a fixed
   read-only `--agent`) — *who the agent is, its stance, hard guardrails, output
   discipline*. Invariant per role. Uses a leading word (`gatherer`, `synthesizer`).
-- **Skill** (loaded) — *what it knows / the artifact spec*. Explore + gather reuse the
-  existing `claude-code-sessions` / `opencode-sessions` reader skills. Synthesize loads
-  the new `thread-contract` skill (the bucket/format spec). Skills are portable across
-  both harnesses.
+- **Skill** (loaded) — *what it knows / the artifact spec*. Explore + gather use the
+  `agent-sessions` reader skill. Synthesize loads the new `thread-contract` skill (the
+  bucket/format spec). Skills are portable across both harnesses.
 - **Prompt** (stdin) — *the variable per-run data*: session locator, dossier text, and
   thread charter (the lens). The watermark is a per-session ISO timestamp recorded in
   the manifest, not a transcript offset; gather always reads the full session.

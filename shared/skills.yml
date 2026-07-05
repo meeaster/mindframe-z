@@ -81,13 +81,12 @@ skills:
     description: >
       Use when answering mise basics: installing or adding global tools, choosing a mise backend, managing global mise
       environment variables, checking mise config, or giving concise mise command guidance.
-  - name: opencode-sessions
+  - name: agent-sessions
     source: local
-    skill: opencode-sessions
+    skill: agent-sessions
     description: >
-      Use when reading or analyzing OpenCode sessions — finding a past session, tracing its tool calls or subagents,
-      reconstructing what happened — or otherwise querying OpenCode's local SQLite database (`opencode db`) for messages,
-      projects, or todos.
+      Use when doing session archaeology: finding, reading, reconstructing, or auditing prior OpenCode or Claude Code
+      sessions, including tool calls, subagents, permission events, failures, skill usage, and local session stores.
   - name: thread-log
     source: local
     skill: thread-log
@@ -262,13 +261,6 @@ skills:
       Navigate and fetch Claude Code documentation. Use when answering questions about Claude Code features,
       configuration, capabilities, hooks, plugins, MCP servers, settings, CLI usage, deployment options, or
       troubleshooting.
-  - name: claude-code-sessions
-    source: local
-    skill: claude-code-sessions
-    description: >
-      Use when reading or analyzing Claude Code sessions (Claude sessions) — finding a past session by prompt, project,
-      or recency, tracing its tool calls, subagents, or permission events, or reconstructing what happened — from the
-      local session files under `~/.claude`.
   - name: build-mcp-server
     source: git
     repo: https://github.com/anthropics/claude-plugins-official
