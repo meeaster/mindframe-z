@@ -51,11 +51,11 @@ active source list in its prompt context and SHALL load the corresponding
 
 ### Requirement: Discovery uses reader skills, not a thread skill
 
-The discovery agent SHALL load the existing `claude-code-sessions` and/or
-`opencode-sessions` reader skills to enumerate and inspect sessions, selected based on
-the active session sources, and SHALL NOT load any thread-specific synthesis skill. Its
-result SHALL be free text that identifies each candidate by a qualified `source:id` (e.g.
-`claude-code:bb55cee5-…`) and a one-line reason it matched the prompt.
+The discovery agent SHALL load the `agent-sessions` reader skill to enumerate and inspect
+sessions, with provider branches selected based on the active session sources, and SHALL
+NOT load any thread-specific synthesis skill. Its result SHALL be free text that identifies
+each candidate by a qualified `source:id` (e.g. `claude-code:bb55cee5-...`) and a one-line
+reason it matched the prompt.
 
 #### Scenario: Candidate carries qualified source:id and match rationale
 

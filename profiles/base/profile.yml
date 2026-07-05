@@ -42,7 +42,7 @@ skills:
     enabled: false
   mise:
     enabled: false
-  opencode-sessions:
+  agent-sessions:
     enabled: true
   threads:
     enabled: true
@@ -91,8 +91,6 @@ skills:
   improve:
     enabled: true
   claude-code-docs:
-    enabled: true
-  claude-code-sessions:
     enabled: true
   build-mcp-server:
     enabled: true

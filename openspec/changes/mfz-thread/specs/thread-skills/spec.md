@@ -35,16 +35,15 @@ synthesize and digest dispatches SHALL load this skill.
 - **THEN** it loads the `thread-contract` skill and produces a session file conforming to
   that contract
 
-### Requirement: Reuse of existing reader skills
+### Requirement: Reuse of session reader skill
 
-The explore and gather roles SHALL reuse the existing `claude-code-sessions` and
-`opencode-sessions` reader skills for reading sessions; this change SHALL NOT author a
-new session-reading skill.
+The explore and gather roles SHALL use the `agent-sessions` reader skill for reading
+OpenCode and Claude Code sessions.
 
 #### Scenario: Gather uses an existing reader skill
 
 - **WHEN** a gather dispatch reads a session
-- **THEN** it loads the existing `claude-code-sessions` or `opencode-sessions` skill
+- **THEN** it loads the `agent-sessions` skill
 
 ### Requirement: Legacy thread-log skill demoted to user-invoked
 

@@ -27,9 +27,8 @@ untouched** as the working in-Claude-Code path.
   separate from the developer `mfz sandbox`.
 - Split each dispatched agent's instructions across three layers: a thin **persona**
   (disposition + guardrails), a loaded **skill** (artifact spec / how-to-read), and a
-  per-run **prompt** (the variable data). Reuse the existing `claude-code-sessions` /
-  `opencode-sessions` reader skills for explore + gather; author a new
-  **thread-contract** skill for the synthesizer.
+  per-run **prompt** (the variable data). Use the `agent-sessions` reader skill for
+  explore + gather; author a new **thread-contract** skill for the synthesizer.
 - Author a new slim **threads** skill that teaches an interactive agent how to operate
   the `mfz thread` CLI — the new entry point that the demoted, now user-invoked
   `thread-log` skill's in-harness role is migrating toward.

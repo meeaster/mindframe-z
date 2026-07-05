@@ -21,7 +21,8 @@ describe("thread runner", () => {
       model: "haiku",
       effort: "low",
       persona: "gatherer.",
-      skills: ["claude-code-sessions"],
+      skills: ["agent-sessions"],
+      sessionSources: ["claude-code"],
       prompt: "read session"
     });
 
@@ -46,7 +47,8 @@ describe("thread runner", () => {
       model: "haiku",
       effort: "low",
       persona: "gatherer.",
-      skills: ["claude-code-sessions"],
+      skills: ["agent-sessions"],
+      sessionSources: ["claude-code"],
       prompt: "read session"
     });
 
@@ -65,7 +67,8 @@ describe("thread runner", () => {
       harness: "claude-code",
       model: "haiku",
       persona: "discover.",
-      skills: ["opencode-sessions"],
+      skills: ["agent-sessions"],
+      sessionSources: ["opencode"],
       prompt: "find opencode sessions"
     });
 
@@ -209,11 +212,11 @@ describe("thread runner", () => {
   it("mounts only requested skills read-only at runtime", () => {
     const paths = createRuntimePaths({ root: "/repo", home: "/home/test" });
 
-    expect(skillMountArgsForTest(paths, ["claude-code-sessions"])).toEqual([
+    expect(skillMountArgsForTest(paths, ["agent-sessions"])).toEqual([
       "--volume",
-      "/repo/skills/claude-code-sessions:/home/sandbox/.claude/skills/claude-code-sessions:ro",
+      "/repo/skills/agent-sessions:/home/sandbox/.claude/skills/agent-sessions:ro",
       "--volume",
-      "/repo/skills/claude-code-sessions:/home/sandbox/.agents/skills/claude-code-sessions:ro"
+      "/repo/skills/agent-sessions:/home/sandbox/.agents/skills/agent-sessions:ro"
     ]);
   });
 
