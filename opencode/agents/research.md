@@ -1,9 +1,8 @@
 ---
 description: Extract documentation and source facts for libraries, APIs, SDKs, CLIs, integrations, and external repos. Use before coding only for specific research questions, not to inspect an OpenSpec change, plan implementation, identify code seams, choose tests, or produce an implementation briefing.
 mode: subagent
-model: opencode-go/deepseek-v4-flash
-options:
-  reasoningEffort: max
+model: opencode/deepseek-v4-flash-free
+variant: max
 permission:
   "*": deny
   read: allow

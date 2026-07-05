@@ -7,7 +7,7 @@ thread:
       remote: git@github.com:meeaster/threads.git
       default: true
   defaults:
-    discover: claude-code:haiku@low
+    discover: claude-code:claude-sonnet-5@high
     gather: claude-code:haiku@low
     synthesize: claude-code:claude-sonnet-5@low
     digest: claude-code:claude-sonnet-5@high
@@ -42,11 +42,11 @@ opencode:
         "*": allow
     agent:
       explore:
-        model: opencode-go/deepseek-v4-flash
-        reasoningEffort: max
+        model: opencode/deepseek-v4-flash-free
+        variant: max
       compaction:
-        model: opencode-go/deepseek-v4-flash
-        reasoningEffort: max
+        model: openai/gpt-5.4-mini
+        variant: high
   agent_task:
     models:
       - name: gpt-5.4-mini
@@ -60,7 +60,7 @@ opencode:
       - name: deepseek-v4-flash
         variants: [max]
         default_variant: max
-        providers: [opencode-go/deepseek-v4-flash]
+        providers: [opencode/deepseek-v4-flash-free]
       - name: glm-5.2
         providers: [opencode-go/glm-5.2]
     agents:
