@@ -1,6 +1,6 @@
 ---
 name: threads
-description: Operate threads with the `mfz thread` CLI — load a thread's digest into context, or build and refresh one by discovering and ingesting sessions. Use when the user references an existing thread, wants to resume or catch up on prior multi-session work, or wants to ingest sessions into a thread.
+description: Operate threads with the `mfz thread` CLI — load a thread's digest into context, or build and refresh one by discovering and ingesting sessions. Use when the user references an existing thread, wants to resume or catch up on a thread, or wants to ingest sessions into a thread. For catching up on a session (not a thread), use agent-sessions instead.
 ---
 
 # threads

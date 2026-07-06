@@ -1,9 +1,9 @@
 ---
 name: agent-sessions
 description: >
-  Use when the user wants session archaeology: find, read, reconstruct, or audit prior OpenCode or Claude Code sessions,
-  including tool calls, subagents, permission events, failures, skill usage, durable user perspective, and local session
-  stores.
+  Use when the user wants session archaeology: find, read, reconstruct, catch up on, or audit prior OpenCode or Claude
+  Code sessions, including catching up on or resuming from a specific past session, tool calls, subagents, permission
+  events, failures, skill usage, durable user perspective, and local session stores.
 ---
 
 # Agent Sessions

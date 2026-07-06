@@ -42,19 +42,6 @@ skills:
       Best practices for HA automations, helpers, scripts, device controls, and dashboards. Use when creating/editing
       automations, scripts, scenes, dashboards, helpers, Zigbee button/remote automations, entity renames, or Home
       Assistant dashboard cards.
-  - name: homeassistant
-    source: local
-    skill: homeassistant
-    description: >
-      Use when inspecting, scripting, testing, or troubleshooting Home Assistant through CLI-accessible HTTP or
-      WebSocket APIs, including curl, inline Python with uv, authentication, service calls, events, entity registry
-      work, or voice-assistant exposure.
-  - name: gpt-model-selection
-    source: local
-    skill: gpt-model-selection
-    description: >
-      Use when choosing which GPT model or reasoning effort to use, or when creating, reviewing, migrating, or tightening
-      prompts for GPT-5.5, GPT-5.4, GPT-5.4-mini, or GPT-5.3 Codex.
   - name: impeccable
     source: git
     repo: https://github.com/pbakaus/impeccable
@@ -85,28 +72,17 @@ skills:
     source: local
     skill: agent-sessions
     description: >
-      Use when doing session archaeology: finding, reading, reconstructing, or auditing prior OpenCode or Claude Code
-      sessions, including tool calls, subagents, permission events, failures, skill usage, and local session stores.
-  - name: thread-log
-    source: local
-    skill: thread-log
-    description: >
-      Hand-orchestrated thread-log workflow — read, create, or update a thread-log via subagents directly,
-      the pre-CLI path kept working alongside the `mfz thread` system. User-invoked.
+      Use when doing session archaeology: finding, reading, reconstructing, catching up on, or auditing prior OpenCode
+      or Claude Code sessions, including catching up on or resuming from a specific past session, tool calls, subagents,
+      permission events, failures, skill usage, and local session stores.
   - name: threads
     source: local
     skill: threads
     description: >
       Operate threads with the `mfz thread` CLI — load a thread's digest into context, or build and refresh
       one by discovering and ingesting sessions. Use when the user references an existing thread, wants to
-      resume or catch up on prior multi-session work, or wants to ingest sessions into a thread.
-  - name: thread-contract
-    source: local
-    skill: thread-contract
-    description: >
-      The artifact contract for thread synthesis — the bucket taxonomy, citation form, and the exact shape
-      of a thread session file and of the current-state digest. Use when writing a thread session file from
-      a dossier or regenerating a thread digest from session files.
+      resume or catch up on a thread, or wants to ingest sessions into a thread. For catching up on a session
+      (not a thread), use agent-sessions instead.
   - name: skill-writer
     source: git
     repo: https://github.com/getsentry/skills

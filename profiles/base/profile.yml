@@ -80,8 +80,6 @@ skills:
     enabled: false
   improve-codebase-architecture:
     enabled: false
-  gpt-model-selection:
-    enabled: false
   domain-modeling:
     enabled: false
   qmd:

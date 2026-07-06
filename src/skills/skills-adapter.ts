@@ -82,6 +82,9 @@ export function buildSkillsCommand(
       "add",
       path.join(paths.root, "skills"),
       ...(skill.skill ? ["--skill", skill.skill] : []),
+      // Grouped skills live under skills/<group>/<skill>/; --full-depth makes the
+      // CLI recurse past its default depth-1 walk so nested skills are discovered.
+      "--full-depth",
       "-a",
       agent,
       "-g",

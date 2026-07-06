@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -118,7 +118,7 @@ export class DockerAgentRunner implements AgentRunner {
           ...dockerEnvArgs({ ...env, ...bedrock?.env }),
           ...(await credentialMountArgs(this.paths, request.harness, bedrock?.credsDir)),
           ...(await sessionStoreMountArgs(this.paths)),
-          ...skillMountArgs(this.paths, request.skills),
+          ...(await skillMountArgs(this.paths, request.skills)),
           "--volume",
           `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
           ...(transcriptDir ? ["--volume", `${transcriptDir}:${CONTAINER_CLAUDE_PROJECTS}`] : []),
@@ -393,16 +393,66 @@ async function sessionStoreMountArgs(paths: RuntimePaths): Promise<string[]> {
 
 export const sessionStoreMountArgsForTest = sessionStoreMountArgs;
 
-function skillMountArgs(paths: RuntimePaths, skills: readonly string[]): string[] {
-  return [...new Set(skills)].flatMap((skill) => {
-    const source = path.join(paths.root, "skills", skill);
-    return [
+// Skills may be grouped into subfolders (`skills/<group>/<name>/`), so resolve
+// each requested skill by walking for the directory whose basename matches and
+// that holds a SKILL.md. Depth is capped to match the skills CLI's own search.
+// `src/thread` is searched too: `thread-contract` is an internal skill mounted
+// only by this pipeline, co-located with its consumers rather than shipped as a
+// global catalog skill.
+const SKILL_SEARCH_ROOTS = ["skills", "src/thread"] as const;
+const SKILL_SKIP_DIRS = new Set(["node_modules", ".git"]);
+
+async function resolveSkillDir(
+  skillsRoot: string,
+  name: string,
+  depth = 0,
+  maxDepth = 5
+): Promise<string | null> {
+  if (depth > maxDepth) return null;
+
+  let entries;
+  try {
+    entries = await readdir(skillsRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  // A SKILL.md marks a skill leaf; don't descend into a skill's own internals.
+  if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
+    return path.basename(skillsRoot) === name ? skillsRoot : null;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || SKILL_SKIP_DIRS.has(entry.name)) continue;
+    const found = await resolveSkillDir(
+      path.join(skillsRoot, entry.name),
+      name,
+      depth + 1,
+      maxDepth
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
+async function skillMountArgs(paths: RuntimePaths, skills: readonly string[]): Promise<string[]> {
+  const roots = SKILL_SEARCH_ROOTS.map((dir) => path.join(paths.root, dir));
+  const args: string[] = [];
+  for (const skill of new Set(skills)) {
+    let source: string | null = null;
+    for (const root of roots) {
+      source = await resolveSkillDir(root, skill);
+      if (source) break;
+    }
+    if (!source) throw new Error(`Skill "${skill}" not found under ${roots.join(", ")}`);
+    args.push(
       "--volume",
       `${source}:/home/sandbox/.claude/skills/${skill}:ro`,
       "--volume",
       `${source}:/home/sandbox/.agents/skills/${skill}:ro`
-    ];
-  });
+    );
+  }
+  return args;
 }
 
 export const skillMountArgsForTest = skillMountArgs;

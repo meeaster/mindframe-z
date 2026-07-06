@@ -1,6 +1,6 @@
 # thread-log Skill — Design Spec
 
-> Design/build notes for the `skills/thread-log` skill. Not bundled with the skill; not loaded at runtime.
+> Design/build notes for the archived `skills/archive/thread-log` skill. Not bundled with the skill; not loaded at runtime.
 
 ## Intent
 

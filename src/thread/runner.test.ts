@@ -209,15 +209,44 @@ describe("thread runner", () => {
     ).resolves.toEqual(["--volume", "/home/test/.mindframe-z/bedrock:/home/sandbox/.aws:ro"]);
   });
 
-  it("mounts only requested skills read-only at runtime", () => {
-    const paths = createRuntimePaths({ root: "/repo", home: "/home/test" });
+  it("mounts requested skills from flat, nested, and co-located source layouts", async () => {
+    const root = await makeTempDir();
+    const paths = createRuntimePaths({ root, home: "/home/test" });
+    const flat = path.join(root, "skills", "agent-sessions");
+    const nested = path.join(root, "skills", "writing", "pr-writer");
+    // thread-contract is an internal skill co-located with the threads source.
+    const internal = path.join(root, "src", "thread", "thread-contract");
+    await mkdir(flat, { recursive: true });
+    await mkdir(nested, { recursive: true });
+    await mkdir(internal, { recursive: true });
+    await writeFile(path.join(flat, "SKILL.md"), "flat\n", "utf8");
+    await writeFile(path.join(nested, "SKILL.md"), "nested\n", "utf8");
+    await writeFile(path.join(internal, "SKILL.md"), "internal\n", "utf8");
 
-    expect(skillMountArgsForTest(paths, ["agent-sessions"])).toEqual([
+    await expect(
+      skillMountArgsForTest(paths, ["agent-sessions", "pr-writer", "thread-contract"])
+    ).resolves.toEqual([
       "--volume",
-      "/repo/skills/agent-sessions:/home/sandbox/.claude/skills/agent-sessions:ro",
+      `${flat}:/home/sandbox/.claude/skills/agent-sessions:ro`,
       "--volume",
-      "/repo/skills/agent-sessions:/home/sandbox/.agents/skills/agent-sessions:ro"
+      `${flat}:/home/sandbox/.agents/skills/agent-sessions:ro`,
+      "--volume",
+      `${nested}:/home/sandbox/.claude/skills/pr-writer:ro`,
+      "--volume",
+      `${nested}:/home/sandbox/.agents/skills/pr-writer:ro`,
+      "--volume",
+      `${internal}:/home/sandbox/.claude/skills/thread-contract:ro`,
+      "--volume",
+      `${internal}:/home/sandbox/.agents/skills/thread-contract:ro`
     ]);
+  });
+
+  it("throws when a requested skill cannot be found", async () => {
+    const root = await makeTempDir();
+    const paths = createRuntimePaths({ root, home: "/home/test" });
+    await mkdir(path.join(root, "skills"), { recursive: true });
+
+    await expect(skillMountArgsForTest(paths, ["missing"])).rejects.toThrow(/missing/);
   });
 
   it("mounts host session files outside the writable Claude runtime home", async () => {
