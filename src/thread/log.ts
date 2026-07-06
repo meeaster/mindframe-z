@@ -1,6 +1,6 @@
 // Deterministic `log.md` renderer: merge the event buckets of every session file
 // into one flat, timestamp-ordered stream. Pure (no I/O) so it is unit-testable.
-// The artifact contract lives in skills/thread-log/ARTIFACTS.md.
+// The artifact contract lives in skills/archive/thread-log/ARTIFACTS.md.
 
 // The five event buckets, by their Title-Case session-file header → lowercase log tag.
 // State buckets (Intent & Vision, Artifacts Touched, Sources) never reach the log.

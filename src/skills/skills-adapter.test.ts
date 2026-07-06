@@ -43,6 +43,7 @@ describe("buildSkillsCommand", () => {
       "/repo/skills",
       "--skill",
       "mise",
+      "--full-depth",
       "-a",
       "opencode",
       "-g",
