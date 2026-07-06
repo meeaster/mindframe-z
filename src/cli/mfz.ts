@@ -43,11 +43,14 @@ import { runSeedOpenai } from "../sandbox/seed-openai.js";
 import { runSessionsBackup } from "../sessions/backup.js";
 import {
   runThreadCreate,
+  runThreadConclude,
   runThreadDelete,
   runThreadDestinations,
   runThreadDiscover,
   runThreadIngest,
+  runThreadPending,
   runThreadRefresh,
+  runThreadReject,
   runThreadList,
   runThreadObserveDown,
   runThreadObserveStatus,
@@ -55,6 +58,7 @@ import {
   runThreadRegenerate,
   runThreadRuns,
   runThreadShow,
+  runThreadSweep,
   runThreadSync
 } from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
@@ -441,6 +445,41 @@ thread
       synthesize: options.synthesizeModel
     })
   );
+
+thread
+  .command("sweep")
+  .description("Detect and triage new or changed sessions without writing thread repos")
+  .option("--include-hot", "triage sessions active inside the quiescence window")
+  .option("--triage-model <id>", "triage model (harness:model@effort)")
+  .option("--json", "emit structured JSON")
+  .action(async (options) =>
+    runThreadSweep({
+      ...program.opts(),
+      includeHot: Boolean(options.includeHot),
+      triageModel: options.triageModel,
+      json: Boolean(options.json)
+    })
+  );
+
+thread
+  .command("pending")
+  .description("List pending thread proposals from the local sweep ledger")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runThreadPending({ ...program.opts(), json: Boolean(options.json) }));
+
+thread
+  .command("reject")
+  .description("Record a sticky human rejection for a pending proposal")
+  .argument("<id>", "source-qualified session id")
+  .requiredOption("--thread <slug>", "thread slug")
+  .action(async (id, options) =>
+    runThreadReject(id, { ...program.opts(), thread: options.thread })
+  );
+
+thread
+  .command("conclude")
+  .description("Pass all remaining pending proposals and stamp review time")
+  .action(async () => runThreadConclude(program.opts()));
 
 thread
   .command("regenerate")

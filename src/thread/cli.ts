@@ -14,6 +14,7 @@ import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import { dispatch } from "./dispatch.js";
 import { ingestThread } from "./ingest.js";
 import { regenerateThread } from "./regenerate.js";
+import { concludePending, listPending, rejectPending, runSweep } from "./sweep.js";
 import {
   lapdogDashboardUrl,
   lapdogStatus,
@@ -238,6 +239,72 @@ export async function runThreadRefresh(
   });
 }
 
+export async function runThreadSweep(
+  options: ThreadOptions & {
+    includeHot?: boolean | undefined;
+    triageModel?: string | undefined;
+    json?: boolean | undefined;
+    runner?: AgentRunner | undefined;
+  }
+): Promise<void> {
+  await withThreadLog(options, "thread sweep", async ({ paths, profile }) => {
+    const report = await runSweep({
+      paths,
+      profile,
+      includeHot: Boolean(options.includeHot),
+      triageModel: options.triageModel,
+      runner: options.runner
+    });
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    if (report.baseline_staked) console.log(`baseline staked\t${report.baseline_at}`);
+    console.log(`sessions since last sweep\t${report.counts_since_last_sweep.sessions}`);
+    console.log(`triage dispatches\t${report.triage_dispatches}`);
+    console.log(`pending proposals\t${report.proposals.length}\tmfz thread pending`);
+    for (const drift of groupByThread(report.drifted))
+      console.log(
+        `${drift.thread}\t${drift.count} members drifted\tmfz thread refresh --thread ${drift.thread}`
+      );
+    for (const item of report.deferred) console.log(`deferred\t${item.id}\t${item.reason}`);
+    for (const item of report.malformed) console.log(`malformed\t${item.id}\t${item.line}`);
+  });
+}
+
+export async function runThreadPending(
+  options: ThreadOptions & { json?: boolean | undefined }
+): Promise<void> {
+  await withThreadLog(options, "thread pending", async ({ paths }) => {
+    const proposals = await listPending(paths);
+    if (options.json) {
+      console.log(JSON.stringify({ proposals }, null, 2));
+      return;
+    }
+    for (const proposal of proposals)
+      console.log(
+        `${proposal.stale ? "stale" : "pending"}\t${proposal.id}\t${proposal.thread}\t${proposal.reason}`
+      );
+  });
+}
+
+export async function runThreadReject(
+  id: string,
+  options: ThreadOptions & { thread: string }
+): Promise<void> {
+  await withThreadLog(options, `thread reject ${id}`, async ({ paths }) => {
+    await rejectPending(paths, id, assertThreadSlug(options.thread));
+    console.log(`rejected\t${id}\t${options.thread}`);
+  });
+}
+
+export async function runThreadConclude(options: ThreadOptions): Promise<void> {
+  await withThreadLog(options, "thread conclude", async ({ paths }) => {
+    const count = await concludePending(paths);
+    console.log(`concluded\t${count} passed`);
+  });
+}
+
 export async function runThreadRegenerate(
   slug: string,
   options: ThreadOptions & {
@@ -432,4 +499,12 @@ function emptyManifest(): ThreadManifest {
     sessions: [],
     synthesis: {}
   };
+}
+
+function groupByThread(
+  items: ReadonlyArray<{ thread: string }>
+): Array<{ thread: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(item.thread, (counts.get(item.thread) ?? 0) + 1);
+  return [...counts].map(([thread, count]) => ({ thread, count }));
 }

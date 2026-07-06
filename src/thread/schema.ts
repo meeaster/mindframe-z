@@ -32,7 +32,7 @@ export const threadManifestSchema = z.object({
 });
 
 export const threadDispatchRunSchema = z.object({
-  role: z.enum(["discover", "gather", "synthesize", "digest"]),
+  role: z.enum(["discover", "gather", "synthesize", "digest", "triage"]),
   harness: z.enum(["claude-code", "opencode"]),
   model: z.string(),
   cost_usd: z.number().nullable(),

@@ -37,6 +37,7 @@ export interface ResolvedSynthesisDefaults {
   gather: ParsedModelId;
   synthesize: ParsedModelId;
   digest: ParsedModelId;
+  triage: ParsedModelId;
 }
 
 export type ResolvedThreadDestination = ThreadDestination & { path: string };
@@ -117,6 +118,7 @@ export async function writeThreadRuns(dir: string, runs: ThreadRuns): Promise<vo
 
 const FALLBACK_DISCOVER = "claude-code:sonnet@high";
 const FALLBACK_GATHER = "claude-code:haiku@low";
+const FALLBACK_TRIAGE = "claude-code:haiku@low";
 const FALLBACK_SYNTHESIZE = "claude-code:sonnet@high";
 
 export function parseModelId(id: string): ParsedModelId {
@@ -147,6 +149,7 @@ export function resolveSynthesisDefaults(
     gather?: string | undefined;
     synthesize?: string | undefined;
     digest?: string | undefined;
+    triage?: string | undefined;
   } = {}
 ): ResolvedSynthesisDefaults {
   // Resolve the synthesize id first so an unset digest can inherit it, preserving
@@ -166,8 +169,16 @@ export function resolveSynthesisDefaults(
     synthesize: parseModelId(synthesize),
     digest: parseModelId(
       flags.digest ?? manifest.synthesis.digest ?? profileDefaults.digest ?? synthesize
-    )
+    ),
+    triage: parseModelId(flags.triage ?? profileDefaults.triage ?? FALLBACK_TRIAGE)
   };
+}
+
+export function resolveTriageModel(
+  profileDefaults: ThreadDefaults,
+  flag?: string | undefined
+): ParsedModelId {
+  return parseModelId(flag ?? profileDefaults.triage ?? FALLBACK_TRIAGE);
 }
 
 const DEFAULT_SESSION_SOURCES: ThreadHarness[] = ["claude-code", "opencode"];

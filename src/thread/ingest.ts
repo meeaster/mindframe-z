@@ -353,8 +353,8 @@ export async function resolveRefreshSet(
 
 // The explicit-path seam, generalized across harnesses: a live Claude transcript is
 // preferred; otherwise, a hydrated archive-cache copy is used for either harness
-  // (present OpenCode sessions have no live-store equivalent path — they keep today's
-  // sqlite-discovery route, per the agent-sessions OpenCode branch).
+// (present OpenCode sessions have no live-store equivalent path — they keep today's
+// sqlite-discovery route, per the agent-sessions OpenCode branch).
 async function resolveTranscriptPath(
   paths: RuntimePaths,
   source: ThreadHarness,

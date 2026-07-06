@@ -137,6 +137,10 @@ export function threadRunsRoot(paths: RuntimePaths): string {
   return path.join(paths.home, ".mindframe-z", "thread-runs", "runs");
 }
 
+export function threadSweepRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "thread-sweep");
+}
+
 export function threadRunPath(paths: RuntimePaths, runId: string): string {
   return path.join(threadRunsRoot(paths), runId);
 }
