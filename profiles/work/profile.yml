@@ -7,8 +7,6 @@ skills:
     enabled: true
   jira-writer:
     enabled: true
-  pr-writer:
-    enabled: true
   visual-explainer:
     enabled: false
 references:
