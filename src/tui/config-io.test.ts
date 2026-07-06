@@ -10,6 +10,7 @@ import {
   readLocalSkillOverrides,
   resolveSkillConfigPaths,
   resolveSkillToggleState,
+  setLocalSkillState,
   writeChangedSkillOverrides,
   writeLocalSkillOverrides
 } from "./config-io.js";
@@ -323,5 +324,41 @@ describe("skill override delta writes", () => {
     const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
     expect(localConfig).not.toContain("inherited");
     expect(localConfig).toContain('"changed": "deny"');
+  });
+
+  it("writes a single skill delta via setLocalSkillState", async () => {
+    const runtimePaths = paths(root);
+    await initGitRepo(root);
+    process.chdir(root);
+    const profile = {
+      enabledSkills: [
+        { name: "kept", enabled: true, targets: ["opencode"] },
+        { name: "changed", enabled: true, targets: ["opencode"] }
+      ]
+    } as ResolvedProfile;
+
+    await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
+
+    const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
+    expect(localConfig).toContain('"changed": "deny"');
+    expect(localConfig).not.toContain("kept");
+  });
+
+  it("removes the local override when a skill returns to its base default", async () => {
+    const runtimePaths = paths(root);
+    await initGitRepo(root);
+    process.chdir(root);
+    const profile = {
+      enabledSkills: [{ name: "changed", enabled: true, targets: ["opencode"] }]
+    } as ResolvedProfile;
+
+    await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
+    expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ changed: false });
+
+    await setLocalSkillState(runtimePaths, profile, "opencode", "changed", true);
+
+    expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({});
+    const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
+    expect(localConfig).not.toContain("changed");
   });
 });
