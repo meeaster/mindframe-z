@@ -53,6 +53,7 @@ opencode:
           baseURL: http://127.0.0.1:9099
     permission:
       bash:
+        "*": allow
         "*ARTIFACTORY_TOKEN*": deny
         "*UV_INDEX_ARTIFACTORY_PASSWORD*": deny
         "aws ec2 describe-instances *": allow
