@@ -84,6 +84,8 @@ MCP enablement is profile-owned: `shared/mcp.yml` defines connection details onl
 
 `mfz apply` writes rendered files under `configs/<profile>/`, writes machine-local `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` when configured, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
 
+Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
+
 `extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode `external_directory`/`edit` permissions and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
 
 Claude `settings.json` and Claude MCP are not symlinked. The rendered `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
