@@ -215,6 +215,28 @@ async function enableCommandInProfile(root: string, targetProfile: string, comma
   await writeProfileYaml(root, targetProfile, doc);
 }
 
+/**
+ * Assign each unmanaged item to a destination profile. When `targetProfile` names an
+ * available profile it is used for every item without prompting; otherwise `prompt`
+ * decides per item, and items the user skips (a `null` answer) are dropped.
+ */
+export async function resolveMoves<T>(
+  items: readonly T[],
+  targetProfile: string | undefined,
+  availableProfiles: string[],
+  prompt: (item: T, profiles: string[]) => Promise<string | null>
+): Promise<{ item: T; targetProfile: string }[]> {
+  const moves: { item: T; targetProfile: string }[] = [];
+  for (const item of items) {
+    const chosen =
+      targetProfile && availableProfiles.includes(targetProfile)
+        ? targetProfile
+        : await prompt(item, availableProfiles);
+    if (chosen) moves.push({ item, targetProfile: chosen });
+  }
+  return moves;
+}
+
 export async function runSync(
   paths: RuntimePaths,
   profile: ResolvedProfile,
@@ -252,58 +274,38 @@ export async function runSync(
 
   const availableProfiles = [...profile.manifests.profiles.keys()];
 
-  const manualMoves: { candidate: SyncCandidate; targetProfile: string }[] = [];
-  const skillMoves: { skill: UnknownSkill; targetProfile: string }[] = [];
-  const commandMoves: { command: UnknownCommand; targetProfile: string }[] = [];
-
-  for (const candidate of candidates) {
-    const chosen =
-      targetProfile && availableProfiles.includes(targetProfile)
-        ? targetProfile
-        : await promptUser(candidate, availableProfiles);
-    if (chosen) {
-      manualMoves.push({ candidate, targetProfile: chosen });
-    }
-  }
-
-  for (const skill of skillCandidates) {
-    const chosen =
-      targetProfile && availableProfiles.includes(targetProfile)
-        ? targetProfile
-        : await promptSkillUser(skill, availableProfiles);
-    if (chosen) {
-      skillMoves.push({ skill, targetProfile: chosen });
-    }
-  }
-
-  for (const command of commandCandidates) {
-    const chosen =
-      targetProfile && availableProfiles.includes(targetProfile)
-        ? targetProfile
-        : await promptCommandUser(command, availableProfiles);
-    if (chosen) {
-      commandMoves.push({ command, targetProfile: chosen });
-    }
-  }
+  const manualMoves = await resolveMoves(candidates, targetProfile, availableProfiles, promptUser);
+  const skillMoves = await resolveMoves(
+    skillCandidates,
+    targetProfile,
+    availableProfiles,
+    promptSkillUser
+  );
+  const commandMoves = await resolveMoves(
+    commandCandidates,
+    targetProfile,
+    availableProfiles,
+    promptCommandUser
+  );
 
   if (skillMoves.length > 0) {
     await writeSkillsCatalog(
       paths.root,
-      skillMoves.map(({ skill }) => skill)
+      skillMoves.map(({ item }) => item)
     );
     console.log("  Updated shared/skills.yml");
-    for (const { skill, targetProfile } of skillMoves) {
+    for (const { item: skill, targetProfile } of skillMoves) {
       await enableSkillInProfile(paths.root, targetProfile, skill.name);
       console.log(`  Updated ${targetProfile}/profile.yml: skills.${skill.name}`);
     }
   }
 
-  for (const { command, targetProfile } of commandMoves) {
+  for (const { item: command, targetProfile } of commandMoves) {
     await enableCommandInProfile(paths.root, targetProfile, command.name);
     console.log(`  Updated ${targetProfile}/profile.yml: opencode.commands.${command.name}`);
   }
 
-  for (const { candidate, targetProfile } of manualMoves) {
+  for (const { item: candidate, targetProfile } of manualMoves) {
     if (candidate.target === "mise") {
       await writeMiseToml(paths.root, targetProfile, candidate);
       console.log(

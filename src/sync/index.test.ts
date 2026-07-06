@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { parseProfileChoice } from "./index.js";
+import { describe, expect, it, vi } from "vitest";
+import { parseProfileChoice, resolveMoves } from "./index.js";
 
 describe("parseProfileChoice", () => {
   const profiles = ["base", "personal", "work"];
@@ -21,5 +21,43 @@ describe("parseProfileChoice", () => {
       kind: "unknown",
       answer: "missing"
     });
+  });
+});
+
+describe("resolveMoves", () => {
+  const profiles = ["base", "work"];
+
+  it("assigns an available target profile to every item without prompting", async () => {
+    const prompt = vi.fn();
+    const moves = await resolveMoves(["a", "b"], "work", profiles, prompt);
+    expect(moves).toEqual([
+      { item: "a", targetProfile: "work" },
+      { item: "b", targetProfile: "work" }
+    ]);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("prompts per item when no target profile is given and drops skipped items", async () => {
+    const prompt = vi.fn(async (item: string) => (item === "b" ? null : "base"));
+    const moves = await resolveMoves(["a", "b", "c"], undefined, profiles, prompt);
+    expect(moves).toEqual([
+      { item: "a", targetProfile: "base" },
+      { item: "c", targetProfile: "base" }
+    ]);
+    expect(prompt).toHaveBeenCalledTimes(3);
+    expect(prompt).toHaveBeenCalledWith("a", profiles);
+  });
+
+  it("prompts when the requested target profile is not available", async () => {
+    const prompt = vi.fn(async () => "work");
+    const moves = await resolveMoves(["a"], "missing", profiles, prompt);
+    expect(moves).toEqual([{ item: "a", targetProfile: "work" }]);
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  it("returns no moves for an empty item list without prompting", async () => {
+    const prompt = vi.fn();
+    expect(await resolveMoves([], "work", profiles, prompt)).toEqual([]);
+    expect(prompt).not.toHaveBeenCalled();
   });
 });
