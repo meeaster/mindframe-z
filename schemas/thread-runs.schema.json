@@ -43,7 +43,8 @@
                     "discover",
                     "gather",
                     "synthesize",
-                    "digest"
+                    "digest",
+                    "triage"
                   ]
                 },
                 "harness": {

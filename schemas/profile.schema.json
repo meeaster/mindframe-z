@@ -350,6 +350,13 @@
             "synthesize": {
               "type": "string"
             },
+            "triage": {
+              "type": "string"
+            },
+            "quiescence_minutes": {
+              "type": "number",
+              "minimum": 0
+            },
             "digest": {
               "type": "string"
             },

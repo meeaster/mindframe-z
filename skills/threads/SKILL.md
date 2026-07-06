@@ -41,6 +41,26 @@ Folds sessions into a thread. **Ingestion dispatches read-only agents and costs 
 
 `update_strategy` in the profile's `thread` config picks how a drifted session is refreshed: `full` (default) re-synthesizes the whole session; `delta` reads only the messages past the watermark and revises the existing file. Global; set once. `--all` always re-synthesizes in full.
 
+## Sweep Review
+
+Use this when the user asks to keep threads current across recent sessions without manually remembering ids. Sweep is advisory: it writes only the machine-local verdict ledger and never writes thread repos.
+
+1. **Sweep.** `mfz thread sweep`
+
+   Detects quiet new or changed sessions after the machine baseline, triages candidates against thread charters, and reports pending proposals, drifted members, deferred hot sessions, and malformed triage lines. Add `--include-hot` only when the user wants active sessions judged anyway. Done when the report is read.
+
+2. **Review proposals.** `mfz thread pending`
+
+   Lists derived pending proposals. `stale` means the proposal was judged at an older pin or charter and should be refreshed by another sweep before acting if precision matters.
+
+3. **Act.** Accept with `mfz thread ingest <source:id> --thread <slug>`; reject nagging false positives with `mfz thread reject <source:id> --thread <slug>`.
+
+   There is no accept verb: ingest is the acceptance path and still runs the normal gather -> synthesize -> digest pipeline.
+
+4. **Conclude.** `mfz thread conclude`
+
+   Converts every remaining pending proposal into a pinned pass and stamps review time, so unchanged sessions stop reappearing. If sweep reported drifted members, run `mfz thread refresh --thread <slug>` for each affected thread when the user wants the thread updated.
+
 ## Inspect
 
 - `mfz thread list` — known threads, each with its destination and session count.
@@ -53,4 +73,4 @@ Every read command prints **condensed text** by default — built for reading an
 
 ## Cost levers
 
-Model and effort trade cost against fidelity: `create` pins per-thread defaults, and `--harness` / `--synth-model` / `--effort` on `discover` and `ingest` override per run.
+Model and effort trade cost against fidelity: `create` pins per-thread defaults, `--model` on `discover` overrides discovery, `--gather-model` and `--synthesize-model` on `ingest`/`refresh` override synthesis work, and `--triage-model` on `sweep` overrides cheap triage.
