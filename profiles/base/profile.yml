@@ -100,6 +100,8 @@ skills:
     enabled: true
   handoff:
     enabled: true
+  pr-writer:
+    enabled: true
 mcp:
   context7:
     enabled: true
@@ -145,6 +147,9 @@ claude:
       command: ccstatusline
       padding: 0
       refreshInterval: 10
+    attribution:
+      commit: ""
+      pr: ""
 
 extra_folders:
   - path: ~/.mindframe-z
