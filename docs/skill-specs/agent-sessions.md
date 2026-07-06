@@ -1,6 +1,6 @@
 # agent-sessions Skill — Design Spec
 
-> Design/build notes for the `skills/agent-sessions` skill. Not bundled with the skill; not loaded at runtime.
+> Design/build notes for the `skills/active/agent-sessions` skill. Not bundled with the skill; not loaded at runtime.
 
 ## Intent
 
