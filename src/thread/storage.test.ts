@@ -248,7 +248,8 @@ describe("thread storage", () => {
       gather: { harness: "claude-code", model: "haiku", effort: "low" },
       synthesize: { harness: "claude-code", model: "sonnet", effort: "max" },
       // digest unset everywhere → inherits the resolved synthesize id
-      digest: { harness: "claude-code", model: "sonnet", effort: "max" }
+      digest: { harness: "claude-code", model: "sonnet", effort: "max" },
+      triage: { harness: "claude-code", model: "haiku", effort: "low" }
     });
   });
 

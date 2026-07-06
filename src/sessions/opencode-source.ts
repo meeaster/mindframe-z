@@ -26,7 +26,10 @@ async function exportSession(id: string, dataHome: string): Promise<Buffer> {
 // <id>.json` files. Each session's freshness signal is the greater of its own
 // `time_updated` and its latest message's `time_created`, because message growth
 // may not bump the session row's `time_updated`.
-export async function listOpencodeItems(paths: RuntimePaths): Promise<BackupItem[]> {
+export async function listOpencodeItems(
+  paths: RuntimePaths,
+  options: { includeChildren?: boolean | undefined } = {}
+): Promise<BackupItem[]> {
   const dataHome = opencodeDataHome(paths);
   const dbPath = opencodeDbPath(paths);
   if (!(await pathExists(dbPath))) return [];
@@ -37,7 +40,11 @@ export async function listOpencodeItems(paths: RuntimePaths): Promise<BackupItem
     return [];
   }
   try {
-    const sessions = db.prepare("SELECT id, time_updated FROM session").all() as Array<{
+    const sessions = db
+      .prepare(
+        `SELECT id, time_updated FROM session${options.includeChildren === false ? " WHERE parent_id IS NULL" : ""}`
+      )
+      .all() as Array<{
       id: string;
       time_updated: number;
     }>;

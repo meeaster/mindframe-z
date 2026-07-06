@@ -142,6 +142,8 @@ export const threadDefaultsSchema = z.object({
   discover: z.string().optional(),
   gather: z.string().optional(),
   synthesize: z.string().optional(),
+  triage: z.string().optional(),
+  quiescence_minutes: z.number().nonnegative().optional(),
   // Omitted digest inherits the resolved synthesize model (see
   // resolveSynthesisDefaults) so existing profiles keep their current behavior.
   digest: z.string().optional(),
