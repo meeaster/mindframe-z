@@ -16,6 +16,7 @@ function paths(home: string): RuntimePaths {
     configsDir: path.join(home, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
+    codexDir: path.join(home, ".codex"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -52,6 +53,7 @@ describe("createRuntimePaths", () => {
     "MFZ_HOME",
     "OPENCODE_CONFIG_DIR",
     "CLAUDE_CONFIG_DIR",
+    "CODEX_HOME",
     "MISE_CONFIG_DIR"
   ] as const;
   const saved: Record<string, string | undefined> = {};
@@ -77,16 +79,19 @@ describe("createRuntimePaths", () => {
     expect(runtime.configsDir).toBe(path.join("/tmp/repo", "configs"));
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", ".config", "opencode"));
     expect(runtime.claudeDir).toBe(path.join("/tmp/home", ".claude"));
+    expect(runtime.codexDir).toBe(path.join("/tmp/home", ".codex"));
     expect(runtime.miseConfigDir).toBe(path.join("/tmp/home", ".config", "mise"));
   });
 
   it("reads tool config dirs from environment overrides", () => {
     process.env.OPENCODE_CONFIG_DIR = "/env/opencode";
     process.env.CLAUDE_CONFIG_DIR = "/env/claude";
+    process.env.CODEX_HOME = "/env/codex";
     process.env.MISE_CONFIG_DIR = "/env/mise";
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.opencodeConfigDir).toBe("/env/opencode");
     expect(runtime.claudeDir).toBe("/env/claude");
+    expect(runtime.codexDir).toBe("/env/codex");
     expect(runtime.miseConfigDir).toBe("/env/mise");
   });
 
@@ -97,10 +102,12 @@ describe("createRuntimePaths", () => {
       root: "/tmp/repo",
       home: "/tmp/home",
       opencodeConfigDir: "/opt/opencode",
-      claudeDir: "/opt/claude"
+      claudeDir: "/opt/claude",
+      codexDir: "/opt/codex"
     });
     expect(runtime.opencodeConfigDir).toBe("/opt/opencode");
     expect(runtime.claudeDir).toBe("/opt/claude");
+    expect(runtime.codexDir).toBe("/opt/codex");
   });
 
   it("expands a ~-relative override against the resolved home", () => {

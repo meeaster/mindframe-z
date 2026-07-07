@@ -9,6 +9,7 @@ import type { ResolvedProfile } from "../core/profile.js";
 import { syncMise } from "./mise.js";
 import { syncOpencode } from "./opencode.js";
 import { syncClaude } from "./claude.js";
+import { syncCodex } from "./codex.js";
 import { syncSkills, type UnknownSkill } from "./skills.js";
 import type { SyncCandidate } from "./types.js";
 
@@ -247,24 +248,35 @@ export async function runSync(
   const mcp = path.join(configsProfile, "mise", "config.toml");
   const ocp = path.join(configsProfile, "opencode", "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
+  const cdx = path.join(configsProfile, "codex", "config.toml");
 
-  const [miseResult, opencodeResult, claudeResult, skillCandidates, commandCandidates] =
-    await Promise.all([
-      syncMise(mcp, profile),
-      profile.agents.includes("opencode")
-        ? syncOpencode(ocp, profile)
-        : Promise.resolve({ candidates: [] }),
-      profile.agents.includes("claude-code")
-        ? syncClaude(clp, profile)
-        : Promise.resolve({ candidates: [] }),
-      syncSkills(paths.home, profile.manifests, profile.agents),
-      profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
-    ]);
+  const [
+    miseResult,
+    opencodeResult,
+    claudeResult,
+    codexResult,
+    skillCandidates,
+    commandCandidates
+  ] = await Promise.all([
+    syncMise(mcp, profile),
+    profile.agents.includes("opencode")
+      ? syncOpencode(ocp, profile)
+      : Promise.resolve({ candidates: [] }),
+    profile.agents.includes("claude-code")
+      ? syncClaude(clp, profile)
+      : Promise.resolve({ candidates: [] }),
+    profile.agents.includes("codex")
+      ? syncCodex(cdx, profile)
+      : Promise.resolve({ candidates: [] }),
+    syncSkills(paths.home, profile.manifests, profile.agents),
+    profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
+  ]);
 
   const candidates = [
     ...miseResult.candidates,
     ...opencodeResult.candidates,
-    ...claudeResult.candidates
+    ...claudeResult.candidates,
+    ...codexResult.candidates
   ];
 
   if (candidates.length === 0 && skillCandidates.length === 0 && commandCandidates.length === 0) {

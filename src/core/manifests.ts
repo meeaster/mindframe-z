@@ -4,9 +4,9 @@ import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
 
-export const agentSchema = z.enum(["opencode", "claude-code"]);
+export const agentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const targetSchema = agentSchema;
-const skillTargetSchema = z.enum(["opencode", "claude-code", "all"]);
+const skillTargetSchema = z.enum(["opencode", "claude-code", "codex", "all"]);
 const profileMcpConfigSchema = z.object({
   targets: z.array(targetSchema).min(1).optional(),
   enabled: z.boolean()
@@ -193,12 +193,16 @@ const opencodeConfigSchema = z.object({
   agent_task: agentTaskSchema.optional()
 });
 
+const codexConfigSchema = z.object({
+  config: z.record(z.string(), z.unknown()).default({})
+});
+
 export const profileSchema = z
   .object({
     name: z.string().min(1),
     extends: z.string().optional(),
     description: z.string().default(""),
-    agents: z.array(agentSchema).default(["opencode", "claude-code"]),
+    agents: z.array(agentSchema).default(["opencode", "claude-code", "codex"]),
     instructions: z.array(z.string()).default([]),
     references: z.array(z.string()).default([]),
     skills: z
@@ -220,6 +224,7 @@ export const profileSchema = z
         settings: z.record(z.string(), z.unknown()).default({})
       })
       .default({ settings: {} }),
+    codex: codexConfigSchema.default({ config: {} }),
     mise: z
       .object({
         tools: z.record(z.string(), miseToolValueSchema).default({}),
@@ -419,13 +424,14 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       if (!(await exists(profileYaml))) continue;
       const profile = await readYaml(profileYaml, profileSchema, {
         name: entry,
-        agents: ["opencode", "claude-code"],
+        agents: ["opencode", "claude-code", "codex"],
         instructions: [],
         references: [],
         skills: {},
         mcp: {},
         opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
+        codex: { config: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         thread: {
           destinations: [],

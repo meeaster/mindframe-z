@@ -16,13 +16,18 @@ function targetSkillsDir(paths: RuntimePaths, target: ToolTarget): string | null
       return path.join(paths.home, ".agents", "skills");
     case "claude-code":
       return path.join(paths.claudeDir, "skills");
+    case "codex":
+      return path.join(paths.home, ".agents", "skills");
     default:
       return null;
   }
 }
 
-function targetAgentDisplayName(target: Extract<ToolTarget, "opencode" | "claude-code">): string {
-  return target === "claude-code" ? "Claude Code" : "OpenCode";
+function targetAgentDisplayName(
+  target: Extract<ToolTarget, "opencode" | "claude-code" | "codex">
+): string {
+  if (target === "claude-code") return "Claude Code";
+  return target === "codex" ? "Codex" : "OpenCode";
 }
 
 async function listSkillDirectories(skillsDir: string): Promise<Set<string>> {
@@ -75,7 +80,8 @@ export function buildSkillsCommand(
   skill: SkillEntry,
   target: ToolTarget
 ): string[] {
-  const agent = target === "claude-code" ? "claude-code" : "opencode";
+  const agent =
+    target === "claude-code" ? "claude-code" : target === "codex" ? "codex" : "opencode";
   if (skill.source === "local") {
     return [
       "skills",
@@ -106,10 +112,16 @@ export function buildSkillsCommand(
 
 export function buildSkillsRemoveCommand(
   skill: SkillEntry,
-  target?: Extract<ToolTarget, "opencode" | "claude-code">
+  target?: Extract<ToolTarget, "opencode" | "claude-code" | "codex">
 ): string[] {
   const agent =
-    target === "claude-code" ? "claude-code" : target === "opencode" ? "opencode" : null;
+    target === "claude-code"
+      ? "claude-code"
+      : target === "codex"
+        ? "codex"
+        : target === "opencode"
+          ? "opencode"
+          : null;
   return ["skills", "remove", skill.name, "-g", ...(agent ? ["-a", agent] : []), "-y"];
 }
 
@@ -120,7 +132,7 @@ export function buildSkillsUpdateCommand(skill: SkillEntry): string[] | null {
 
 export async function listInstalledSkills(
   paths: RuntimePaths,
-  target: Extract<ToolTarget, "opencode" | "claude-code">
+  target: Extract<ToolTarget, "opencode" | "claude-code" | "codex">
 ): Promise<Set<string>> {
   const skillsDir = targetSkillsDir(paths, target);
   if (!skillsDir) return new Set();
@@ -156,7 +168,7 @@ export async function applySkill(
   const command = buildSkillsCommand(paths, skill, target);
   if (dryRun) return command.join(" ");
 
-  if (target !== "opencode" && target !== "claude-code") {
+  if (target !== "opencode" && target !== "claude-code" && target !== "codex") {
     return runCommand(paths, command, "No skills command generated");
   }
 
@@ -170,7 +182,7 @@ export async function applySkill(
 export async function removeSkill(
   paths: RuntimePaths,
   skill: SkillEntry,
-  target: Extract<ToolTarget, "opencode" | "claude-code"> | undefined,
+  target: Extract<ToolTarget, "opencode" | "claude-code" | "codex"> | undefined,
   dryRun: boolean,
   installedSkills?: ReadonlySet<string>
 ): Promise<string> {

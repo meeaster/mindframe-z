@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
+import { parse } from "smol-toml";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -26,6 +27,7 @@ function paths(root: string): RuntimePaths {
     configsDir: path.join(root, "configs"),
     opencodeConfigDir: path.join(root, ".config", "opencode"),
     claudeDir: path.join(root, ".claude"),
+    codexDir: path.join(root, ".codex"),
     miseConfigDir: path.join(root, ".config", "mise")
   };
 }
@@ -111,7 +113,8 @@ describe("skill config path resolution", () => {
       scope: "repo",
       active: {
         opencode: path.join(root, ".opencode", "opencode.jsonc"),
-        "claude-code": path.join(root, ".claude", "settings.local.json")
+        "claude-code": path.join(root, ".claude", "settings.local.json"),
+        codex: path.join(root, ".codex", "config.toml")
       }
     });
   });
@@ -126,11 +129,13 @@ describe("skill config path resolution", () => {
       scope: "global",
       active: {
         opencode: path.join(runtimePaths.opencodeConfigDir, "opencode.jsonc"),
-        "claude-code": path.join(runtimePaths.claudeDir, "settings.json")
+        "claude-code": path.join(runtimePaths.claudeDir, "settings.json"),
+        codex: path.join(runtimePaths.codexDir, "config.toml")
       },
       global: {
         opencode: path.join(runtimePaths.opencodeConfigDir, "opencode.jsonc"),
-        "claude-code": path.join(runtimePaths.claudeDir, "settings.json")
+        "claude-code": path.join(runtimePaths.claudeDir, "settings.json"),
+        codex: path.join(runtimePaths.codexDir, "config.toml")
       }
     });
   });
@@ -342,6 +347,42 @@ describe("skill override delta writes", () => {
     const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
     expect(localConfig).toContain('"changed": "deny"');
     expect(localConfig).not.toContain("kept");
+  });
+
+  it("writes Codex skill toggles using resolved SKILL.md paths", async () => {
+    const runtimePaths = paths(root);
+    await initGitRepo(root);
+    process.chdir(root);
+    const skillPath = path.join(root, ".agents", "skills", "changed", "SKILL.md");
+    await mkdir(path.dirname(skillPath), { recursive: true });
+    await writeFile(skillPath, "# Changed\n", "utf8");
+    const profile = {
+      enabledSkills: [{ name: "changed", enabled: true, targets: ["codex"] }]
+    } as ResolvedProfile;
+
+    await setLocalSkillState(runtimePaths, profile, "codex", "changed", false);
+
+    const localConfig = parse(await readFile(path.join(root, ".codex", "config.toml"), "utf8")) as {
+      skills?: { config?: Array<{ path?: string; enabled?: boolean }> };
+    };
+    expect(localConfig.skills?.config).toContainEqual({ path: skillPath, enabled: false });
+    const exclude = await readFile(path.join(root, ".git", "info", "exclude"), "utf8");
+    expect(exclude).toContain(".codex/config.toml");
+  });
+
+  it("errors clearly when a Codex skill path cannot be resolved", async () => {
+    const runtimePaths = paths(root);
+    await initGitRepo(root);
+    process.chdir(root);
+    const profile = {
+      enabledSkills: [{ name: "missing", enabled: true, targets: ["codex"] }]
+    } as ResolvedProfile;
+
+    await expect(
+      setLocalSkillState(runtimePaths, profile, "codex", "missing", false)
+    ).rejects.toThrow(
+      "Cannot toggle missing for codex: installed SKILL.md path could not be resolved"
+    );
   });
 
   it("removes the local override when a skill returns to its base default", async () => {

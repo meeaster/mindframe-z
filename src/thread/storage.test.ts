@@ -30,6 +30,7 @@ function paths(home: string, root = home): RuntimePaths {
     configsDir: path.join(root, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
+    codexDir: path.join(home, ".codex"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -48,6 +49,7 @@ function profile(machine: MachineManifest): ResolvedProfile {
       mcp: {},
       opencode: { config: {}, plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
+      codex: { config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
         destinations: [

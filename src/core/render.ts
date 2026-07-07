@@ -4,6 +4,7 @@ import type { RuntimePaths, ToolTarget } from "./paths.js";
 import { globalSkillStatePath, profileConfigsDir } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
 import { renderClaude } from "../renderers/claude.js";
+import { renderCodex } from "../renderers/codex.js";
 import { renderDotfiles } from "../renderers/dotfiles.js";
 import { renderMise } from "../renderers/mise.js";
 import { renderOpenCode } from "../renderers/opencode.js";
@@ -79,6 +80,9 @@ export async function renderTarget(
       break;
     case "claude-code":
       rendered = await renderClaude(paths, profile);
+      break;
+    case "codex":
+      rendered = await renderCodex(paths, profile);
       break;
     case "mise":
       rendered = await renderMise(paths, profile);

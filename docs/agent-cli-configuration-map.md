@@ -1,8 +1,7 @@
 # Agent CLI Configuration Map
 
 This note maps Claude Code, OpenCode, and Codex configuration surfaces to the
-mindframe-z manifest and renderer model. It is intended to guide first-class
-Codex support without losing the existing Claude Code and OpenCode behavior.
+mindframe-z manifest and renderer model.
 
 Sources:
 
@@ -44,9 +43,10 @@ Existing agent renderers are gated by `profile.agents`:
 | --- | --- | --- |
 | OpenCode | configs/<profile>/opencode/opencode.jsonc plus commands, agents, plugins | Symlinked into ~/.config/opencode. Global skill state is overlaid during apply. |
 | Claude Code | configs/<profile>/claude/CLAUDE.md, settings.json, mcp.json | CLAUDE.md is symlinked. settings.json and ~/.claude.json#mcpServers are merged into local user files. |
+| Codex | configs/<profile>/codex/AGENTS.md, config.toml | AGENTS.md is copied into $CODEX_HOME. config.toml is merged into local user config. |
 
-Codex should follow the same renderer pattern: add a target, render a managed
-snapshot under `configs/<profile>/codex/`, and apply it into the tool's real
+Codex follows the same renderer pattern: it is an agent target, renders a managed
+snapshot under `configs/<profile>/codex/`, and applies it into the tool's real
 runtime location without making profile manifests depend on user-local state.
 
 ## Configuration Loading By Tool
@@ -133,17 +133,17 @@ Relevant documented locations:
 | Permissions | `sandbox_mode`, `approval_policy`, `sandbox_workspace_write`, or named `[permissions.*]` profiles | Named permission profiles cover filesystem and network policy. |
 | Noninteractive | `codex exec --json` | Useful for future `mfz thread` dispatch support. |
 
-Codex needs a new mfz renderer:
+Codex has an mfz renderer:
 
-| Codex feature | Proposed mfz mapping | Notes |
+| Codex feature | mfz mapping | Notes |
 | --- | --- | --- |
-| Agent target | Add `codex` to agent enums and profile `agents`. | Affects schema, profile resolution, MCP/skill target filtering, apply/status/doctor/sync. |
-| User config | Add `profile.codex.config`, render `configs/<profile>/codex/config.toml`. | Use TOML, not JSON. |
-| Local apply behavior | Merge managed snapshot into ~/.codex/config.toml. | Prefer Claude-style merge over symlink to avoid overwriting auth/plugin/project trust/user state. |
-| Instructions | Render `configs/<profile>/codex/AGENTS.md` and link or copy to ~/.codex/AGENTS.md. | Avoid `AGENTS.override.md`; override semantics are too blunt for a managed baseline. |
-| MCP | Render `shared/mcp.yml` selections to `[mcp_servers]`. | Need transport mapping: stdio command/args/env, HTTP url/headers/env headers. |
-| Extra folders | Render named permission profile, likely `[permissions.mfz.filesystem]` plus `default_permissions = "mfz"`. | This maps read/edit/deny better than legacy `sandbox_workspace_write.writable_roots`. |
-| Skills | Continue catalog/install model; add Codex target to skill targeting. | For enable/disable, render `[[skills.config]]` entries by SKILL.md path if mfz knows installed paths. |
+| Agent target | `codex` in agent enums and profile `agents`. | Affects schema, profile resolution, MCP/skill target filtering, apply/status/doctor/sync. |
+| User config | `profile.codex.config` renders to `configs/<profile>/codex/config.toml`. | TOML pass-through. |
+| Local apply behavior | Managed snapshot merges into `$CODEX_HOME/config.toml`. | Claude-style merge avoids overwriting auth/plugin/project trust/user state. |
+| Instructions | `configs/<profile>/codex/AGENTS.md` copies to `$CODEX_HOME/AGENTS.md`. | Does not create `AGENTS.override.md`. |
+| MCP | `shared/mcp.yml` selections render to `[mcp_servers]`. | Stdio command/args/env and HTTP url/static headers are covered. |
+| Extra folders | Named permission profile under `[permissions.mfz.filesystem]` plus `default_permissions = "mfz"`. | Maps read/write/deny from references and extra folders. |
+| Skills | Catalog/install model includes Codex target; enable/disable writes `[[skills.config]]` by SKILL.md path. | Toggle writes fail clearly when the installed path cannot be resolved. |
 | Hooks | Initially pass through `codex.config.hooks` or render hooks.json from `codex.hooks`. | Hooks are powerful; start explicit rather than inferred. |
 | Subagents | Add optional source dir, e.g. `codex/agents/*.toml`. | Codex agent files are TOML, unlike OpenCode/Claude markdown agents. |
 | Plugins | Initially pass through `[plugins.*]` config. | Plugin installation/marketplaces should be separate from renderer MVP. |
@@ -154,12 +154,12 @@ Codex needs a new mfz renderer:
 
 | mfz concept | Claude Code | OpenCode | Codex |
 | --- | --- | --- | --- |
-| Agent target | `claude-code` | `opencode` | Proposed `codex` |
+| Agent target | `claude-code` | `opencode` | `codex` |
 | Primary config format | JSON | JSON/JSONC | TOML |
 | Global config path | ~/.claude/settings.json plus ~/.claude.json | ~/.config/opencode/opencode.jsonc | ~/.codex/config.toml |
 | Project config path | .claude/settings.json, .claude/settings.local.json, .mcp.json | opencode.jsonc/json, .opencode/ | .codex/config.toml |
 | Instructions | CLAUDE.md | `instructions` array and project docs | AGENTS.md |
-| Tool-neutral generated guidance | Imported by rendered CLAUDE.md | Listed in `instructions` | Should become ~/.codex/AGENTS.md |
+| Tool-neutral generated guidance | Imported by rendered CLAUDE.md | Listed in `instructions` | Installed to ~/.codex/AGENTS.md |
 | MCP | ~/.claude.json and .mcp.json | `mcp` object | `[mcp_servers]` |
 | Permissions | `permissions.allow/ask/deny`, `defaultMode`, `additionalDirectories` | `permission` object | `approval_policy`, `sandbox_mode`, `[permissions]` profiles |
 | Extra folders | Read/Edit permissions plus `additionalDirectories` | `external_directory` and `edit` rules | Named filesystem permission profile |
@@ -169,9 +169,9 @@ Codex needs a new mfz renderer:
 | Plugins | Marketplace/local plugins | TS/JS plugin files or config specs | Plugin directory/config, marketplace |
 | Noninteractive runner | `claude -p --output-format stream-json` | `opencode run --format json` | `codex exec --json` |
 
-## Recommended Codex MVP
+## Implemented Codex MVP
 
-The first Codex change should be intentionally narrow:
+The first Codex change is intentionally narrow:
 
 1. Add `codex` as an agent target.
 2. Add `codex.config` pass-through TOML config in profile manifests.
@@ -232,4 +232,3 @@ Keep each tool's native permission model behind a common mfz intent:
 
 Codex should use named permission profiles rather than legacy workspace-write
 only settings because the profile syntax can express read, write, and deny.
-

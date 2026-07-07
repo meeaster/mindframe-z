@@ -8,6 +8,11 @@ import {
   writeSkillOverridesFile
 } from "../core/skill-overrides.js";
 import {
+  readCodexSkillOverrides,
+  readCodexSkillOverridesForNames,
+  replaceCodexSkillOverrides
+} from "./codex-skill-overrides.js";
+import {
   ensureActiveGitExcluded,
   resolveSkillConfigPaths,
   type SkillConfigPaths,
@@ -20,6 +25,7 @@ export async function readActiveSkillOverrides(
   configPaths: SkillConfigPaths,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
+  if (target === "codex") throw new Error("Codex skill overrides require profile context");
   return readSkillOverridesFromFile(target, configPaths.active[target]);
 }
 
@@ -27,6 +33,7 @@ export async function readLocalSkillOverrides(
   paths: RuntimePaths,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
+  if (target === "codex") throw new Error("Codex skill overrides require profile context");
   const configPaths = await resolveSkillConfigPaths(paths);
   return readActiveSkillOverrides(configPaths, target);
 }
@@ -37,6 +44,10 @@ export async function writeLocalSkillOverrides(
   state: SkillToggleState
 ): Promise<void> {
   const configPaths = await resolveSkillConfigPaths(paths);
+  if (target === "codex") {
+    await replaceCodexSkillOverrides(configPaths, state);
+    return;
+  }
   await mergeSkillOverridesIntoFile(target, configPaths.active[target], state);
   if (configPaths.scope === "global") {
     await mergeGlobalSkillState(configPaths, target, state);
@@ -88,7 +99,8 @@ export async function writeChangedSkillOverridesForTargets(
       profile,
       "claude-code",
       states["claude-code"]
-    )
+    ),
+    writeChangedSkillOverridesForConfigPaths(configPaths, profile, "codex", states.codex)
   ]);
 }
 
@@ -107,6 +119,13 @@ export async function resolveSkillToggleStateForConfigPaths(
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
   const defaults = profileDefaults(profile, target);
+  if (target === "codex") {
+    const [globalOverrides, localOverrides] = await Promise.all([
+      readSkillOverridesFile(configPaths.state.codex),
+      configPaths.scope === "repo" ? readCodexSkillOverrides(configPaths.active.codex, profile) : {}
+    ]);
+    return { ...defaults, ...globalOverrides, ...localOverrides };
+  }
   const [globalOverrides, localOverrides] = await Promise.all([
     readSkillOverridesFile(configPaths.state[target]),
     configPaths.scope === "repo"
@@ -146,6 +165,25 @@ async function writeSkillOverrideDelta(
   base: SkillToggleState,
   next: SkillToggleState
 ): Promise<void> {
+  if (target === "codex") {
+    const overrides = await readCodexSkillOverridesForNames(
+      configPaths.active.codex,
+      new Set(Object.keys(base))
+    );
+    let changed = false;
+    for (const [name, enabled] of Object.entries(next)) {
+      if (base[name] === enabled) {
+        changed ||= name in overrides;
+        delete overrides[name];
+      } else {
+        changed ||= overrides[name] !== enabled;
+        overrides[name] = enabled;
+      }
+    }
+    if (!changed) return;
+    await replaceCodexSkillOverrides(configPaths, overrides);
+    return;
+  }
   const overrides = await readActiveSkillOverrides(configPaths, target);
   let changed = false;
   for (const [name, enabled] of Object.entries(next)) {
@@ -166,6 +204,10 @@ async function replaceLocalSkillOverrides(
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<void> {
+  if (target === "codex") {
+    await replaceCodexSkillOverrides(configPaths, state);
+    return;
+  }
   await replaceSkillOverridesInFile(target, configPaths.active[target], state);
   if (configPaths.scope === "global") {
     await writeSkillOverridesFile(configPaths.state[target], state);
