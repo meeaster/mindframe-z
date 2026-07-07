@@ -3,18 +3,20 @@ import path from "node:path";
 import { execa } from "execa";
 import { globalSkillStatePath, type AgentName, type RuntimePaths } from "../core/paths.js";
 
-export type SkillToggleTarget = Extract<AgentName, "opencode" | "claude-code">;
+export type SkillToggleTarget = AgentName;
 
 export type SkillConfigPaths =
   | {
       readonly scope: "repo";
       readonly repoRoot: string;
+      readonly home: string;
       readonly active: Record<SkillToggleTarget, string>;
       readonly global: Record<SkillToggleTarget, string>;
       readonly state: Record<SkillToggleTarget, string>;
     }
   | {
       readonly scope: "global";
+      readonly home: string;
       readonly active: Record<SkillToggleTarget, string>;
       readonly global: Record<SkillToggleTarget, string>;
       readonly state: Record<SkillToggleTarget, string>;
@@ -37,19 +39,23 @@ export async function resolveSkillConfigPaths(
   const repoRoot = await findGitRoot(cwd);
   const global = {
     opencode: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
-    "claude-code": path.join(paths.claudeDir, "settings.json")
+    "claude-code": path.join(paths.claudeDir, "settings.json"),
+    codex: path.join(paths.codexDir, "config.toml")
   };
   const state = {
     opencode: globalSkillStatePath(paths, "opencode"),
-    "claude-code": globalSkillStatePath(paths, "claude-code")
+    "claude-code": globalSkillStatePath(paths, "claude-code"),
+    codex: globalSkillStatePath(paths, "codex")
   };
-  if (!repoRoot) return { scope: "global", active: global, global, state };
+  if (!repoRoot) return { scope: "global", home: paths.home, active: global, global, state };
   return {
     scope: "repo",
     repoRoot,
+    home: paths.home,
     active: {
       opencode: path.join(repoRoot, ".opencode", "opencode.jsonc"),
-      "claude-code": path.join(repoRoot, ".claude", "settings.local.json")
+      "claude-code": path.join(repoRoot, ".claude", "settings.local.json"),
+      codex: path.join(repoRoot, ".codex", "config.toml")
     },
     global,
     state
@@ -83,5 +89,6 @@ export async function ensureActiveGitExcluded(
 }
 
 function excludePattern(target: SkillToggleTarget): string {
-  return target === "opencode" ? ".opencode/opencode.jsonc" : ".claude/settings.local.json";
+  if (target === "opencode") return ".opencode/opencode.jsonc";
+  return target === "codex" ? ".codex/config.toml" : ".claude/settings.local.json";
 }

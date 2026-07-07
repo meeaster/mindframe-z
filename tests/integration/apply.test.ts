@@ -1,5 +1,6 @@
-import { lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parse } from "smol-toml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, setupIntegrationFixture } from "./support.js";
 
@@ -15,6 +16,15 @@ describe("apply integration", () => {
     root = "";
     home = "";
   });
+
+  async function exists(file: string): Promise<boolean> {
+    try {
+      await access(file);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   it("renders and links OpenCode and Claude config into temporary homes", async () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
@@ -158,6 +168,141 @@ describe("apply integration", () => {
     expect(settings).toHaveProperty("additionalDirectories");
     expect(settings.additionalDirectories).toContain(codePath);
     expect((settings.permissions as { allow?: string[] }).allow).toContain(`Read(/${codePath}/**)`);
+  });
+
+  it("renders Codex config and guidance without writing local files in no-link mode", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [codex]",
+        "instructions:",
+        "  - shared/AGENTS.global.md",
+        "references:",
+        "  - local-ref",
+        "mcp:",
+        "  context7:",
+        "    enabled: true",
+        "  local-helper:",
+        "    targets: [codex]",
+        "    enabled: false",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      [
+        "profile: personal",
+        "references_dir: ~/references",
+        "extra_folders:",
+        "  - path: ~/work",
+        "    description: Work code",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+
+    const config = parse(
+      await readFile(path.join(root, "configs", "personal", "codex", "config.toml"), "utf8")
+    ) as Record<string, unknown>;
+    expect(config.model).toBe("test/codex");
+    expect(config.default_permissions).toBe("mfz");
+    expect(config.mcp_servers).toMatchObject({
+      context7: { url: "https://mcp.context7.com/mcp", enabled: true },
+      "local-helper": { command: "tool-helper", args: ["--serve"], enabled: false }
+    });
+    expect(config.permissions).toMatchObject({
+      mfz: {
+        filesystem: { [path.join(home, "references")]: "read", [path.join(home, "work")]: "write" }
+      }
+    });
+    expect(
+      await readFile(path.join(root, "configs", "personal", "codex", "AGENTS.md"), "utf8")
+    ).toContain("# Test Agents");
+    expect(await exists(path.join(home, ".codex", "config.toml"))).toBe(false);
+  });
+
+  it("merges Codex config into local TOML without replacing unrelated keys", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "instructions:",
+        "  - shared/AGENTS.global.md",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".codex"), { recursive: true });
+    await writeFile(path.join(home, ".codex", "config.toml"), 'user_key = "kept"\n', "utf8");
+
+    await cli("mfz", root, home, ["apply", "--agent", "codex"]);
+
+    const localConfig = parse(
+      await readFile(path.join(home, ".codex", "config.toml"), "utf8")
+    ) as Record<string, unknown>;
+    expect(localConfig.user_key).toBe("kept");
+    expect(localConfig.model).toBe("test/codex");
+    expect(await exists(path.join(home, ".codex", "AGENTS.override.md"))).toBe(false);
+    expect(await readFile(path.join(home, ".codex", "AGENTS.md"), "utf8")).toContain(
+      "# Test Agents"
+    );
+  });
+
+  it("sync promotes unmanaged Codex config keys and ignores generated tables", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+
+    const codexPath = path.join(root, "configs", "personal", "codex", "config.toml");
+    await writeFile(
+      codexPath,
+      [
+        'model = "test/codex"',
+        'model_verbosity = "low"',
+        'default_permissions = "mfz"',
+        "",
+        "[mcp_servers.generated]",
+        'url = "https://example.invalid/mcp"',
+        "",
+        "[permissions.mfz.filesystem]",
+        `"${path.join(home, "references")}" = "read"`,
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
+    expect(syncResult.stdout).toContain(
+      "Updated personal/profile.yml: codex.config.model_verbosity"
+    );
+    const profileYaml = await readFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "utf8"
+    );
+    expect(profileYaml).toContain("model_verbosity: low");
+    expect(profileYaml).not.toContain("mcp_servers");
   });
 
   it("machine.opencode overrides folder-generated permissions", async () => {

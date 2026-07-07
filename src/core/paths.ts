@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
 
-export type AgentName = "opencode" | "claude-code";
-export type ToolTarget = "opencode" | "claude-code" | "mise" | "dotfiles";
+export type AgentName = "opencode" | "claude-code" | "codex";
+export type ToolTarget = "opencode" | "claude-code" | "codex" | "mise" | "dotfiles";
 export type InfraTarget = "mise" | "dotfiles";
 export type ApplyAgent = AgentName | "all";
 
@@ -16,6 +16,7 @@ export interface RuntimePaths {
   configsDir: string;
   opencodeConfigDir: string;
   claudeDir: string;
+  codexDir: string;
   miseConfigDir: string;
 }
 
@@ -24,6 +25,7 @@ export interface PathOptions {
   home?: string | undefined;
   opencodeConfigDir?: string | undefined;
   claudeDir?: string | undefined;
+  codexDir?: string | undefined;
 }
 
 export function packageRootFromImport(importMetaUrl: string): string {
@@ -73,6 +75,9 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
         options.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
         home
       )
+    ),
+    codexDir: path.resolve(
+      expandHome(options.codexDir ?? process.env.CODEX_HOME ?? path.join(home, ".codex"), home)
     ),
     miseConfigDir: path.resolve(
       expandHome(process.env.MISE_CONFIG_DIR ?? path.join(home, ".config", "mise"), home)

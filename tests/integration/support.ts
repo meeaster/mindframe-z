@@ -18,6 +18,7 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
     configsDir: path.join(root, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
+    codexDir: path.join(home, ".codex"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -189,6 +190,7 @@ export function cli(
       MFZ_HOME: home,
       OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+      CODEX_HOME: path.join(home, ".codex"),
       ...env
     }
   };
@@ -220,7 +222,8 @@ export function cliWithMachineRepoPath(home: string, args: string[]) {
         MFZ_HOME: home,
         MFZ_ROOT: undefined,
         OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
-        CLAUDE_CONFIG_DIR: path.join(home, ".claude")
+        CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+        CODEX_HOME: path.join(home, ".codex")
       }
     }
   );

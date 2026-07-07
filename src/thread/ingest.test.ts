@@ -28,6 +28,7 @@ function paths(home: string): RuntimePaths {
     configsDir: path.join(home, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
+    codexDir: path.join(home, ".codex"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -58,6 +59,7 @@ function profile(): ResolvedProfile {
       mcp: {},
       opencode: { config: {}, plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
+      codex: { config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
         destinations: [{ name: "personal", default: true, no_push: false }],

@@ -93,6 +93,9 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       agent_task: child.opencode.agent_task ?? base.opencode.agent_task
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
+    codex: {
+      config: deepMerge(base.codex.config, child.codex.config)
+    },
     mise: {
       tools: deepMerge(
         base.mise.tools as Record<string, unknown>,
@@ -202,7 +205,7 @@ export async function resolveProfile(
 
 export function filterMcpForTarget(
   profile: ResolvedProfile,
-  target: "opencode" | "claude-code"
+  target: ToolTargetName
 ): ResolvedMcpServer[] {
   return profile.mcpServers.filter((entry) => entry.targets.includes(target));
 }

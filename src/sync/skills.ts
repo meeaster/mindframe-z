@@ -49,7 +49,7 @@ export async function syncSkills(
   manifests: LoadedManifests,
   agents: AgentName[]
 ): Promise<UnknownSkill[]> {
-  if (!agents.includes("opencode")) return [];
+  if (!agents.includes("opencode") && !agents.includes("codex")) return [];
 
   let lock: z.infer<typeof skillLockSchema>;
   try {

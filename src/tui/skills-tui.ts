@@ -24,7 +24,7 @@ interface SkillsPromptResult {
   states: Record<SkillToggleTarget, SkillToggleState>;
 }
 
-const targets: SkillToggleTarget[] = ["opencode", "claude-code"];
+const targets: SkillToggleTarget[] = ["opencode", "claude-code", "codex"];
 
 function truncateText(text: string, maxLen: number): string {
   if (maxLen <= 0) return "";
@@ -59,7 +59,9 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
     states: Record<SkillToggleTarget, SkillToggleState>,
     streams: { input?: Readable; output?: Writable } = {}
   ) {
-    const initialTarget = profile.agents.includes("opencode") ? "opencode" : "claude-code";
+    const initialTarget = profile.agents.includes("opencode")
+      ? "opencode"
+      : (profile.agents[0] ?? "opencode");
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
     super({
@@ -166,13 +168,15 @@ export async function runSkillsTui(
   streams: { input?: Readable; output?: Writable } = {}
 ): Promise<void> {
   const configPaths = await resolveSkillConfigPaths(paths);
-  const [opencodeState, claudeCodeState] = await Promise.all([
+  const [opencodeState, claudeCodeState, codexState] = await Promise.all([
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "opencode"),
-    resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code")
+    resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code"),
+    resolveSkillToggleStateForConfigPaths(configPaths, profile, "codex")
   ]);
   const states: Record<SkillToggleTarget, SkillToggleState> = {
     opencode: opencodeState,
-    "claude-code": claudeCodeState
+    "claude-code": claudeCodeState,
+    codex: codexState
   };
   const prompt = new SkillsTogglePrompt(profile, states, streams);
   const result = await prompt.prompt();
