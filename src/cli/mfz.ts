@@ -187,6 +187,7 @@ async function doctor(options: {
   console.log(`configs\t${paths.configsDir}`);
   console.log(`opencode config dir\t${paths.opencodeConfigDir}`);
   console.log(`claude dir\t${paths.claudeDir}`);
+  console.log(`codex dir\t${paths.codexDir}`);
   console.log(`mise config dir\t${paths.miseConfigDir}`);
   const manifestResults = await validateManifests(paths.root, paths.home);
   const hasInvalidManifest = manifestResults.some((result) => !result.ok);
@@ -301,7 +302,7 @@ program
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option("--agent <agent>", "opencode, claude-code, or all", "all")
+  .option("--agent <agent>", "opencode, claude-code, codex, or all", "all")
   .option("--target <target>", "mise, dotfiles, or all", "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
@@ -593,11 +594,11 @@ const skills = program
     await runSkillsTui(paths, profile);
   });
 
-const skillTargets = ["opencode", "claude-code"] as const;
+const skillTargets = ["opencode", "claude-code", "codex"] as const;
 
 function parseSkillTarget(target: string | undefined): SkillToggleTarget | undefined {
   if (!target) return undefined;
-  if (target === "opencode" || target === "claude-code") return target;
+  if (target === "opencode" || target === "claude-code" || target === "codex") return target;
   throw new Error(`Unknown skill target: ${target}`);
 }
 
@@ -623,14 +624,14 @@ skills
   .command("enable")
   .description("Enable a skill for this project")
   .argument("<name>", "skill name")
-  .option("--target <target>", "opencode or claude-code")
+  .option("--target <target>", "opencode, claude-code, or codex")
   .action(async (name, options) => setSkillEnabled(name, true, options));
 
 skills
   .command("disable")
   .description("Disable a skill for this project")
   .argument("<name>", "skill name")
-  .option("--target <target>", "opencode or claude-code")
+  .option("--target <target>", "opencode, claude-code, or codex")
   .action(async (name, options) => setSkillEnabled(name, false, options));
 
 skills
@@ -646,7 +647,7 @@ skills
 skills
   .command("sync")
   .description("Mirror installed global skills to match the resolved profile")
-  .option("--agent <agent>", "opencode or claude-code")
+  .option("--agent <agent>", "opencode, claude-code, or codex")
   .option("--dry-run", "print skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
@@ -718,7 +719,7 @@ skills
 skills
   .command("upgrade")
   .description("Update profile-enabled git skills to latest versions")
-  .option("--agent <agent>", "opencode or claude-code")
+  .option("--agent <agent>", "opencode, claude-code, or codex")
   .option("--dry-run", "print skills commands without running them")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());

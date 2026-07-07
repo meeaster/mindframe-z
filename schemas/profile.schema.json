@@ -16,14 +16,16 @@
     "agents": {
       "default": [
         "opencode",
-        "claude-code"
+        "claude-code",
+        "codex"
       ],
       "type": "array",
       "items": {
         "type": "string",
         "enum": [
           "opencode",
-          "claude-code"
+          "claude-code",
+          "codex"
         ]
       }
     },
@@ -67,6 +69,7 @@
                   "enum": [
                     "opencode",
                     "claude-code",
+                    "codex",
                     "all"
                   ]
                 }
@@ -80,6 +83,7 @@
               "enum": [
                 "opencode",
                 "claude-code",
+                "codex",
                 "all"
               ]
             }
@@ -106,7 +110,8 @@
               "type": "string",
               "enum": [
                 "opencode",
-                "claude-code"
+                "claude-code",
+                "codex"
               ]
             }
           },
@@ -231,6 +236,22 @@
           "type": "string"
         },
         "settings": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      }
+    },
+    "codex": {
+      "default": {
+        "config": {}
+      },
+      "type": "object",
+      "properties": {
+        "config": {
           "default": {},
           "type": "object",
           "propertyNames": {

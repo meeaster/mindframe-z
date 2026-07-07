@@ -1,26 +1,101 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
+import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
-export type SkillOverrideTarget = "opencode" | "claude-code";
+export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
+
+export interface SkillOverrideContext {
+  readonly skillNames?: ReadonlySet<string>;
+  readonly skillPaths?: Readonly<Record<string, string>>;
+}
 
 type SkillCodec = {
-  readonly jsonc: boolean;
-  readonly read: (data: Record<string, unknown>) => Record<string, string>;
+  readonly format: "json" | "jsonc" | "toml";
+  readonly read: (
+    data: Record<string, unknown>,
+    context: SkillOverrideContext
+  ) => Record<string, string>;
   readonly write: (
     data: Record<string, unknown>,
-    entries: Record<string, string>
+    entries: Record<string, string>,
+    context: SkillOverrideContext
   ) => Record<string, unknown>;
   readonly encode: (enabled: boolean) => string;
   readonly decode: (value: string) => boolean;
 };
 
-export async function readJsonFile(file: string, jsonc: boolean): Promise<Record<string, unknown>> {
+function readCodexEntries(
+  data: Record<string, unknown>,
+  context: SkillOverrideContext
+): Record<string, string> {
+  const skills = record(data.skills);
+  const entries = Array.isArray(skills.config) ? skills.config : [];
+  const result: Record<string, string> = {};
+  for (const entry of entries) {
+    const item = record(entry);
+    if (typeof item.path !== "string" || typeof item.enabled !== "boolean") continue;
+    const name = path.basename(path.dirname(item.path));
+    if (context.skillNames && !context.skillNames.has(name)) continue;
+    result[name] = item.enabled ? "on" : "off";
+  }
+  return result;
+}
+
+function writeCodexEntries(
+  data: Record<string, unknown>,
+  entries: Record<string, string>,
+  context: SkillOverrideContext
+): Record<string, unknown> {
+  const skills = record(data.skills);
+  const existingConfig = Array.isArray(skills.config) ? skills.config : [];
+  const managedPaths = new Set<string>();
+  const nextConfig: unknown[] = [];
+
+  for (const [name, enabled] of Object.entries(entries)) {
+    const skillPath = context.skillPaths?.[name];
+    if (!skillPath) {
+      throw new Error(
+        `Cannot toggle ${name} for codex: installed SKILL.md path could not be resolved`
+      );
+    }
+    managedPaths.add(skillPath);
+    nextConfig.push({ path: skillPath, enabled: enabled !== "off" });
+  }
+
+  for (const entry of existingConfig) {
+    const skillPath = record(entry).path;
+    if (typeof skillPath !== "string" || !managedPaths.has(skillPath)) nextConfig.push(entry);
+  }
+
+  return { ...data, skills: { ...skills, config: nextConfig } };
+}
+
+export function parseTomlObject(content: string): Record<string, unknown> {
+  const parsed = parseToml(content) as unknown;
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
+}
+
+export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
+  try {
+    return parseTomlObject(await readFile(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export async function readConfigFile(
+  file: string,
+  format: SkillCodec["format"]
+): Promise<Record<string, unknown>> {
   try {
     const raw = await readFile(file, "utf8");
-    const parsed = jsonc ? parseJsonc(raw) : JSON.parse(raw);
+    const parsed =
+      format === "toml" ? parseToml(raw) : format === "jsonc" ? parseJsonc(raw) : JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error(`${file} must contain a JSON object`);
+      throw new Error(`${file} must contain an object`);
     }
     return parsed;
   } catch (error) {
@@ -29,9 +104,14 @@ export async function readJsonFile(file: string, jsonc: boolean): Promise<Record
   }
 }
 
-export async function writeJsonFile(file: string, data: Record<string, unknown>): Promise<void> {
+export async function writeConfigFile(
+  file: string,
+  format: SkillCodec["format"],
+  data: Record<string, unknown>
+): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+  const content = format === "toml" ? stringifyToml(data) : JSON.stringify(data, null, 2) + "\n";
+  await writeFile(file, content, "utf8");
 }
 
 function stringRecord(value: unknown): Record<string, string> {
@@ -51,7 +131,7 @@ function record(value: unknown): Record<string, unknown> {
 
 const codecs: Record<SkillOverrideTarget, SkillCodec> = {
   opencode: {
-    jsonc: true,
+    format: "jsonc",
     read: (data) => stringRecord(record(data.permission).skill),
     write: (data, entries) => ({
       ...data,
@@ -61,9 +141,16 @@ const codecs: Record<SkillOverrideTarget, SkillCodec> = {
     decode: (value) => value !== "deny"
   },
   "claude-code": {
-    jsonc: false,
+    format: "json",
     read: (data) => stringRecord(data.skillOverrides),
     write: (data, entries) => ({ ...data, skillOverrides: entries }),
+    encode: (enabled) => (enabled ? "on" : "off"),
+    decode: (value) => value !== "off"
+  },
+  codex: {
+    format: "toml",
+    read: readCodexEntries,
+    write: writeCodexEntries,
     encode: (enabled) => (enabled ? "on" : "off"),
     decode: (value) => value !== "off"
   }
@@ -81,65 +168,83 @@ function encodeOverrides(
 
 export function readSkillOverrides(
   target: SkillOverrideTarget,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  context: SkillOverrideContext = {}
 ): Record<string, boolean> {
   const codec = codecs[target];
   return Object.fromEntries(
-    Object.entries(codec.read(data)).map(([name, value]) => [name, codec.decode(value)])
+    Object.entries(codec.read(data, context)).map(([name, value]) => [name, codec.decode(value)])
   );
 }
 
 export function mergeSkillOverrides(
   target: SkillOverrideTarget,
   data: Record<string, unknown>,
-  state: Record<string, boolean>
+  state: Record<string, boolean>,
+  context: SkillOverrideContext = {}
 ): Record<string, unknown> {
   const codec = codecs[target];
-  return codec.write(data, { ...codec.read(data), ...encodeOverrides(target, state) });
+  return codec.write(
+    data,
+    { ...codec.read(data, context), ...encodeOverrides(target, state) },
+    context
+  );
 }
 
 export function replaceSkillOverrides(
   target: SkillOverrideTarget,
   data: Record<string, unknown>,
-  state: Record<string, boolean>
+  state: Record<string, boolean>,
+  context: SkillOverrideContext = {}
 ): Record<string, unknown> {
-  return codecs[target].write(data, encodeOverrides(target, state));
+  return codecs[target].write(data, encodeOverrides(target, state), context);
 }
 
 export async function readSkillOverridesFromFile(
   target: SkillOverrideTarget,
-  file: string
+  file: string,
+  context: SkillOverrideContext = {}
 ): Promise<Record<string, boolean>> {
-  return readSkillOverrides(target, await readJsonFile(file, codecs[target].jsonc));
+  return readSkillOverrides(target, await readConfigFile(file, codecs[target].format), context);
 }
 
 export async function mergeSkillOverridesIntoFile(
   target: SkillOverrideTarget,
   file: string,
-  state: Record<string, boolean>
+  state: Record<string, boolean>,
+  context: SkillOverrideContext = {}
 ): Promise<void> {
-  const data = await readJsonFile(file, codecs[target].jsonc);
-  await writeJsonFile(file, mergeSkillOverrides(target, data, state));
+  const data = await readConfigFile(file, codecs[target].format);
+  await writeConfigFile(
+    file,
+    codecs[target].format,
+    mergeSkillOverrides(target, data, state, context)
+  );
 }
 
 export async function replaceSkillOverridesInFile(
   target: SkillOverrideTarget,
   file: string,
-  state: Record<string, boolean>
+  state: Record<string, boolean>,
+  context: SkillOverrideContext = {}
 ): Promise<void> {
-  const data = await readJsonFile(file, codecs[target].jsonc);
-  await writeJsonFile(file, replaceSkillOverrides(target, data, state));
+  const data = await readConfigFile(file, codecs[target].format);
+  await writeConfigFile(
+    file,
+    codecs[target].format,
+    replaceSkillOverrides(target, data, state, context)
+  );
 }
 
 export async function writeSkillOverridesFile(
   file: string,
   state: Record<string, boolean>
 ): Promise<void> {
-  await writeJsonFile(file, state);
+  await writeConfigFile(file, "json", state);
 }
 
 export async function readSkillOverridesFile(file: string): Promise<Record<string, boolean>> {
-  const data = await readJsonFile(file, false);
+  const data = await readConfigFile(file, "json");
   for (const [name, enabled] of Object.entries(data)) {
     if (typeof enabled !== "boolean") {
       throw new Error(`${file} must map skill names to boolean values; ${name} is invalid`);
