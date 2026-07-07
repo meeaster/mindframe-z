@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseProfileChoice, resolveMoves } from "./index.js";
+import { parseProfileChoice, resolveMoves, setNested } from "./index.js";
 
 describe("parseProfileChoice", () => {
   const profiles = ["base", "personal", "work"];
@@ -59,5 +59,31 @@ describe("resolveMoves", () => {
     const prompt = vi.fn();
     expect(await resolveMoves([], "work", profiles, prompt)).toEqual([]);
     expect(prompt).not.toHaveBeenCalled();
+  });
+});
+
+describe("setNested", () => {
+  it("places a candidate under the container named by its dotted prefix", () => {
+    const doc: Record<string, unknown> = { name: "personal" };
+    setNested(doc, "claude.settings", "theme", "dark");
+    expect(doc).toEqual({ name: "personal", claude: { settings: { theme: "dark" } } });
+  });
+
+  it("reuses an existing container instead of clobbering sibling keys", () => {
+    const doc: Record<string, unknown> = { claude: { settings: { model: "sonnet" } } };
+    setNested(doc, "claude.settings", "theme", "dark");
+    expect(doc).toEqual({ claude: { settings: { model: "sonnet", theme: "dark" } } });
+  });
+
+  it("replaces a non-object value on the path with a fresh container", () => {
+    const doc: Record<string, unknown> = { claude: "unexpected" };
+    setNested(doc, "claude.settings", "theme", "dark");
+    expect(doc).toEqual({ claude: { settings: { theme: "dark" } } });
+  });
+
+  it("does nothing when the prefix is empty", () => {
+    const doc: Record<string, unknown> = { name: "personal" };
+    setNested(doc, "", "theme", "dark");
+    expect(doc).toEqual({ name: "personal" });
   });
 });

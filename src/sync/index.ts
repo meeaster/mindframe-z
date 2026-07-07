@@ -28,7 +28,7 @@ function ensureRecord(parent: Record<string, unknown>, key: string): Record<stri
   return next;
 }
 
-function setNested(
+export function setNested(
   obj: Record<string, unknown>,
   prefix: string,
   key: string,
