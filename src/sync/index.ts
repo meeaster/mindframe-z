@@ -266,7 +266,7 @@ export async function runSync(
       ? syncClaude(clp, profile)
       : Promise.resolve({ candidates: [] }),
     profile.agents.includes("codex")
-      ? syncCodex(cdx, profile)
+      ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
       : Promise.resolve({ candidates: [] }),
     syncSkills(paths.home, profile.manifests, profile.agents),
     profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])

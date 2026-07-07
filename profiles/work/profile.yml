@@ -1,7 +1,7 @@
 name: work
 extends: base
 description: Work AI setup using Bedrock-backed models.
-agents: [opencode, claude-code]
+agents: [opencode, claude-code, codex]
 skills:
   confluence-writer:
     enabled: true
@@ -91,6 +91,19 @@ opencode:
       compaction:
         model: github-copilot/gpt-5.4-mini
         variant: high
+      research:
+        model: github-copilot/gpt-5.4-mini
+        variant: high
+codex:
+  plugins:
+    "teams@openai-curated":
+      enabled: true
+    "outlook-calendar@openai-curated":
+      enabled: true
+    "outlook-email@openai-curated":
+      enabled: true
+    "sharepoint@openai-curated":
+      enabled: true
 claude:
   settings:
     includeGitInstructions: false

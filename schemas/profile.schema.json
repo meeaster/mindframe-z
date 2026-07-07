@@ -247,7 +247,8 @@
     },
     "codex": {
       "default": {
-        "config": {}
+        "config": {},
+        "plugins": {}
       },
       "type": "object",
       "properties": {
@@ -258,6 +259,27 @@
             "type": "string"
           },
           "additionalProperties": {}
+        },
+        "plugins": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "toggleable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
         }
       }
     },
