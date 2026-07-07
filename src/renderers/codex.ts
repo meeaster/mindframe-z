@@ -1,24 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { parse, stringify } from "smol-toml";
+import { stringify } from "smol-toml";
 import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { readTomlObject } from "../core/skill-overrides.js";
+import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
-export function parseTomlObject(content: string): Record<string, unknown> {
-  const parsed = parse(content) as unknown;
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
-}
-
-async function readTomlObject(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    return parseTomlObject(await readFile(filePath, "utf8"));
-  } catch {
-    return {};
-  }
-}
+export const CODEX_DERIVED_KEYS = new Set(["mcp_servers", "permissions", "default_permissions"]);
 
 function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, unknown> {
   return Object.fromEntries(
@@ -56,11 +45,13 @@ function renderCodexPermissions(
     [profile.referencesDir]: "read"
   };
 
+  if (hasManagedZsh(profile)) {
+    filesystem[zshSecretsDir(paths)] = "deny";
+  }
+
   for (const folder of profile.extraFolders) {
     const absPath = expandHome(folder.path, paths.home);
-    filesystem[absPath] = folder.read === "deny" && folder.edit === "deny" ? "deny" : "read";
-    if (folder.edit === "allow") filesystem[absPath] = "write";
-    if (folder.read === "deny" || folder.edit === "deny") filesystem[absPath] = "deny";
+    filesystem[absPath] = codexFolderPermission(folder.read, folder.edit);
   }
 
   return {
@@ -72,6 +63,12 @@ function renderCodexPermissions(
       }
     }
   };
+}
+
+function codexFolderPermission(read: string, edit: string): "deny" | "read" | "write" {
+  if (read === "deny" || edit === "deny") return "deny";
+  if (edit === "allow") return "write";
+  return "read";
 }
 
 async function renderCodexAgents(paths: RuntimePaths, profile: ResolvedProfile): Promise<string> {
