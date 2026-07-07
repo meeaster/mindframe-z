@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
@@ -5,13 +7,9 @@ import {
   readSkillOverridesFile,
   readSkillOverridesFromFile,
   replaceSkillOverridesInFile,
+  type SkillOverrideContext,
   writeSkillOverridesFile
 } from "../core/skill-overrides.js";
-import {
-  readCodexSkillOverrides,
-  readCodexSkillOverridesForNames,
-  replaceCodexSkillOverrides
-} from "./codex-skill-overrides.js";
 import {
   ensureActiveGitExcluded,
   resolveSkillConfigPaths,
@@ -23,17 +21,16 @@ export type SkillToggleState = Record<string, boolean>;
 
 export async function readActiveSkillOverrides(
   configPaths: SkillConfigPaths,
-  target: SkillToggleTarget
+  target: SkillToggleTarget,
+  context: SkillOverrideContext = {}
 ): Promise<SkillToggleState> {
-  if (target === "codex") throw new Error("Codex skill overrides require profile context");
-  return readSkillOverridesFromFile(target, configPaths.active[target]);
+  return readSkillOverridesFromFile(target, configPaths.active[target], context);
 }
 
 export async function readLocalSkillOverrides(
   paths: RuntimePaths,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
-  if (target === "codex") throw new Error("Codex skill overrides require profile context");
   const configPaths = await resolveSkillConfigPaths(paths);
   return readActiveSkillOverrides(configPaths, target);
 }
@@ -44,11 +41,12 @@ export async function writeLocalSkillOverrides(
   state: SkillToggleState
 ): Promise<void> {
   const configPaths = await resolveSkillConfigPaths(paths);
-  if (target === "codex") {
-    await replaceCodexSkillOverrides(configPaths, state);
-    return;
-  }
-  await mergeSkillOverridesIntoFile(target, configPaths.active[target], state);
+  await mergeSkillOverridesIntoFile(
+    target,
+    configPaths.active[target],
+    state,
+    await writeContext(configPaths, target, state)
+  );
   if (configPaths.scope === "global") {
     await mergeGlobalSkillState(configPaths, target, state);
   }
@@ -119,17 +117,10 @@ export async function resolveSkillToggleStateForConfigPaths(
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
   const defaults = profileDefaults(profile, target);
-  if (target === "codex") {
-    const [globalOverrides, localOverrides] = await Promise.all([
-      readSkillOverridesFile(configPaths.state.codex),
-      configPaths.scope === "repo" ? readCodexSkillOverrides(configPaths.active.codex, profile) : {}
-    ]);
-    return { ...defaults, ...globalOverrides, ...localOverrides };
-  }
   const [globalOverrides, localOverrides] = await Promise.all([
     readSkillOverridesFile(configPaths.state[target]),
     configPaths.scope === "repo"
-      ? readSkillOverridesFromFile(target, configPaths.active[target])
+      ? readSkillOverridesFromFile(target, configPaths.active[target], readContext(profile, target))
       : {}
   ]);
   return { ...defaults, ...globalOverrides, ...localOverrides };
@@ -165,26 +156,9 @@ async function writeSkillOverrideDelta(
   base: SkillToggleState,
   next: SkillToggleState
 ): Promise<void> {
-  if (target === "codex") {
-    const overrides = await readCodexSkillOverridesForNames(
-      configPaths.active.codex,
-      new Set(Object.keys(base))
-    );
-    let changed = false;
-    for (const [name, enabled] of Object.entries(next)) {
-      if (base[name] === enabled) {
-        changed ||= name in overrides;
-        delete overrides[name];
-      } else {
-        changed ||= overrides[name] !== enabled;
-        overrides[name] = enabled;
-      }
-    }
-    if (!changed) return;
-    await replaceCodexSkillOverrides(configPaths, overrides);
-    return;
-  }
-  const overrides = await readActiveSkillOverrides(configPaths, target);
+  const overrides = await readActiveSkillOverrides(configPaths, target, {
+    skillNames: new Set(Object.keys(base))
+  });
   let changed = false;
   for (const [name, enabled] of Object.entries(next)) {
     if (base[name] === enabled) {
@@ -204,11 +178,12 @@ async function replaceLocalSkillOverrides(
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<void> {
-  if (target === "codex") {
-    await replaceCodexSkillOverrides(configPaths, state);
-    return;
-  }
-  await replaceSkillOverridesInFile(target, configPaths.active[target], state);
+  await replaceSkillOverridesInFile(
+    target,
+    configPaths.active[target],
+    state,
+    await writeContext(configPaths, target, state)
+  );
   if (configPaths.scope === "global") {
     await writeSkillOverridesFile(configPaths.state[target], state);
   }
@@ -224,4 +199,51 @@ async function mergeGlobalSkillState(
     ...(await readSkillOverridesFile(configPaths.state[target])),
     ...state
   });
+}
+
+function readContext(profile: ResolvedProfile, target: SkillToggleTarget): SkillOverrideContext {
+  return target === "codex"
+    ? { skillNames: new Set(profile.enabledSkills.map((skill) => skill.name)) }
+    : {};
+}
+
+async function writeContext(
+  configPaths: SkillConfigPaths,
+  target: SkillToggleTarget,
+  state: SkillToggleState
+): Promise<SkillOverrideContext> {
+  if (target !== "codex") return {};
+  const skillPaths = Object.fromEntries(
+    await Promise.all(
+      Object.keys(state).map(async (name) => [name, await resolveCodexSkillPath(configPaths, name)])
+    )
+  );
+  return { skillPaths };
+}
+
+async function pathExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveCodexSkillPath(
+  configPaths: SkillConfigPaths,
+  skillName: string
+): Promise<string> {
+  const candidates = [
+    ...(configPaths.scope === "repo"
+      ? [path.join(configPaths.repoRoot, ".agents", "skills", skillName, "SKILL.md")]
+      : []),
+    path.join(configPaths.home, ".agents", "skills", skillName, "SKILL.md")
+  ];
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) return candidate;
+  }
+  throw new Error(
+    `Cannot toggle ${skillName} for codex: installed SKILL.md path could not be resolved`
+  );
 }
