@@ -193,8 +193,14 @@ const opencodeConfigSchema = z.object({
   agent_task: agentTaskSchema.optional()
 });
 
+export const codexPluginSchema = z.object({
+  enabled: z.boolean(),
+  toggleable: z.boolean().optional()
+});
+
 const codexConfigSchema = z.object({
-  config: z.record(z.string(), z.unknown()).default({})
+  config: z.record(z.string(), z.unknown()).default({}),
+  plugins: z.record(z.string(), codexPluginSchema).default({})
 });
 
 export const profileSchema = z
@@ -224,7 +230,7 @@ export const profileSchema = z
         settings: z.record(z.string(), z.unknown()).default({})
       })
       .default({ settings: {} }),
-    codex: codexConfigSchema.default({ config: {} }),
+    codex: codexConfigSchema.default({ config: {}, plugins: {} }),
     mise: z
       .object({
         tools: z.record(z.string(), miseToolValueSchema).default({}),
@@ -431,7 +437,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         mcp: {},
         opencode: { config: {}, plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
-        codex: { config: {} },
+        codex: { config: {}, plugins: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         thread: {
           destinations: [],

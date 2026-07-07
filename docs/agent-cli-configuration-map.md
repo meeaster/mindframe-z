@@ -138,15 +138,15 @@ Codex has an mfz renderer:
 | Codex feature | mfz mapping | Notes |
 | --- | --- | --- |
 | Agent target | `codex` in agent enums and profile `agents`. | Affects schema, profile resolution, MCP/skill target filtering, apply/status/doctor/sync. |
-| User config | `profile.codex.config` renders to `configs/<profile>/codex/config.toml`. | TOML pass-through. |
-| Local apply behavior | Managed snapshot merges into `$CODEX_HOME/config.toml`. | Claude-style merge avoids overwriting auth/plugin/project trust/user state. |
+| User config | `profile.codex.config` renders to `configs/<profile>/codex/config.toml`. | TOML pass-through. Use `codex.config.tui` for additive `[tui]` settings such as `theme`, `status_line`, and `status_line_use_colors`. |
+| Local apply behavior | Managed snapshot merges into `$CODEX_HOME/config.toml`. | Claude-style merge avoids overwriting auth/project trust/user state. The `[plugins]` table is full-owner state and is replaced from `codex.plugins`. |
 | Instructions | `configs/<profile>/codex/AGENTS.md` copies to `$CODEX_HOME/AGENTS.md`. | Does not create `AGENTS.override.md`. |
 | MCP | `shared/mcp.yml` selections render to `[mcp_servers]`. | Stdio command/args/env and HTTP url/static headers are covered. |
 | Extra folders | Named permission profile under `[permissions.mfz.filesystem]` plus `default_permissions = "mfz"`. | Maps read/write/deny from references and extra folders. |
 | Skills | Catalog/install model includes Codex target; enable/disable writes `[[skills.config]]` by SKILL.md path. | Toggle writes fail clearly when the installed path cannot be resolved. |
 | Hooks | Initially pass through `codex.config.hooks` or render hooks.json from `codex.hooks`. | Hooks are powerful; start explicit rather than inferred. |
 | Subagents | Add optional source dir, e.g. `codex/agents/*.toml`. | Codex agent files are TOML, unlike OpenCode/Claude markdown agents. |
-| Plugins | Initially pass through `[plugins.*]` config. | Plugin installation/marketplaces should be separate from renderer MVP. |
+| Plugins | `codex.plugins."<name>@<marketplace>".enabled` renders authoritative `[plugins."<id>"]` blocks. | Install via Codex `/plugins`, run `mfz sync` to adopt enabled plugins, then `mfz apply`. Undeclared local plugins are pruned on apply; marketplace registration and plugin auth stay outside mfz. |
 | Profile files | Do not use Codex `--profile` initially. | mfz profiles already select the rendered state; nested profile systems will confuse apply/sync. |
 | Thread dispatch | Add later via `codex exec --json`. | Separate from rendering because session ingestion and runner semantics need their own tests. |
 

@@ -11,7 +11,7 @@ thread:
     gather: claude-code:haiku@low
     synthesize: claude-code:claude-sonnet-5@low
     digest: claude-code:claude-sonnet-5@high
-agents: [opencode, claude-code]
+agents: [opencode, claude-code, codex]
 references:
   - clack
   - ha-mcp

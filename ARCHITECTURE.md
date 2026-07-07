@@ -69,7 +69,7 @@ Claude Code `settings.json` is intentionally not symlinked. The rendered `config
 
 Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The rendered `configs/<profile>/claude/mcp.json` contains only profile-managed Claude-targeted servers. During apply, mindframe-z merges that snapshot into the top-level `mcpServers` map in `~/.claude.json`, preserving unrelated user state such as project approvals, disabled server lists, and non-managed MCP entries.
 
-Codex also uses a snapshot-plus-merge model. The rendered `configs/<profile>/codex/config.toml` contains profile-managed `codex.config` keys plus generated `[mcp_servers]`, `default_permissions`, and `[permissions.mfz]` tables. During apply, mindframe-z reads `$CODEX_HOME/config.toml`, deep-merges managed keys on top, and writes a regular local file so unrelated Codex user state remains intact. The renderer installs generated guidance to `$CODEX_HOME/AGENTS.md` and intentionally does not create `AGENTS.override.md`.
+Codex also uses a snapshot-plus-merge model. The rendered `configs/<profile>/codex/config.toml` contains profile-managed `codex.config` keys plus generated `[mcp_servers]`, `default_permissions`, `[permissions.mfz]`, and `[plugins]` tables. During apply, mindframe-z reads `$CODEX_HOME/config.toml`, deep-merges managed keys on top, and writes a regular local file so unrelated Codex user state remains intact. The `[plugins]` table is the exception: `codex.plugins` is full-owner state, so apply replaces the local plugin table with the resolved profile declarations and removes the table when no plugins are declared. Install curated plugins through Codex `/plugins`, run `mfz sync` to adopt enabled plugin ids into `codex.plugins`, then run `mfz apply` to make that set reproducible. The renderer installs generated guidance to `$CODEX_HOME/AGENTS.md` and intentionally does not create `AGENTS.override.md`.
 
 Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.mindframe-z/.zshrc` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
 
@@ -203,6 +203,7 @@ Profiles use `extends` to inherit from a parent. The merge rules are:
 | `opencode.commands` | Concatenate + deduplicate                              |
 | `claude`            | Deep merge — child keys override parent                |
 | `codex.config`      | Deep merge — child keys override parent                |
+| `codex.plugins`     | Deep merge by plugin id — child keys override parent   |
 | `mise.tools`        | Deep merge                                             |
 | `mise.env`          | Shallow merge — child overrides parent                 |
 | `mise.tool_alias`   | Shallow merge — child overrides parent                 |

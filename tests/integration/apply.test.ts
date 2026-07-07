@@ -190,6 +190,12 @@ describe("apply integration", () => {
         "codex:",
         "  config:",
         "    model: test/codex",
+        "  plugins:",
+        '    "github@openai-curated":',
+        "      enabled: true",
+        "      toggleable: false",
+        '    "teams@openai-curated":',
+        "      enabled: false",
         ""
       ].join("\n"),
       "utf8"
@@ -213,6 +219,10 @@ describe("apply integration", () => {
       await readFile(path.join(root, "configs", "personal", "codex", "config.toml"), "utf8")
     ) as Record<string, unknown>;
     expect(config.model).toBe("test/codex");
+    expect(config.plugins).toEqual({
+      "github@openai-curated": { enabled: true, toggleable: false },
+      "teams@openai-curated": { enabled: false }
+    });
     expect(config.default_permissions).toBe("mfz");
     expect(config.mcp_servers).toMatchObject({
       context7: { url: "https://mcp.context7.com/mcp", enabled: true },
@@ -227,6 +237,21 @@ describe("apply integration", () => {
       await readFile(path.join(root, "configs", "personal", "codex", "AGENTS.md"), "utf8")
     ).toContain("# Test Agents");
     expect(await exists(path.join(home, ".codex", "config.toml"))).toBe(false);
+  });
+
+  it("omits Codex plugins from rendered TOML when no plugins are declared", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "agents: [codex]", "codex:", "  config:", "    model: test/codex", ""].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+
+    const config = parse(
+      await readFile(path.join(root, "configs", "personal", "codex", "config.toml"), "utf8")
+    ) as Record<string, unknown>;
+    expect(config).not.toHaveProperty("plugins");
   });
 
   it("merges Codex config into local TOML without replacing unrelated keys", async () => {
@@ -258,6 +283,66 @@ describe("apply integration", () => {
     expect(await readFile(path.join(home, ".codex", "AGENTS.md"), "utf8")).toContain(
       "# Test Agents"
     );
+  });
+
+  it("replaces local Codex plugins while preserving unrelated local keys", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        "  plugins:",
+        '    "github@openai-curated":',
+        "      enabled: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(home, ".codex", "config.toml"),
+      [
+        'user_key = "kept"',
+        "",
+        '[plugins."slack@openai-curated"]',
+        "enabled = true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "codex"]);
+
+    const localConfig = parse(
+      await readFile(path.join(home, ".codex", "config.toml"), "utf8")
+    ) as Record<string, unknown>;
+    expect(localConfig.user_key).toBe("kept");
+    expect(localConfig.model).toBe("test/codex");
+    expect(localConfig.plugins).toEqual({ "github@openai-curated": { enabled: true } });
+  });
+
+  it("removes the local Codex plugins table when the declared set is empty", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "agents: [codex]", "codex:", "  config:", "    model: test/codex", ""].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(home, ".codex", "config.toml"),
+      ['[plugins."slack@openai-curated"]', "enabled = true", ""].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "codex"]);
+
+    const localConfig = parse(
+      await readFile(path.join(home, ".codex", "config.toml"), "utf8")
+    ) as Record<string, unknown>;
+    expect(localConfig).not.toHaveProperty("plugins");
   });
 
   it("sync promotes unmanaged Codex config keys and ignores generated tables", async () => {
@@ -303,6 +388,56 @@ describe("apply integration", () => {
     );
     expect(profileYaml).toContain("model_verbosity: low");
     expect(profileYaml).not.toContain("mcp_servers");
+  });
+
+  it("sync promotes undeclared enabled Codex plugins and ignores declared plugins", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "codex:",
+        "  plugins:",
+        '    "github@openai-curated":',
+        "      enabled: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+
+    const codexDir = path.join(home, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    const codexPath = path.join(codexDir, "config.toml");
+    await writeFile(
+      codexPath,
+      [
+        '[plugins."github@openai-curated"]',
+        "enabled = true",
+        "",
+        '[plugins."teams@openai-curated"]',
+        "enabled = true",
+        "",
+        '[plugins."slack@openai-curated"]',
+        "enabled = false",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
+    expect(syncResult.stdout).toContain(
+      "Updated personal/profile.yml: codex.plugins.teams@openai-curated"
+    );
+    expect(syncResult.stdout).not.toContain("github@openai-curated");
+    expect(syncResult.stdout).not.toContain("slack@openai-curated");
+    const profileYaml = await readFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "utf8"
+    );
+    expect(profileYaml).toContain("teams@openai-curated");
+    expect(profileYaml).toContain("enabled: true");
+    expect(profileYaml).not.toContain("slack@openai-curated");
   });
 
   it("machine.opencode overrides folder-generated permissions", async () => {

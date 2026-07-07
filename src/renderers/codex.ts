@@ -7,7 +7,12 @@ import type { RenderResult } from "../core/render.js";
 import { readTomlObject } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
-export const CODEX_DERIVED_KEYS = new Set(["mcp_servers", "permissions", "default_permissions"]);
+export const CODEX_DERIVED_KEYS = new Set([
+  "mcp_servers",
+  "permissions",
+  "default_permissions",
+  "plugins"
+]);
 
 function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, unknown> {
   return Object.fromEntries(
@@ -71,6 +76,20 @@ function codexFolderPermission(read: string, edit: string): "deny" | "read" | "w
   return "read";
 }
 
+export function renderCodexPlugins(
+  profile: ResolvedProfile
+): Record<string, { enabled: boolean; toggleable?: boolean }> {
+  return Object.fromEntries(
+    Object.entries(profile.profile.codex.plugins).map(([id, plugin]) => [
+      id,
+      {
+        enabled: plugin.enabled,
+        ...(plugin.toggleable === undefined ? {} : { toggleable: plugin.toggleable })
+      }
+    ])
+  );
+}
+
 async function renderCodexAgents(paths: RuntimePaths, profile: ResolvedProfile): Promise<string> {
   const parts: string[] = [];
   for (const file of profile.instructionFiles) parts.push(await readFile(file, "utf8"));
@@ -102,14 +121,22 @@ export async function renderCodex(
   const configPath = path.join(configsCodex, "config.toml");
   const agentsPath = path.join(configsCodex, "AGENTS.md");
 
+  const plugins = renderCodexPlugins(profile);
+  const hasPlugins = Object.keys(plugins).length > 0;
   const config = deepMerge(profile.profile.codex.config, {
     ...renderCodexPermissions(paths, profile),
-    mcp_servers: renderCodexMcp(profile, paths.home)
+    mcp_servers: renderCodexMcp(profile, paths.home),
+    ...(hasPlugins ? { plugins } : {})
   });
   const configContent = stringify(config);
   const agentsContent = await renderCodexAgents(paths, profile);
   const localConfigPath = path.join(paths.codexDir, "config.toml");
   const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), config);
+  if (hasPlugins) {
+    mergedLocalConfig.plugins = config.plugins;
+  } else {
+    delete mergedLocalConfig.plugins;
+  }
 
   return {
     files: [

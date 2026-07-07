@@ -94,7 +94,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     codex: {
-      config: deepMerge(base.codex.config, child.codex.config)
+      config: deepMerge(base.codex.config, child.codex.config),
+      plugins: deepMerge(base.codex.plugins, child.codex.plugins) as ProfileManifest["codex"]["plugins"]
     },
     mise: {
       tools: deepMerge(

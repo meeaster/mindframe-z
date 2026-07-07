@@ -54,3 +54,36 @@ describe("mergeProfiles thread defaults", () => {
     expect(mergeProfiles(base, child).thread.update_strategy).toBe("full");
   });
 });
+
+describe("mergeProfiles codex plugins", () => {
+  it("merges child plugins with base plugins", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      codex: { plugins: { "github@openai-curated": { enabled: true } } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      codex: { plugins: { "teams@openai-curated": { enabled: true } } }
+    });
+
+    expect(mergeProfiles(base, child).codex.plugins).toEqual({
+      "github@openai-curated": { enabled: true },
+      "teams@openai-curated": { enabled: true }
+    });
+  });
+
+  it("lets a child override a base plugin", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      codex: { plugins: { "github@openai-curated": { enabled: true } } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      codex: { plugins: { "github@openai-curated": { enabled: false } } }
+    });
+
+    expect(mergeProfiles(base, child).codex.plugins["github@openai-curated"]?.enabled).toBe(false);
+  });
+});

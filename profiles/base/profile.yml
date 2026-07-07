@@ -85,7 +85,7 @@ skills:
   qmd:
     enabled: false
   openai-docs:
-    enabled: false
+    enabled: true
   improve:
     enabled: true
   claude-code-docs:
@@ -138,6 +138,21 @@ opencode:
     - rmslop
   agents:
     - research
+codex:
+  config:
+    tui:
+      status_line:
+        - model-with-reasoning
+        - current-dir
+        - git-branch
+        - context-used
+        - permissions
+        - approval-mode
+      status_line_use_colors: true
+      theme: dracula
+  plugins:
+    "github@openai-curated":
+      enabled: true
 claude:
   settings:
     statusLine:
