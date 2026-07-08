@@ -27,7 +27,7 @@
 - [x] 4.2 Auto-expose upstream clones as read/edit extra folders in rendered agent permissions and the extra-folders index
 - [x] 4.3 Extend `mfz sync` to offer pushable upstream profiles as assignment targets, write to the clone working tree, and report uncommitted writes; exclude non-pushable remotes via `git push --dry-run`
 - [x] 4.4 Add doctor checks: dirty, ahead/unpushed, and stale upstream clones
-- [ ] 4.5 Integration tests: apply with clean/dirty/offline upstream, cross-home sync assignment, doctor reporting
+- [x] 4.5 Integration tests: apply with clean/dirty/offline upstream, cross-home sync assignment, doctor reporting
 
 ## 5. Bootstrap: init, guide, installer
 
@@ -43,8 +43,8 @@
 ## 6. Cut the personal home
 
 - [x] 6.1 Create the personal home repo; move `profiles/base/`, `profiles/personal/`, `catalog/`, `instructions/`, `skills/`, `opencode/` into it; give it `package.json`/vitest for plugin tests
-- [ ] 6.2 Point the personal machine's `home_path` at the new repo, run `mfz apply`, and diff rendered output against pre-move output for parity
-- [ ] 6.3 Add the home's remote to `thread.destinations` if the home doubles as a thread destination (optional, decide at cut time)
+- [x] 6.2 Point the personal machine's `home_path` at the new repo, run `mfz apply`, and diff rendered output against pre-move output for parity
+- [x] 6.3 Decide thread destination ownership: use the implicit default `home` destination instead of a separate `thread.destinations` remote
 
 ## 7. Cut the work home
 
@@ -56,4 +56,4 @@
 
 - [x] 8.1 Delete moved content from mindframe-z (profiles, catalog, skills, opencode content, work sandbox overlays, `configs/`); keep engine, tests, schemas, sandbox scaffolding
 - [x] 8.2 Update ARCHITECTURE.md and README for the engine/home split, new paths, bootstrap flow, and glossary alignment with CONTEXT.md
-- [ ] 8.3 Run full check suite (`pnpm check`); verify both machines render and link correctly from their homes
+- [x] 8.3 Run full check suite (`pnpm check`); verify both machines render and link correctly from their homes
