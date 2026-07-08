@@ -1,8 +1,9 @@
-import { access, lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
+import { fileExists } from "./fs-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
 export const agentSchema = z.enum(["opencode", "claude-code", "codex"]);
@@ -319,23 +320,22 @@ export interface LoadedManifests {
   machine: MachineManifest;
 }
 
+export function eachUpstream(manifests: LoadedManifests): LoadedManifests[] {
+  return manifests.upstream ? [manifests.upstream, ...eachUpstream(manifests.upstream)] : [];
+}
+
+export function homeDisplayName(home: LoadedManifests): string {
+  return home.aliasPath.length > 0 ? home.aliasPath.join("/") : "local";
+}
+
 export interface ManifestValidationResult {
   file: string;
   ok: boolean;
   error?: string;
 }
 
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
-  if (!(await exists(file))) return fallback;
+  if (!(await fileExists(file))) return fallback;
   const parsed = YAML.parse(await readFile(file, "utf8"));
   return schema.parse(parsed);
 }
@@ -344,7 +344,7 @@ async function validateYamlFile<T>(
   file: string,
   schema: z.ZodType<T>
 ): Promise<ManifestValidationResult | null> {
-  if (!(await exists(file))) return null;
+  if (!(await fileExists(file))) return null;
   try {
     schema.parse(YAML.parse(await readFile(file, "utf8")));
     return { file, ok: true };
@@ -417,7 +417,7 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
 }
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
-  if (!(await exists(path.join(root, "mfz_home.yml")))) {
+  if (!(await fileExists(path.join(root, "mfz_home.yml")))) {
     throw new Error(
       `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
     );
@@ -477,7 +477,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       }
       if (!stat.isDirectory()) continue;
       const profileYaml = path.join(fullPath, "profile.yml");
-      if (!(await exists(profileYaml))) continue;
+      if (!(await fileExists(profileYaml))) continue;
       const profile = await readYaml(profileYaml, profileSchema, {
         name: entry,
         agents: ["opencode", "claude-code", "codex"],
@@ -500,7 +500,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       });
 
       const miseToml = path.join(fullPath, "mise.toml");
-      if (await exists(miseToml)) {
+      if (await fileExists(miseToml)) {
         try {
           const raw = await readFile(miseToml, "utf8");
           const toml = miseTomlSchema.parse(parse(raw));

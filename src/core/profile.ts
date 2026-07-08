@@ -1,6 +1,8 @@
 import path from "node:path";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
 import {
+  eachUpstream,
+  homeDisplayName,
   loadManifests,
   type LoadedManifests,
   type McpServer,
@@ -13,6 +15,12 @@ import {
 } from "./manifests.js";
 
 type CatalogKind = "reference" | "skill" | "mcp" | "profile";
+type SourceKind =
+  | CatalogKind
+  | "instruction"
+  | "opencode plugin"
+  | "opencode command"
+  | "opencode agent";
 
 interface ProfileSources {
   references: Map<string, LoadedManifests>;
@@ -116,20 +124,28 @@ function setSource(
   map.set(name, home);
 }
 
-function homeDisplayName(home: LoadedManifests): string {
-  return home.aliasPath.length > 0 ? home.aliasPath.join("/") : "local";
-}
+function resolveQualifiedName(
+  home: LoadedManifests,
+  rawName: string,
+  kind: SourceKind,
+  options: { allowLocalSlash?: boolean } = {}
+): { name: string; home: LoadedManifests } {
+  const parts = rawName.split("/");
+  const upstream = eachUpstream(home)
+    .sort((a, b) => b.aliasPath.length - a.aliasPath.length)
+    .find((candidate) => candidate.aliasPath.every((alias, index) => parts[index] === alias));
 
-function homeByAliasPath(home: LoadedManifests, aliases: string[]): LoadedManifests | null {
-  if (aliases.length === 0) return home;
-  return (
-    eachUpstream(home).find((candidate) => candidate.aliasPath.join("/") === aliases.join("/")) ??
-    null
-  );
-}
+  if (upstream) {
+    const name = parts.slice(upstream.aliasPath.length).join("/");
+    if (!name) throw new Error(`Missing ${kind} after upstream alias: ${rawName}`);
+    return { name, home: upstream };
+  }
 
-function eachUpstream(home: LoadedManifests): LoadedManifests[] {
-  return home.upstream ? [home.upstream, ...eachUpstream(home.upstream)] : [];
+  if (parts.length > 1 && !options.allowLocalSlash) {
+    throw new Error(`Unknown upstream alias in ${kind}: ${parts[0]}`);
+  }
+
+  return { name: rawName, home };
 }
 
 function hasLocalDefinition(home: LoadedManifests, kind: CatalogKind, name: string): boolean {
@@ -158,29 +174,37 @@ function resolveCatalogName(
   rawName: string,
   kind: CatalogKind
 ): { name: string; home: LoadedManifests } {
-  const parts = rawName.split("/");
-  if (parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]) {
-    const name = parts.at(-1)!;
-    const target = homeByAliasPath(home, parts.slice(0, -1));
-    if (!target)
-      throw new Error(`Unknown upstream alias in ${kind}: ${parts.slice(0, -1).join("/")}`);
-    if (!hasLocalDefinition(target, kind, name)) {
+  const resolved = resolveQualifiedName(home, rawName, kind);
+  if (resolved.home !== home) {
+    if (!hasLocalDefinition(resolved.home, kind, resolved.name)) {
       throw new Error(`Unknown ${kind}: ${rawName}`);
     }
-    return { name, home: target };
+    return resolved;
   }
 
-  if (rawName.includes("/")) {
-    throw new Error(`Unknown upstream alias in ${kind}: ${parts[0]}`);
-  }
-  if (hasLocalDefinition(home, kind, rawName)) return { name: rawName, home };
-  const upstream = findUpstreamDefinition(home, kind, rawName);
+  if (hasLocalDefinition(home, kind, resolved.name)) return resolved;
+  const upstream = findUpstreamDefinition(home, kind, resolved.name);
   if (upstream) {
     throw new Error(
-      `Unknown local ${kind}: ${rawName}. Did you mean ${upstream.aliasPath.join("/")}/${rawName}?`
+      `Unknown local ${kind}: ${rawName}. Did you mean ${upstream.aliasPath.join("/")}/${resolved.name}?`
     );
   }
   throw new Error(`Unknown ${kind}: ${rawName}`);
+}
+
+function normalizeSourceNames(
+  home: LoadedManifests,
+  names: readonly string[],
+  sourceMap: Map<string, LoadedManifests>,
+  kind: SourceKind,
+  label: string,
+  options: { allowLocalSlash?: boolean } = {}
+): string[] {
+  return names.map((rawName) => {
+    const resolved = resolveQualifiedName(home, rawName, kind, options);
+    setSource(sourceMap, label, resolved.name, resolved.home);
+    return resolved.name;
+  });
 }
 
 function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): ProfileBuild {
@@ -204,54 +228,37 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
       return [resolved.name, config];
     })
   ) as ProfileManifest["mcp"];
-  const instructions = profile.instructions.map((rawName) => {
-    const parts = rawName.split("/");
-    if (parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]) {
-      const target = homeByAliasPath(home, parts.slice(0, -1));
-      if (!target)
-        throw new Error(`Unknown upstream alias in instruction: ${parts.slice(0, -1).join("/")}`);
-      const name = parts.at(-1)!;
-      setSource(sources.instructions, "instruction", name, target);
-      return name;
-    }
-    setSource(sources.instructions, "instruction", rawName, home);
-    return rawName;
-  });
+  const instructions = normalizeSourceNames(
+    home,
+    profile.instructions,
+    sources.instructions,
+    "instruction",
+    "instruction",
+    { allowLocalSlash: true }
+  );
   const opencode = {
     ...profile.opencode,
-    plugins: profile.opencode.plugins.map((rawName) => {
-      const parts = rawName.split("/");
-      const target =
-        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-          ? homeByAliasPath(home, parts.slice(0, -1))
-          : home;
-      if (!target) throw new Error(`Unknown upstream alias in opencode plugin: ${parts[0]}`);
-      const name = parts.at(-1)!;
-      setSource(sources.plugins, "OpenCode plugin", name, target);
-      return name;
-    }),
-    commands: profile.opencode.commands.map((rawName) => {
-      const parts = rawName.split("/");
-      const target =
-        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-          ? homeByAliasPath(home, parts.slice(0, -1))
-          : home;
-      if (!target) throw new Error(`Unknown upstream alias in opencode command: ${parts[0]}`);
-      const name = parts.at(-1)!;
-      setSource(sources.commands, "OpenCode command", name, target);
-      return name;
-    }),
-    agents: profile.opencode.agents.map((rawName) => {
-      const parts = rawName.split("/");
-      const target =
-        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-          ? homeByAliasPath(home, parts.slice(0, -1))
-          : home;
-      if (!target) throw new Error(`Unknown upstream alias in opencode agent: ${parts[0]}`);
-      const name = parts.at(-1)!;
-      setSource(sources.agents, "OpenCode agent", name, target);
-      return name;
-    })
+    plugins: normalizeSourceNames(
+      home,
+      profile.opencode.plugins,
+      sources.plugins,
+      "opencode plugin",
+      "OpenCode plugin"
+    ),
+    commands: normalizeSourceNames(
+      home,
+      profile.opencode.commands,
+      sources.commands,
+      "opencode command",
+      "OpenCode command"
+    ),
+    agents: normalizeSourceNames(
+      home,
+      profile.opencode.agents,
+      sources.agents,
+      "opencode agent",
+      "OpenCode agent"
+    )
   };
 
   return { profile: { ...profile, references, skills, mcp, instructions, opencode }, sources };

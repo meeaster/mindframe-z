@@ -5,6 +5,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { parse, stringify } from "smol-toml";
 import YAML from "yaml";
+import { eachUpstream } from "../core/manifests.js";
 import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { syncMise } from "./mise.js";
@@ -240,7 +241,7 @@ async function syncTargets(profile: ResolvedProfile): Promise<SyncTarget[]> {
     profile: name,
     upstream: false
   }));
-  for (let upstream = profile.manifests.upstream; upstream; upstream = upstream.upstream) {
+  for (const upstream of eachUpstream(profile.manifests)) {
     if (!(await isPushable(upstream.root))) continue;
     const prefix = upstream.aliasPath.join("/");
     for (const name of upstream.profiles.keys()) {

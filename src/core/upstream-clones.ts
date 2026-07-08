@@ -1,26 +1,13 @@
-import { access, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { fileExists } from "./fs-util.js";
+import { expandHome } from "./path-util.js";
 
 function isLocalRepoSpec(repo: string): boolean {
   return (
     repo.startsWith("/") || repo.startsWith("./") || repo.startsWith("../") || repo.startsWith("~/")
   );
-}
-
-function expandHome(value: string, home: string): string {
-  if (value === "~") return home;
-  if (value.startsWith("~/")) return path.join(home, value.slice(2));
-  return value;
 }
 
 async function isDirty(root: string): Promise<boolean> {
@@ -45,7 +32,7 @@ export async function resolveUpstreamHomeRoot(options: {
   if (isLocalRepoSpec(options.repo)) return path.resolve(expandHome(options.repo, options.home));
 
   const cloneRoot = path.join(options.home, ".mindframe-z", "homes", options.alias);
-  if (!(await exists(cloneRoot))) {
+  if (!(await fileExists(cloneRoot))) {
     await mkdir(path.dirname(cloneRoot), { recursive: true });
     await execa("git", ["clone", options.repo, cloneRoot]);
     return cloneRoot;

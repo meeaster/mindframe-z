@@ -35,6 +35,7 @@ async function copyDirContents(
 }
 
 async function collectPluginFiles(
+  localRoot: string,
   rootByName: (name: string) => string,
   configsOpencode: string,
   pluginNames: readonly string[]
@@ -43,7 +44,7 @@ async function collectPluginFiles(
   if (pluginNames.length > 0) {
     names = [...pluginNames];
   } else {
-    const sourceDir = path.join(rootByName(""), "opencode", "plugins");
+    const sourceDir = path.join(localRoot, "opencode", "plugins");
     try {
       await stat(sourceDir);
     } catch (error) {
@@ -145,6 +146,7 @@ export async function renderOpenCode(
   const configsOpencode = path.join(configsProfile, "opencode");
   const configPath = path.join(configsOpencode, "opencode.jsonc");
   const pluginResult = await collectPluginFiles(
+    paths.root,
     (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
     configsOpencode,
     profile.profile.opencode.plugins

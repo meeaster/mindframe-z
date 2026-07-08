@@ -4,6 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
+import { expandHome } from "./path-util.js";
+
+export { expandHome } from "./path-util.js";
 
 export type AgentName = "opencode" | "claude-code" | "codex";
 export type ToolTarget = "opencode" | "claude-code" | "codex" | "mise" | "dotfiles";
@@ -30,12 +33,6 @@ export interface PathOptions {
 
 export function packageRootFromImport(importMetaUrl: string): string {
   return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), "../..");
-}
-
-export function expandHome(value: string, home = process.env.HOME ?? ""): string {
-  if (value === "~") return home;
-  if (value.startsWith("~/")) return path.join(home, value.slice(2));
-  return value;
 }
 
 function machineHomePath(home: string): string | undefined {
