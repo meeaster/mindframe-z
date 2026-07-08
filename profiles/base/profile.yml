@@ -135,6 +135,7 @@ opencode:
         "*GITHUB_TOKEN*": deny
         "*GH_TOKEN*": deny
   plugins:
+    - advisor
     - agent-task
     - mindframe-z-example
   commands:
