@@ -153,7 +153,14 @@ describe("thread storage", () => {
     const destinations = resolveThreadDestinations(
       paths(home, root),
       profileWithDestinations(
-        [{ name: "personal", remote: "git@example.com:me/threads.git", default: false, no_push: false }],
+        [
+          {
+            name: "personal",
+            remote: "git@example.com:me/threads.git",
+            default: false,
+            no_push: false
+          }
+        ],
         machine([])
       )
     );

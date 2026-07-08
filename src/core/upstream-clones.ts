@@ -64,7 +64,9 @@ export async function resolveUpstreamHomeRoot(options: {
     await execa("git", ["pull", "--ff-only"], { cwd: cloneRoot });
   } catch (error) {
     const detail = error instanceof Error ? `: ${error.message}` : "";
-    console.warn(`warning\tupstream home ${options.alias} could not update; using existing clone${detail}`);
+    console.warn(
+      `warning\tupstream home ${options.alias} could not update; using existing clone${detail}`
+    );
   }
   return cloneRoot;
 }
