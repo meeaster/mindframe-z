@@ -41,7 +41,8 @@ function machine(): MachineManifest {
     sandbox: {},
     thread: { destinations: [] },
     archives: [],
-    opencode: {}
+    opencode: {},
+    claude: {}
   };
 }
 

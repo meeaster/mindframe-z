@@ -159,11 +159,19 @@ export async function renderClaude(
   const permissions: Record<string, string[]> = {};
   if (allowPermissions.length > 0) permissions.allow = allowPermissions;
   if (denyPermissions.length > 0) permissions.deny = denyPermissions;
-  const settings: Record<string, unknown> = {
-    ...profile.profile.claude.settings,
-    ...(profile.profile.claude.model ? { model: profile.profile.claude.model } : {})
-  };
-  settings.permissions = mergeClaudePermissions(settings.permissions, permissions);
+  const { permissions: machinePermissions, ...machineClaudeRest } = profile.manifests.machine
+    .claude as Record<string, unknown> & { permissions?: Record<string, string[]> };
+  const settings: Record<string, unknown> = deepMerge(
+    {
+      ...profile.profile.claude.settings,
+      ...(profile.profile.claude.model ? { model: profile.profile.claude.model } : {})
+    },
+    machineClaudeRest
+  );
+  settings.permissions = mergeClaudePermissions(
+    mergeClaudePermissions(settings.permissions, permissions),
+    machinePermissions ?? {}
+  );
   if (additionalDirectories.length > 0) {
     settings.additionalDirectories = additionalDirectories;
   }

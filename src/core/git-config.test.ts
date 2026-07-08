@@ -19,7 +19,8 @@ function machine(git: MachineManifest["git"]): MachineManifest {
     sandbox: {},
     thread: { destinations: [] },
     archives: [],
-    opencode: {}
+    opencode: {},
+    claude: {}
   };
 }
 

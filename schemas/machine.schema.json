@@ -161,6 +161,14 @@
         "type": "string"
       },
       "additionalProperties": {}
+    },
+    "claude": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
     }
   }
 }

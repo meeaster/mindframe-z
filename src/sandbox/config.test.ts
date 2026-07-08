@@ -35,7 +35,8 @@ function machine(credentials?: "bedrock" | "subscription"): MachineManifest {
     sandbox: credentials ? { credentials } : {},
     thread: { destinations: [] },
     archives: [],
-    opencode: {}
+    opencode: {},
+    claude: {}
   };
 }
 

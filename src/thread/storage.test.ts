@@ -87,7 +87,8 @@ function machine(destinations: MachineManifest["thread"]["destinations"]): Machi
     sandbox: {},
     thread: { destinations },
     archives: [],
-    opencode: {}
+    opencode: {},
+    claude: {}
   };
 }
 

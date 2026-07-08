@@ -38,7 +38,8 @@ function profile(
     sandbox: { credentials },
     thread: { destinations: [] },
     archives: [],
-    opencode: {}
+    opencode: {},
+    claude: {}
   };
 
   return {

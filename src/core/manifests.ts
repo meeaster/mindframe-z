@@ -262,7 +262,8 @@ export const machineSchema = z.object({
     .default({}),
   thread: machineThreadSchema,
   archives: z.array(archiveSchema).default([]),
-  opencode: z.record(z.string(), z.unknown()).default({})
+  opencode: z.record(z.string(), z.unknown()).default({}),
+  claude: z.record(z.string(), z.unknown()).default({})
 });
 
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;
@@ -402,7 +403,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         sandbox: {},
         thread: { destinations: [] },
         archives: [],
-        opencode: {}
+        opencode: {},
+        claude: {}
       })
     : {
         references_dir: "~/references" as const,
@@ -411,7 +413,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         sandbox: {},
         thread: { destinations: [] },
         archives: [],
-        opencode: {}
+        opencode: {},
+        claude: {}
       };
   const profileMap = new Map<string, ProfileManifest>();
   const profilesDir = path.join(root, "profiles");
