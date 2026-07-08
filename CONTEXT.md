@@ -7,6 +7,28 @@ distilled from agent sessions across harnesses.
 
 ### Configuration
 
+**Home**:
+A git repository of mindframe-z content — catalogs, profiles, skills, plugins,
+and optionally thread destinations. A machine activates exactly one home; a
+home may extend one upstream home by git URL, forming a linear chain.
+_Avoid_: config repo, dotfiles repo, source
+
+**Upstream alias**:
+The name a home assigns to its upstream when declaring `extends`; the qualifier
+in all cross-home references (`<alias>/<entry>`), composing across hops
+(`personal/common/x`). Aliases are consumer-owned: an upstream renaming itself
+never changes how downstreams reference it.
+_Avoid_: home name (upstreams have no self-declared identity)
+
+**Qualified reference**:
+A cross-home mention of a catalog entry or profile, written `<alias>/<name>`.
+Unqualified names always resolve in the current home's own catalog.
+
+**Engine**:
+The mindframe-z tool itself — CLI, renderers, schemas — distributed separately
+from any home and containing no personal content.
+_Avoid_: the repo (ambiguous with home)
+
 **Harness**:
 A host coding agent that mindframe-z renders configuration for: claude-code,
 opencode, or codex. Called `agents`/`targets` in profile manifests.
