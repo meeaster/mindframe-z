@@ -4,6 +4,7 @@ import {
   loadManifests,
   type LoadedManifests,
   type McpServer,
+  type ProfileAgentDefaults,
   type ProfileManifest,
   type ToolTargetName,
   type ReferenceEntry,
@@ -14,15 +15,16 @@ import {
 export interface ResolvedMcpServer {
   name: string;
   server: McpServer;
-  targets: ToolTargetName[];
-  enabled: boolean;
+  agents: ProfileAgentDefaults;
 }
 
 export type ResolvedSkill = SkillEntry & {
-  enabled: boolean;
+  agents: ProfileAgentDefaults;
   toggleable: boolean;
   targets: ToolTargetName[];
 };
+
+export type TargetedMcpServer = ResolvedMcpServer & { enabled: boolean };
 
 export interface ResolvedProfile {
   name: string;
@@ -95,7 +97,10 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     codex: {
       config: deepMerge(base.codex.config, child.codex.config),
-      plugins: deepMerge(base.codex.plugins, child.codex.plugins) as ProfileManifest["codex"]["plugins"]
+      plugins: deepMerge(
+        base.codex.plugins,
+        child.codex.plugins
+      ) as ProfileManifest["codex"]["plugins"]
     },
     mise: {
       tools: deepMerge(
@@ -124,15 +129,17 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
 function resolveSkillConfig(
   config: ProfileManifest["skills"][string],
   agents: AgentName[]
-): { enabled: boolean; toggleable: boolean; targets: ToolTargetName[] } {
-  if (!config) return { enabled: true, toggleable: true, targets: agents };
-  const targets = Array.isArray(config) ? config : (config.targets ?? agents);
+): { agents: ProfileAgentDefaults; toggleable: boolean; targets: ToolTargetName[] } {
+  if (!config?.agents) {
+    throw new Error("Skill entries must declare agents after profile inheritance is resolved");
+  }
+  const targets = Object.keys(config.agents).filter((target): target is ToolTargetName =>
+    agents.includes(target as AgentName)
+  );
   return {
-    enabled: Array.isArray(config) ? true : config.enabled,
-    toggleable: Array.isArray(config) ? true : config.toggleable,
-    targets: targets.includes("all")
-      ? agents
-      : targets.filter((target): target is ToolTargetName => target !== "all")
+    agents: config.agents,
+    toggleable: config.toggleable,
+    targets
   };
 }
 
@@ -173,10 +180,10 @@ export async function resolveProfile(
     .filter((entry) => entry.targets.length > 0);
   const enabledCommands = dedupe(profile.opencode.commands);
   const enabledAgents = dedupe(profile.opencode.agents);
-  const mcpServers = Object.entries(profile.mcp).map(([serverName, { enabled, targets }]) => {
+  const mcpServers = Object.entries(profile.mcp).map(([serverName, { agents: mcpAgents }]) => {
     const server = manifests.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    return { name: serverName, server, targets: targets ?? agents, enabled };
+    return { name: serverName, server, agents: mcpAgents };
   });
 
   const extraFolders: ExtraFolder[] = (() => {
@@ -207,6 +214,8 @@ export async function resolveProfile(
 export function filterMcpForTarget(
   profile: ResolvedProfile,
   target: ToolTargetName
-): ResolvedMcpServer[] {
-  return profile.mcpServers.filter((entry) => entry.targets.includes(target));
+): TargetedMcpServer[] {
+  return profile.mcpServers.flatMap((entry) =>
+    entry.agents[target] === undefined ? [] : [{ ...entry, enabled: entry.agents[target] }]
+  );
 }

@@ -4,11 +4,11 @@ description: Work AI setup using Bedrock-backed models.
 agents: [opencode, claude-code, codex]
 skills:
   confluence-writer:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   jira-writer:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   visual-explainer:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
 references:
   - datadog-agent
   - integrations-core
@@ -16,15 +16,15 @@ references:
   - pup
 mcp:
   aws-knowledge:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   jira:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   confluence:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   datadog:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   forge:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
 thread:
   # Thread dispatch authenticates to Bedrock the same way interactive Claude
   # Code does: the runner reads ~/.claude/settings.json for the AWS profile,

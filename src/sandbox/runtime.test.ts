@@ -97,8 +97,9 @@ function remoteMcp(
 ): ResolvedMcpServer {
   return {
     name,
-    enabled: true,
-    targets: options.targets ?? ["opencode", "claude-code"],
+    agents: Object.fromEntries(
+      (options.targets ?? ["opencode", "claude-code"]).map((target) => [target, true])
+    ),
     server: {
       type: "remote",
       transport: "http",

@@ -477,7 +477,9 @@ function launchCommand(target: SandboxLaunchTarget, args: readonly string[]): st
 }
 
 function remoteEnabledMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] {
-  return profile.mcpServers.filter((entry) => entry.enabled && entry.server.type === "remote");
+  return profile.mcpServers.filter(
+    (entry) => Object.values(entry.agents).some(Boolean) && entry.server.type === "remote"
+  );
 }
 
 function headersSignature(headers: Record<string, string> | undefined, serverName: string): string {

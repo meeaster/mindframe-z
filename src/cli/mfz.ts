@@ -1,6 +1,6 @@
 import * as readline from "node:readline/promises";
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
@@ -15,6 +15,14 @@ import {
   type InfraTarget
 } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
+import {
+  effectiveProjectState,
+  findProjectRoot,
+  projectOverrides,
+  readOverrideStore,
+  renderAllPayloads,
+  writeProjectOverrideDelta
+} from "../core/override-store.js";
 import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
 import {
   ensureGitConfigInclude,
@@ -62,6 +70,7 @@ import {
   runThreadSync
 } from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
+import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 
 async function confirmReplace(
@@ -108,6 +117,7 @@ async function applyConfig(options: {
     if (!options.dryRun) {
       await writeReferenceIndex(paths, profile);
       await writeExtraFoldersIndex(paths, profile);
+      await renderAllPayloads(paths, profile);
     }
     if (!options.noLink) {
       const fragmentPath = gitIdentityFragmentPath(paths);
@@ -206,6 +216,29 @@ async function doctor(options: {
       console.log(`link:${status.state}\t${status.linkPath}\t${status.detail}`);
     }
   }
+  const projectRoot = await findProjectRoot();
+  if (projectRoot) {
+    for (const file of [
+      path.join(projectRoot, ".opencode", "opencode.jsonc"),
+      path.join(projectRoot, ".claude", "settings.local.json"),
+      path.join(projectRoot, ".codex", "config.toml")
+    ]) {
+      if (await fileExists(file)) {
+        console.log(
+          `stale-project-toggle\t${file}\tproject toggles now live in ~/.mindframe-z/overrides.json`
+        );
+      }
+    }
+  }
+}
+
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function schemas(options: { root?: string | undefined }): Promise<void> {
@@ -227,7 +260,16 @@ async function statusFn(options: {
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
   console.log(`commands\t${profile.enabledCommands.join(", ") || "none"}`);
   console.log(
-    `mcp\t${profile.mcpServers.map((server) => `${server.name}:${server.enabled ? "enabled" : "disabled"}`).join(", ") || "none"}`
+    `mcp\t${
+      profile.mcpServers
+        .map(
+          (server) =>
+            `${server.name}:${Object.entries(server.agents)
+              .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
+              .join("|")}`
+        )
+        .join(", ") || "none"
+    }`
   );
 }
 
@@ -734,6 +776,86 @@ skills
         if (skill.source === "git") updatedGitSkills.add(skill.name);
       }
     }
+  });
+
+function parseAgentOption(agent: string | undefined): AgentName | undefined {
+  if (!agent) return undefined;
+  if (agent === "opencode" || agent === "claude-code" || agent === "codex") return agent;
+  throw new Error(`Unknown agent: ${agent}`);
+}
+
+async function setMcpEnabled(
+  name: string,
+  enabled: boolean,
+  options: { agent?: string | undefined }
+): Promise<void> {
+  const paths = createRuntimePaths(program.opts());
+  const profile = await resolveProfile(paths, program.opts().profile);
+  const server = profile.mcpServers.find((entry) => entry.name === name);
+  if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
+  const requestedAgent = parseAgentOption(options.agent);
+  const targets = requestedAgent ? [requestedAgent] : (Object.keys(server.agents) as AgentName[]);
+  for (const target of targets) {
+    if (server.agents[target] === undefined) {
+      throw new Error(`MCP server ${name} is not available for ${target}`);
+    }
+  }
+  const projectRoot = await findProjectRoot();
+  if (!projectRoot) throw new Error("mfz mcp toggles must be run inside a git repository");
+  for (const target of targets) {
+    await writeProjectOverrideDelta(paths, profile, projectRoot, target, "mcp", {
+      [name]: enabled
+    });
+  }
+  for (const target of targets)
+    console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
+}
+
+async function printMcpStatus(): Promise<void> {
+  const paths = createRuntimePaths(program.opts());
+  const profile = await resolveProfile(paths, program.opts().profile);
+  const projectRoot = await findProjectRoot();
+  const store = await readOverrideStore(paths.home);
+  for (const server of profile.mcpServers) {
+    for (const target of Object.keys(server.agents) as AgentName[]) {
+      const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
+      const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};
+      const marker = server.name in overrides ? "\toverridden" : "";
+      console.log(
+        `${server.name}\t${target}\t${effective[server.name] ? "enabled" : "disabled"}${marker}`
+      );
+    }
+  }
+}
+
+const mcp = program.command("mcp").description("Manage project-scoped MCP server toggles");
+
+mcp
+  .command("enable")
+  .description("Enable an MCP server for this project")
+  .argument("<name>", "MCP server name")
+  .option("--agent <agent>", "opencode, claude-code, or codex")
+  .action(async (name, options) => setMcpEnabled(name, true, options));
+
+mcp
+  .command("disable")
+  .description("Disable an MCP server for this project")
+  .argument("<name>", "MCP server name")
+  .option("--agent <agent>", "opencode, claude-code, or codex")
+  .action(async (name, options) => setMcpEnabled(name, false, options));
+
+mcp
+  .command("status")
+  .description("Show merged MCP server state for this project")
+  .action(async () => printMcpStatus());
+
+mcp
+  .command("tui")
+  .description("Toggle MCP servers for this project")
+  .action(async () => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+    await runMcpTui(paths, profile);
   });
 
 program

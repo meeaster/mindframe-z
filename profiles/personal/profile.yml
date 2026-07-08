@@ -17,20 +17,20 @@ references:
   - ha-mcp
 skills:
   home-assistant-best-practices:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
 mcp:
   homeassistant:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   openai-docs:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   pinescript-docs:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   aws-knowledge:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   x-docs:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   exa-research:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
 opencode:
   config:
     permission:

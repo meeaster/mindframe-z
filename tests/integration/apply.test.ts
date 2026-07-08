@@ -183,10 +183,9 @@ describe("apply integration", () => {
         "  - local-ref",
         "mcp:",
         "  context7:",
-        "    enabled: true",
+        "    agents: { codex: true }",
         "  local-helper:",
-        "    targets: [codex]",
-        "    enabled: false",
+        "    agents: { codex: false }",
         "codex:",
         "  config:",
         "    model: test/codex",
@@ -242,7 +241,14 @@ describe("apply integration", () => {
   it("omits Codex plugins from rendered TOML when no plugins are declared", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "agents: [codex]", "codex:", "  config:", "    model: test/codex", ""].join("\n"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
@@ -304,13 +310,9 @@ describe("apply integration", () => {
     await mkdir(path.join(home, ".codex"), { recursive: true });
     await writeFile(
       path.join(home, ".codex", "config.toml"),
-      [
-        'user_key = "kept"',
-        "",
-        '[plugins."slack@openai-curated"]',
-        "enabled = true",
-        ""
-      ].join("\n"),
+      ['user_key = "kept"', "", '[plugins."slack@openai-curated"]', "enabled = true", ""].join(
+        "\n"
+      ),
       "utf8"
     );
 
@@ -327,7 +329,14 @@ describe("apply integration", () => {
   it("removes the local Codex plugins table when the declared set is empty", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "agents: [codex]", "codex:", "  config:", "    model: test/codex", ""].join("\n"),
+      [
+        "name: personal",
+        "agents: [codex]",
+        "codex:",
+        "  config:",
+        "    model: test/codex",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await mkdir(path.join(home, ".codex"), { recursive: true });
@@ -629,11 +638,9 @@ describe("apply integration", () => {
         "extends: base",
         "mcp:",
         "  context7:",
-        "    targets: [opencode]",
-        "    enabled: true",
+        "    agents: { opencode: true }",
         "  local-helper:",
-        "    targets: [claude-code]",
-        "    enabled: false",
+        "    agents: { claude-code: true }",
         ""
       ].join("\n"),
       "utf8"
@@ -670,6 +677,7 @@ describe("apply integration", () => {
     expect(localClaudeJson.projects).toBeDefined();
     expect(localClaudeJson.mcpServers).toEqual({
       manual: { type: "http", url: "https://manual.invalid" },
+      context7: { type: "http", url: "https://mcp.context7.com/mcp" },
       "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
     });
   });
@@ -685,7 +693,7 @@ describe("apply integration", () => {
         "  - shared/AGENTS.global.md",
         "mcp:",
         "  context7:",
-        "    enabled: true",
+        "    agents: { opencode: true }",
         ""
       ].join("\n"),
       "utf8"
@@ -701,7 +709,7 @@ describe("apply integration", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("defaults omitted MCP targets to profile agents", async () => {
+  it("renders MCP entries for declared agents", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
@@ -712,7 +720,7 @@ describe("apply integration", () => {
         "  - shared/AGENTS.global.md",
         "mcp:",
         "  context7:",
-        "    enabled: true",
+        "    agents: { opencode: true }",
         ""
       ].join("\n"),
       "utf8"

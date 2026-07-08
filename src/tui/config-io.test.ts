@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
-import { parse } from "smol-toml";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -49,37 +48,16 @@ describe("skill config git exclusion", () => {
     await execa("git", ["init"], { cwd: dir });
   }
 
-  it("adds .opencode/opencode.jsonc to .git/info/exclude", async () => {
+  it("does not write repo-local git exclude entries", async () => {
     await initGitRepo(root);
     process.chdir(root);
 
-    await writeLocalSkillOverrides(paths(root), "opencode", { "test-skill": true });
+    await resolveSkillConfigPaths(paths(root));
 
     const exclude = await readFile(path.join(root, ".git", "info", "exclude"), "utf8");
-    expect(exclude).toContain(".opencode/opencode.jsonc");
-  });
-
-  it("adds .claude/settings.local.json to .git/info/exclude", async () => {
-    await initGitRepo(root);
-    process.chdir(root);
-
-    await writeLocalSkillOverrides(paths(root), "claude-code", { "test-skill": true });
-
-    const exclude = await readFile(path.join(root, ".git", "info", "exclude"), "utf8");
-    expect(exclude).toContain(".claude/settings.local.json");
-  });
-
-  it("does not duplicate entries on repeated calls", async () => {
-    await initGitRepo(root);
-    process.chdir(root);
-
-    await writeLocalSkillOverrides(paths(root), "opencode", { "test-skill": true });
-    await writeLocalSkillOverrides(paths(root), "opencode", { "test-skill": true });
-    await writeLocalSkillOverrides(paths(root), "opencode", { "test-skill": false });
-
-    const exclude = await readFile(path.join(root, ".git", "info", "exclude"), "utf8");
-    const matches = exclude.match(/\.opencode\/opencode\.jsonc/g);
-    expect(matches).toHaveLength(1);
+    expect(exclude).not.toContain(".opencode/opencode.jsonc");
+    expect(exclude).not.toContain(".claude/settings.local.json");
+    expect(exclude).not.toContain(".codex/config.toml");
   });
 });
 
@@ -110,12 +88,7 @@ describe("skill config path resolution", () => {
 
     expect(resolved).toMatchObject({
       repoRoot: root,
-      scope: "repo",
-      active: {
-        opencode: path.join(root, ".opencode", "opencode.jsonc"),
-        "claude-code": path.join(root, ".claude", "settings.local.json"),
-        codex: path.join(root, ".codex", "config.toml")
-      }
+      scope: "repo"
     });
   });
 
@@ -255,7 +228,10 @@ describe("skill override precedence", () => {
     await initGitRepo(root);
     process.chdir(root);
     const runtimePaths = paths(root);
-    await writeLocalSkillOverrides(runtimePaths, "opencode", { local: false });
+    const profile = {
+      enabledSkills: [{ name: "local", agents: { opencode: true }, targets: ["opencode"] }]
+    } as unknown as ResolvedProfile;
+    await setLocalSkillState(runtimePaths, profile, "opencode", "local", false);
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ local: false });
 
     const outsideRepo = await tmpDir();
@@ -272,14 +248,14 @@ describe("skill override precedence", () => {
 
     await initGitRepo(root);
     process.chdir(root);
-    await writeLocalSkillOverrides(runtimePaths, "opencode", { both: true });
     const profile = {
       enabledSkills: [
-        { name: "default", enabled: true, targets: ["opencode"] },
-        { name: "global", enabled: true, targets: ["opencode"] },
-        { name: "both", enabled: false, targets: ["opencode"] }
+        { name: "default", agents: { opencode: true }, targets: ["opencode"] },
+        { name: "global", agents: { opencode: true }, targets: ["opencode"] },
+        { name: "both", agents: { opencode: false }, targets: ["opencode"] }
       ]
-    } as ResolvedProfile;
+    } as unknown as ResolvedProfile;
+    await setLocalSkillState(runtimePaths, profile, "opencode", "both", true);
 
     await expect(resolveSkillToggleState(runtimePaths, profile, "opencode")).resolves.toEqual({
       default: true,
@@ -316,19 +292,20 @@ describe("skill override delta writes", () => {
     process.chdir(root);
     const profile = {
       enabledSkills: [
-        { name: "inherited", enabled: true, targets: ["opencode"] },
-        { name: "changed", enabled: true, targets: ["opencode"] }
+        { name: "inherited", agents: { opencode: true }, targets: ["opencode"] },
+        { name: "changed", agents: { opencode: true }, targets: ["opencode"] }
       ]
-    } as ResolvedProfile;
+    } as unknown as ResolvedProfile;
 
     await writeChangedSkillOverrides(runtimePaths, profile, "opencode", {
       inherited: false,
       changed: false
     });
 
-    const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
-    expect(localConfig).not.toContain("inherited");
-    expect(localConfig).toContain('"changed": "deny"');
+    const store = JSON.parse(
+      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
+    expect(store.projects?.[root]?.opencode?.skills).toEqual({ changed: false });
   });
 
   it("writes a single skill delta via setLocalSkillState", async () => {
@@ -337,51 +314,54 @@ describe("skill override delta writes", () => {
     process.chdir(root);
     const profile = {
       enabledSkills: [
-        { name: "kept", enabled: true, targets: ["opencode"] },
-        { name: "changed", enabled: true, targets: ["opencode"] }
+        { name: "kept", agents: { opencode: true }, targets: ["opencode"] },
+        { name: "changed", agents: { opencode: true }, targets: ["opencode"] }
       ]
-    } as ResolvedProfile;
+    } as unknown as ResolvedProfile;
 
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
 
-    const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
-    expect(localConfig).toContain('"changed": "deny"');
-    expect(localConfig).not.toContain("kept");
+    const store = JSON.parse(
+      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
+    expect(store.projects?.[root]?.opencode?.skills).toEqual({ changed: false });
   });
 
   it("writes Codex skill toggles using resolved SKILL.md paths", async () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
-    const skillPath = path.join(root, ".agents", "skills", "changed", "SKILL.md");
+    const skillPath = path.join(runtimePaths.home, ".agents", "skills", "changed", "SKILL.md");
     await mkdir(path.dirname(skillPath), { recursive: true });
     await writeFile(skillPath, "# Changed\n", "utf8");
     const profile = {
-      enabledSkills: [{ name: "changed", enabled: true, targets: ["codex"] }]
-    } as ResolvedProfile;
+      enabledSkills: [{ name: "changed", agents: { codex: true }, targets: ["codex"] }]
+    } as unknown as ResolvedProfile;
 
     await setLocalSkillState(runtimePaths, profile, "codex", "changed", false);
 
-    const localConfig = parse(await readFile(path.join(root, ".codex", "config.toml"), "utf8")) as {
-      skills?: { config?: Array<{ path?: string; enabled?: boolean }> };
-    };
-    expect(localConfig.skills?.config).toContainEqual({ path: skillPath, enabled: false });
-    const exclude = await readFile(path.join(root, ".git", "info", "exclude"), "utf8");
-    expect(exclude).toContain(".codex/config.toml");
+    const store = JSON.parse(
+      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, { codex?: { payload?: { argv?: string[] } } }> };
+    expect(store.projects?.[root]?.codex?.payload?.argv?.join("\n")).toContain(
+      JSON.stringify([{ path: skillPath, enabled: false }])
+    );
   });
 
-  it("errors clearly when a Codex skill path cannot be resolved", async () => {
+  it("renders deterministic Codex skill paths in payloads", async () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
     const profile = {
-      enabledSkills: [{ name: "missing", enabled: true, targets: ["codex"] }]
-    } as ResolvedProfile;
+      enabledSkills: [{ name: "missing", agents: { codex: true }, targets: ["codex"] }]
+    } as unknown as ResolvedProfile;
 
-    await expect(
-      setLocalSkillState(runtimePaths, profile, "codex", "missing", false)
-    ).rejects.toThrow(
-      "Cannot toggle missing for codex: installed SKILL.md path could not be resolved"
+    await setLocalSkillState(runtimePaths, profile, "codex", "missing", false);
+    const store = JSON.parse(
+      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, { codex?: { payload?: { argv?: string[] } } }> };
+    expect(store.projects?.[root]?.codex?.payload?.argv?.join("\n")).toContain(
+      path.join(runtimePaths.home, ".agents", "skills", "missing", "SKILL.md")
     );
   });
 
@@ -390,8 +370,8 @@ describe("skill override delta writes", () => {
     await initGitRepo(root);
     process.chdir(root);
     const profile = {
-      enabledSkills: [{ name: "changed", enabled: true, targets: ["opencode"] }]
-    } as ResolvedProfile;
+      enabledSkills: [{ name: "changed", agents: { opencode: true }, targets: ["opencode"] }]
+    } as unknown as ResolvedProfile;
 
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ changed: false });
@@ -399,7 +379,9 @@ describe("skill override delta writes", () => {
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", true);
 
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({});
-    const localConfig = await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8");
-    expect(localConfig).not.toContain("changed");
+    const store = JSON.parse(
+      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, unknown> };
+    expect(store.projects).toEqual({});
   });
 });

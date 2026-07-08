@@ -50,48 +50,28 @@
         "type": "string"
       },
       "additionalProperties": {
-        "anyOf": [
-          {
+        "type": "object",
+        "properties": {
+          "agents": {
             "type": "object",
-            "properties": {
-              "enabled": {
-                "default": true,
-                "type": "boolean"
-              },
-              "toggleable": {
-                "default": true,
-                "type": "boolean"
-              },
-              "targets": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "opencode",
-                    "claude-code",
-                    "codex",
-                    "all"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "type": "array",
-            "items": {
+            "propertyNames": {
               "type": "string",
               "enum": [
                 "opencode",
                 "claude-code",
-                "codex",
-                "all"
+                "codex"
               ]
+            },
+            "additionalProperties": {
+              "type": "boolean"
             }
           },
-          {
-            "type": "null"
+          "toggleable": {
+            "default": true,
+            "type": "boolean"
           }
-        ]
+        },
+        "additionalProperties": false
       }
     },
     "mcp": {
@@ -103,25 +83,25 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "targets": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
+          "agents": {
+            "type": "object",
+            "propertyNames": {
               "type": "string",
               "enum": [
                 "opencode",
                 "claude-code",
                 "codex"
               ]
+            },
+            "additionalProperties": {
+              "type": "boolean"
             }
-          },
-          "enabled": {
-            "type": "boolean"
           }
         },
         "required": [
-          "enabled"
-        ]
+          "agents"
+        ],
+        "additionalProperties": false
       }
     },
     "opencode": {

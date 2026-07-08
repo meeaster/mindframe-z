@@ -96,8 +96,7 @@ describe("skill CLI integration", () => {
         "agents: [opencode]",
         "skills:",
         "  local-skill:",
-        "    enabled: false",
-        "    targets: [opencode]",
+        "    agents: { opencode: false }",
         ""
       ].join("\n"),
       "utf8"
@@ -108,7 +107,7 @@ describe("skill CLI integration", () => {
     expect(result.stdout).toContain("-a opencode -g -y");
   });
 
-  it("toggles skill state in local OpenCode and Claude Code config", async () => {
+  it("toggles project skill state in the override store", async () => {
     await execa("git", ["init"], { cwd: root });
     await mkdir(path.join(root, ".opencode"), { recursive: true });
     await writeFile(
@@ -145,13 +144,26 @@ describe("skill CLI integration", () => {
     );
     expect(enable.stdout).toContain("Enabled claude-skill for claude-code");
 
+    const overrides = JSON.parse(
+      await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as {
+      projects?: Record<
+        string,
+        {
+          opencode?: { skills?: Record<string, boolean> };
+          "claude-code"?: { skills?: Record<string, boolean> };
+        }
+      >;
+    };
+    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(false);
+    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBeUndefined();
+
     const opencode = JSON.parse(
       await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
-    ) as { permission?: Record<string, unknown> };
-    expect(opencode.permission).toMatchObject({
-      webfetch: "allow",
-      skill: { "local-skill": "deny" }
-    });
+    ) as {
+      permission?: Record<string, unknown>;
+    };
+    expect(opencode.permission).toEqual({ webfetch: "allow" });
 
     const claude = JSON.parse(
       await readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
@@ -191,10 +203,9 @@ describe("skill CLI integration", () => {
         "agents: [opencode, claude-code]",
         "skills:",
         "  local-skill:",
-        "    enabled: false",
+        "    agents: { opencode: false }",
         "  claude-skill:",
-        "    enabled: true",
-        "    targets: [claude-code]",
+        "    agents: { claude-code: true }",
         ""
       ].join("\n"),
       "utf8"
@@ -212,10 +223,13 @@ describe("skill CLI integration", () => {
       process.chdir(originalCwd);
     }
 
-    const opencode = JSON.parse(
-      await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
-    ) as { permission?: { skill?: Record<string, string> } };
-    expect(opencode.permission?.skill?.["local-skill"]).toBe("allow");
+    const overrides = JSON.parse(
+      await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
+    ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
+    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(true);
+    await expect(
+      readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
 
     await expect(
       readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
@@ -231,7 +245,7 @@ describe("skill CLI integration", () => {
         "agents: [opencode]",
         "skills:",
         "  local-skill:",
-        "    enabled: true",
+        "    agents: { opencode: true }",
         "    toggleable: false",
         ""
       ].join("\n"),

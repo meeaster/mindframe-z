@@ -6,21 +6,25 @@ import { z } from "zod";
 
 export const agentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const targetSchema = agentSchema;
-const skillTargetSchema = z.enum(["opencode", "claude-code", "codex", "all"]);
-const profileMcpConfigSchema = z.object({
-  targets: z.array(targetSchema).min(1).optional(),
-  enabled: z.boolean()
-});
-const profileSkillTargetsSchema = z
-  .array(skillTargetSchema)
-  .refine((targets) => !targets.includes("all") || targets.length === 1, {
-    message: "Use either [all] or explicit skill targets, not both"
+const agentsMapSchema = z
+  .partialRecord(agentSchema, z.boolean())
+  .refine((agents) => Object.keys(agents).length > 0, {
+    message: "agents must contain at least one harness"
   });
-const profileSkillConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  toggleable: z.boolean().default(true),
-  targets: profileSkillTargetsSchema.optional()
-});
+const profileMcpConfigSchema = z
+  .object({
+    agents: agentsMapSchema
+  })
+  .strict()
+  .refine((config) => config.agents["claude-code"] !== false, {
+    message: "MCP entries cannot set claude-code to false"
+  });
+const profileSkillConfigSchema = z
+  .object({
+    agents: agentsMapSchema.optional(),
+    toggleable: z.boolean().default(true)
+  })
+  .strict();
 
 export const referenceSchema = z.object({
   name: z.string().min(1),
@@ -211,12 +215,7 @@ export const profileSchema = z
     agents: z.array(agentSchema).default(["opencode", "claude-code", "codex"]),
     instructions: z.array(z.string()).default([]),
     references: z.array(z.string()).default([]),
-    skills: z
-      .record(
-        z.string(),
-        z.union([profileSkillConfigSchema, profileSkillTargetsSchema, z.null()]).optional()
-      )
-      .default({}),
+    skills: z.record(z.string(), profileSkillConfigSchema.optional()).default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
     opencode: opencodeConfigSchema.default({
       config: {},
@@ -270,7 +269,7 @@ export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
-export type ProfileSkillTarget = z.infer<typeof skillTargetSchema>;
+export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;

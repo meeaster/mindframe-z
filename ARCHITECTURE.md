@@ -54,13 +54,13 @@ machine config ────┤               claude,       claude/              
 ### Apply (profiles → tools)
 
 1. **Load manifests** — parse `shared/refs.yml`, `shared/skills.yml`, `shared/mcp.yml`, all `profiles/*/profile.yml`, and `~/.mindframe-z/config.yml`.
-2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`; each profile decides which agents are active, and individual skill/MCP target lists default to those active agents when omitted.
+2. **Resolve profile** — select profile via `--profile` > `MFZ_PROFILE` > machine config > default `personal`. The config root is selected via `--root` > `MFZ_ROOT` > machine `repo_path` > cwd. If the profile `extends` another, recursively merge (arrays are additive and deduplicated; maps are deep-merged with child overriding parent). MCP server definitions come from `shared/mcp.yml`; each profile decides which agents are active, and skill/MCP entries declare per-agent availability and default state with an `agents` map.
 3. **Render** — for each active agent and infrastructure target, the renderer produces files and link plans:
    - **opencode**: `opencode.jsonc` + plugin files + command files, linked to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/commands/`; folder permissions render to `permission.external_directory` and `permission.edit`
    - **claude-code**: `CLAUDE.md` linked to `~/.claude/`; `settings.json` rendered as a managed snapshot and merged into the machine-local `~/.claude/settings.json`; `mcp.json` rendered as a managed snapshot and merged into user-level `~/.claude.json#mcpServers`; folder permissions render to `permissions` and `additionalDirectories`
    - **codex**: `config.toml` and `AGENTS.md` rendered under `configs/<profile>/codex/`; `config.toml` is merged into `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`); folder permissions render as a named Codex permission profile
    - **mise**: `config.toml`, linked to `~/.config/mise/config.toml`
-   - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`; a managed `.zshrc` also sources local secret and machine-local customization files when they exist
+   - **dotfiles**: any files declared in the profile's `dotfiles` map, linked to `~/`; a managed `.zshrc` also sources local secret and machine-local customization files when they exist, and defines launchers for `codex`, `opencode`, and `claude` that inject project overrides from `~/.mindframe-z/overrides.json`
 4. **Write files** — rendered content is written to `configs/<profile>/`. `extra_folders` also writes the machine-local `~/.mindframe-z/extra_folders.md` index. If an agent is not in the profile's `agents` list, its rendered directory is not produced by a default apply.
 5. **Write machine-local managed files** — apply writes host-local files that must not enter rendered profile config, including `~/.mindframe-z/gitconfig` from machine git identity and target-specific merged runtime files.
 6. **Create symlinks** — global tool paths are symlinked to the rendered files, with backup-and-replace on conflict (after user confirmation).
@@ -71,7 +71,7 @@ Claude MCP follows a similar snapshot-plus-merge model, but at user scope. The r
 
 Codex also uses a snapshot-plus-merge model. The rendered `configs/<profile>/codex/config.toml` contains profile-managed `codex.config` keys plus generated `[mcp_servers]`, `default_permissions`, `[permissions.mfz]`, and `[plugins]` tables. During apply, mindframe-z reads `$CODEX_HOME/config.toml`, deep-merges managed keys on top, and writes a regular local file so unrelated Codex user state remains intact. The `[plugins]` table is the exception: `codex.plugins` is full-owner state, so apply replaces the local plugin table with the resolved profile declarations and removes the table when no plugins are declared. Install curated plugins through Codex `/plugins`, run `mfz sync` to adopt enabled plugin ids into `codex.plugins`, then run `mfz apply` to make that set reproducible. The renderer installs generated guidance to `$CODEX_HOME/AGENTS.md` and intentionally does not create `AGENTS.override.md`.
 
-Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.mindframe-z/.zshrc` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values.
+Managed zsh config uses the existing dotfiles model with one convention: when profiles declare `.zshrc`, the dotfiles renderer wraps the profile content with guarded local includes and managed harness launcher functions. The rendered `~/.zshrc` sources `~/.mindframe-z/secrets/zsh.env` first for secrets and `~/.mindframe-z/.zshrc` last for non-secret machine overrides, ignoring both when absent. Agent renderers deny read and edit access to `~/.mindframe-z/secrets/**` so agents can safely edit managed zsh config without seeing secret values. The launchers read `~/.mindframe-z/overrides.json` with `jq`, resolve the current git root, and inject payloads with Codex `-c`, `OPENCODE_CONFIG_CONTENT`, or Claude `--settings`; if the store, `jq`, or project entry is absent they run the underlying command unchanged.
 
 To migrate an existing `.zshrc`, move portable aliases, PATH setup, prompt selection, and shell framework configuration into `profiles/base/.zshrc` or a child profile `.zshrc`. Move secret exports such as API tokens to `~/.mindframe-z/secrets/zsh.env`, and move host-specific non-secret tweaks to `~/.mindframe-z/.zshrc`.
 
@@ -173,19 +173,19 @@ Project editor settings map schemas to YAML files:
 
 Zed uses `.zed/settings.json` to configure `yaml-language-server`; VS Code uses `.vscode/settings.json` with `yaml.schemas`.
 
-## Repo-Scoped Skill Toggles
+## Project Override Store
 
-Profiles declare which skills exist for each agent target and each skill's default `enabled` state. `mfz skills sync` installs every profile-declared skill, including disabled skills, so enabling a skill later is an instant config write rather than an install operation.
+Profiles declare which skills and MCP servers exist for each agent target and each target's default enabled state. A key in an entry's `agents` map means available for that harness; the boolean value is that harness's default. `mfz skills sync` installs every profile-declared skill, including disabled skills, so enabling a skill later is an instant config write rather than an install operation.
 
-Skill visibility is runtime tool state, not rendered profile state. `mfz skills tui`, `mfz skills enable`, and `mfz skills disable` detect the current git repository with `git rev-parse --show-toplevel`. Inside a repo they write to repo-local tool config at the git root; outside a repo they write to user-global tool config:
+Project-scoped skill and MCP visibility is runtime tool state, not rendered profile state. `mfz skills tui`, `mfz skills enable`, `mfz skills disable`, and `mfz mcp` commands detect the current git repository with `git rev-parse --show-toplevel`. Inside a repo they write deltas to `~/.mindframe-z/overrides.json`, keyed by absolute project root and harness. No project-scoped toggle writes files inside the repository. Outside a repo, skill toggles keep writing user-global tool config:
 
-| Target        | Repo-local file               | Global file                         | Managed key        |
-| ------------- | ----------------------------- | ----------------------------------- | ------------------ |
-| `opencode`    | `.opencode/opencode.jsonc`    | `~/.config/opencode/opencode.jsonc` | `permission.skill` |
-| `claude-code` | `.claude/settings.local.json` | `~/.claude/settings.json`           | `skillOverrides`   |
-| `codex`       | `.codex/config.toml`          | `$CODEX_HOME/config.toml`           | `[[skills.config]]` |
+| Target        | Project destination                 | Global skill destination            | Managed key        |
+| ------------- | ----------------------------------- | ----------------------------------- | ------------------ |
+| `opencode`    | `~/.mindframe-z/overrides.json`     | `~/.config/opencode/opencode.jsonc` | `permission.skill` |
+| `claude-code` | `~/.mindframe-z/overrides.json`     | `~/.claude/settings.json`           | `skillOverrides`   |
+| `codex`       | `~/.mindframe-z/overrides.json`     | `$CODEX_HOME/config.toml`           | `[[skills.config]]` |
 
-Read precedence is repo-local overrides, then global overrides, then profile defaults. Repo-local files are added to `.git/info/exclude`; global writes skip git exclusion. Global skill state is also recorded under `~/.mindframe-z/skill-overrides/` so `mfz apply` can explicitly overlay OpenCode skill preferences onto the linked runtime snapshot without scraping generated config. Claude Code global settings are merged as local state during apply. Codex skill toggles use path-based `[[skills.config]]` entries and require a resolvable installed `SKILL.md` path. OpenCode reads these changes on restart; Claude Code hot-reloads local settings.
+Read precedence for skills is project overrides, then global overrides, then profile defaults. MCP has profile defaults plus project overrides. Overrides are deltas: setting a project value back to its effective default removes the stored entry. The store also holds pre-rendered launch payloads so shell launchers stay simple. Global skill state is still recorded under `~/.mindframe-z/skill-overrides/` so `mfz apply` can explicitly overlay OpenCode skill preferences onto the linked runtime snapshot without scraping generated config. Claude Code global settings are merged as local state during apply. Codex skill toggles use path-based `[[skills.config]]` entries in the launcher payload.
 
 ## Profile Inheritance and Merge Semantics
 
