@@ -129,11 +129,12 @@ describe("thread storage", () => {
 
     expect(destinations.map((destination) => [destination.name, destination.default])).toEqual([
       ["personal", false],
-      ["work", true]
+      ["work", true],
+      ["home", false]
     ]);
   });
 
-  it("defaults to the active home threads folder when no destination is default", async () => {
+  it("defaults to the active home threads folder without configured destinations", async () => {
     const home = await makeTempDir();
     const root = path.join(home, "mfz-home");
     const destinations = resolveThreadDestinations(
@@ -144,6 +145,23 @@ describe("thread storage", () => {
     expect(
       destinations.map((destination) => [destination.name, destination.default, destination.path])
     ).toContainEqual(["home", true, path.join(root, "threads")]);
+  });
+
+  it("keeps home as the default when destinations only add non-default remotes", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const destinations = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations(
+        [{ name: "personal", remote: "git@example.com:me/threads.git", default: false, no_push: false }],
+        machine([])
+      )
+    );
+
+    expect(destinations.map((destination) => [destination.name, destination.default])).toEqual([
+      ["personal", false],
+      ["home", true]
+    ]);
   });
 
   it("resolves destination paths relative to the active home", async () => {

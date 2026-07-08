@@ -53,11 +53,11 @@ export function resolveThreadDestinations(
     map.set(destination.name, destination);
   }
 
+  if (!map.has("home")) {
+    map.set("home", { name: "home", path: "threads", no_push: false, default: false });
+  }
   const destinations = [...map.values()];
   const defaultName = destinations.findLast((destination) => destination.default)?.name ?? "home";
-  if (!destinations.some((destination) => destination.name === defaultName)) {
-    destinations.push({ name: defaultName, path: "threads", no_push: false, default: true });
-  }
   return destinations.map((destination) => ({
     ...destination,
     default: destination.name === defaultName,
