@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify } from "smol-toml";
 import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import { parseEnvRef } from "../core/env-ref.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { readTomlObject } from "../core/skill-overrides.js";
@@ -21,9 +22,9 @@ function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, 
         const literalHeaders: Record<string, string> = {};
         const envHeaders: Record<string, string> = {};
         for (const [header, value] of Object.entries(server.headers ?? {})) {
-          const match = value.match(/^\{env:(.+)\}$/);
-          if (match) {
-            envHeaders[header] = match[1]!;
+          const envVar = parseEnvRef(value);
+          if (envVar !== null) {
+            envHeaders[header] = envVar;
           } else {
             literalHeaders[header] = value;
           }

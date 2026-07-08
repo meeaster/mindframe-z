@@ -2,11 +2,22 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   agentList,
+  archiveCacheRoot,
   createRuntimePaths,
+  expandHome,
+  globalSkillStatePath,
   infraTargetList,
   opencodeDataHome,
   opencodeDbPath,
-  type RuntimePaths
+  overrideStorePath,
+  type RuntimePaths,
+  threadCliLogPath,
+  threadDestinationRoot,
+  threadPath,
+  threadRunPath,
+  threadRunsRoot,
+  threadStoreRoot,
+  threadSweepRoot
 } from "./paths.js";
 
 function paths(home: string): RuntimePaths {
@@ -121,6 +132,62 @@ describe("createRuntimePaths", () => {
     const runtime = createRuntimePaths({ home: "/tmp/home" });
     expect(runtime.root).toBe("/env/repo");
     expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
+  });
+});
+
+describe("expandHome", () => {
+  it("returns the home directory for a bare tilde", () => {
+    expect(expandHome("~", "/tmp/home")).toBe("/tmp/home");
+  });
+
+  it("joins tilde-slash paths onto home", () => {
+    expect(expandHome("~/nested/dir", "/tmp/home")).toBe(path.join("/tmp/home", "nested", "dir"));
+  });
+
+  it("leaves non-tilde paths untouched", () => {
+    expect(expandHome("/abs/path", "/tmp/home")).toBe("/abs/path");
+    expect(expandHome("relative/path", "/tmp/home")).toBe("relative/path");
+  });
+});
+
+describe(".mindframe-z store path contract", () => {
+  const home = "/tmp/store-home";
+  const runtime = paths(home);
+  const mfz = path.join(home, ".mindframe-z");
+
+  it("pins the per-agent skill override state path", () => {
+    expect(globalSkillStatePath(runtime, "claude-code")).toBe(
+      path.join(mfz, "skill-overrides", "claude-code.json")
+    );
+  });
+
+  it("pins the override store path from a home directory", () => {
+    expect(overrideStorePath(home)).toBe(path.join(mfz, "overrides.json"));
+  });
+
+  it("pins the thread store root and per-slug path", () => {
+    expect(threadStoreRoot(runtime)).toBe(path.join(mfz, "threads"));
+    expect(threadPath(runtime, "my-slug")).toBe(path.join(mfz, "threads", "my-slug"));
+  });
+
+  it("pins the archive cache root", () => {
+    expect(archiveCacheRoot(runtime)).toBe(path.join(mfz, "archive-cache"));
+  });
+
+  it("pins the thread destination root", () => {
+    expect(threadDestinationRoot(runtime, "dest")).toBe(
+      path.join(mfz, "thread-destinations", "dest")
+    );
+  });
+
+  it("pins the thread run roots, per-run path, and cli log", () => {
+    expect(threadRunsRoot(runtime)).toBe(path.join(mfz, "thread-runs", "runs"));
+    expect(threadRunPath(runtime, "run-1")).toBe(path.join(mfz, "thread-runs", "runs", "run-1"));
+    expect(threadCliLogPath(runtime)).toBe(path.join(mfz, "thread-runs", "cli.log"));
+  });
+
+  it("pins the thread sweep root", () => {
+    expect(threadSweepRoot(runtime)).toBe(path.join(mfz, "thread-sweep"));
   });
 });
 

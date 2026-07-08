@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { expandHome } from "../core/paths.js";
+import { parseEnvRef } from "../core/env-ref.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
@@ -41,7 +42,8 @@ async function readJsonObject(filePath: string): Promise<Record<string, unknown>
 }
 
 function stripEnvRef(value: string): string {
-  return value.replace(/^\{env:(.+)\}$/, "$${$1}");
+  const name = parseEnvRef(value);
+  return name === null ? value : `\${${name}}`;
 }
 
 function renderClaudeMcpServer(
