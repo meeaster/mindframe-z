@@ -98,6 +98,13 @@ async function confirmReplace(
   return normalized === "y" || normalized === "yes";
 }
 
+function staleManagedConfigTarget(detail: string): boolean {
+  const prefix = "symlink points to ";
+  if (!detail.startsWith(prefix)) return false;
+  const linkedTarget = detail.slice(prefix.length);
+  return linkedTarget.includes(`${path.sep}configs${path.sep}`);
+}
+
 async function applyConfig(options: {
   root?: string | undefined;
   home?: string | undefined;
@@ -172,7 +179,8 @@ async function applyConfig(options: {
           }
 
           const backupPath = backupPathFor(link.linkPath);
-          if (!(await confirmReplace(rl, link.linkPath, backupPath))) {
+          const autoReplace = staleManagedConfigTarget(status.detail);
+          if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
             console.log(`skipped\t${link.linkPath} (${status.detail})`);
             continue;
           }
