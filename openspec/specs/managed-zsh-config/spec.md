@@ -9,7 +9,7 @@ mindframe-z SHALL render a profile-managed zsh startup file for the active profi
 
 #### Scenario: Applying managed zsh config
 - **WHEN** the active profile declares managed zsh startup content and the user runs `mfz apply --target dotfiles`
-- **THEN** mindframe-z renders the zsh startup file under `configs/<profile>/` and plans a link to `~/.zshrc`
+- **THEN** mindframe-z renders the zsh startup file under `~/.mindframe-z/configs/<profile>/` and plans a link to `~/.zshrc`
 
 ### Requirement: Protected zsh secrets include
 The managed zsh startup file SHALL source a machine-local zsh secrets file when that file exists, and secret values SHALL NOT be stored in profile manifests or rendered profile config.
@@ -60,11 +60,18 @@ mindframe-z SHALL support managing portable Powerlevel10k prompt configuration a
 
 #### Scenario: Applying managed p10k config
 - **WHEN** the active profile declares `.p10k.zsh` content and the user runs `mfz apply --target dotfiles`
-- **THEN** mindframe-z renders `.p10k.zsh` under `configs/<profile>/dotfiles/` and plans a link to `~/.p10k.zsh`
+- **THEN** mindframe-z renders `.p10k.zsh` under `~/.mindframe-z/configs/<profile>/dotfiles/` and plans a link to `~/.p10k.zsh`
 
 #### Scenario: Managed zsh config sources p10k config
 - **WHEN** the managed zsh startup file is evaluated and `~/.p10k.zsh` exists
 - **THEN** the shell sources `~/.p10k.zsh`
+
+### Requirement: Engine bin directory on PATH
+The managed zsh startup file SHALL ensure `~/.mindframe-z/bin` is present on `PATH` so the engine launcher remains resolvable regardless of node version switches or shell customization.
+
+#### Scenario: Managed zshrc guarantees engine PATH
+- **WHEN** the rendered zsh startup file is evaluated
+- **THEN** `~/.mindframe-z/bin` is on `PATH` in the resulting shell
 
 ### Requirement: Shell dependency installation out of scope
 mindframe-z SHALL NOT install oh-my-zsh, the Powerlevel10k theme repository, fonts, or zsh plugins as part of managed zsh config rendering.
