@@ -79,6 +79,8 @@ skills:
     enabled: false
   grilling:
     enabled: false
+  to-prd:
+    enabled: true
   improve-codebase-architecture:
     enabled: false
   domain-modeling:
