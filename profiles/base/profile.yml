@@ -16,6 +16,7 @@ references:
   - mattpocock-skills
   - dd-apm-test-agent
   - sideshow
+  - codex
 thread:
   destinations:
     - name: testing
