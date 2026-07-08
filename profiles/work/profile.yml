@@ -24,7 +24,7 @@ mcp:
   datadog:
     agents: { opencode: false, claude-code: true, codex: false }
   forge:
-    agents: { opencode: true, claude-code: true, codex: true }
+    agents: { opencode: false, claude-code: true, codex: false }
 thread:
   # Thread dispatch authenticates to Bedrock the same way interactive Claude
   # Code does: the runner reads ~/.claude/settings.json for the AWS profile,
@@ -107,3 +107,32 @@ codex:
 claude:
   settings:
     includeGitInstructions: false
+    permissions:
+      defaultMode: acceptEdits
+      allow:
+        - "Bash(*)"
+        - "WebFetch(domain:*)"
+        - "mcp__context7__*"
+        - "mcp__qmd__*"
+        - "mcp__fff__*"
+        - "mcp__deepwiki__*"
+        - "mcp__openai-docs__*"
+        - "mcp__exa__*"
+        - "mcp__aws-knowledge__*"
+        - "mcp__jira__*"
+        - "mcp__confluence__*"
+        - "mcp__datadog__*"
+      deny:
+        - "Bash(rm -rf *)"
+        - "Bash(rm -rf)"
+        - "Bash(git push --force*)"
+        - "Bash(git push -f*)"
+        - "Bash(git reset --hard*)"
+        - "Bash(git checkout -- *)"
+        - "Bash(git clean -f*)"
+        - "Bash(cat ~/.aws/*)"
+        - "Bash(cat ~/.ssh/*)"
+        - "Bash(env)"
+        - "Bash(printenv*)"
+        - "Read(//home/mark/.aws/**)"
+        - "Read(//home/mark/.ssh/**)"
