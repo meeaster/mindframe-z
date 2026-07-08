@@ -5,6 +5,30 @@ distilled from agent sessions across harnesses.
 
 ## Language
 
+### Configuration
+
+**Harness**:
+A host coding agent that mindframe-z renders configuration for: claude-code,
+opencode, or codex. Called `agents`/`targets` in profile manifests.
+_Avoid_: tool, CLI
+
+**Profile default**:
+The enabled state a profile declares for a skill or MCP server on one harness;
+what a fresh render produces before any override.
+
+**Override**:
+A per-project, per-harness delta from a profile default, keyed by project path.
+Setting an override equal to the default removes it — overrides only ever
+record drift.
+_Avoid_: local toggle, custom setting
+
+**Launcher**:
+The managed shell function that shadows a harness command and injects the
+current project's overrides at session start, using the harness's native
+launch-time mechanism. Sessions started without the launcher see only profile
+defaults.
+_Avoid_: alias, shim
+
 ### Threads
 
 **Thread**:
