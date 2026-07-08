@@ -49,10 +49,7 @@ describe("dotfiles integration", () => {
     expect(gitconfig).toContain("\tco = checkout");
     expect(gitconfig.split(`path = ${fragmentPath}`).length - 1).toBe(1);
 
-    const renderedProfile = await readFile(
-      configsPath(home, "personal", "AGENTS.md"),
-      "utf8"
-    );
+    const renderedProfile = await readFile(configsPath(home, "personal", "AGENTS.md"), "utf8");
     expect(renderedProfile).not.toContain("Test User");
     expect(renderedProfile).not.toContain("test@example.com");
   });
@@ -135,10 +132,7 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const npmrc = await readFile(
-      configsPath(home, "personal", "dotfiles", ".npmrc"),
-      "utf8"
-    );
+    const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
 
@@ -157,10 +151,7 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const zshrc = await readFile(
-      configsPath(home, "personal", "dotfiles", ".zshrc"),
-      "utf8"
-    );
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "bin"));
     expect(zshrc).toContain("alias gs='git status'");
@@ -176,10 +167,7 @@ describe("dotfiles integration", () => {
 
     await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
 
-    const zshrc = await readFile(
-      configsPath(home, "personal", "dotfiles", ".zshrc"),
-      "utf8"
-    );
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain("if [ -r ");
     expect(zshrc).toContain("source ");
     expect(zshrc).not.toContain("API_KEY=");
@@ -221,10 +209,7 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const npmrc = await readFile(
-      configsPath(home, "personal", "dotfiles", ".npmrc"),
-      "utf8"
-    );
+    const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
     expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");

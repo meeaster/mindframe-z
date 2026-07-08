@@ -54,6 +54,6 @@
 
 ## 8. Strip the engine
 
-- [ ] 8.1 Delete moved content from mindframe-z (profiles, catalog, skills, opencode content, work sandbox overlays, `configs/`); keep engine, tests, schemas, sandbox scaffolding
-- [ ] 8.2 Update ARCHITECTURE.md and README for the engine/home split, new paths, bootstrap flow, and glossary alignment with CONTEXT.md
+- [x] 8.1 Delete moved content from mindframe-z (profiles, catalog, skills, opencode content, work sandbox overlays, `configs/`); keep engine, tests, schemas, sandbox scaffolding
+- [x] 8.2 Update ARCHITECTURE.md and README for the engine/home split, new paths, bootstrap flow, and glossary alignment with CONTEXT.md
 - [ ] 8.3 Run full check suite (`pnpm check`); verify both machines render and link correctly from their homes

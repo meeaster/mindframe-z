@@ -251,7 +251,9 @@ async function doctor(options: {
 }
 
 function collectUpstreamHomes(manifests: LoadedManifests): LoadedManifests[] {
-  return manifests.upstream ? [manifests.upstream, ...collectUpstreamHomes(manifests.upstream)] : [];
+  return manifests.upstream
+    ? [manifests.upstream, ...collectUpstreamHomes(manifests.upstream)]
+    : [];
 }
 
 async function gitStdout(cwd: string, args: string[]): Promise<string | null> {
@@ -269,11 +271,15 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
   const dirty = (await gitStdout(upstream.root, ["status", "--porcelain"]))?.trim();
   if (dirty) lines.push(`upstream:dirty\t${label}\t${upstream.root}`);
 
-  const ahead = Number((await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0");
+  const ahead = Number(
+    (await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0"
+  );
   if (ahead > 0) lines.push(`upstream:ahead\t${label}\t${ahead} commit(s) unpushed`);
 
   await gitStdout(upstream.root, ["fetch", "--quiet"]);
-  const behind = Number((await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0");
+  const behind = Number(
+    (await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0"
+  );
   if (behind > 0) lines.push(`upstream:stale\t${label}\t${behind} commit(s) behind`);
   return lines;
 }
@@ -281,7 +287,9 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   if (process.env.MFZ_REFERENCES_DIR) return false;
   try {
-    const parsed = YAML.parse(await readFile(path.join(home, ".mindframe-z", "config.yml"), "utf8")) as unknown;
+    const parsed = YAML.parse(
+      await readFile(path.join(home, ".mindframe-z", "config.yml"), "utf8")
+    ) as unknown;
     if (parsed && typeof parsed === "object" && "references_dir" in parsed) return false;
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.
@@ -380,7 +388,11 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
     ].join("\n"),
     "utf8"
   );
-  await writeFile(path.join(homeRoot, "instructions", "AGENTS.md"), "# Home Instructions\n", "utf8");
+  await writeFile(
+    path.join(homeRoot, "instructions", "AGENTS.md"),
+    "# Home Instructions\n",
+    "utf8"
+  );
   const agentList = agents.length > 0 ? agents : ["opencode", "claude-code", "codex"];
   await writeFile(
     path.join(homeRoot, "profiles", "base", "profile.yml"),
@@ -424,16 +436,26 @@ async function initHome(options: {
   agents?: string | undefined;
   home?: string | undefined;
 }): Promise<void> {
-  const machineHome = path.resolve(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd());
+  const machineHome = path.resolve(
+    options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd()
+  );
   const configDir = path.join(machineHome, ".mindframe-z");
   await mkdir(configDir, { recursive: true });
   let homeRoot: string;
   if (options.create) {
     homeRoot = path.resolve(options.create);
-    await scaffoldHome(homeRoot, options.agents?.split(",").map((agent) => agent.trim()).filter(Boolean) ?? []);
+    await scaffoldHome(
+      homeRoot,
+      options.agents
+        ?.split(",")
+        .map((agent) => agent.trim())
+        .filter(Boolean) ?? []
+    );
     await execa("git", ["init"], { cwd: homeRoot });
     await execa("git", ["add", "."], { cwd: homeRoot });
-    await execa("git", ["commit", "-m", "Initial mindframe-z home"], { cwd: homeRoot }).catch(() => undefined);
+    await execa("git", ["commit", "-m", "Initial mindframe-z home"], { cwd: homeRoot }).catch(
+      () => undefined
+    );
   } else if (options.clone) {
     const name = options.name ?? path.basename(options.clone, ".git");
     homeRoot = path.join(machineHome, ".mindframe-z", "homes", name);
@@ -444,7 +466,11 @@ async function initHome(options: {
   } else {
     throw new Error("mfz init requires --create <path>, --clone <repo>, or --point <path>");
   }
-  await writeFile(path.join(configDir, "config.yml"), `home_path: ${homeRoot}\nprofile: base\n`, "utf8");
+  await writeFile(
+    path.join(configDir, "config.yml"),
+    `home_path: ${homeRoot}\nprofile: base\n`,
+    "utf8"
+  );
   console.log(`home_path\t${homeRoot}`);
 }
 

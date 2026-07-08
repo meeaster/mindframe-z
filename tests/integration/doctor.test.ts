@@ -19,7 +19,12 @@ describe("doctor integration", () => {
   it("uses machine home_path when root is not provided", async () => {
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),
-      ["profile: personal", `home_path: ${root}`, "references_dir: ~/.mindframe-z/references", ""].join("\n"),
+      [
+        "profile: personal",
+        `home_path: ${root}`,
+        "references_dir: ~/.mindframe-z/references",
+        ""
+      ].join("\n"),
       "utf8"
     );
 

@@ -43,16 +43,10 @@ describe("apply integration", () => {
       )
     ).toContain("mindframe-z-plugin-loaded");
     expect(
-      await readFile(
-        configsPath(home, "personal", "opencode", "commands", "test-cmd.md"),
-        "utf8"
-      )
+      await readFile(configsPath(home, "personal", "opencode", "commands", "test-cmd.md"), "utf8")
     ).toContain("Run the test command.");
 
-    const claude = await readFile(
-      configsPath(home, "personal", "claude", "CLAUDE.md"),
-      "utf8"
-    );
+    const claude = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
     expect(claude).toContain("@" + configsPath(home, "personal", "AGENTS.md"));
 
     const claudeMcp = JSON.parse(
@@ -232,9 +226,9 @@ describe("apply integration", () => {
         filesystem: { [path.join(home, "references")]: "read", [path.join(home, "work")]: "write" }
       }
     });
-    expect(
-      await readFile(configsPath(home, "personal", "codex", "AGENTS.md"), "utf8")
-    ).toContain("# Test Agents");
+    expect(await readFile(configsPath(home, "personal", "codex", "AGENTS.md"), "utf8")).toContain(
+      "# Test Agents"
+    );
     expect(await exists(path.join(home, ".codex", "config.toml"))).toBe(false);
   });
 
@@ -506,7 +500,9 @@ describe("apply integration", () => {
       permission: { bash: Record<string, string>; edit: Record<string, string> };
     };
     expect(config.permission.bash["rm *"]).toBe("deny");
-    expect(config.permission.edit[`${path.join(home, ".mindframe-z", "references")}/**`]).toBe("deny");
+    expect(config.permission.edit[`${path.join(home, ".mindframe-z", "references")}/**`]).toBe(
+      "deny"
+    );
   });
 
   it("sync promotes unmanaged rendered OpenCode config keys to the chosen profile", async () => {

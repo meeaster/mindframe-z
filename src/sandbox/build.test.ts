@@ -33,7 +33,9 @@ describe("sandbox image build plan", () => {
     expect(first.inputs.contextFiles).toHaveProperty("sandbox/scripts/helper.mjs");
     expect(first.label).toContain(first.hash);
 
-    await mkdir(path.join(home, ".mindframe-z", "configs", "personal", "dotfiles"), { recursive: true });
+    await mkdir(path.join(home, ".mindframe-z", "configs", "personal", "dotfiles"), {
+      recursive: true
+    });
     await writeFile(
       path.join(home, ".mindframe-z", "configs", "personal", "dotfiles", ".zshrc"),
       "alias ok=true\n",

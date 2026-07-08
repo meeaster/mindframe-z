@@ -14,7 +14,9 @@ async function writeHome(root: string, options: { extends?: { name: string; repo
   await writeFile(
     path.join(root, "mfz_home.yml"),
     options.extends
-      ? [`extends:`, `  name: ${options.extends.name}`, `  repo: ${options.extends.repo}`, ""].join("\n")
+      ? [`extends:`, `  name: ${options.extends.name}`, `  repo: ${options.extends.repo}`, ""].join(
+          "\n"
+        )
       : "description: Test home\n",
     "utf8"
   );
@@ -126,7 +128,12 @@ describe("home inheritance", () => {
     await writeHome(parent);
     await writeFile(
       path.join(parent, "catalog", "references.yml"),
-      ["references:", "  - name: upstream-ref", "    url: https://example.invalid/upstream.git", ""].join("\n"),
+      [
+        "references:",
+        "  - name: upstream-ref",
+        "    url: https://example.invalid/upstream.git",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await writeFile(
@@ -139,7 +146,9 @@ describe("home inheritance", () => {
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
-      ["name: work", "extends: personal/base", "references:", "  - personal/upstream-ref", ""].join("\n"),
+      ["name: work", "extends: personal/base", "references:", "  - personal/upstream-ref", ""].join(
+        "\n"
+      ),
       "utf8"
     );
 
@@ -187,13 +196,23 @@ describe("home inheritance", () => {
     await writeHome(parent);
     await writeFile(
       path.join(parent, "catalog", "references.yml"),
-      ["references:", "  - name: shared-ref", "    url: https://example.invalid/upstream.git", ""].join("\n"),
+      [
+        "references:",
+        "  - name: shared-ref",
+        "    url: https://example.invalid/upstream.git",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await writeHome(child, { extends: { name: "personal", repo: parent } });
     await writeFile(
       path.join(child, "catalog", "references.yml"),
-      ["references:", "  - name: shared-ref", "    url: https://example.invalid/local.git", ""].join("\n"),
+      [
+        "references:",
+        "  - name: shared-ref",
+        "    url: https://example.invalid/local.git",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });

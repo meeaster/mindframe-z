@@ -20,10 +20,7 @@ describe("mise integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
-    const mise = await readFile(
-      configsPath(home, "personal", "mise", "config.toml"),
-      "utf8"
-    );
+    const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
     expect(mise).toContain('jq = "latest"');
     expect(mise).toContain('node = "24"');
     expect(mise).toContain("[settings]");

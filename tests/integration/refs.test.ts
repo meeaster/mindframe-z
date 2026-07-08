@@ -47,10 +47,7 @@ describe("refs integration", () => {
     );
     expect(opencode).not.toContain("extra_folders.md");
 
-    const claudeMd = await readFile(
-      configsPath(home, "personal", "claude", "CLAUDE.md"),
-      "utf8"
-    );
+    const claudeMd = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
     expect(claudeMd).not.toContain("extra_folders.md");
   });
 
@@ -88,10 +85,7 @@ describe("refs integration", () => {
     );
     expect(opencode).toContain("extra_folders.md");
 
-    const claudeMd = await readFile(
-      configsPath(home, "personal", "claude", "CLAUDE.md"),
-      "utf8"
-    );
+    const claudeMd = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
     expect(claudeMd).toContain("extra_folders.md");
   });
 

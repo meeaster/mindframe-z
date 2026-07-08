@@ -12,7 +12,9 @@ async function exists(file: string): Promise<boolean> {
 }
 
 function isLocalRepoSpec(repo: string): boolean {
-  return repo.startsWith("/") || repo.startsWith("./") || repo.startsWith("../") || repo.startsWith("~/");
+  return (
+    repo.startsWith("/") || repo.startsWith("./") || repo.startsWith("../") || repo.startsWith("~/")
+  );
 }
 
 function expandHome(value: string, home: string): string {

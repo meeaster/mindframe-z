@@ -73,7 +73,11 @@ function emptySources(): ProfileSources {
 }
 
 function mergeSources(base: ProfileSources, child: ProfileSources): ProfileSources {
-  const merge = (kind: string, a: Map<string, LoadedManifests>, b: Map<string, LoadedManifests>) => {
+  const merge = (
+    kind: string,
+    a: Map<string, LoadedManifests>,
+    b: Map<string, LoadedManifests>
+  ) => {
     const merged = new Map(a);
     for (const [name, home] of b) {
       const existing = merged.get(name);
@@ -118,7 +122,10 @@ function homeDisplayName(home: LoadedManifests): string {
 
 function homeByAliasPath(home: LoadedManifests, aliases: string[]): LoadedManifests | null {
   if (aliases.length === 0) return home;
-  return eachUpstream(home).find((candidate) => candidate.aliasPath.join("/") === aliases.join("/")) ?? null;
+  return (
+    eachUpstream(home).find((candidate) => candidate.aliasPath.join("/") === aliases.join("/")) ??
+    null
+  );
 }
 
 function eachUpstream(home: LoadedManifests): LoadedManifests[] {
@@ -138,7 +145,11 @@ function hasLocalDefinition(home: LoadedManifests, kind: CatalogKind, name: stri
   }
 }
 
-function findUpstreamDefinition(home: LoadedManifests, kind: CatalogKind, name: string): LoadedManifests | null {
+function findUpstreamDefinition(
+  home: LoadedManifests,
+  kind: CatalogKind,
+  name: string
+): LoadedManifests | null {
   return eachUpstream(home).find((candidate) => hasLocalDefinition(candidate, kind, name)) ?? null;
 }
 
@@ -151,7 +162,8 @@ function resolveCatalogName(
   if (parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]) {
     const name = parts.at(-1)!;
     const target = homeByAliasPath(home, parts.slice(0, -1));
-    if (!target) throw new Error(`Unknown upstream alias in ${kind}: ${parts.slice(0, -1).join("/")}`);
+    if (!target)
+      throw new Error(`Unknown upstream alias in ${kind}: ${parts.slice(0, -1).join("/")}`);
     if (!hasLocalDefinition(target, kind, name)) {
       throw new Error(`Unknown ${kind}: ${rawName}`);
     }
@@ -196,7 +208,8 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
     const parts = rawName.split("/");
     if (parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]) {
       const target = homeByAliasPath(home, parts.slice(0, -1));
-      if (!target) throw new Error(`Unknown upstream alias in instruction: ${parts.slice(0, -1).join("/")}`);
+      if (!target)
+        throw new Error(`Unknown upstream alias in instruction: ${parts.slice(0, -1).join("/")}`);
       const name = parts.at(-1)!;
       setSource(sources.instructions, "instruction", name, target);
       return name;
@@ -208,9 +221,10 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
     ...profile.opencode,
     plugins: profile.opencode.plugins.map((rawName) => {
       const parts = rawName.split("/");
-      const target = parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-        ? homeByAliasPath(home, parts.slice(0, -1))
-        : home;
+      const target =
+        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
+          ? homeByAliasPath(home, parts.slice(0, -1))
+          : home;
       if (!target) throw new Error(`Unknown upstream alias in opencode plugin: ${parts[0]}`);
       const name = parts.at(-1)!;
       setSource(sources.plugins, "OpenCode plugin", name, target);
@@ -218,9 +232,10 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
     }),
     commands: profile.opencode.commands.map((rawName) => {
       const parts = rawName.split("/");
-      const target = parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-        ? homeByAliasPath(home, parts.slice(0, -1))
-        : home;
+      const target =
+        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
+          ? homeByAliasPath(home, parts.slice(0, -1))
+          : home;
       if (!target) throw new Error(`Unknown upstream alias in opencode command: ${parts[0]}`);
       const name = parts.at(-1)!;
       setSource(sources.commands, "OpenCode command", name, target);
@@ -228,9 +243,10 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
     }),
     agents: profile.opencode.agents.map((rawName) => {
       const parts = rawName.split("/");
-      const target = parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
-        ? homeByAliasPath(home, parts.slice(0, -1))
-        : home;
+      const target =
+        parts.length > 1 && home.upstream?.aliasPath[0] === parts[0]
+          ? homeByAliasPath(home, parts.slice(0, -1))
+          : home;
       if (!target) throw new Error(`Unknown upstream alias in opencode agent: ${parts[0]}`);
       const name = parts.at(-1)!;
       setSource(sources.agents, "OpenCode agent", name, target);
@@ -372,7 +388,10 @@ export async function resolveProfile(
 
   const instructionFiles = profile.instructions.map((file) => {
     const sourceHome = sources.instructions.get(file) ?? manifests;
-    return path.resolve(sourceHome.root, file.startsWith("instructions/") ? file : path.join("instructions", file));
+    return path.resolve(
+      sourceHome.root,
+      file.startsWith("instructions/") ? file : path.join("instructions", file)
+    );
   });
   const referenceNames = dedupe(profile.references);
   const enabledReferences = referenceNames.map((refName) => {
