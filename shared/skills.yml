@@ -263,6 +263,14 @@ skills:
       to inspect spreadsheet data, create/update Excel files, analyze tabular data, convert CSV to XLSX, or
       work with Excel workbooks programmatically in Python.
     installer: skills
+  - name: skill-creator
+    source: git
+    repo: https://github.com/anthropics/skills
+    skill: skill-creator
+    description: >
+      Create and maintain reusable agent skills following the Anthropic skills framework. Use when
+      writing or updating a skill package, shaping its instructions, or organizing skill assets.
+    installer: skills
   - name: prototype
     source: git
     repo: https://github.com/mattpocock/skills
@@ -281,3 +289,12 @@ skills:
       Summarize conversations into handoff documents for seamless agent-to-agent transitions.
       Use when wrapping up a session and wanting to create a structured summary for a fresh
       agent to continue the work.
+  - name: dataviz
+    source: local
+    skill: dataviz
+    description: >
+      Use this skill whenever you are about to create ANY chart, graph, plot, dashboard, or data
+      visualization, in ANY output medium. Read it BEFORE writing chart code, choosing chart
+      colors, building a stat tile / meter / KPI row, or laying out a dashboard. Teaches a
+      design-system-agnostic method: a form heuristic, a color formula with a runnable validator,
+      mark specs, and interaction rules, plus a validated default palette to swap for your brand.

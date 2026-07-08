@@ -97,6 +97,8 @@ skills:
     agents: { opencode: true, claude-code: true, codex: true }
   xlsx:
     agents: { opencode: true, claude-code: true, codex: true }
+  skill-creator:
+    agents: { opencode: false, claude-code: false, codex: false }
   prototype:
     agents: { opencode: true, claude-code: true, codex: true }
   handoff:
