@@ -28,6 +28,9 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
   const managedSettings = new Set(Object.keys(profile.profile.mise.settings));
 
   for (const key of Object.keys(existing.tools)) {
+    if (key === "node" && existing.tools[key] === "24" && !("node" in profile.profile.mise.tools)) {
+      continue;
+    }
     if (!managedTools.has(key)) {
       candidates.push({
         target: "mise",

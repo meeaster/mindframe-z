@@ -5,11 +5,11 @@
     "profile": {
       "type": "string"
     },
-    "repo_path": {
+    "home_path": {
       "type": "string"
     },
     "references_dir": {
-      "default": "~/references",
+      "default": "~/.mindframe-z/references",
       "type": "string"
     },
     "extra_folders": {

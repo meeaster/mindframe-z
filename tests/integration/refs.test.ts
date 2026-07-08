@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 describe("refs integration", () => {
   let root: string;
@@ -19,16 +19,16 @@ describe("refs integration", () => {
   it("auto-adds references_dir permissions without extra_folders", async () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
-    const refsAbs = path.join(home, "references");
+    const refsAbs = path.join(home, ".mindframe-z", "references");
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain(`${refsAbs}/**`);
 
     const settings = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+      await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     ) as Record<string, unknown>;
     const perms = settings.permissions as { allow?: string[]; deny?: string[] };
     expect(perms.allow).toContain(`Read(/${refsAbs}/**)`);
@@ -42,13 +42,13 @@ describe("refs integration", () => {
     await expect(readFile(indexPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).not.toContain("extra_folders.md");
 
     const claudeMd = await readFile(
-      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      configsPath(home, "personal", "claude", "CLAUDE.md"),
       "utf8"
     );
     expect(claudeMd).not.toContain("extra_folders.md");
@@ -59,7 +59,7 @@ describe("refs integration", () => {
       path.join(home, ".mindframe-z", "config.yml"),
       [
         "profile: personal",
-        "references_dir: ~/references",
+        "references_dir: ~/.mindframe-z/references",
         "extra_folders:",
         "  - path: ~/code/work",
         "    description: Work code",
@@ -83,13 +83,13 @@ describe("refs integration", () => {
     );
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain("extra_folders.md");
 
     const claudeMd = await readFile(
-      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      configsPath(home, "personal", "claude", "CLAUDE.md"),
       "utf8"
     );
     expect(claudeMd).toContain("extra_folders.md");
@@ -111,6 +111,6 @@ describe("refs integration", () => {
     });
 
     expect(result.stdout).toContain(`${referencesDir}/local-ref`);
-    expect(result.stdout).not.toContain(`${home}/references/local-ref`);
+    expect(result.stdout).not.toContain(`${home}/.mindframe-z/references/local-ref`);
   });
 });

@@ -1,9 +1,10 @@
 {
   "yaml.schemas": {
-    "./schemas/refs.schema.json": "shared/refs.yml",
-    "./schemas/skills.schema.json": "shared/skills.yml",
-    "./schemas/mcp.schema.json": "shared/mcp.yml",
+    "./schemas/references.schema.json": "catalog/references.yml",
+    "./schemas/skills.schema.json": "catalog/skills.yml",
+    "./schemas/mcp.schema.json": "catalog/mcp.yml",
     "./schemas/profile.schema.json": "profiles/*/profile.yml",
+    "./schemas/mfz_home.schema.json": "mfz_home.yml",
     "./schemas/machine.schema.json": "machine-config.example.yml"
   }
 }

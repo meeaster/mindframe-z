@@ -77,7 +77,7 @@ async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstal
 
 export function buildSkillsCommand(
   paths: RuntimePaths,
-  skill: SkillEntry,
+  skill: SkillEntry & { sourceRoot?: string },
   target: ToolTarget
 ): string[] {
   const agent =
@@ -86,7 +86,7 @@ export function buildSkillsCommand(
     return [
       "skills",
       "add",
-      path.join(paths.root, "skills"),
+      path.join(skill.sourceRoot ?? paths.root, "skills"),
       ...(skill.skill ? ["--skill", skill.skill] : []),
       // Grouped skills live under skills/<group>/<skill>/; --full-depth makes the
       // CLI recurse past its default depth-1 walk so nested skills are discovered.

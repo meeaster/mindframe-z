@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { z, type ZodType } from "zod";
 import {
   machineSchema,
+  homeManifestSchema,
   mcpManifestSchema,
   profileSchema,
   refsManifestSchema,
@@ -12,10 +13,11 @@ import {
 import { threadManifestSchema, threadRunsSchema } from "../thread/schema.js";
 
 const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
-  { schema: refsManifestSchema, filename: "refs.schema.json" },
+  { schema: refsManifestSchema, filename: "references.schema.json" },
   { schema: skillsManifestSchema, filename: "skills.schema.json" },
   { schema: mcpManifestSchema, filename: "mcp.schema.json" },
   { schema: profileSchema, filename: "profile.schema.json" },
+  { schema: homeManifestSchema, filename: "mfz_home.schema.json" },
   { schema: machineSchema, filename: "machine.schema.json" },
   { schema: threadManifestSchema, filename: "thread-manifest.schema.json" },
   { schema: threadRunsSchema, filename: "thread-runs.schema.json" }

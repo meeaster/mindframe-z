@@ -79,6 +79,6 @@ function makeProfile(referencesDir: string): ResolvedProfile {
         description: "Datadog Agent reference."
       }
     ],
-    manifests: { references: [], skills: [], mcpServers: [] }
+    manifests: { homeManifest: {}, references: [], skills: [], mcpServers: {} }
   } as unknown as ResolvedProfile;
 }

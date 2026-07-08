@@ -57,8 +57,13 @@ function renderHarnessLaunchers(paths: RuntimePaths): string[] {
 }
 
 function renderZshrc(paths: RuntimePaths, content: string): string {
+  const engineBin = path.join(paths.home, ".mindframe-z", "bin");
   return [
     "# Managed by mindframe-z. Edit the profile-owned .zshrc source, then run mfz apply.",
+    `if [[ ":$PATH:" != *":${engineBin}:"* ]]; then`,
+    `  export PATH=${JSON.stringify(engineBin)}":$PATH"`,
+    "fi",
+    "",
     `if [ -r ${JSON.stringify(zshSecretsFile(paths))} ]; then`,
     `  source ${JSON.stringify(zshSecretsFile(paths))}`,
     "fi",

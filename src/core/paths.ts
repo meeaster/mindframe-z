@@ -38,10 +38,10 @@ export function expandHome(value: string, home = process.env.HOME ?? ""): string
   return value;
 }
 
-function machineRepoPath(home: string): string | undefined {
+function machineHomePath(home: string): string | undefined {
   try {
     const parsed = YAML.parse(readFileSync(path.join(home, ".mindframe-z", "config.yml"), "utf8"));
-    return machineSchema.parse(parsed).repo_path;
+    return machineSchema.parse(parsed).home_path;
   } catch {
     return undefined;
   }
@@ -49,7 +49,7 @@ function machineRepoPath(home: string): string | undefined {
 
 export function resolveRoot(input?: string, home = process.env.HOME ?? ""): string {
   return path.resolve(
-    expandHome(input ?? process.env.MFZ_ROOT ?? machineRepoPath(home) ?? process.cwd(), home)
+    expandHome(input ?? process.env.MFZ_ROOT ?? machineHomePath(home) ?? process.cwd(), home)
   );
 }
 
@@ -61,7 +61,7 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.resolve(
       expandHome(
         options.opencodeConfigDir ??

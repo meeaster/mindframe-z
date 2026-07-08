@@ -15,12 +15,16 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
+}
+
+export function configsPath(home: string, ...segments: string[]): string {
+  return path.join(home, ".mindframe-z", "configs", ...segments);
 }
 
 // Fresh, isolated root + home temp dirs populated with the standard fixture. One
@@ -33,12 +37,14 @@ export async function setupIntegrationFixture(): Promise<{ root: string; home: s
 }
 
 export async function writeFixture(root: string, home?: string): Promise<void> {
-  await mkdir(path.join(root, "shared"), { recursive: true });
+  await mkdir(path.join(root, "catalog"), { recursive: true });
+  await mkdir(path.join(root, "instructions"), { recursive: true });
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
   await mkdir(path.join(root, "opencode", "commands"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
-  await writeFile(path.join(root, "shared", "AGENTS.global.md"), "# Test Agents\n", "utf8");
+  await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+  await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Test Agents\n", "utf8");
   await writeFile(
     path.join(root, "opencode", "plugins", "config-marker.ts"),
     [
@@ -59,7 +65,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     "utf8"
   );
   await writeFile(
-    path.join(root, "shared", "refs.yml"),
+    path.join(root, "catalog", "references.yml"),
     [
       "references:",
       "  - name: local-ref",
@@ -70,7 +76,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     "utf8"
   );
   await writeFile(
-    path.join(root, "shared", "skills.yml"),
+    path.join(root, "catalog", "skills.yml"),
     [
       "skills:",
       "  - name: local-skill",
@@ -90,7 +96,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     "utf8"
   );
   await writeFile(
-    path.join(root, "shared", "mcp.yml"),
+    path.join(root, "catalog", "mcp.yml"),
     [
       "servers:",
       "  context7:",
@@ -136,7 +142,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "extends: base",
       "agents: [opencode, claude-code]",
       "instructions:",
-      "  - shared/AGENTS.global.md",
+      "  - instructions/AGENTS.md",
       "references:",
       "  - local-ref",
       "skills:",
@@ -169,7 +175,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     await mkdir(cfgDir, { recursive: true });
     await writeFile(
       path.join(cfgDir, "config.yml"),
-      ["profile: personal", "references_dir: ~/references", ""].join("\n"),
+      ["profile: personal", "references_dir: ~/.mindframe-z/references", ""].join("\n"),
       "utf8"
     );
   }
@@ -213,7 +219,7 @@ export function cli(
   );
 }
 
-export function cliWithMachineRepoPath(home: string, args: string[]) {
+export function cliWithMachineHomePath(home: string, args: string[]) {
   return execa(
     process.execPath,
     ["--import", "tsx", path.join(projectRoot, "src", "cli", "mfz.ts"), "--home", home, ...args],

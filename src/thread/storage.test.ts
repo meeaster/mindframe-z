@@ -27,7 +27,7 @@ function paths(home: string, root = home): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
@@ -67,7 +67,25 @@ function profile(machine: MachineManifest): ResolvedProfile {
       dotfiles: {},
       extra_folders: []
     },
-    manifests: { references: [], skills: [], mcpServers: {}, profiles: new Map(), machine },
+    manifests: {
+      homeManifest: {},
+      root: "/tmp/home",
+      aliasPath: [],
+      references: [],
+      skills: [],
+      mcpServers: {},
+      profiles: new Map(),
+      machine
+    },
+    sources: {
+      references: new Map(),
+      skills: new Map(),
+      mcp: new Map(),
+      instructions: new Map(),
+      plugins: new Map(),
+      commands: new Map(),
+      agents: new Map()
+    },
     instructionFiles: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
@@ -81,7 +99,7 @@ function profile(machine: MachineManifest): ResolvedProfile {
 
 function machine(destinations: MachineManifest["thread"]["destinations"]): MachineManifest {
   return {
-    references_dir: "~/references",
+    references_dir: "~/.mindframe-z/references",
     extra_folders: [],
     git: {},
     sandbox: {},

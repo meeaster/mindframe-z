@@ -52,10 +52,10 @@ describe("skill CLI integration", () => {
     expect(syncResult.stdout).toContain(
       "Unmanaged skill: remote-skill (https://github.com/example/skills)"
     );
-    expect(syncResult.stdout).toContain("Updated shared/skills.yml");
+    expect(syncResult.stdout).toContain("Updated catalog/skills.yml");
     expect(syncResult.stdout).toContain("Updated personal/profile.yml: skills.remote-skill");
 
-    const skillsYaml = await readFile(path.join(root, "shared", "skills.yml"), "utf8");
+    const skillsYaml = await readFile(path.join(root, "catalog", "skills.yml"), "utf8");
     expect(skillsYaml).toContain("name: remote-skill");
     expect(skillsYaml).toContain("repo: https://github.com/example/skills");
     expect(skillsYaml).toContain("skill: remote-skill");

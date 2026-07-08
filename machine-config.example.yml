@@ -3,8 +3,8 @@
 # OpenCode overrides for this machine.
 # This file is not checked into the repo — it's per-machine config.
 profile: personal
-repo_path: ~/code/mindframe-z
-references_dir: ~/references
+home_path: ~/code/mindframe-z
+references_dir: ~/.mindframe-z/references
 
 # git:
 #   name: Your Name

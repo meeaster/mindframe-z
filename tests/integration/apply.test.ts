@@ -2,7 +2,7 @@ import { access, lstat, mkdir, readFile, realpath, symlink, writeFile } from "no
 import path from "node:path";
 import { parse } from "smol-toml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 describe("apply integration", () => {
   let root: string;
@@ -31,32 +31,32 @@ describe("apply integration", () => {
     expect(result.stdout).toContain("rendered");
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain("https://opencode.ai/config.json");
     expect(opencode).toContain("context7");
     expect(
       await readFile(
-        path.join(root, "configs", "personal", "opencode", "plugins", "config-marker.ts"),
+        configsPath(home, "personal", "opencode", "plugins", "config-marker.ts"),
         "utf8"
       )
     ).toContain("mindframe-z-plugin-loaded");
     expect(
       await readFile(
-        path.join(root, "configs", "personal", "opencode", "commands", "test-cmd.md"),
+        configsPath(home, "personal", "opencode", "commands", "test-cmd.md"),
         "utf8"
       )
     ).toContain("Run the test command.");
 
     const claude = await readFile(
-      path.join(root, "configs", "personal", "claude", "CLAUDE.md"),
+      configsPath(home, "personal", "claude", "CLAUDE.md"),
       "utf8"
     );
-    expect(claude).toContain("@" + path.join(root, "configs", "personal", "AGENTS.md"));
+    expect(claude).toContain("@" + configsPath(home, "personal", "AGENTS.md"));
 
     const claudeMcp = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "claude", "mcp.json"), "utf8")
+      await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
     ) as Record<string, unknown>;
     expect(claudeMcp).toMatchObject({
       context7: { type: "http", url: "https://mcp.context7.com/mcp" },
@@ -64,13 +64,13 @@ describe("apply integration", () => {
     });
 
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc")
+      configsPath(home, "personal", "opencode", "opencode.jsonc")
     );
     await expect(realpath(path.join(home, ".config", "opencode", "commands"))).resolves.toBe(
-      path.join(root, "configs", "personal", "opencode", "commands")
+      configsPath(home, "personal", "opencode", "commands")
     );
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
-      path.join(root, "configs", "personal", "claude", "CLAUDE.md")
+      configsPath(home, "personal", "claude", "CLAUDE.md")
     );
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
 
@@ -104,7 +104,7 @@ describe("apply integration", () => {
     expect(result.stdout).toContain("rendered");
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain("permission");
@@ -133,7 +133,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     const config = JSON.parse(opencode) as {
@@ -162,7 +162,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
 
     const settings = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+      await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     ) as Record<string, unknown>;
     expect(settings).toHaveProperty("permissions");
     expect(settings).toHaveProperty("additionalDirectories");
@@ -178,7 +178,7 @@ describe("apply integration", () => {
         "extends: base",
         "agents: [codex]",
         "instructions:",
-        "  - shared/AGENTS.global.md",
+        "  - instructions/AGENTS.md",
         "references:",
         "  - local-ref",
         "mcp:",
@@ -215,7 +215,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
     const config = parse(
-      await readFile(path.join(root, "configs", "personal", "codex", "config.toml"), "utf8")
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     ) as Record<string, unknown>;
     expect(config.model).toBe("test/codex");
     expect(config.plugins).toEqual({
@@ -233,7 +233,7 @@ describe("apply integration", () => {
       }
     });
     expect(
-      await readFile(path.join(root, "configs", "personal", "codex", "AGENTS.md"), "utf8")
+      await readFile(configsPath(home, "personal", "codex", "AGENTS.md"), "utf8")
     ).toContain("# Test Agents");
     expect(await exists(path.join(home, ".codex", "config.toml"))).toBe(false);
   });
@@ -255,7 +255,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
     const config = parse(
-      await readFile(path.join(root, "configs", "personal", "codex", "config.toml"), "utf8")
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     ) as Record<string, unknown>;
     expect(config).not.toHaveProperty("plugins");
   });
@@ -267,7 +267,7 @@ describe("apply integration", () => {
         "name: personal",
         "agents: [codex]",
         "instructions:",
-        "  - shared/AGENTS.global.md",
+        "  - instructions/AGENTS.md",
         "codex:",
         "  config:",
         "    model: test/codex",
@@ -369,7 +369,7 @@ describe("apply integration", () => {
     );
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
-    const codexPath = path.join(root, "configs", "personal", "codex", "config.toml");
+    const codexPath = configsPath(home, "personal", "codex", "config.toml");
     await writeFile(
       codexPath,
       [
@@ -472,7 +472,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain(`"${workPath}/**": "ask"`);
@@ -499,20 +499,20 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     const config = JSON.parse(opencode) as {
       permission: { bash: Record<string, string>; edit: Record<string, string> };
     };
     expect(config.permission.bash["rm *"]).toBe("deny");
-    expect(config.permission.edit[`${path.join(home, "references")}/**`]).toBe("deny");
+    expect(config.permission.edit[`${path.join(home, ".mindframe-z", "references")}/**`]).toBe("deny");
   });
 
   it("sync promotes unmanaged rendered OpenCode config keys to the chosen profile", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    const opencodePath = path.join(root, "configs", "personal", "opencode", "opencode.jsonc");
+    const opencodePath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const opencode = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
     opencode.small_model = "test/small-model";
     await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
@@ -590,13 +590,13 @@ describe("apply integration", () => {
     });
 
     const snapshot = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+      await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     ) as Record<string, unknown>;
     expect(snapshot).toEqual({
       includeGitInstructions: true,
       permissions: {
-        allow: [`Read(/${path.join(home, "references")}/**)`],
-        deny: ["Bash(curl *)", `Edit(/${path.join(home, "references")}/**)`]
+        allow: [`Read(/${path.join(home, ".mindframe-z", "references")}/**)`],
+        deny: ["Bash(curl *)", `Edit(/${path.join(home, ".mindframe-z", "references")}/**)`]
       },
       env: { CLAUDE_CODE_ENABLE_TELEMETRY: "1" },
       model: "sonnet"
@@ -604,7 +604,7 @@ describe("apply integration", () => {
   });
 
   it("replaces an old Claude settings symlink with a machine-local file", async () => {
-    const snapshotPath = path.join(root, "configs", "personal", "claude", "settings.json");
+    const snapshotPath = configsPath(home, "personal", "claude", "settings.json");
     const settingsPath = path.join(home, ".claude", "settings.json");
     await mkdir(path.dirname(snapshotPath), { recursive: true });
     await mkdir(path.dirname(settingsPath), { recursive: true });
@@ -690,7 +690,7 @@ describe("apply integration", () => {
         "extends: base",
         "agents: [opencode]",
         "instructions:",
-        "  - shared/AGENTS.global.md",
+        "  - instructions/AGENTS.md",
         "mcp:",
         "  context7:",
         "    agents: { opencode: true }",
@@ -702,10 +702,10 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
     await expect(
-      readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+      readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     ).resolves.toContain("context7");
     await expect(
-      readFile(path.join(root, "configs", "personal", "claude", "CLAUDE.md"), "utf8")
+      readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -717,7 +717,7 @@ describe("apply integration", () => {
         "extends: base",
         "agents: [opencode]",
         "instructions:",
-        "  - shared/AGENTS.global.md",
+        "  - instructions/AGENTS.md",
         "mcp:",
         "  context7:",
         "    agents: { opencode: true }",
@@ -728,7 +728,7 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--no-link"]);
     const opencode = await readFile(
-      path.join(root, "configs", "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain("context7");
@@ -738,10 +738,10 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     await expect(
-      readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+      readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     ).resolves.toContain("test/model");
     await expect(
-      readFile(path.join(root, "configs", "personal", "claude", "CLAUDE.md"), "utf8")
+      readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

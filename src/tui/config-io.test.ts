@@ -23,7 +23,7 @@ function paths(root: string): RuntimePaths {
   return {
     root,
     home: path.join(root, "home"),
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(root, "home", ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(root, ".config", "opencode"),
     claudeDir: path.join(root, ".claude"),
     codexDir: path.join(root, ".codex"),

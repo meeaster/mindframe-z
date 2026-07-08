@@ -13,7 +13,7 @@ function paths(home: string): RuntimePaths {
   return {
     root: home,
     home,
-    configsDir: path.join(home, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
@@ -76,7 +76,7 @@ describe("createRuntimePaths", () => {
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.root).toBe("/tmp/repo");
     expect(runtime.home).toBe("/tmp/home");
-    expect(runtime.configsDir).toBe(path.join("/tmp/repo", "configs"));
+    expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", ".config", "opencode"));
     expect(runtime.claudeDir).toBe(path.join("/tmp/home", ".claude"));
     expect(runtime.codexDir).toBe(path.join("/tmp/home", ".codex"));
@@ -120,7 +120,7 @@ describe("createRuntimePaths", () => {
     process.env.MFZ_ROOT = "/env/repo";
     const runtime = createRuntimePaths({ home: "/tmp/home" });
     expect(runtime.root).toBe("/env/repo");
-    expect(runtime.configsDir).toBe(path.join("/env/repo", "configs"));
+    expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
   });
 });
 

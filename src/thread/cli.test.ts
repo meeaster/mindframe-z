@@ -86,10 +86,11 @@ async function writeFakeDocker(home: string): Promise<string> {
 // (adding/removing destinations) would otherwise break unrelated thread tests.
 async function makeFixtureRoot(): Promise<string> {
   const root = await makeTempDir();
-  await mkdir(path.join(root, "shared"), { recursive: true });
-  await writeFile(path.join(root, "shared", "refs.yml"), "references: []\n", "utf8");
-  await writeFile(path.join(root, "shared", "skills.yml"), "skills: []\n", "utf8");
-  await writeFile(path.join(root, "shared", "mcp.yml"), "servers: {}\n", "utf8");
+  await mkdir(path.join(root, "catalog"), { recursive: true });
+  await writeFile(path.join(root, "mfz_home.yml"), "description: Thread test home\n", "utf8");
+  await writeFile(path.join(root, "catalog", "references.yml"), "references: []\n", "utf8");
+  await writeFile(path.join(root, "catalog", "skills.yml"), "skills: []\n", "utf8");
+  await writeFile(path.join(root, "catalog", "mcp.yml"), "servers: {}\n", "utf8");
   const profileDir = path.join(root, "profiles", "base");
   await mkdir(profileDir, { recursive: true });
   await writeFile(
@@ -402,7 +403,8 @@ describe("thread cli", () => {
   it("lists runs across threads with crashed detection and json round-trip", async () => {
     captureConsole();
     const home = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const root = await makeFixtureRoot();
+    const paths = createRuntimePaths({ root, home });
     await writeRunStatus(paths, {
       id: "run-live",
       thread: "t1",
@@ -422,7 +424,7 @@ describe("thread cli", () => {
       cost_usd: null
     });
 
-    await runThreadRuns({ root: process.cwd(), home, profile: "base", json: true });
+    await runThreadRuns({ root, home, profile: "base", json: true });
 
     const parsed = JSON.parse(logs[0]!) as {
       runs: Array<{ id: string; thread: string; state: string }>;

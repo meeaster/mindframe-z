@@ -14,8 +14,9 @@ export async function renderMise(
   const configPath = path.join(configsMise, "config.toml");
 
   const { tools, env, tool_alias, settings } = profile.profile.mise;
+  const renderedTools = "node" in tools ? tools : { ...tools, node: "24" };
   const managed = {
-    ...(Object.keys(tools).length > 0 ? { tools } : {}),
+    tools: renderedTools,
     ...(Object.keys(env).length > 0 ? { env } : {}),
     ...(Object.keys(tool_alias).length > 0 ? { tool_alias } : {}),
     ...(Object.keys(settings).length > 0 ? { settings } : {})
