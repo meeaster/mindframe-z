@@ -137,7 +137,6 @@ opencode:
   plugins:
     - advisor
     - agent-task
-    - mindframe-z-example
   commands:
     - apply-spec
     - rmslop
