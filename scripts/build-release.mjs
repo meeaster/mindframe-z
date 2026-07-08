@@ -11,6 +11,17 @@ await mkdir(stage, { recursive: true });
 await cp(path.join(root, "dist"), path.join(stage, "dist"), { recursive: true });
 await cp(path.join(root, "schemas"), path.join(stage, "schemas"), { recursive: true });
 await cp(path.join(root, "package.json"), path.join(stage, "package.json"));
+await cp(path.join(root, "Dockerfile.tools"), path.join(stage, "Dockerfile.tools"));
+await mkdir(path.join(stage, "src", "thread"), { recursive: true });
+await cp(
+  path.join(root, "src", "thread", "opencode.thread.json"),
+  path.join(stage, "src", "thread", "opencode.thread.json")
+);
+await mkdir(path.join(stage, "opencode", "plugins"), { recursive: true });
+await cp(
+  path.join(root, "opencode", "plugins", "lapdog.ts"),
+  path.join(stage, "opencode", "plugins", "lapdog.ts")
+);
 await writeFile(
   path.join(stage, "mfz"),
   '#!/usr/bin/env bash\nset -euo pipefail\nexec node "$(dirname "$0")/dist/cli/mfz.js" "$@"\n',

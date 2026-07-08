@@ -69,7 +69,8 @@ import {
   runThreadRuns,
   runThreadShow,
   runThreadSweep,
-  runThreadSync
+  runThreadSync,
+  runThreadToolsBuild
 } from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runMcpTui } from "../tui/mcp-tui.js";
@@ -488,6 +489,16 @@ thread
   .option("--json", "emit structured JSON")
   .action(async (options) =>
     runThreadDestinations({ ...program.opts(), json: Boolean(options.json) })
+  );
+
+thread
+  .command("tools")
+  .description("Manage the local thread tools image")
+  .command("build")
+  .description("Build or refresh the bundled local Docker image used by thread dispatch")
+  .option("--force", "rebuild even when the image hash is current")
+  .action(async (options) =>
+    runThreadToolsBuild({ ...program.opts(), force: Boolean(options.force) })
   );
 
 thread

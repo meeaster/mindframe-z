@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import type { RuntimePaths } from "../core/paths.js";
+import { packageRootFromImport, type RuntimePaths } from "../core/paths.js";
 import { buildClaudeSettingsJson } from "./claude-hooks.js";
 
 export const threadToolsImageName = "mindframe-z-thread-tools:latest";
@@ -20,23 +20,24 @@ export interface ThreadToolsImageBuildPlan {
 }
 
 export async function threadToolsImageBuildPlan(
-  paths: RuntimePaths
+  paths: RuntimePaths,
+  packageRoot = packageRootFromImport(import.meta.url)
 ): Promise<ThreadToolsImageBuildPlan> {
-  const dockerfile = await readFile(path.join(paths.root, "Dockerfile.tools"), "utf8");
+  const dockerfile = await readFile(path.join(packageRoot, "Dockerfile.tools"), "utf8");
   const opencodeConfig = await readFile(
-    path.join(paths.root, "src", "thread", "opencode.thread.json"),
+    path.join(packageRoot, "src", "thread", "opencode.thread.json"),
     "utf8"
   );
   const claudeSettings = buildClaudeSettingsJson();
   const lapdogPlugin = await readFile(
-    path.join(paths.root, "opencode", "plugins", "lapdog.ts"),
+    path.join(packageRoot, "opencode", "plugins", "lapdog.ts"),
     "utf8"
   );
   const hash = createHash("sha256")
     .update(JSON.stringify({ dockerfile, opencodeConfig, claudeSettings, lapdogPlugin }))
     .digest("hex");
   return {
-    root: paths.root,
+    root: packageRoot,
     image: process.env.MFZ_THREAD_TOOLS_IMAGE ?? threadToolsImageName,
     dockerfile,
     hash,

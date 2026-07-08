@@ -44,6 +44,7 @@ import {
   readRunTrace,
   writeRunStatus
 } from "./observability.js";
+import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
 
 interface ThreadOptions extends PathOptions {
   profile?: string | undefined;
@@ -66,6 +67,16 @@ export async function runThreadDestinations(
         console.log(
           `${destination.default ? "*" : " "} ${destination.name}\t${destination.remote ?? "-"}${destination.no_push ? "\tno_push" : ""}`
         );
+  });
+}
+
+export async function runThreadToolsBuild(
+  options: ThreadOptions & { force?: boolean | undefined }
+): Promise<void> {
+  await withThreadLog(options, "thread tools build", async ({ paths }) => {
+    const plan = await threadToolsImageBuildPlan(paths);
+    const result = await ensureThreadToolsImage(plan, { force: options.force });
+    console.log(`${result}\t${plan.image}\t${plan.hash}`);
   });
 }
 
