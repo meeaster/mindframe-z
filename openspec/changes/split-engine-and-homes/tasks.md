@@ -48,8 +48,8 @@
 
 ## 7. Cut the work home
 
-- [ ] 7.1 Create the work home repo: `work` profile with `extends: personal/base`, work catalog entries (jira/confluence/datadog/forge MCP, work skills, work references), `sandbox/agent-vault/` overlays, `mfz_home.yml` with `extends: {name: personal, repo: <personal home URL>}`
-- [ ] 7.2 Qualify upstream mentions in the work profile (`personal/base`, `personal/aws-knowledge`, `personal/visual-explainer`)
+- [x] 7.1 Create the work home repo: `work` profile with `extends: personal/base`, work catalog entries (jira/confluence/datadog/forge MCP, work skills, work references), `sandbox/agent-vault/` overlays, `mfz_home.yml` with `extends: {name: personal, repo: <personal home URL>}`
+- [x] 7.2 Qualify upstream mentions in the work profile (`personal/base`, `personal/aws-knowledge`, `personal/visual-explainer`)
 - [ ] 7.3 Migrate the work machine via `mfz init`; verify upstream clone, apply parity, and remove machine-config separation hacks
 
 ## 8. Strip the engine
