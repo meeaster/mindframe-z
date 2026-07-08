@@ -18,12 +18,23 @@ function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, 
   return Object.fromEntries(
     filterMcpForTarget(profile, "codex").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
+        const literalHeaders: Record<string, string> = {};
+        const envHeaders: Record<string, string> = {};
+        for (const [header, value] of Object.entries(server.headers ?? {})) {
+          const match = value.match(/^\{env:(.+)\}$/);
+          if (match) {
+            envHeaders[header] = match[1]!;
+          } else {
+            literalHeaders[header] = value;
+          }
+        }
         return [
           name,
           {
             url: server.url,
             enabled,
-            ...(server.headers ? { http_headers: server.headers } : {})
+            ...(Object.keys(literalHeaders).length > 0 ? { http_headers: literalHeaders } : {}),
+            ...(Object.keys(envHeaders).length > 0 ? { env_http_headers: envHeaders } : {})
           }
         ];
       }

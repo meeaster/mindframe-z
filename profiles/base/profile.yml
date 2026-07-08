@@ -30,93 +30,92 @@ thread:
       - opencode
 skills:
   agent-browser:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   hunk-review:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   thermo-nuclear-code-quality-review:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   adversarial-code-review:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   quality-garden:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   impeccable:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   mise:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   agent-sessions:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   threads:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   openspec-apply-change:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   openspec-archive-change:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   openspec-explore:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   openspec-propose:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   openspec-sync-specs:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   openspec-verify-change:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
     toggleable: false
   skill-writer:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   writing-great-skills:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   skill-patterns:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   audit-ai-writing:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   grill-with-docs:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   grill-me:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   grilling:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   to-prd:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   improve-codebase-architecture:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   domain-modeling:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   qmd:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
   openai-docs:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   improve:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   claude-code-docs:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   build-mcp-server:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   xlsx:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   prototype:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   handoff:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   pr-writer:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
 mcp:
   context7:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   qmd:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   fff:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   deepwiki:
-    enabled: true
+    agents: { opencode: true, claude-code: true, codex: true }
   openai-docs:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
   exa:
-    enabled: true
-    targets: [claude-code]
+    agents: { claude-code: true }
 opencode:
   config:
     lsp: true

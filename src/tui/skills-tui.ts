@@ -182,5 +182,5 @@ export async function runSkillsTui(
   const result = await prompt.prompt();
   if (isCancel(result) || !prompt.result.saved) return;
 
-  await writeChangedSkillOverridesForTargets(configPaths, profile, prompt.result.states);
+  await writeChangedSkillOverridesForTargets(paths, configPaths, profile, prompt.result.states);
 }

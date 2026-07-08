@@ -22,7 +22,7 @@ The CLI is `mfz`.
 - **References** — git repos cloned locally that agents can consult, plus a
   generated index so agents can discover them without loading everything into
   context.
-- **Skills** — portable skill definitions installed per agent, with repo-local and
+- **Skills** — portable skill definitions installed per agent, with project and
   global enable/disable toggles.
 - **Threads** — long-running topics of work distilled from your agent sessions
   across harnesses (see [Threads](#threads)).
@@ -116,6 +116,12 @@ pnpm dev --profile personal apply --dry-run
 - `mfz skills list` — list profile-enabled skills.
 - `mfz skills upgrade` — update git-sourced skills to their latest versions.
 
+### MCP
+
+- `mfz mcp enable` / `mfz mcp disable` — toggle an MCP server for the current repo.
+- `mfz mcp status` — print the merged per-harness MCP state and override markers.
+- `mfz mcp tui` — toggle MCP servers interactively for the current repo.
+
 ### Threads
 
 `mfz thread` manages cross-session thread logs distilled from your agent sessions.
@@ -192,15 +198,20 @@ references:
   - ha-mcp
 skills:
   home-assistant-best-practices:
-    enabled: false
+    agents: { opencode: false, claude-code: false, codex: false }
 mcp:
   homeassistant:
-    enabled: false
+    agents: { opencode: false, claude-code: true, codex: false }
 ```
 
 Profiles inherit from a parent with `extends`; arrays are additive and maps deep-merge
 with the child overriding the parent. The full merge semantics are in
 [ARCHITECTURE.md](ARCHITECTURE.md).
+
+For profile `skills` and `mcp` entries, an `agents` key means the item is available
+for that harness and the boolean is its default enabled state. Project-scoped
+toggles are stored outside repos in `~/.mindframe-z/overrides.json` and injected at
+launch by managed zsh functions for `codex`, `opencode`, and `claude`.
 
 ### Schemas
 

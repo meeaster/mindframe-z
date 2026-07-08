@@ -16,7 +16,7 @@ describe("skills profile integration", () => {
     home = "";
   });
 
-  it("defaults omitted skill targets to profile agents", async () => {
+  it("lists skills for declared agents", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
@@ -25,7 +25,9 @@ describe("skills profile integration", () => {
         "agents: [opencode]",
         "skills:",
         "  local-skill:",
-        "  all-skill: [all]",
+        "    agents: { opencode: true }",
+        "  all-skill:",
+        "    agents: { opencode: true }",
         ""
       ].join("\n"),
       "utf8"
@@ -67,7 +69,14 @@ describe("skills profile integration", () => {
     );
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "skills:", "  shared-git-skill: [all]", ""].join("\n"),
+      [
+        "name: personal",
+        "extends: base",
+        "skills:",
+        "  shared-git-skill:",
+        "    agents: { opencode: true, claude-code: true }",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
@@ -85,7 +94,7 @@ describe("skills profile integration", () => {
         "extends: base",
         "skills:",
         "  local-skill:",
-        "    targets: [claude-code]",
+        "    agents: { claude-code: true }",
         ""
       ].join("\n"),
       "utf8"
@@ -96,19 +105,17 @@ describe("skills profile integration", () => {
         "name: base",
         "skills:",
         "  local-skill:",
-        "    enabled: false",
-        "    targets: [opencode]",
+        "    agents: { opencode: false, claude-code: false }",
         ""
       ].join("\n"),
       "utf8"
     );
 
     const result = await cli("mfz", root, home, ["skills", "list"]);
-    expect(result.stdout).toContain("local-skill\tclaude-code\tLocal test skill.");
-    expect(result.stdout).not.toContain("local-skill\topencode");
+    expect(result.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
   });
 
-  it("accepts legacy empty skill target arrays as no targets", async () => {
+  it("rejects legacy empty skill target arrays", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       ["name: personal", "extends: base", "skills:", "  local-skill: []", ""].join("\n"),
@@ -116,13 +123,10 @@ describe("skills profile integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["doctor"]);
-    expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
-
-    const listResult = await cli("mfz", root, home, ["skills", "list"]);
-    expect(listResult.stdout).not.toContain("local-skill");
+    expect(result.stdout).toContain("manifest:✗\tprofiles/personal/profile.yml");
   });
 
-  it("accepts legacy null skill entries", async () => {
+  it("rejects legacy null skill entries", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
@@ -136,7 +140,7 @@ describe("skills profile integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["skills", "list"]);
-    expect(result.stdout).toContain("local-skill\topencode\tLocal test skill.");
+    const result = await cli("mfz", root, home, ["doctor"]);
+    expect(result.stdout).toContain("manifest:✗\tprofiles/personal/profile.yml");
   });
 });

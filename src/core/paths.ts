@@ -106,6 +106,10 @@ export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): st
   return path.join(paths.home, ".mindframe-z", "skill-overrides", `${target}.json`);
 }
 
+export function overrideStorePath(home: string): string {
+  return path.join(home, ".mindframe-z", "overrides.json");
+}
+
 export function threadStoreRoot(paths: RuntimePaths): string {
   return path.join(paths.home, ".mindframe-z", "threads");
 }
