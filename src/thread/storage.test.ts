@@ -97,6 +97,15 @@ function profile(machine: MachineManifest): ResolvedProfile {
   };
 }
 
+function profileWithDestinations(
+  destinations: ResolvedProfile["profile"]["thread"]["destinations"],
+  machineManifest: MachineManifest
+): ResolvedProfile {
+  const resolved = profile(machineManifest);
+  resolved.profile.thread.destinations = destinations;
+  return resolved;
+}
+
 function machine(destinations: MachineManifest["thread"]["destinations"]): MachineManifest {
   return {
     references_dir: "~/.mindframe-z/references",
@@ -122,6 +131,33 @@ describe("thread storage", () => {
       ["personal", false],
       ["work", true]
     ]);
+  });
+
+  it("defaults to the active home threads folder when no destination is default", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const destinations = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations([], machine([]))
+    );
+
+    expect(
+      destinations.map((destination) => [destination.name, destination.default, destination.path])
+    ).toContainEqual(["home", true, path.join(root, "threads")]);
+  });
+
+  it("resolves destination paths relative to the active home", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const [destination] = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations(
+        [],
+        machine([{ name: "work", path: "threads", default: true, no_push: false }])
+      )
+    );
+
+    expect(destination?.path).toBe(path.join(root, "threads"));
   });
 
   it("round-trips manifest and runs files", async () => {

@@ -136,6 +136,18 @@ export const threadIdentifierSchema = z
 export const threadDestinationSchema = z.object({
   name: threadIdentifierSchema,
   remote: z.string().optional(),
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        !path.isAbsolute(value) &&
+        !value
+          .split(/[\\/]+/)
+          .some((segment) => segment === "" || segment === "." || segment === ".."),
+      "must be a relative path without empty, . or .. segments"
+    )
+    .optional(),
   no_push: z.boolean().default(false),
   default: z.boolean().default(false)
 });
@@ -406,7 +418,9 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
   if (!(await exists(path.join(root, "mfz_home.yml")))) {
-    throw new Error(`Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`);
+    throw new Error(
+      `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
+    );
   }
   const homeManifest = await readYaml(path.join(root, "mfz_home.yml"), homeManifestSchema, {});
   const effectiveHome = home ?? process.env.HOME ?? "";
