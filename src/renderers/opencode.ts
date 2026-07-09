@@ -35,22 +35,22 @@ async function copyDirContents(
 }
 
 async function collectPluginFiles(
-  root: string,
+  localRoot: string,
+  rootByName: (name: string) => string,
   configsOpencode: string,
   pluginNames: readonly string[]
 ): Promise<{ files: RenderResult["files"]; entries: string[] }> {
-  const sourceDir = path.join(root, "opencode", "plugins");
-  try {
-    await stat(sourceDir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { files: [], entries: [] };
-    throw error;
-  }
-
   let names: string[];
   if (pluginNames.length > 0) {
     names = [...pluginNames];
   } else {
+    const sourceDir = path.join(localRoot, "opencode", "plugins");
+    try {
+      await stat(sourceDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { files: [], entries: [] };
+      throw error;
+    }
     const dirEntries = await readdir(sourceDir, { withFileTypes: true });
     const discovered = new Set<string>();
     for (const entry of dirEntries) {
@@ -69,6 +69,7 @@ async function collectPluginFiles(
   const sourceExtensions = [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"];
 
   for (const name of names) {
+    const sourceDir = path.join(rootByName(name), "opencode", "plugins");
     const dirPath = path.join(sourceDir, name);
     let isDir = false;
     try {
@@ -106,16 +107,16 @@ async function collectPluginFiles(
 }
 
 async function collectMarkdownFiles(
-  root: string,
+  rootByName: (name: string) => string,
   configsOpencode: string,
   kind: "commands" | "agents",
   names: readonly string[]
 ): Promise<RenderResult["files"]> {
-  const sourceDir = path.join(root, "opencode", kind);
   const files: RenderResult["files"] = [];
   const label = kind === "commands" ? "command" : "agent";
 
   for (const name of names) {
+    const sourceDir = path.join(rootByName(name), "opencode", kind);
     const fileName = `${name}.md`;
     const filePath = path.join(sourceDir, fileName);
     let content: string;
@@ -146,18 +147,19 @@ export async function renderOpenCode(
   const configPath = path.join(configsOpencode, "opencode.jsonc");
   const pluginResult = await collectPluginFiles(
     paths.root,
+    (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
     configsOpencode,
     profile.profile.opencode.plugins
   );
   const plugin = pluginResult.entries;
   const commandFiles = await collectMarkdownFiles(
-    paths.root,
+    (name) => profile.sources.commands.get(name)?.root ?? paths.root,
     configsOpencode,
     "commands",
     profile.enabledCommands
   );
   const agentFiles = await collectMarkdownFiles(
-    paths.root,
+    (name) => profile.sources.agents.get(name)?.root ?? paths.root,
     configsOpencode,
     "agents",
     profile.enabledAgents

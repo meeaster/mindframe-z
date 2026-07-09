@@ -10,7 +10,7 @@ function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
@@ -23,7 +23,7 @@ function profile(
   options: { readonly home?: string; readonly root?: string; readonly extraFolder?: string } = {}
 ): ResolvedProfile {
   const machine: MachineManifest = {
-    references_dir: "~/references",
+    references_dir: "~/.mindframe-z/references",
     extra_folders: options.extraFolder
       ? [
           {
@@ -65,9 +65,27 @@ function profile(
       dotfiles: { ".zshrc": "zsh", ".p10k.zsh": "prompt" },
       extra_folders: []
     },
-    manifests: { references: [], skills: [], mcpServers: {}, profiles: new Map(), machine },
-    instructionFiles: options.root ? [path.join(options.root, "shared", "AGENTS.global.md")] : [],
-    referencesDir: path.join(options.home ?? "/tmp", "references"),
+    manifests: {
+      homeManifest: {},
+      root: options.root ?? "/tmp/mfz-root",
+      aliasPath: [],
+      references: [],
+      skills: [],
+      mcpServers: {},
+      profiles: new Map(),
+      machine
+    },
+    sources: {
+      references: new Map(),
+      skills: new Map(),
+      mcp: new Map(),
+      instructions: new Map(),
+      plugins: new Map(),
+      commands: new Map(),
+      agents: new Map()
+    },
+    instructionFiles: options.root ? [path.join(options.root, "instructions", "AGENTS.md")] : [],
+    referencesDir: path.join(options.home ?? "/tmp", ".mindframe-z", "references"),
     enabledReferences: [
       { name: "local-ref", url: "https://example.invalid/ref.git", description: "Local ref." }
     ],
@@ -155,7 +173,10 @@ describe("sandbox runtime inputs", () => {
     expect(byTarget.get("/home/sandbox/.config/mise/config.toml")).toMatchObject({ mode: "ro" });
     expect(byTarget.get("/home/sandbox/.gitconfig")).toMatchObject({ mode: "ro" });
     expect(byTarget.get("/home/sandbox/.mindframe-z/references.md")).toMatchObject({ mode: "ro" });
-    expect(byTarget.get("/references")).toMatchObject({ source: "/tmp/references", mode: "ro" });
+    expect(byTarget.get("/references")).toMatchObject({
+      source: "/tmp/.mindframe-z/references",
+      mode: "ro"
+    });
     expect(byTarget.get("/home/sandbox/.local/share/opencode")).toMatchObject({ mode: "rw" });
     expect(byTarget.get("/home/sandbox/.local/state/opencode")).toMatchObject({ mode: "rw" });
   });
@@ -164,8 +185,8 @@ describe("sandbox runtime inputs", () => {
     const home = "/tmp/mfz-sandbox-home";
     const root = "/tmp/mfz-sandbox-root";
     const runtimePaths = paths(home, root);
-    await mkdir(path.join(root, "shared"), { recursive: true });
-    await writeFile(path.join(root, "shared", "AGENTS.global.md"), "# Agents\n", "utf8");
+    await mkdir(path.join(root, "instructions"), { recursive: true });
+    await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");
 
     const runtime = await resolveSandboxRuntimeInputs(
       runtimePaths,
@@ -199,8 +220,8 @@ describe("sandbox runtime inputs", () => {
     const home = "/tmp/mfz-sandbox-home";
     const root = "/tmp/mfz-sandbox-root";
     const runtimePaths = paths(home, root);
-    await mkdir(path.join(root, "shared"), { recursive: true });
-    await writeFile(path.join(root, "shared", "AGENTS.global.md"), "# Agents\n", "utf8");
+    await mkdir(path.join(root, "instructions"), { recursive: true });
+    await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");
 
     const runtime = await resolveSandboxRuntimeInputs(
       runtimePaths,

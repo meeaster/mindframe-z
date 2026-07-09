@@ -76,11 +76,23 @@ function profile(): ResolvedProfile {
       extra_folders: []
     },
     manifests: {
+      homeManifest: {},
+      root: "/tmp/home",
+      aliasPath: [],
       references: [],
       skills: [],
       mcpServers: {},
       profiles: new Map(),
       machine: machine()
+    },
+    sources: {
+      references: new Map(),
+      skills: new Map(),
+      mcp: new Map(),
+      instructions: new Map(),
+      plugins: new Map(),
+      commands: new Map(),
+      agents: new Map()
     },
     instructionFiles: [],
     referencesDir: "/tmp/references",

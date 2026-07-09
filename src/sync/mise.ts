@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { parse } from "smol-toml";
 import { z } from "zod";
+import { ENGINE_MISE_DEFAULT_TOOLS } from "../core/mise-defaults.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { SyncResult, SyncCandidate } from "./types.js";
 
@@ -28,6 +29,14 @@ export async function syncMise(configPath: string, profile: ResolvedProfile): Pr
   const managedSettings = new Set(Object.keys(profile.profile.mise.settings));
 
   for (const key of Object.keys(existing.tools)) {
+    if (
+      key in ENGINE_MISE_DEFAULT_TOOLS &&
+      existing.tools[key] ===
+        ENGINE_MISE_DEFAULT_TOOLS[key as keyof typeof ENGINE_MISE_DEFAULT_TOOLS] &&
+      !(key in profile.profile.mise.tools)
+    ) {
+      continue;
+    }
     if (!managedTools.has(key)) {
       candidates.push({
         target: "mise",

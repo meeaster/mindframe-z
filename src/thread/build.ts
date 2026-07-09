@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import type { RuntimePaths } from "../core/paths.js";
+import { packageRootFromImport, type RuntimePaths } from "../core/paths.js";
 import { buildClaudeSettingsJson } from "./claude-hooks.js";
 
 export const threadToolsImageName = "mindframe-z-thread-tools:latest";
@@ -10,6 +10,13 @@ export const threadToolsBuildHashLabel = "dev.mindframe-z.thread-tools.build-has
 
 export const threadToolsGeneratedDir = ".generated/thread-tools";
 export const threadToolsClaudeSettingsPath = "claude-settings.json";
+
+// Docker-context files, relative to the package root. embedded-assets.ts writes its
+// materialized copies to the same relative paths, so a rename here breaks the bundle
+// at compile time instead of shipping a binary that fails at runtime.
+export const threadToolsDockerfilePath = "Dockerfile.tools";
+export const threadToolsOpencodeConfigPath = "src/thread/opencode.thread.json";
+export const threadToolsLapdogPluginPath = "src/thread/lapdog-plugin.ts";
 
 export interface ThreadToolsImageBuildPlan {
   root: string;
@@ -19,24 +26,39 @@ export interface ThreadToolsImageBuildPlan {
   label: string;
 }
 
+// In a compiled bun binary the docker-context files live only in the embedded
+// filesystem, so the standalone entry (src/cli/mfz-bun.ts) registers a resolver that
+// materializes them. That entry stays out of the tsc program because embedded-assets
+// uses `type: "file"` imports Node/tsc can't parse; keeping the wiring here as a plain
+// callback lets build.ts remain pure TS while bun bundles the assets into the binary.
+let embeddedPackageRootResolver: (() => Promise<string>) | undefined;
+let resolvedPackageRoot: Promise<string> | undefined;
+
+export function setEmbeddedPackageRootResolver(resolver: () => Promise<string>): void {
+  embeddedPackageRootResolver = resolver;
+}
+
+async function resolvePackageRoot(): Promise<string> {
+  resolvedPackageRoot ??= embeddedPackageRootResolver
+    ? embeddedPackageRootResolver()
+    : Promise.resolve(packageRootFromImport(import.meta.url));
+  return resolvedPackageRoot;
+}
+
 export async function threadToolsImageBuildPlan(
-  paths: RuntimePaths
+  paths: RuntimePaths,
+  packageRoot?: string
 ): Promise<ThreadToolsImageBuildPlan> {
-  const dockerfile = await readFile(path.join(paths.root, "Dockerfile.tools"), "utf8");
-  const opencodeConfig = await readFile(
-    path.join(paths.root, "src", "thread", "opencode.thread.json"),
-    "utf8"
-  );
+  const root = packageRoot ?? (await resolvePackageRoot());
+  const dockerfile = await readFile(path.join(root, threadToolsDockerfilePath), "utf8");
+  const opencodeConfig = await readFile(path.join(root, threadToolsOpencodeConfigPath), "utf8");
   const claudeSettings = buildClaudeSettingsJson();
-  const lapdogPlugin = await readFile(
-    path.join(paths.root, "opencode", "plugins", "lapdog.ts"),
-    "utf8"
-  );
+  const lapdogPlugin = await readFile(path.join(root, threadToolsLapdogPluginPath), "utf8");
   const hash = createHash("sha256")
     .update(JSON.stringify({ dockerfile, opencodeConfig, claudeSettings, lapdogPlugin }))
     .digest("hex");
   return {
-    root: paths.root,
+    root,
     image: process.env.MFZ_THREAD_TOOLS_IMAGE ?? threadToolsImageName,
     dockerfile,
     hash,
@@ -89,7 +111,7 @@ export async function ensureThreadToolsImage(
       "--label",
       plan.label,
       "-f",
-      path.join(plan.root, "Dockerfile.tools"),
+      path.join(plan.root, threadToolsDockerfilePath),
       plan.root
     ],
     { cwd: plan.root }

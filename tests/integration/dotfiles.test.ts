@@ -1,7 +1,7 @@
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 describe("dotfiles integration", () => {
   let root: string;
@@ -21,7 +21,7 @@ describe("dotfiles integration", () => {
       path.join(home, ".mindframe-z", "config.yml"),
       [
         "profile: personal",
-        "references_dir: ~/references",
+        "references_dir: ~/.mindframe-z/references",
         "git:",
         "  name: Test User",
         "  email: test@example.com",
@@ -49,10 +49,7 @@ describe("dotfiles integration", () => {
     expect(gitconfig).toContain("\tco = checkout");
     expect(gitconfig.split(`path = ${fragmentPath}`).length - 1).toBe(1);
 
-    const renderedProfile = await readFile(
-      path.join(root, "configs", "personal", "AGENTS.md"),
-      "utf8"
-    );
+    const renderedProfile = await readFile(configsPath(home, "personal", "AGENTS.md"), "utf8");
     expect(renderedProfile).not.toContain("Test User");
     expect(renderedProfile).not.toContain("test@example.com");
   });
@@ -71,7 +68,7 @@ describe("dotfiles integration", () => {
       path.join(home, ".mindframe-z", "config.yml"),
       [
         "profile: personal",
-        "references_dir: ~/references",
+        "references_dir: ~/.mindframe-z/references",
         "extra_folders:",
         `  - path: ~/code/work/proj`,
         `    description: Work project`,
@@ -104,7 +101,7 @@ describe("dotfiles integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const config = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     ) as {
       permission: { external_directory: Record<string, string>; edit: Record<string, string> };
     };
@@ -124,7 +121,7 @@ describe("dotfiles integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
 
     const settings = JSON.parse(
-      await readFile(path.join(root, "configs", "personal", "claude", "settings.json"), "utf8")
+      await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     ) as { permissions: { deny?: string[] } };
     const secretsPattern = `/${path.join(home, ".mindframe-z", "secrets")}/**`;
     expect(settings.permissions.deny).toContain(`Read(${secretsPattern})`);
@@ -135,15 +132,12 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const npmrc = await readFile(
-      path.join(root, "configs", "personal", "dotfiles", ".npmrc"),
-      "utf8"
-    );
+    const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
 
     await expect(realpath(path.join(home, ".npmrc"))).resolves.toBe(
-      path.join(root, "configs", "personal", "dotfiles", ".npmrc")
+      configsPath(home, "personal", "dotfiles", ".npmrc")
     );
   });
 
@@ -157,16 +151,14 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const zshrc = await readFile(
-      path.join(root, "configs", "personal", "dotfiles", ".zshrc"),
-      "utf8"
-    );
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
+    expect(zshrc).toContain(path.join(home, ".mindframe-z", "bin"));
     expect(zshrc).toContain("alias gs='git status'");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", ".zshrc"));
 
     await expect(realpath(path.join(home, ".zshrc"))).resolves.toBe(
-      path.join(root, "configs", "personal", "dotfiles", ".zshrc")
+      configsPath(home, "personal", "dotfiles", ".zshrc")
     );
   });
 
@@ -175,10 +167,7 @@ describe("dotfiles integration", () => {
 
     await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
 
-    const zshrc = await readFile(
-      path.join(root, "configs", "personal", "dotfiles", ".zshrc"),
-      "utf8"
-    );
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain("if [ -r ");
     expect(zshrc).toContain("source ");
     expect(zshrc).not.toContain("API_KEY=");
@@ -220,10 +209,7 @@ describe("dotfiles integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("rendered");
 
-    const npmrc = await readFile(
-      path.join(root, "configs", "personal", "dotfiles", ".npmrc"),
-      "utf8"
-    );
+    const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
     expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");
@@ -243,15 +229,7 @@ describe("dotfiles integration", () => {
     expect(result.stdout).toContain("rendered");
 
     const rendered = await readFile(
-      path.join(
-        root,
-        "configs",
-        "personal",
-        "dotfiles",
-        ".config",
-        "ccstatusline",
-        "settings.json"
-      ),
+      configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json"),
       "utf8"
     );
     expect(rendered).toContain('"version":3');
@@ -259,7 +237,7 @@ describe("dotfiles integration", () => {
     await expect(
       realpath(path.join(home, ".config", "ccstatusline", "settings.json"))
     ).resolves.toBe(
-      path.join(root, "configs", "personal", "dotfiles", ".config", "ccstatusline", "settings.json")
+      configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json")
     );
   });
 });

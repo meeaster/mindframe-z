@@ -9,6 +9,7 @@ export interface LinkPlan {
 export interface LinkStatus extends LinkPlan {
   state: "missing" | "ok" | "conflict";
   detail: string;
+  resolvedTarget?: string;
 }
 
 export async function verifyLink(plan: LinkPlan): Promise<LinkStatus> {
@@ -20,9 +21,14 @@ export async function verifyLink(plan: LinkPlan): Promise<LinkStatus> {
     const current = await readlink(plan.linkPath);
     const resolved = path.resolve(path.dirname(plan.linkPath), current);
     if (resolved === path.resolve(plan.targetPath)) {
-      return { ...plan, state: "ok", detail: "already linked" };
+      return { ...plan, state: "ok", detail: "already linked", resolvedTarget: resolved };
     }
-    return { ...plan, state: "conflict", detail: `symlink points to ${resolved}` };
+    return {
+      ...plan,
+      state: "conflict",
+      detail: `symlink points to ${resolved}`,
+      resolvedTarget: resolved
+    };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { ...plan, state: "missing", detail: "missing" };

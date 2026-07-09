@@ -63,6 +63,17 @@ function skillsCliEnv(paths: RuntimePaths): NodeJS.ProcessEnv {
   };
 }
 
+export async function skillsCliAvailable(paths: RuntimePaths): Promise<boolean> {
+  try {
+    await execa("skills", ["--version"], { env: skillsCliEnv(paths), timeout: 15000 });
+    return true;
+  } catch (error) {
+    // Only a missing binary (ENOENT) means the CLI is unavailable; any other
+    // failure (e.g. an unrecognized flag) still proves the CLI is installed.
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+}
+
 async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstalledSkill[]> {
   try {
     const { stdout } = await execa("skills", ["list", "-g", "--json"], {
@@ -77,7 +88,7 @@ async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstal
 
 export function buildSkillsCommand(
   paths: RuntimePaths,
-  skill: SkillEntry,
+  skill: SkillEntry & { sourceRoot?: string },
   target: ToolTarget
 ): string[] {
   const agent =
@@ -86,7 +97,7 @@ export function buildSkillsCommand(
     return [
       "skills",
       "add",
-      path.join(paths.root, "skills"),
+      path.join(skill.sourceRoot ?? paths.root, "skills"),
       ...(skill.skill ? ["--skill", skill.skill] : []),
       // Grouped skills live under skills/<group>/<skill>/; --full-depth makes the
       // CLI recurse past its default depth-1 walk so nested skills are discovered.

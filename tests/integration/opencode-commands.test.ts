@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 describe("opencode commands integration", () => {
   let root: string;
@@ -50,7 +50,7 @@ describe("opencode commands integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     await expect(
-      readFile(path.join(root, "configs", "personal", "opencode", "agents", "garden.md"), "utf8")
+      readFile(configsPath(home, "personal", "opencode", "agents", "garden.md"), "utf8")
     ).resolves.toBe("# Garden agent\n");
   });
 

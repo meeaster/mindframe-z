@@ -1,7 +1,0 @@
-vault: local-ai-dev-sandbox-mcp-confluence
-services:
-  - name: confluence-mcp
-    host: mcp.atlassian.com
-    auth:
-      type: bearer
-      token: CONFLUENCE_OAUTH

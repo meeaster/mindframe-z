@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 describe("sandbox integration", () => {
   let root: string;
@@ -25,10 +25,7 @@ describe("sandbox integration", () => {
 
     await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
 
-    const zshrc = await readFile(
-      path.join(root, "configs", "personal", "dotfiles", ".zshrc"),
-      "utf8"
-    );
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain("alias mfzcc='mfz cc'");
     expect(zshrc).toContain("alias mfzoc='mfz oc'");
   });

@@ -1,7 +1,0 @@
-vault: local-ai-dev-sandbox
-services:
-  - name: datadog-mcp
-    host: mcp.datadoghq.com
-    auth:
-      type: bearer
-      token: DD_ACCESS_TOKEN

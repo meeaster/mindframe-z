@@ -2,8 +2,10 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import * as readline from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
+import { execa } from "execa";
 import { parse, stringify } from "smol-toml";
 import YAML from "yaml";
+import { eachUpstream } from "../core/manifests.js";
 import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { syncMise } from "./mise.js";
@@ -17,6 +19,13 @@ type ProfileChoice =
   | { kind: "profile"; name: string }
   | { kind: "skip" }
   | { kind: "unknown"; answer: string };
+
+interface SyncTarget {
+  label: string;
+  root: string;
+  profile: string;
+  upstream: boolean;
+}
 
 function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
   const existing = parent[key];
@@ -143,7 +152,7 @@ async function promptSkillUser(
 }
 
 async function writeSkillsCatalog(root: string, skills: UnknownSkill[]): Promise<void> {
-  const yamlPath = path.join(root, "shared", "skills.yml");
+  const yamlPath = path.join(root, "catalog", "skills.yml");
   let doc: Record<string, unknown>;
   try {
     doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
@@ -216,6 +225,37 @@ async function enableCommandInProfile(root: string, targetProfile: string, comma
   await writeProfileYaml(root, targetProfile, doc);
 }
 
+async function isPushable(root: string): Promise<boolean> {
+  try {
+    await execa("git", ["push", "--dry-run"], { cwd: root, timeout: 30000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function syncTargets(profile: ResolvedProfile): Promise<SyncTarget[]> {
+  const targets: SyncTarget[] = [...profile.manifests.profiles.keys()].map((name) => ({
+    label: name,
+    root: profile.manifests.root,
+    profile: name,
+    upstream: false
+  }));
+  for (const upstream of eachUpstream(profile.manifests)) {
+    if (!(await isPushable(upstream.root))) continue;
+    const prefix = upstream.aliasPath.join("/");
+    for (const name of upstream.profiles.keys()) {
+      targets.push({
+        label: `${prefix}/${name}`,
+        root: upstream.root,
+        profile: name,
+        upstream: true
+      });
+    }
+  }
+  return targets;
+}
+
 /**
  * Assign each unmanaged item to a destination profile. When `targetProfile` names an
  * available profile it is used for every item without prompting; otherwise `prompt`
@@ -284,7 +324,9 @@ export async function runSync(
     return;
   }
 
-  const availableProfiles = [...profile.manifests.profiles.keys()];
+  const availableTargets = await syncTargets(profile);
+  const availableProfiles = availableTargets.map((target) => target.label);
+  const targetByLabel = new Map(availableTargets.map((target) => [target.label, target]));
 
   const manualMoves = await resolveMoves(candidates, targetProfile, availableProfiles, promptUser);
   const skillMoves = await resolveMoves(
@@ -305,34 +347,40 @@ export async function runSync(
       paths.root,
       skillMoves.map(({ item }) => item)
     );
-    console.log("  Updated shared/skills.yml");
+    console.log("  Updated catalog/skills.yml");
     for (const { item: skill, targetProfile } of skillMoves) {
-      await enableSkillInProfile(paths.root, targetProfile, skill.name);
-      console.log(`  Updated ${targetProfile}/profile.yml: skills.${skill.name}`);
+      const target = targetByLabel.get(targetProfile)!;
+      await enableSkillInProfile(target.root, target.profile, skill.name);
+      console.log(`  Updated ${target.label}/profile.yml: skills.${skill.name}`);
+      if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
     }
   }
 
   for (const { item: command, targetProfile } of commandMoves) {
-    await enableCommandInProfile(paths.root, targetProfile, command.name);
-    console.log(`  Updated ${targetProfile}/profile.yml: opencode.commands.${command.name}`);
+    const target = targetByLabel.get(targetProfile)!;
+    await enableCommandInProfile(target.root, target.profile, command.name);
+    console.log(`  Updated ${target.label}/profile.yml: opencode.commands.${command.name}`);
+    if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 
   for (const { item: candidate, targetProfile } of manualMoves) {
+    const target = targetByLabel.get(targetProfile)!;
     if (candidate.target === "mise") {
-      await writeMiseToml(paths.root, targetProfile, candidate);
+      await writeMiseToml(target.root, target.profile, candidate);
       console.log(
-        `  Updated ${targetProfile}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`
+        `  Updated ${target.label}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`
       );
     } else {
-      const doc = await readProfileYaml(paths.root, targetProfile);
+      const doc = await readProfileYaml(target.root, target.profile);
 
       setNested(doc, candidate.yamlPrefix, candidate.key, candidate.value);
 
-      await writeProfileYaml(paths.root, targetProfile, doc);
+      await writeProfileYaml(target.root, target.profile, doc);
       console.log(
-        `  Updated ${targetProfile}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`
+        `  Updated ${target.label}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`
       );
     }
+    if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 
   console.log("Sync complete. Run `mfz apply` to re-render.");

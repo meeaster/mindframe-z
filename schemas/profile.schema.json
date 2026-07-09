@@ -346,6 +346,10 @@
               "remote": {
                 "type": "string"
               },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
               "no_push": {
                 "default": false,
                 "type": "boolean"

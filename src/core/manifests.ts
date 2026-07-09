@@ -1,8 +1,10 @@
-import { access, lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
+import { fileExists } from "./fs-util.js";
+import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
 export const agentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const targetSchema = agentSchema;
@@ -35,6 +37,19 @@ export const referenceSchema = z.object({
 export const refsManifestSchema = z.object({
   references: z.array(referenceSchema).default([])
 });
+
+export const homeManifestSchema = z
+  .object({
+    description: z.string().optional(),
+    extends: z
+      .object({
+        name: z.string().min(1),
+        repo: z.string().min(1)
+      })
+      .strict()
+      .optional()
+  })
+  .strict();
 
 export const skillSchema = z.object({
   name: z.string().min(1),
@@ -122,6 +137,18 @@ export const threadIdentifierSchema = z
 export const threadDestinationSchema = z.object({
   name: threadIdentifierSchema,
   remote: z.string().optional(),
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        !path.isAbsolute(value) &&
+        !value
+          .split(/[\\/]+/)
+          .some((segment) => segment === "" || segment === "." || segment === ".."),
+      "must be a relative path without empty, . or .. segments"
+    )
+    .optional(),
   no_push: z.boolean().default(false),
   default: z.boolean().default(false)
 });
@@ -246,8 +273,8 @@ export const profileSchema = z
 
 export const machineSchema = z.object({
   profile: z.string().optional(),
-  repo_path: z.string().optional(),
-  references_dir: z.string().default("~/references"),
+  home_path: z.string().optional(),
+  references_dir: z.string().default("~/.mindframe-z/references"),
   extra_folders: z.array(extraFolderSchema).default([]),
   git: z
     .object({
@@ -274,6 +301,7 @@ export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
+export type HomeManifest = z.infer<typeof homeManifestSchema>;
 export type Archive = z.infer<typeof archiveSchema>;
 export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
 export type ThreadDestination = z.infer<typeof threadDestinationSchema>;
@@ -281,11 +309,23 @@ export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
 export type ThreadHarness = z.infer<typeof threadHarnessSchema>;
 
 export interface LoadedManifests {
+  homeManifest: HomeManifest;
+  root: string;
+  aliasPath: string[];
+  upstream?: LoadedManifests;
   references: ReferenceEntry[];
   skills: SkillEntry[];
   mcpServers: Record<string, McpServer>;
   profiles: Map<string, ProfileManifest>;
   machine: MachineManifest;
+}
+
+export function eachUpstream(manifests: LoadedManifests): LoadedManifests[] {
+  return manifests.upstream ? [manifests.upstream, ...eachUpstream(manifests.upstream)] : [];
+}
+
+export function homeDisplayName(home: LoadedManifests): string {
+  return home.aliasPath.length > 0 ? home.aliasPath.join("/") : "local";
 }
 
 export interface ManifestValidationResult {
@@ -294,17 +334,8 @@ export interface ManifestValidationResult {
   error?: string;
 }
 
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
-  if (!(await exists(file))) return fallback;
+  if (!(await fileExists(file))) return fallback;
   const parsed = YAML.parse(await readFile(file, "utf8"));
   return schema.parse(parsed);
 }
@@ -313,7 +344,7 @@ async function validateYamlFile<T>(
   file: string,
   schema: z.ZodType<T>
 ): Promise<ManifestValidationResult | null> {
-  if (!(await exists(file))) return null;
+  if (!(await fileExists(file))) return null;
   try {
     schema.parse(YAML.parse(await readFile(file, "utf8")));
     return { file, ok: true };
@@ -327,9 +358,10 @@ export async function validateManifests(
   home?: string
 ): Promise<ManifestValidationResult[]> {
   const files: Array<{ file: string; schema: z.ZodType }> = [
-    { file: path.join(root, "shared", "refs.yml"), schema: refsManifestSchema },
-    { file: path.join(root, "shared", "skills.yml"), schema: skillsManifestSchema },
-    { file: path.join(root, "shared", "mcp.yml"), schema: mcpManifestSchema }
+    { file: path.join(root, "mfz_home.yml"), schema: homeManifestSchema },
+    { file: path.join(root, "catalog", "references.yml"), schema: refsManifestSchema },
+    { file: path.join(root, "catalog", "skills.yml"), schema: skillsManifestSchema },
+    { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema }
   ];
 
   const effectiveHome = home ?? process.env.HOME;
@@ -385,19 +417,35 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
 }
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
-  const refs = await readYaml(path.join(root, "shared", "refs.yml"), refsManifestSchema, {
+  if (!(await fileExists(path.join(root, "mfz_home.yml")))) {
+    throw new Error(
+      `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
+    );
+  }
+  const homeManifest = await readYaml(path.join(root, "mfz_home.yml"), homeManifestSchema, {});
+  const effectiveHome = home ?? process.env.HOME ?? "";
+  const upstream = homeManifest.extends
+    ? await loadManifests(
+        await resolveUpstreamHomeRoot({
+          home: effectiveHome,
+          alias: homeManifest.extends.name,
+          repo: homeManifest.extends.repo
+        }),
+        home
+      )
+    : undefined;
+  const refs = await readYaml(path.join(root, "catalog", "references.yml"), refsManifestSchema, {
     references: []
   });
-  const skills = await readYaml(path.join(root, "shared", "skills.yml"), skillsManifestSchema, {
+  const skills = await readYaml(path.join(root, "catalog", "skills.yml"), skillsManifestSchema, {
     skills: []
   });
-  const mcp = await readYaml(path.join(root, "shared", "mcp.yml"), mcpManifestSchema, {
+  const mcp = await readYaml(path.join(root, "catalog", "mcp.yml"), mcpManifestSchema, {
     servers: {}
   });
-  const effectiveHome = home ?? process.env.HOME;
   const machine = effectiveHome
     ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
-        references_dir: "~/references",
+        references_dir: "~/.mindframe-z/references",
         extra_folders: [],
         git: {},
         sandbox: {},
@@ -407,7 +455,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         claude: {}
       })
     : {
-        references_dir: "~/references" as const,
+        references_dir: "~/.mindframe-z/references" as const,
         extra_folders: [],
         git: {},
         sandbox: {},
@@ -429,7 +477,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       }
       if (!stat.isDirectory()) continue;
       const profileYaml = path.join(fullPath, "profile.yml");
-      if (!(await exists(profileYaml))) continue;
+      if (!(await fileExists(profileYaml))) continue;
       const profile = await readYaml(profileYaml, profileSchema, {
         name: entry,
         agents: ["opencode", "claude-code", "codex"],
@@ -452,7 +500,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       });
 
       const miseToml = path.join(fullPath, "mise.toml");
-      if (await exists(miseToml)) {
+      if (await fileExists(miseToml)) {
         try {
           const raw = await readFile(miseToml, "utf8");
           const toml = miseTomlSchema.parse(parse(raw));
@@ -475,10 +523,22 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   return {
+    homeManifest,
+    root,
+    aliasPath: [],
+    ...(upstream ? { upstream: withAliasPrefix(upstream, homeManifest.extends!.name) } : {}),
     references: refs.references,
     skills: skills.skills,
     mcpServers: mcp.servers,
     profiles: profileMap,
     machine
+  };
+}
+
+function withAliasPrefix(manifests: LoadedManifests, alias: string): LoadedManifests {
+  return {
+    ...manifests,
+    aliasPath: [alias, ...manifests.aliasPath],
+    ...(manifests.upstream ? { upstream: withAliasPrefix(manifests.upstream, alias) } : {})
   };
 }

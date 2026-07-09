@@ -27,7 +27,7 @@ function paths(home: string, root = home): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
@@ -67,7 +67,25 @@ function profile(machine: MachineManifest): ResolvedProfile {
       dotfiles: {},
       extra_folders: []
     },
-    manifests: { references: [], skills: [], mcpServers: {}, profiles: new Map(), machine },
+    manifests: {
+      homeManifest: {},
+      root: "/tmp/home",
+      aliasPath: [],
+      references: [],
+      skills: [],
+      mcpServers: {},
+      profiles: new Map(),
+      machine
+    },
+    sources: {
+      references: new Map(),
+      skills: new Map(),
+      mcp: new Map(),
+      instructions: new Map(),
+      plugins: new Map(),
+      commands: new Map(),
+      agents: new Map()
+    },
     instructionFiles: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
@@ -79,9 +97,18 @@ function profile(machine: MachineManifest): ResolvedProfile {
   };
 }
 
+function profileWithDestinations(
+  destinations: ResolvedProfile["profile"]["thread"]["destinations"],
+  machineManifest: MachineManifest
+): ResolvedProfile {
+  const resolved = profile(machineManifest);
+  resolved.profile.thread.destinations = destinations;
+  return resolved;
+}
+
 function machine(destinations: MachineManifest["thread"]["destinations"]): MachineManifest {
   return {
-    references_dir: "~/references",
+    references_dir: "~/.mindframe-z/references",
     extra_folders: [],
     git: {},
     sandbox: {},
@@ -102,8 +129,60 @@ describe("thread storage", () => {
 
     expect(destinations.map((destination) => [destination.name, destination.default])).toEqual([
       ["personal", false],
-      ["work", true]
+      ["work", true],
+      ["home", false]
     ]);
+  });
+
+  it("defaults to the active home threads folder without configured destinations", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const destinations = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations([], machine([]))
+    );
+
+    expect(
+      destinations.map((destination) => [destination.name, destination.default, destination.path])
+    ).toContainEqual(["home", true, path.join(root, "threads")]);
+  });
+
+  it("keeps home as the default when destinations only add non-default remotes", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const destinations = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations(
+        [
+          {
+            name: "personal",
+            remote: "git@example.com:me/threads.git",
+            default: false,
+            no_push: false
+          }
+        ],
+        machine([])
+      )
+    );
+
+    expect(destinations.map((destination) => [destination.name, destination.default])).toEqual([
+      ["personal", false],
+      ["home", true]
+    ]);
+  });
+
+  it("resolves destination paths relative to the active home", async () => {
+    const home = await makeTempDir();
+    const root = path.join(home, "mfz-home");
+    const [destination] = resolveThreadDestinations(
+      paths(home, root),
+      profileWithDestinations(
+        [],
+        machine([{ name: "work", path: "threads", default: true, no_push: false }])
+      )
+    );
+
+    expect(destination?.path).toBe(path.join(root, "threads"));
   });
 
   it("round-trips manifest and runs files", async () => {

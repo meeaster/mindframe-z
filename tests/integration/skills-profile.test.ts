@@ -54,7 +54,7 @@ describe("skills profile integration", () => {
 
   it("upgrade updates git skills for all configured targets", async () => {
     await writeFile(
-      path.join(root, "shared", "skills.yml"),
+      path.join(root, "catalog", "skills.yml"),
       [
         "skills:",
         "  - name: shared-git-skill",

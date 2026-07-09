@@ -15,5 +15,10 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  // These are Bun-only: embedded-assets.ts imports non-TS files with `type: "file"`
+  // (which only Bun's bundler understands, not tsc/node), and mfz-bun.ts is the
+  // `bun build --compile` entry that imports it. Both are bundled into the standalone
+  // binary by bun and never enter the tsc/node program.
+  "exclude": ["src/thread/embedded-assets.ts", "src/cli/mfz-bun.ts"]
 }

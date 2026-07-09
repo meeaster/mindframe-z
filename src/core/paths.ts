@@ -1,9 +1,12 @@
 import { access, mkdir } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
+import { expandHome } from "./path-util.js";
+
+export { expandHome } from "./path-util.js";
 
 export type AgentName = "opencode" | "claude-code" | "codex";
 export type ToolTarget = "opencode" | "claude-code" | "codex" | "mise" | "dotfiles";
@@ -29,19 +32,22 @@ export interface PathOptions {
 }
 
 export function packageRootFromImport(importMetaUrl: string): string {
-  return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), "../..");
+  // Resolve the engine root by finding the nearest package.json, so it works
+  // identically from source (src/*, two levels up) and the compiled dist tree
+  // (dist/src/*, three levels up).
+  const start = path.dirname(fileURLToPath(importMetaUrl));
+  let dir = start;
+  while (dir !== path.dirname(dir)) {
+    if (existsSync(path.join(dir, "package.json"))) return dir;
+    dir = path.dirname(dir);
+  }
+  return path.resolve(start, "../..");
 }
 
-export function expandHome(value: string, home = process.env.HOME ?? ""): string {
-  if (value === "~") return home;
-  if (value.startsWith("~/")) return path.join(home, value.slice(2));
-  return value;
-}
-
-function machineRepoPath(home: string): string | undefined {
+function machineHomePath(home: string): string | undefined {
   try {
     const parsed = YAML.parse(readFileSync(path.join(home, ".mindframe-z", "config.yml"), "utf8"));
-    return machineSchema.parse(parsed).repo_path;
+    return machineSchema.parse(parsed).home_path;
   } catch {
     return undefined;
   }
@@ -49,7 +55,7 @@ function machineRepoPath(home: string): string | undefined {
 
 export function resolveRoot(input?: string, home = process.env.HOME ?? ""): string {
   return path.resolve(
-    expandHome(input ?? process.env.MFZ_ROOT ?? machineRepoPath(home) ?? process.cwd(), home)
+    expandHome(input ?? process.env.MFZ_ROOT ?? machineHomePath(home) ?? process.cwd(), home)
   );
 }
 
@@ -61,7 +67,7 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(root, "configs"),
+    configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.resolve(
       expandHome(
         options.opencodeConfigDir ??

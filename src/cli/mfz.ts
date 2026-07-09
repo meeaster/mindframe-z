@@ -1,11 +1,13 @@
 import * as readline from "node:readline/promises";
 import path from "node:path";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
+import YAML from "yaml";
 import { generateSchemas } from "../core/generate-schemas.js";
-import { validateManifests } from "../core/manifests.js";
+import { eachUpstream, validateManifests } from "../core/manifests.js";
+import type { LoadedManifests } from "../core/manifests.js";
 import {
   agentList,
   createRuntimePaths,
@@ -41,6 +43,7 @@ import {
   applySkill,
   listInstalledSkills,
   removeSkill,
+  skillsCliAvailable,
   updateSkill
 } from "../skills/skills-adapter.js";
 import type { SkillEntry } from "../core/manifests.js";
@@ -67,11 +70,19 @@ import {
   runThreadRuns,
   runThreadShow,
   runThreadSweep,
-  runThreadSync
+  runThreadSync,
+  runThreadToolsBuild
 } from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
+import { guide, initHome } from "./init.js";
+import {
+  engineSkillName,
+  ensureHomeGuidance,
+  hasHomeGuidance,
+  materializeEngineSkill
+} from "../core/engine-skill.js";
 
 async function confirmReplace(
   rl: readline.Interface | null,
@@ -94,6 +105,12 @@ async function confirmReplace(
   }
   const normalized = answer.trim().toLowerCase();
   return normalized === "y" || normalized === "yes";
+}
+
+function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir: string): boolean {
+  if (!resolvedTarget) return false;
+  const relative = path.relative(configsDir, resolvedTarget);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 async function applyConfig(options: {
@@ -170,7 +187,8 @@ async function applyConfig(options: {
           }
 
           const backupPath = backupPathFor(link.linkPath);
-          if (!(await confirmReplace(rl, link.linkPath, backupPath))) {
+          const autoReplace = staleManagedConfigTarget(status.resolvedTarget, paths.configsDir);
+          if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
             console.log(`skipped\t${link.linkPath} (${status.detail})`);
             continue;
           }
@@ -180,6 +198,9 @@ async function applyConfig(options: {
           console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
         }
       }
+    }
+    if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
+      console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
     }
   } finally {
     rl?.close();
@@ -209,6 +230,21 @@ async function doctor(options: {
 
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
+  if (await hasHomeGuidance(paths.root)) {
+    console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
+  } else {
+    console.log(
+      `home-guidance:missing\t${path.join(paths.root, "AGENTS.md")}\trun mfz apply to write it`
+    );
+  }
+  if (await shouldHintLegacyReferences(paths.home)) {
+    console.log(
+      `hint\tlegacy references directory exists at ${path.join(paths.home, "references")}; default is now ${path.join(paths.home, ".mindframe-z", "references")}. Set references_dir to keep using the legacy path.`
+    );
+  }
+  for (const upstream of eachUpstream(profile.manifests)) {
+    for (const line of await upstreamDoctorLines(upstream)) console.log(line);
+  }
   for (const target of [...profile.agents, ...infraTargetList("all")]) {
     const result = await renderTarget(paths, profile, target);
     for (const link of result.links) {
@@ -230,6 +266,47 @@ async function doctor(options: {
       }
     }
   }
+}
+
+async function gitStdout(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const { stdout } = await execa("git", args, { cwd });
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]> {
+  const label = upstream.aliasPath.join("/");
+  const lines: string[] = [];
+  const dirty = (await gitStdout(upstream.root, ["status", "--porcelain"]))?.trim();
+  if (dirty) lines.push(`upstream:dirty\t${label}\t${upstream.root}`);
+
+  const ahead = Number(
+    (await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0"
+  );
+  if (ahead > 0) lines.push(`upstream:ahead\t${label}\t${ahead} commit(s) unpushed`);
+
+  await gitStdout(upstream.root, ["fetch", "--quiet"]);
+  const behind = Number(
+    (await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0"
+  );
+  if (behind > 0) lines.push(`upstream:stale\t${label}\t${behind} commit(s) behind`);
+  return lines;
+}
+
+async function shouldHintLegacyReferences(home: string): Promise<boolean> {
+  if (process.env.MFZ_REFERENCES_DIR) return false;
+  try {
+    const parsed = YAML.parse(
+      await readFile(path.join(home, ".mindframe-z", "config.yml"), "utf8")
+    ) as unknown;
+    if (parsed && typeof parsed === "object" && "references_dir" in parsed) return false;
+  } catch {
+    // Missing or unreadable machine config means there is no references_dir override.
+  }
+  return fileExists(path.join(home, "references"));
 }
 
 async function fileExists(file: string): Promise<boolean> {
@@ -332,6 +409,22 @@ program
   .action(async () => schemas(program.opts()));
 
 program
+  .command("guide")
+  .description("Print the mindframe-z home conventions guide")
+  .argument("[topic]", "topic guide: skills")
+  .action(async (topic) => guide(topic));
+
+program
+  .command("init")
+  .description("Initialize machine config and create, clone, or point at a home")
+  .option("--create <path>", "scaffold a new home at path")
+  .option("--clone <repo>", "clone an existing home repository")
+  .option("--point <path>", "point machine config at an existing home")
+  .option("--name <name>", "clone destination name under ~/.mindframe-z/homes")
+  .option("--agents <agents>", "comma-separated starter agents", "opencode,claude-code,codex")
+  .action(async (options) => initHome({ ...program.opts(), ...options }));
+
+program
   .command("sync")
   .description("Detect unmanaged changes and promote them to profile YAML")
   .option("--profile <profile>", "target profile to write changes to (skip interactive prompt)")
@@ -414,6 +507,16 @@ thread
   .option("--json", "emit structured JSON")
   .action(async (options) =>
     runThreadDestinations({ ...program.opts(), json: Boolean(options.json) })
+  );
+
+thread
+  .command("tools")
+  .description("Manage the local thread tools image")
+  .command("build")
+  .description("Build or refresh the bundled local Docker image used by thread dispatch")
+  .option("--force", "rebuild even when the image hash is current")
+  .action(async (options) =>
+    runThreadToolsBuild({ ...program.opts(), force: Boolean(options.force) })
   );
 
 thread
@@ -694,9 +797,23 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = options.agent as AgentName | undefined;
+    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
     const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const dryRun = options.dryRun ?? false;
+    if (!dryRun && !(await skillsCliAvailable(paths))) {
+      console.log(
+        "skills CLI not found; skipping skill sync. Install it (e.g. `npm install -g skills`), then re-run `mfz skills sync`."
+      );
+      return;
+    }
+    // The engine ships its own slim skill so every machine gets it via sync,
+    // versioned with the binary. A home that declares a skill of the same name
+    // owns it instead (including declaring-without-enabling to opt out).
+    const engineOwnsSkill =
+      !profile.enabledSkills.some((skill) => skill.name === engineSkillName) &&
+      !profile.manifests.skills.some((skill) => skill.name === engineSkillName);
+    const engineSkill = engineOwnsSkill ? await materializeEngineSkill(paths) : undefined;
+
     const installedByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
     const desiredByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
     const allSkillNames = new Set<string>();
@@ -708,19 +825,28 @@ skills
           .filter((entry) => entry.targets.includes(target))
           .map((entry) => entry.name)
       );
+      if (engineSkill) desired.add(engineSkill.name);
       installedByTarget.set(target, installed);
       desiredByTarget.set(target, desired);
       for (const name of installed) allSkillNames.add(name);
       for (const name of desired) allSkillNames.add(name);
     }
 
-    const skillEntryFor = (name: string): SkillEntry =>
-      profile.manifests.skills.find((skill) => skill.name === name) ?? {
-        name,
-        source: "git",
-        installer: "skills",
-        description: ""
-      };
+    // Prefer the resolved skill: it carries the true source and sourceRoot,
+    // including for skills defined in an upstream home. The engine skill serves
+    // its own name; the local catalog and the git fallback only serve orphaned
+    // skills that are installed but no longer enabled.
+    const skillEntryFor = (name: string): SkillEntry & { sourceRoot?: string } =>
+      profile.enabledSkills.find((skill) => skill.name === name) ??
+      profile.manifests.skills.find((skill) => skill.name === name) ??
+      (name === engineSkill?.name
+        ? engineSkill
+        : {
+            name,
+            source: "git",
+            installer: "skills",
+            description: ""
+          });
 
     for (const name of allSkillNames) {
       const installedTargets = targets.filter((target) => installedByTarget.get(target)?.has(name));
@@ -766,7 +892,7 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = options.agent as AgentName | undefined;
+    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
     const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const updatedGitSkills = new Set<string>();
     for (const target of targets) {

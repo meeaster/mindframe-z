@@ -1,7 +1,7 @@
-import { DatabaseSync } from "node:sqlite";
 import { execa } from "execa";
 import type { RuntimePaths } from "../core/paths.js";
 import { opencodeDataHome, opencodeDbPath, pathExists } from "../core/paths.js";
+import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { BackupItem } from "./backup-item.js";
 import { primaryRelPath } from "./archive.js";
 
@@ -33,9 +33,9 @@ export async function listOpencodeItems(
   const dataHome = opencodeDataHome(paths);
   const dbPath = opencodeDbPath(paths);
   if (!(await pathExists(dbPath))) return [];
-  let db: DatabaseSync;
+  let db: SqliteDatabase;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
+    db = openSqlite(dbPath, { readOnly: true });
   } catch {
     return [];
   }

@@ -1,7 +1,7 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, cliWithMachineRepoPath, setupIntegrationFixture } from "./support.js";
+import { cli, cliWithMachineHomePath, setupIntegrationFixture } from "./support.js";
 
 describe("doctor integration", () => {
   let root: string;
@@ -16,17 +16,22 @@ describe("doctor integration", () => {
     home = "";
   });
 
-  it("uses machine repo_path when root is not provided", async () => {
+  it("uses machine home_path when root is not provided", async () => {
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),
-      ["profile: personal", `repo_path: ${root}`, "references_dir: ~/references", ""].join("\n"),
+      [
+        "profile: personal",
+        `home_path: ${root}`,
+        "references_dir: ~/.mindframe-z/references",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
-    const result = await cliWithMachineRepoPath(home, ["doctor"]);
+    const result = await cliWithMachineHomePath(home, ["doctor"]);
 
     expect(result.stdout).toContain(`root\t${root}`);
-    expect(result.stdout).toContain("manifest:✓\tshared/refs.yml");
+    expect(result.stdout).toContain("manifest:✓\tcatalog/references.yml");
   });
 
   it("prints enabled commands in status output", async () => {
@@ -36,15 +41,16 @@ describe("doctor integration", () => {
 
   it("doctor reports valid manifests", async () => {
     const result = await cli("mfz", root, home, ["doctor"]);
-    expect(result.stdout).toContain("manifest:✓\tshared/refs.yml");
-    expect(result.stdout).toContain("manifest:✓\tshared/skills.yml");
-    expect(result.stdout).toContain("manifest:✓\tshared/mcp.yml");
+    expect(result.stdout).toContain("manifest:✓\tmfz_home.yml");
+    expect(result.stdout).toContain("manifest:✓\tcatalog/references.yml");
+    expect(result.stdout).toContain("manifest:✓\tcatalog/skills.yml");
+    expect(result.stdout).toContain("manifest:✓\tcatalog/mcp.yml");
     expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
   });
 
   it("doctor reports invalid manifests without throwing", async () => {
     await writeFile(
-      path.join(root, "shared", "mcp.yml"),
+      path.join(root, "catalog", "mcp.yml"),
       ["servers:", "  broken:", "    type: websocket", "    url: https://example.invalid", ""].join(
         "\n"
       ),
@@ -52,9 +58,20 @@ describe("doctor integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["doctor"]);
-    expect(result.stdout).toContain("manifest:✗\tshared/mcp.yml");
+    expect(result.stdout).toContain("manifest:✗\tcatalog/mcp.yml");
     expect(result.stdout).toContain("Invalid input");
     expect(result.stdout).toContain("remote");
     expect(result.stdout).toContain("local");
+  });
+
+  it("hints when legacy references exist without an override", async () => {
+    await mkdir(path.join(home, "references"), { recursive: true });
+    await writeFile(path.join(home, ".mindframe-z", "config.yml"), "profile: personal\n", "utf8");
+
+    const result = await cli("mfz", root, home, ["doctor"]);
+
+    expect(result.stdout).toContain("hint\tlegacy references directory exists");
+    expect(result.stdout).toContain(path.join(home, "references"));
+    expect(result.stdout).toContain(path.join(home, ".mindframe-z", "references"));
   });
 });
