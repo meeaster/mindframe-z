@@ -1,6 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { z, type ZodType } from "zod";
 import {
   machineSchema,
@@ -35,8 +34,4 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
     written.push(outputPath);
   }
   return written;
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  for (const file of await generateSchemas()) console.log(`wrote\t${file}`);
 }

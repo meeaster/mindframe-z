@@ -4,6 +4,29 @@ mindframe-z is the engine for rendering profile-aware AI coding tool configurati
 
 A home is a git repo with `mfz_home.yml`, `catalog/`, `instructions/`, `profiles/`, optional local `skills/`, optional `opencode/`, and optional `sandbox/` overlays. A machine activates one home through `~/.mindframe-z/config.yml#home_path`.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash
+```
+
+This installs mise, node (for the `skills` CLI), and the self-contained `mfz` binary to `~/.mindframe-z/bin/mfz`, and adds shell integration to your rc file. Then, in a new shell:
+
+```sh
+mfz init --create ~/code/my-home   # or --clone <home-repo-url> / --point <path>
+mfz apply --target all --agent all
+```
+
+### Agent-driven setup
+
+Or let your AI coding agent do the whole setup — paste this into Claude Code, opencode, or Codex:
+
+```text
+Set up mindframe-z on this machine. Fetch
+https://raw.githubusercontent.com/meeaster/mindframe-z/master/docs/agent-setup.md
+and follow its steps. My home: <your home repo URL, or "create a new home at ~/code/my-home">
+```
+
 ## Core Commands
 
 ```sh
@@ -100,8 +123,12 @@ pnpm test
 pnpm test:integration
 pnpm check
 pnpm schemas
-pnpm release:tarball
+pnpm release
 ```
+
+`pnpm release` cross-compiles a self-contained `bun --compile` binary per platform
+(`release/mfz-<os>-<arch>`); `scripts/install.sh` downloads the matching one. It
+requires `bun` on PATH.
 
 If local mise shims are not active before applying a home, run commands with explicit tools, for example:
 

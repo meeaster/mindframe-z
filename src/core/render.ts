@@ -31,14 +31,16 @@ export async function renderRuntimeInstructions(
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<RenderedFile[]> {
-  const files: RenderedFile[] = [];
-  for (const file of profile.instructionFiles) {
-    files.push({
+  if (profile.instructionFiles.length === 0) return [];
+  const contents = await Promise.all(
+    profile.instructionFiles.map((file) => readFile(file, "utf8"))
+  );
+  return [
+    {
       path: path.join(profileConfigsDir(paths, profile.name), "AGENTS.md"),
-      content: await readFile(file, "utf8")
-    });
-  }
-  return files;
+      content: contents.map((content) => content.trimEnd()).join("\n\n") + "\n"
+    }
+  ];
 }
 
 export async function writeRenderedFiles(files: RenderedFile[]): Promise<void> {

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { ensureHomeGuidance } from "../core/engine-skill.js";
 
 const guideMarkdown = `# mindframe-z Home Guide
 
@@ -8,12 +9,70 @@ A home is a git repository with \`mfz_home.yml\` at its root. The engine loads f
 
 Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz_home.yml#extends\`.
 
-Edit home files directly for durable configuration. Use \`mfz apply\` to render machine-local output under \`~/.mindframe-z/configs/<profile>/\`. Use \`mfz sync\` after editing rendered files to promote unmanaged keys back into profiles.
+The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and every globally linked tool config file is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly — if that already happened, run \`mfz sync\` to promote the unmanaged edits back into profiles.
 
 Local skills live under \`skills/\` and are registered in \`catalog/skills.yml\` with \`source: local\`. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`, then profiles enable them under \`opencode.plugins\`, \`opencode.commands\`, and \`opencode.agents\`.
+
+Topic guides: \`mfz guide skills\` — add or change skills.
 `;
 
-export async function guide(): Promise<void> {
+const skillsGuideMarkdown = `# Skills Guide
+
+A skill reaches an agent in three steps: the catalog declares it, a profile enables it per agent, and \`mfz skills sync\` installs it into each harness.
+
+Add a local skill:
+
+1. Create \`skills/<name>/SKILL.md\`. The frontmatter must carry both \`name:\` and \`description:\` — the skills CLI installer rejects files missing either:
+
+   \`\`\`markdown
+   ---
+   name: my-skill
+   description: Use when <trigger phrasing an agent would match>.
+   ---
+   <skill body>
+   \`\`\`
+
+2. Declare it in \`catalog/skills.yml\`:
+
+   \`\`\`yaml
+   skills:
+     - name: my-skill
+       source: local
+       skill: my-skill
+       description: One-line summary.
+   \`\`\`
+
+3. Enable it in \`profiles/<profile>/profile.yml\`:
+
+   \`\`\`yaml
+   skills:
+     my-skill:
+       agents: { opencode: true, claude-code: true, codex: true }
+   \`\`\`
+
+4. Run \`mfz apply --target all --agent all\`, then \`mfz skills sync\`.
+
+Variants:
+
+- Git-sourced skills use \`source: git\` with \`repo: <url>\` in the catalog; an optional \`skill:\` selects one skill out of the repo.
+- Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
+
+Verify with \`mfz skills list\` and \`mfz doctor\`.
+`;
+
+const guideTopics: Record<string, string> = { skills: skillsGuideMarkdown };
+
+export async function guide(topic?: string): Promise<void> {
+  if (topic !== undefined) {
+    const content = guideTopics[topic];
+    if (!content) {
+      throw new Error(
+        `Unknown guide topic: ${topic}. Topics: ${Object.keys(guideTopics).join(", ")}`
+      );
+    }
+    console.log(content.trimEnd());
+    return;
+  }
   console.log(guideMarkdown.trimEnd());
 }
 
@@ -23,7 +82,6 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
   await mkdir(path.join(homeRoot, "catalog"), { recursive: true });
   await mkdir(path.join(homeRoot, "instructions"), { recursive: true });
   await mkdir(path.join(homeRoot, "profiles", "base"), { recursive: true });
-  await mkdir(path.join(homeRoot, "skills", "mindframe-z"), { recursive: true });
   await writeFile(
     path.join(homeRoot, "mfz_home.yml"),
     `# yaml-language-server: $schema=${schemaBaseUrl}/mfz_home.schema.json\ndescription: mindframe-z home\n`,
@@ -41,15 +99,7 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
   );
   await writeFile(
     path.join(homeRoot, "catalog", "skills.yml"),
-    [
-      `# yaml-language-server: $schema=${schemaBaseUrl}/skills.schema.json`,
-      "skills:",
-      "  - name: mindframe-z",
-      "    source: local",
-      "    skill: mindframe-z",
-      "    description: Guidance for editing a mindframe-z home.",
-      ""
-    ].join("\n"),
+    `# yaml-language-server: $schema=${schemaBaseUrl}/skills.schema.json\nskills: []\n`,
     "utf8"
   );
   await writeFile(
@@ -66,24 +116,11 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
       `agents: [${agentList.join(", ")}]`,
       "instructions:",
       "  - instructions/AGENTS.md",
-      "skills:",
-      "  mindframe-z:",
-      `    agents: { ${agentList.map((agent) => `${agent}: true`).join(", ")} }`,
       ""
     ].join("\n"),
     "utf8"
   );
-  await writeFile(
-    path.join(homeRoot, "skills", "mindframe-z", "SKILL.md"),
-    [
-      "---",
-      "description: Use when editing a mindframe-z home, including profiles, catalog entries, local skills, OpenCode plugins, or machine config.",
-      "---",
-      "Run `mfz guide` and follow the home conventions it prints.",
-      ""
-    ].join("\n"),
-    "utf8"
-  );
+  await ensureHomeGuidance(homeRoot);
   await writeFile(path.join(homeRoot, ".gitignore"), "node_modules/\n", "utf8");
   await writeFile(
     path.join(homeRoot, "README.md"),

@@ -6,3 +6,4 @@ machine/machine.yml
 .generated/
 *.log
 archive-cache/
+release/

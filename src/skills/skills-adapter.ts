@@ -63,6 +63,17 @@ function skillsCliEnv(paths: RuntimePaths): NodeJS.ProcessEnv {
   };
 }
 
+export async function skillsCliAvailable(paths: RuntimePaths): Promise<boolean> {
+  try {
+    await execa("skills", ["--version"], { env: skillsCliEnv(paths), timeout: 15000 });
+    return true;
+  } catch (error) {
+    // Only a missing binary (ENOENT) means the CLI is unavailable; any other
+    // failure (e.g. an unrecognized flag) still proves the CLI is installed.
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+}
+
 async function listCliInstalledSkills(paths: RuntimePaths): Promise<ListedInstalledSkill[]> {
   try {
     const { stdout } = await execa("skills", ["list", "-g", "--json"], {

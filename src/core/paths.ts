@@ -1,5 +1,5 @@
 import { access, mkdir } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -32,7 +32,16 @@ export interface PathOptions {
 }
 
 export function packageRootFromImport(importMetaUrl: string): string {
-  return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), "../..");
+  // Resolve the engine root by finding the nearest package.json, so it works
+  // identically from source (src/*, two levels up) and the compiled dist tree
+  // (dist/src/*, three levels up).
+  const start = path.dirname(fileURLToPath(importMetaUrl));
+  let dir = start;
+  while (dir !== path.dirname(dir)) {
+    if (existsSync(path.join(dir, "package.json"))) return dir;
+    dir = path.dirname(dir);
+  }
+  return path.resolve(start, "../..");
 }
 
 function machineHomePath(home: string): string | undefined {

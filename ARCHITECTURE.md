@@ -51,7 +51,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/overrides.json
 ~/.mindframe-z/threads/
 ~/.mindframe-z/bin/
-~/.mindframe-z/engine/
 ```
 
 Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Symlinks and merged local files point at this rendered root.
@@ -94,7 +93,7 @@ Applied agent configs expose upstream clones as editable extra folders so agents
 
 `mfz guide` prints version-local home conventions. Scaffolded homes include a slim `mindframe-z` skill that tells agents to run `mfz guide`.
 
-The installer writes a launcher to `~/.mindframe-z/bin/mfz` and unpacks release tarballs under `~/.mindframe-z/engine/`. The release tarball is built by `pnpm release:tarball`.
+The installer downloads a self-contained `bun --compile` binary for the host platform to `~/.mindframe-z/bin/mfz`. The per-platform binaries are built by `pnpm release`.
 
 ## Schemas
 

@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
-import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
+import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { opencodeDbPath, pathExists } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
@@ -142,9 +142,9 @@ async function readOpencodeWatermarkFromDb(
 ): Promise<Watermark | undefined> {
   const dbPath = opencodeDbPath(paths);
   if (!(await pathExists(dbPath))) return undefined;
-  let db: DatabaseSync;
+  let db: SqliteDatabase;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
+    db = openSqlite(dbPath, { readOnly: true });
   } catch {
     return undefined;
   }

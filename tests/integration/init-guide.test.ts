@@ -21,6 +21,15 @@ describe("init and guide integration", () => {
     const result = await mfz(home, ["guide"]);
     expect(result.stdout).toContain("# mindframe-z Home Guide");
     expect(result.stdout).toContain("catalog/references.yml");
+    expect(result.stdout).toContain("mfz guide skills");
+  });
+
+  it("prints the skills topic guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "skills"]);
+    expect(result.stdout).toContain("# Skills Guide");
+    expect(result.stdout).toContain("catalog/skills.yml");
+    expect(result.stdout).toContain("mfz skills sync");
   });
 
   it("scaffolds a valid home and records home_path", async () => {
@@ -34,8 +43,12 @@ describe("init and guide integration", () => {
       "mfz_home.schema.json"
     );
     expect(await readFile(path.join(homeRoot, "catalog", "skills.yml"), "utf8")).toContain(
-      "name: mindframe-z"
+      "skills: []"
     );
+    expect(await readFile(path.join(homeRoot, "AGENTS.md"), "utf8")).toContain(
+      "mfz:home-guidance:begin"
+    );
+    expect(await readFile(path.join(homeRoot, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
     expect(await readFile(path.join(machineHome, ".mindframe-z", "config.yml"), "utf8")).toContain(
       `home_path: ${homeRoot}`
     );

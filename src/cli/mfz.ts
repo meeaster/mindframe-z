@@ -43,6 +43,7 @@ import {
   applySkill,
   listInstalledSkills,
   removeSkill,
+  skillsCliAvailable,
   updateSkill
 } from "../skills/skills-adapter.js";
 import type { SkillEntry } from "../core/manifests.js";
@@ -76,6 +77,12 @@ import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js"
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 import { guide, initHome } from "./init.js";
+import {
+  engineSkillName,
+  ensureHomeGuidance,
+  hasHomeGuidance,
+  materializeEngineSkill
+} from "../core/engine-skill.js";
 
 async function confirmReplace(
   rl: readline.Interface | null,
@@ -192,6 +199,9 @@ async function applyConfig(options: {
         }
       }
     }
+    if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
+      console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
+    }
   } finally {
     rl?.close();
   }
@@ -220,6 +230,13 @@ async function doctor(options: {
 
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
+  if (await hasHomeGuidance(paths.root)) {
+    console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
+  } else {
+    console.log(
+      `home-guidance:missing\t${path.join(paths.root, "AGENTS.md")}\trun mfz apply to write it`
+    );
+  }
   if (await shouldHintLegacyReferences(paths.home)) {
     console.log(
       `hint\tlegacy references directory exists at ${path.join(paths.home, "references")}; default is now ${path.join(paths.home, ".mindframe-z", "references")}. Set references_dir to keep using the legacy path.`
@@ -394,7 +411,8 @@ program
 program
   .command("guide")
   .description("Print the mindframe-z home conventions guide")
-  .action(async () => guide());
+  .argument("[topic]", "topic guide: skills")
+  .action(async (topic) => guide(topic));
 
 program
   .command("init")
@@ -779,9 +797,23 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = options.agent as AgentName | undefined;
+    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
     const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const dryRun = options.dryRun ?? false;
+    if (!dryRun && !(await skillsCliAvailable(paths))) {
+      console.log(
+        "skills CLI not found; skipping skill sync. Install it (e.g. `npm install -g skills`), then re-run `mfz skills sync`."
+      );
+      return;
+    }
+    // The engine ships its own slim skill so every machine gets it via sync,
+    // versioned with the binary. A home that declares a skill of the same name
+    // owns it instead (including declaring-without-enabling to opt out).
+    const engineOwnsSkill =
+      !profile.enabledSkills.some((skill) => skill.name === engineSkillName) &&
+      !profile.manifests.skills.some((skill) => skill.name === engineSkillName);
+    const engineSkill = engineOwnsSkill ? await materializeEngineSkill(paths) : undefined;
+
     const installedByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
     const desiredByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
     const allSkillNames = new Set<string>();
@@ -793,19 +825,28 @@ skills
           .filter((entry) => entry.targets.includes(target))
           .map((entry) => entry.name)
       );
+      if (engineSkill) desired.add(engineSkill.name);
       installedByTarget.set(target, installed);
       desiredByTarget.set(target, desired);
       for (const name of installed) allSkillNames.add(name);
       for (const name of desired) allSkillNames.add(name);
     }
 
-    const skillEntryFor = (name: string): SkillEntry =>
-      profile.manifests.skills.find((skill) => skill.name === name) ?? {
-        name,
-        source: "git",
-        installer: "skills",
-        description: ""
-      };
+    // Prefer the resolved skill: it carries the true source and sourceRoot,
+    // including for skills defined in an upstream home. The engine skill serves
+    // its own name; the local catalog and the git fallback only serve orphaned
+    // skills that are installed but no longer enabled.
+    const skillEntryFor = (name: string): SkillEntry & { sourceRoot?: string } =>
+      profile.enabledSkills.find((skill) => skill.name === name) ??
+      profile.manifests.skills.find((skill) => skill.name === name) ??
+      (name === engineSkill?.name
+        ? engineSkill
+        : {
+            name,
+            source: "git",
+            installer: "skills",
+            description: ""
+          });
 
     for (const name of allSkillNames) {
       const installedTargets = targets.filter((target) => installedByTarget.get(target)?.has(name));
@@ -851,7 +892,7 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = options.agent as AgentName | undefined;
+    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
     const targets = requestedAgent ? [requestedAgent] : profile.agents;
     const updatedGitSkills = new Set<string>();
     for (const target of targets) {

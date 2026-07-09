@@ -82,9 +82,13 @@ describe("skill CLI integration", () => {
   it("sync installs missing skills and removes extra skills", async () => {
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
     const addLines = result.stdout.split("\n").filter((line) => line.includes("skills add"));
-    expect(addLines).toHaveLength(5);
-    expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(2);
-    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(3);
+    // Profile skills plus the engine-owned mindframe-z skill, one add per agent.
+    const engineLines = addLines.filter((line) => line.includes("engine-skills"));
+    expect(engineLines).toHaveLength(2);
+    expect(engineLines.every((line) => line.includes("--skill mindframe-z"))).toBe(true);
+    expect(addLines).toHaveLength(7);
+    expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(3);
+    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(4);
   });
 
   it("sync installs disabled profile skills", async () => {

@@ -1,32 +1,30 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 
 const root = process.cwd();
 const outDir = path.join(root, "release");
-const stage = path.join(outDir, "engine");
+const entry = path.join(root, "src", "cli", "mfz-bun.ts");
+
+// Cross-compile a self-contained binary per platform. `bun build --compile` embeds
+// the JS runtime plus the thread-tools docker-context assets (see embedded-assets.ts),
+// so the release ships no node, no dependency tree, and no install-time step.
+const targets = [
+  { bun: "bun-linux-x64", name: "mfz-linux-x64" },
+  { bun: "bun-linux-arm64", name: "mfz-linux-arm64" },
+  { bun: "bun-darwin-x64", name: "mfz-darwin-x64" },
+  { bun: "bun-darwin-arm64", name: "mfz-darwin-arm64" }
+];
 
 await rm(outDir, { recursive: true, force: true });
-await mkdir(stage, { recursive: true });
-await cp(path.join(root, "dist"), path.join(stage, "dist"), { recursive: true });
-await cp(path.join(root, "schemas"), path.join(stage, "schemas"), { recursive: true });
-await cp(path.join(root, "package.json"), path.join(stage, "package.json"));
-await cp(path.join(root, "Dockerfile.tools"), path.join(stage, "Dockerfile.tools"));
-await mkdir(path.join(stage, "src", "thread"), { recursive: true });
-await cp(
-  path.join(root, "src", "thread", "opencode.thread.json"),
-  path.join(stage, "src", "thread", "opencode.thread.json")
-);
-await mkdir(path.join(stage, "opencode", "plugins"), { recursive: true });
-await cp(
-  path.join(root, "opencode", "plugins", "lapdog.ts"),
-  path.join(stage, "opencode", "plugins", "lapdog.ts")
-);
-await writeFile(
-  path.join(stage, "mfz"),
-  '#!/usr/bin/env bash\nset -euo pipefail\nexec node "$(dirname "$0")/dist/cli/mfz.js" "$@"\n',
-  { mode: 0o755 }
-);
+await mkdir(outDir, { recursive: true });
 
-await execa("tar", ["-czf", path.join(outDir, "mindframe-z-engine.tar.gz"), "-C", stage, "."]);
-console.log(`wrote\t${path.join(outDir, "mindframe-z-engine.tar.gz")}`);
+for (const target of targets) {
+  const outfile = path.join(outDir, target.name);
+  await execa(
+    "bun",
+    ["build", "--compile", `--target=${target.bun}`, entry, "--outfile", outfile],
+    { stdio: "inherit" }
+  );
+  console.log(`wrote\t${outfile}`);
+}
