@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -17,6 +18,24 @@ import {
 
 async function tmpDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-config-io-"));
+}
+
+async function readCodexSkillsConfig(
+  runtimePaths: RuntimePaths
+): Promise<Array<{ path: string; enabled: boolean }> | undefined> {
+  const data = parseToml(
+    await readFile(path.join(runtimePaths.codexDir, "config.toml"), "utf8")
+  ) as {
+    skills?: { config?: Array<{ path: string; enabled: boolean }> };
+  };
+  return data.skills?.config;
+}
+
+async function writeInstalledSkill(runtimePaths: RuntimePaths, name: string): Promise<string> {
+  const skillPath = path.join(runtimePaths.home, ".agents", "skills", name, "SKILL.md");
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, `# ${name}\n`, "utf8");
+  return skillPath;
 }
 
 function paths(root: string): RuntimePaths {
@@ -204,6 +223,46 @@ describe("skill config global writes", () => {
       await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8")
     ) as Record<string, boolean>;
     expect(state).toEqual({ first: false, second: true });
+  });
+
+  it("writes codex toggles against the installed SKILL.md under the home directory", async () => {
+    process.chdir(root);
+    const runtimePaths = paths(root);
+    const skillPath = await writeInstalledSkill(runtimePaths, "test-skill");
+
+    await writeLocalSkillOverrides(runtimePaths, "codex", { "test-skill": false });
+
+    expect(await readCodexSkillsConfig(runtimePaths)).toEqual([
+      { path: skillPath, enabled: false }
+    ]);
+  });
+
+  it("writes codex delta toggles against the installed SKILL.md outside a repo", async () => {
+    process.chdir(root);
+    const runtimePaths = paths(root);
+    const skillPath = await writeInstalledSkill(runtimePaths, "changed");
+    const profile = {
+      enabledSkills: [{ name: "changed", agents: { codex: true }, targets: ["codex"] }]
+    } as unknown as ResolvedProfile;
+
+    await setLocalSkillState(runtimePaths, profile, "codex", "changed", false);
+
+    expect(await readCodexSkillsConfig(runtimePaths)).toEqual([
+      { path: skillPath, enabled: false }
+    ]);
+  });
+
+  it("refuses codex toggles when the skill has no installed SKILL.md", async () => {
+    process.chdir(root);
+    const runtimePaths = paths(root);
+
+    await expect(
+      writeLocalSkillOverrides(runtimePaths, "codex", { "test-skill": false })
+    ).rejects.toThrow("Cannot toggle test-skill for codex");
+
+    await expect(
+      readFile(path.join(runtimePaths.codexDir, "config.toml"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

@@ -23,6 +23,7 @@ import {
 
 export type SkillToggleState = Record<string, boolean>;
 type GlobalSkillConfigPaths = Extract<SkillConfigPaths, { scope: "global" }>;
+type RepoSkillConfigPaths = Extract<SkillConfigPaths, { scope: "repo" }>;
 
 export async function readActiveSkillOverrides(
   configPaths: GlobalSkillConfigPaths,
@@ -63,9 +64,7 @@ export async function writeLocalSkillOverrides(
     state,
     await writeContext(configPaths, target, state)
   );
-  if (configPaths.scope === "global") {
-    await mergeGlobalSkillState(configPaths, target, state);
-  }
+  await mergeGlobalSkillState(configPaths, target, state);
 }
 
 export async function setLocalSkillState(
@@ -239,9 +238,7 @@ async function replaceLocalSkillOverrides(
     state,
     await writeContext(configPaths, target, state)
   );
-  if (configPaths.scope === "global") {
-    await writeSkillOverridesFile(configPaths.state[target], state);
-  }
+  await writeSkillOverridesFile(configPaths.state[target], state);
 }
 
 async function mergeGlobalSkillState(
@@ -256,10 +253,9 @@ async function mergeGlobalSkillState(
 }
 
 async function readOverrideStoreForConfigPaths(
-  configPaths: SkillConfigPaths,
+  configPaths: RepoSkillConfigPaths,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
-  if (configPaths.scope !== "repo") return {};
   return projectOverrides(
     await readOverrideStore(configPaths.home),
     configPaths.repoRoot,
@@ -269,7 +265,7 @@ async function readOverrideStoreForConfigPaths(
 }
 
 async function writeContext(
-  configPaths: SkillConfigPaths,
+  configPaths: GlobalSkillConfigPaths,
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<SkillOverrideContext> {
@@ -292,18 +288,11 @@ async function pathExists(file: string): Promise<boolean> {
 }
 
 async function resolveCodexSkillPath(
-  configPaths: SkillConfigPaths,
+  configPaths: GlobalSkillConfigPaths,
   skillName: string
 ): Promise<string> {
-  const candidates = [
-    ...(configPaths.scope === "repo"
-      ? [path.join(configPaths.repoRoot, ".agents", "skills", skillName, "SKILL.md")]
-      : []),
-    path.join(configPaths.home, ".agents", "skills", skillName, "SKILL.md")
-  ];
-  for (const candidate of candidates) {
-    if (await pathExists(candidate)) return candidate;
-  }
+  const skillPath = path.join(configPaths.home, ".agents", "skills", skillName, "SKILL.md");
+  if (await pathExists(skillPath)) return skillPath;
   throw new Error(
     `Cannot toggle ${skillName} for codex: installed SKILL.md path could not be resolved`
   );
