@@ -261,11 +261,11 @@ describe("thread cli", () => {
     const digests = calls.filter((c) => c.role === "digest");
     expect(gathers).toHaveLength(2);
     expect(synths).toHaveLength(2);
-    for (const gather of gathers) expect(gather.skills).toEqual(["agent-sessions"]);
+    for (const gather of gathers) expect(gather.skills).toEqual(["thread-sessions"]);
     for (const synth of synths) {
       expect(synth.skills).toEqual(["thread-contract"]);
       expect(synth.prompt).toContain("DOSSIER-");
-      expect(synth.skills).not.toContain("agent-sessions");
+      expect(synth.skills).not.toContain("thread-sessions");
     }
 
     // Parallel fan-out wrote one frontmatter-free session file per id; provenance

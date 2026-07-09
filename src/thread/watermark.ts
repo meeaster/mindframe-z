@@ -77,7 +77,7 @@ async function readClaudeWatermark(
 
 // A transcript line is a message turn when its `type` is user or assistant; other
 // lines (queue ops, titles, attachments) are not counted. The turn's `uuid` is the
-// message id and `timestamp` its activity time — mirrors the agent-sessions Claude branch.
+// message id and `timestamp` its activity time — mirrors the thread-sessions Claude branch.
 function tailSignatureFromJsonl(content: string): Watermark | undefined {
   let count = 0;
   let last: { uuid?: string; timestamp?: string } | undefined;
@@ -164,7 +164,7 @@ async function readOpencodeWatermarkFromDb(
       last_activity_at: new Date(row.last_ms).toISOString()
     };
   } catch {
-    // The opencode message table's shape changes between versions (the agent-sessions
+    // The opencode message table's shape changes between versions (the thread-sessions
     // OpenCode branch warns to verify columns live). A schema mismatch means we can't read a
     // watermark this run, not that ingest should crash — treat it as absent.
     return undefined;

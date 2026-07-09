@@ -17,7 +17,7 @@ In scope:
 
 Out of scope:
 
-- Reimplementing session storage mechanics — delegated entirely to `agent-sessions`.
+- Reimplementing session storage mechanics — handled by the pipeline via `thread-sessions`.
 - Writing to or mutating any session store.
 - Cross-thread membership suggestion (designed-for via per-thread charters, deferred until more than one thread exists).
 - A separate design document — forward-looking intent lives in the digest's **Direction** section.
@@ -43,8 +43,8 @@ Model-invoked (no `disable-model-invocation`). The deciding factor is the **Read
 
 ## Dependencies
 
-- Hard dependency on `agent-sessions`. The skill loads it and uses the relevant provider branch per session; it holds no storage knowledge of its own. If a use case needs better support, improve `agent-sessions` rather than duplicate its mechanics here.
-- Discovery reuses the `agent-sessions` "find a session" recipes, topic-scoped instead of project-scoped — a filter change on documented recipes, not a missing capability, so `agent-sessions` needs no change to support thread-log today.
+- Session-reading mechanics are supplied by the engine-owned `thread-sessions` skill, loaded into gather, triage, and discover dispatch containers. It reads stores mounted at literal paths and carries no store-discovery logic of its own — the storage maps (Claude Code JSONL layout, OpenCode sqlite schema, Archive Cache format) are the skill's contract. Because it is engine-owned, improving it is an in-repo change rather than a request against a foreign skill.
+- Discovery is also pipeline-handled via `thread-sessions`, which lists recent sessions by iterating the mounted store's transcript glob or running the OpenCode session query — no separate "find a session" recipes needed.
 
 ## Data Model
 

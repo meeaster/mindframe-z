@@ -170,7 +170,7 @@ export async function runThreadDiscover(
       model,
       effort,
       persona: THREAD_PERSONAS.discover,
-      skills: ["agent-sessions"],
+      skills: ["thread-sessions"],
       sessionSources,
       prompt: `Sessions to search: ${sessionSources.join(", ")}.\n\n${prompt}`
     });

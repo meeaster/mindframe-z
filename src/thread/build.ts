@@ -17,6 +17,8 @@ export const threadToolsClaudeSettingsPath = "claude-settings.json";
 export const threadToolsDockerfilePath = "Dockerfile.tools";
 export const threadToolsOpencodeConfigPath = "src/thread/opencode.thread.json";
 export const threadToolsLapdogPluginPath = "src/thread/lapdog-plugin.ts";
+export const threadContractSkillPath = "src/thread/thread-contract/SKILL.md";
+export const threadSessionsSkillPath = "src/thread/thread-sessions/SKILL.md";
 
 export interface ThreadToolsImageBuildPlan {
   root: string;
@@ -38,7 +40,7 @@ export function setEmbeddedPackageRootResolver(resolver: () => Promise<string>):
   embeddedPackageRootResolver = resolver;
 }
 
-async function resolvePackageRoot(): Promise<string> {
+export async function resolvePackageRoot(): Promise<string> {
   resolvedPackageRoot ??= embeddedPackageRootResolver
     ? embeddedPackageRootResolver()
     : Promise.resolve(packageRootFromImport(import.meta.url));

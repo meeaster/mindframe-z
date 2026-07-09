@@ -213,7 +213,7 @@ export async function runSweep(args: {
       model: model.model,
       effort: model.effort,
       persona: THREAD_PERSONAS.triage,
-      skills: ["agent-sessions"],
+      skills: ["thread-sessions"],
       sessionSources: [signal.source],
       prompt: triagePrompt(signal, standingThreads)
     });

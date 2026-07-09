@@ -16,7 +16,8 @@ raw transcript ──gather──▶ dossier ──synthesize──▶ session.m
 Every stage has two independent levers:
 
 - **Prompt** — the persona/instructions for that stage (`src/thread/personas.ts`), plus
-  the reader skill it loads (`agent-sessions`).
+  the skill it loads: `thread-sessions` (gather) or `thread-contract` (synthesize,
+  digest).
 - **Model + effort** — `harness:model@effort` (`profiles/<name>/profile.yml` `thread.defaults`,
   or per-thread `synthesis` overrides). Each of `gather`, `synthesize`, and `digest` is an
   independent default; an unset `digest` inherits the resolved `synthesize` id.

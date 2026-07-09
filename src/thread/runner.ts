@@ -1,4 +1,4 @@
-import { access, mkdtemp, readdir, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -11,7 +11,7 @@ import {
   refreshBedrockCredentials,
   writeScopedBedrockCredentials
 } from "./bedrock.js";
-import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
+import { ensureThreadToolsImage, resolvePackageRoot, threadToolsImageBuildPlan } from "./build.js";
 import { backfillClaudeTranscript } from "./claude-backfill.js";
 import {
   buildCostSpanPayload,
@@ -28,9 +28,9 @@ import { isLapdogReachable, lapdogContainerUrl, lapdogNetworkName, lapdogUrl } f
 const CONTAINER_CLAUDE_PROJECTS = "/home/sandbox/.claude/projects";
 
 // Where the read-only host session store is mounted inside the dispatch container —
-// distinct from the container's own writable ~/.claude. The agent-sessions skill
-// resolves its Claude store root from this, and ingest builds the exact transcript
-// path it hands gather from the same root.
+// distinct from the container's own writable ~/.claude. The thread-sessions skill reads
+// its Claude store root from this, and ingest builds the exact transcript path it hands
+// gather from the same root.
 export const CONTAINER_SESSION_STORE = "/mnt/claude-sessions";
 
 // Where the read-only archive-cache is visible inside the dispatch container — a
@@ -118,7 +118,7 @@ export class DockerAgentRunner implements AgentRunner {
           ...dockerEnvArgs({ ...env, ...bedrock?.env }),
           ...(await credentialMountArgs(this.paths, request.harness, bedrock?.credsDir)),
           ...(await sessionStoreMountArgs(this.paths)),
-          ...(await skillMountArgs(this.paths, request.skills)),
+          ...(await skillMountArgs(request.skills)),
           "--volume",
           `${this.paths.home}/.mindframe-z:/home/sandbox/.mindframe-z:ro`,
           ...(transcriptDir ? ["--volume", `${transcriptDir}:${CONTAINER_CLAUDE_PROJECTS}`] : []),
@@ -182,11 +182,7 @@ export function buildHarnessCommand(request: AgentRunRequest): {
       "--mcp-config",
       '{"mcpServers":{}}'
     );
-    // Point the agent-sessions skill at the read-only store mount instead of
-    // the container's own writable ~/.claude (which holds only this dispatch's
-    // transcript). A separate var from CLAUDE_CONFIG_DIR so Claude Code's own runtime
-    // home stays writable while the skill reads the mounted host store.
-    return { tool: "claude", args, env: { CLAUDE_SESSIONS_DIR: CONTAINER_SESSION_STORE } };
+    return { tool: "claude", args, env: {} };
   }
 
   const args = ["run", "--format", "json", "--agent", "thread-readonly", "--model", request.model];
@@ -319,15 +315,19 @@ function skillPrompt(
   sessionSources?: readonly ThreadHarness[]
 ): string {
   const sources = new Set(sessionSources ?? []);
+  const stores: string[] = [];
+  if (sources.has("claude-code")) {
+    stores.push(`This dispatch reads the Claude Code store at ${CONTAINER_SESSION_STORE}.`);
+  }
+  if (sources.has("opencode")) {
+    stores.push(
+      "This dispatch reads the OpenCode store at /mnt/opencode-data/opencode/opencode.db."
+    );
+  }
   return [
     persona,
     skills.length ? `Load skills: ${skills.join(", ")}.` : "No extra skills.",
-    sources.has("claude-code")
-      ? `The Claude session store is mounted read-only at ${CONTAINER_SESSION_STORE} (holding \`projects/\`, \`history.jsonl\`, and \`transcripts/\`) — follow the agent-sessions Claude branch, but use that literal path as the store root. Do not rely on expanding \`$CLAUDE_SESSIONS_DIR\`: this dispatch's bash blocks variable expansion, so a command like \`STORE="\${CLAUDE_SESSIONS_DIR:-...}"\` is denied — substitute the literal ${CONTAINER_SESSION_STORE} into every command instead. Never read \`~/.claude\` or \`/home/sandbox/.claude\`, which is only this dispatch's own writable runtime home and holds none of the sessions you are searching. Read the store with bash — \`jq\`, \`ls\`, \`grep\`, \`find\` — which is pre-authorized for this dispatch; run those commands directly instead of asking the operator for permission. Never use the \`Read\` or \`glob\` tools on the store: those are denied and will dead-end the dispatch with no dossier. If a command is denied, switch to a literal-path \`jq\`/\`bash\` form of the same read rather than giving up.`
-      : "",
-    sources.has("opencode")
-      ? "The OpenCode database here is a read-only file at /mnt/opencode-data/opencode/opencode.db — a non-standard location, so follow the agent-sessions OpenCode branch's non-standard-location rule and read it with sqlite3, never `opencode db` (which opens the file read-write and would fail on the read-only mount or migrate it across versions). Run: sqlite3 -json 'file:/mnt/opencode-data/opencode/opencode.db?immutable=1' \"<SELECT ...>\". These read-only queries are pre-authorized for this dispatch; run them directly instead of asking the operator for permission."
-      : ""
+    ...stores
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -393,63 +393,25 @@ async function sessionStoreMountArgs(paths: RuntimePaths): Promise<string[]> {
 
 export const sessionStoreMountArgsForTest = sessionStoreMountArgs;
 
-// Skills may be grouped into subfolders (`skills/<group>/<name>/`), so resolve
-// each requested skill by walking for the directory whose basename matches and
-// that holds a SKILL.md. Depth is capped to match the skills CLI's own search.
-// `src/thread` is searched too: `thread-contract` is an internal skill mounted
-// only by this pipeline, co-located with its consumers rather than shipped as a
-// global catalog skill.
-const SKILL_SEARCH_ROOTS = ["skills", "src/thread"] as const;
-const SKILL_SKIP_DIRS = new Set(["node_modules", ".git"]);
-
-async function resolveSkillDir(
-  skillsRoot: string,
-  name: string,
-  depth = 0,
-  maxDepth = 5
-): Promise<string | null> {
-  if (depth > maxDepth) return null;
-
-  let entries;
-  try {
-    entries = await readdir(skillsRoot, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
-  // A SKILL.md marks a skill leaf; don't descend into a skill's own internals.
-  if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
-    return path.basename(skillsRoot) === name ? skillsRoot : null;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() || SKILL_SKIP_DIRS.has(entry.name)) continue;
-    const found = await resolveSkillDir(
-      path.join(skillsRoot, entry.name),
-      name,
-      depth + 1,
-      maxDepth
-    );
-    if (found) return found;
-  }
-  return null;
-}
-
-async function skillMountArgs(paths: RuntimePaths, skills: readonly string[]): Promise<string[]> {
-  const roots = SKILL_SEARCH_ROOTS.map((dir) => path.join(paths.root, dir));
+// Engine-internal skills are co-located with the thread pipeline under
+// `src/thread/<name>/SKILL.md`. Resolve each against the engine package root —
+// the same resolver build.ts uses for the docker context, which materializes
+// the same relative paths in a compiled binary — so skill mounting works
+// identically from source and from the standalone binary.
+async function skillMountArgs(skills: readonly string[]): Promise<string[]> {
+  const root = await resolvePackageRoot();
   const args: string[] = [];
   for (const skill of new Set(skills)) {
-    let source: string | null = null;
-    for (const root of roots) {
-      source = await resolveSkillDir(root, skill);
-      if (source) break;
+    const dir = path.join(root, "src", "thread", skill);
+    const skillFile = path.join(dir, "SKILL.md");
+    if (!(await pathExists(skillFile))) {
+      throw new Error(`Skill "${skill}" not found at ${skillFile}`);
     }
-    if (!source) throw new Error(`Skill "${skill}" not found under ${roots.join(", ")}`);
     args.push(
       "--volume",
-      `${source}:/home/sandbox/.claude/skills/${skill}:ro`,
+      `${dir}:/home/sandbox/.claude/skills/${skill}:ro`,
       "--volume",
-      `${source}:/home/sandbox/.agents/skills/${skill}:ro`
+      `${dir}:/home/sandbox/.agents/skills/${skill}:ro`
     );
   }
   return args;

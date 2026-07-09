@@ -21,7 +21,7 @@ describe("thread runner", () => {
       model: "haiku",
       effort: "low",
       persona: "gatherer.",
-      skills: ["agent-sessions"],
+      skills: ["thread-sessions"],
       sessionSources: ["claude-code"],
       prompt: "read session"
     });
@@ -36,44 +36,42 @@ describe("thread runner", () => {
     expect(command.args).toContain("/mnt/claude-sessions");
     expect(command.args).toContain("/mnt/opencode-data");
     expect(command.args.join("\n")).toContain("/mnt/claude-sessions");
-    expect(command.env).toEqual({ CLAUDE_SESSIONS_DIR: "/mnt/claude-sessions" });
+    expect(command.env).toEqual({});
     expect(command.args).toContain("--effort");
   });
 
-  it("points the gather at the mounted store root, never the writable ~/.claude", () => {
+  it("points the dispatch at the mounted Claude Code store, no env var", () => {
     const command = buildHarnessCommand({
       role: "gather",
       harness: "claude-code",
       model: "haiku",
       effort: "low",
       persona: "gatherer.",
-      skills: ["agent-sessions"],
+      skills: ["thread-sessions"],
       sessionSources: ["claude-code"],
       prompt: "read session"
     });
 
     const prompt = command.args.join("\n");
-    expect(command.env.CLAUDE_SESSIONS_DIR).toBe("/mnt/claude-sessions");
-    expect(prompt).toContain("mounted read-only at /mnt/claude-sessions");
-    expect(prompt).toContain("Do not rely on expanding `$CLAUDE_SESSIONS_DIR`");
-    expect(prompt).toContain("holds none of the sessions you are searching");
-    expect(prompt).toContain("pre-authorized for this dispatch");
-    expect(prompt).toContain("Never use the `Read` or `glob` tools on the store");
+    expect(command.env).toEqual({});
+    expect(prompt).toContain("thread-sessions");
+    expect(prompt).toContain("/mnt/claude-sessions");
+    expect(prompt).not.toContain("$CLAUDE_SESSIONS_DIR");
   });
 
-  it("tells Claude Code to read the non-standard OpenCode database with sqlite3", () => {
+  it("points the dispatch at the mounted OpenCode store", () => {
     const command = buildHarnessCommand({
       role: "discover",
       harness: "claude-code",
       model: "haiku",
       persona: "discover.",
-      skills: ["agent-sessions"],
+      skills: ["thread-sessions"],
       sessionSources: ["opencode"],
       prompt: "find opencode sessions"
     });
 
-    expect(command.args.join("\n")).toContain("read it with sqlite3, never `opencode db`");
-    expect(command.args.join("\n")).toContain("immutable=1");
+    expect(command.args.join("\n")).toContain("/mnt/opencode-data/opencode/opencode.db");
+    expect(command.args.join("\n")).toContain("thread-sessions");
   });
 
   it("builds OpenCode args with JSON output and readonly agent", () => {
@@ -209,44 +207,17 @@ describe("thread runner", () => {
     ).resolves.toEqual(["--volume", "/home/test/.mindframe-z/bedrock:/home/sandbox/.aws:ro"]);
   });
 
-  it("mounts requested skills from flat, nested, and co-located source layouts", async () => {
-    const root = await makeTempDir();
-    const paths = createRuntimePaths({ root, home: "/home/test" });
-    const flat = path.join(root, "skills", "agent-sessions");
-    const nested = path.join(root, "skills", "writing", "pr-writer");
-    // thread-contract is an internal skill co-located with the threads source.
-    const internal = path.join(root, "src", "thread", "thread-contract");
-    await mkdir(flat, { recursive: true });
-    await mkdir(nested, { recursive: true });
-    await mkdir(internal, { recursive: true });
-    await writeFile(path.join(flat, "SKILL.md"), "flat\n", "utf8");
-    await writeFile(path.join(nested, "SKILL.md"), "nested\n", "utf8");
-    await writeFile(path.join(internal, "SKILL.md"), "internal\n", "utf8");
-
-    await expect(
-      skillMountArgsForTest(paths, ["agent-sessions", "pr-writer", "thread-contract"])
-    ).resolves.toEqual([
-      "--volume",
-      `${flat}:/home/sandbox/.claude/skills/agent-sessions:ro`,
-      "--volume",
-      `${flat}:/home/sandbox/.agents/skills/agent-sessions:ro`,
-      "--volume",
-      `${nested}:/home/sandbox/.claude/skills/pr-writer:ro`,
-      "--volume",
-      `${nested}:/home/sandbox/.agents/skills/pr-writer:ro`,
-      "--volume",
-      `${internal}:/home/sandbox/.claude/skills/thread-contract:ro`,
-      "--volume",
-      `${internal}:/home/sandbox/.agents/skills/thread-contract:ro`
-    ]);
+  it("resolves both engine skills from the engine root", async () => {
+    const args = await skillMountArgsForTest(["thread-contract", "thread-sessions"]);
+    expect(args).toHaveLength(8);
+    const volumes = args.filter((_, i) => i % 2 === 1);
+    expect(volumes.filter((v) => v.includes("thread-contract"))).toHaveLength(2);
+    expect(volumes.filter((v) => v.includes("thread-sessions"))).toHaveLength(2);
+    expect(volumes.every((v) => v.includes("/src/thread/"))).toBe(true);
   });
 
   it("throws when a requested skill cannot be found", async () => {
-    const root = await makeTempDir();
-    const paths = createRuntimePaths({ root, home: "/home/test" });
-    await mkdir(path.join(root, "skills"), { recursive: true });
-
-    await expect(skillMountArgsForTest(paths, ["missing"])).rejects.toThrow(/missing/);
+    await expect(skillMountArgsForTest(["missing"])).rejects.toThrow(/missing/);
   });
 
   it("mounts host session files outside the writable Claude runtime home", async () => {

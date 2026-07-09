@@ -10,7 +10,9 @@ import os from "node:os";
 import {
   threadToolsDockerfilePath,
   threadToolsLapdogPluginPath,
-  threadToolsOpencodeConfigPath
+  threadToolsOpencodeConfigPath,
+  threadContractSkillPath,
+  threadSessionsSkillPath
 } from "./build.js";
 import dockerfileAsset from "../../Dockerfile.tools" with { type: "file" };
 import opencodeConfigAsset from "./opencode.thread.json" with { type: "file" };
@@ -18,6 +20,8 @@ import opencodeConfigAsset from "./opencode.thread.json" with { type: "file" };
 // lapdog.ts helper module (which runner.ts imports normally) so bun never applies
 // both the file loader and the module loader to one path.
 import lapdogAsset from "./lapdog-plugin.ts" with { type: "file" };
+import threadContractSkillAsset from "./thread-contract/SKILL.md" with { type: "file" };
+import threadSessionsSkillAsset from "./thread-sessions/SKILL.md" with { type: "file" };
 
 // Materialize the embedded assets into a real directory usable as a docker build
 // context, laid out like the repo. Written idempotently into a stable per-user dir
@@ -29,7 +33,9 @@ export async function materializeEmbeddedPackageRoot(): Promise<string> {
   const assets: Array<[string, string]> = [
     [threadToolsDockerfilePath, dockerfileAsset],
     [threadToolsOpencodeConfigPath, opencodeConfigAsset],
-    [threadToolsLapdogPluginPath, lapdogAsset]
+    [threadToolsLapdogPluginPath, lapdogAsset],
+    [threadContractSkillPath, threadContractSkillAsset],
+    [threadSessionsSkillPath, threadSessionsSkillAsset]
   ];
   for (const [relPath, asset] of assets) {
     const target = path.join(dir, relPath);
