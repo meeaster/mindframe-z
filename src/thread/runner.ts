@@ -443,10 +443,52 @@ function runProcess(command: string, args: string[], stdin: string): Promise<str
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve(stdout);
-      else reject(new Error(stderr || `${command} exited with status ${code}`));
+      else {
+        const detail =
+          stderr || extractHarnessError(stdout) || `${command} exited with status ${code}`;
+        reject(new Error(detail));
+      }
     });
     child.stdin.end(stdin);
   });
+}
+
+function extractHarnessError(stdout: string): string | undefined {
+  for (const line of stdout.split("\n").reverse()) {
+    if (!line.trim()) continue;
+    try {
+      const event: unknown = JSON.parse(line);
+      if (typeof event !== "object" || event === null || Array.isArray(event)) continue;
+      const obj = event as Record<string, unknown>;
+      // Claude Code: result event with error text
+      if (obj.type === "result" && typeof obj.result === "string" && obj.result) return obj.result;
+      if (obj.type === "result" && obj.error) return String(obj.error);
+      // Claude Code: API retry exhaustion
+      if (obj.type === "system" && obj.subtype === "api_retry" && obj.error) {
+        return `API error: ${obj.error}${obj.error_status ? ` (status ${obj.error_status})` : ""}`;
+      }
+      // OpenCode: error event with NamedError envelope
+      if (obj.type === "error" && typeof obj.error === "object" && obj.error !== null) {
+        const err = obj.error as Record<string, unknown>;
+        const data =
+          typeof err.data === "object" && err.data !== null
+            ? (err.data as Record<string, unknown>)
+            : undefined;
+        const message = typeof data?.message === "string" ? data.message : undefined;
+        if (err.name === "ProviderAuthError") {
+          return `Authentication failed for ${data?.providerID ?? "provider"}: ${message ?? "credentials missing or expired"}`;
+        }
+        if (err.name === "APIError" && typeof data?.statusCode === "number") {
+          return `API error (status ${data.statusCode}): ${message ?? "request failed"}`;
+        }
+        if (message) return message;
+        if (err.name) return String(err.name);
+      }
+    } catch {
+      // not JSON, skip
+    }
+  }
+  return undefined;
 }
 
 function textField(value: unknown): string {
