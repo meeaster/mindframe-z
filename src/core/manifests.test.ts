@@ -69,11 +69,24 @@ describe("loadManifests", () => {
 
   it("skips a symlinked profile dir", async () => {
     const { root, home } = await tmpHome();
-    const baseDir = await writeProfile(root, "base", "name: base\n");
-    await symlink(baseDir, path.join(root, "profiles", "linked"), "dir");
+    await writeProfile(root, "base", "name: base\n");
+    // Link to a profile whose name differs from every real profile dir, so following
+    // the link would add a distinct key rather than overwrite an existing one.
+    const outside = path.join(root, "outside");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "profile.yml"), "name: linked-only\n", "utf8");
+    await symlink(outside, path.join(root, "profiles", "linked"), "dir");
 
     const manifests = await loadManifests(root, home);
     expect([...manifests.profiles.keys()]).toEqual(["base"]);
+  });
+
+  it("surfaces a non-ENOENT failure reading the profiles dir", async () => {
+    const { root, home } = await tmpHome();
+    // `profiles` as a regular file makes readdir raise ENOTDIR: only a *missing*
+    // profiles dir is tolerated, every other failure must reach the caller.
+    await writeFile(path.join(root, "profiles"), "not a dir\n", "utf8");
+    await expect(loadManifests(root, home)).rejects.toThrow(/ENOTDIR/);
   });
 
   it("surfaces a malformed profile.yml instead of dropping the profile", async () => {
