@@ -344,10 +344,45 @@ export interface ManifestValidationResult {
   error?: string;
 }
 
+async function parseYaml<T>(file: string, schema: z.ZodType<T>): Promise<T> {
+  return schema.parse(YAML.parse(await readFile(file, "utf8")));
+}
+
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
   if (!(await fileExists(file))) return fallback;
-  const parsed = YAML.parse(await readFile(file, "utf8"));
-  return schema.parse(parsed);
+  return parseYaml(file, schema);
+}
+
+function machineConfigPath(home: string): string {
+  return path.join(home, ".mindframe-z", "config.yml");
+}
+
+function machineDefaults(): MachineManifest {
+  return machineSchema.parse({});
+}
+
+// Every direct child of `<root>/profiles` that is a real directory. `lstat` keeps
+// symlinked entries out, and a missing `profiles/` dir means "no profiles" rather
+// than an error. Owning the tolerated-ENOENT here keeps it off the callers, whose
+// own reads should surface their failures.
+async function listProfileDirs(root: string): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(path.join(root, "profiles"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  const dirs: string[] = [];
+  for (const entry of entries) {
+    const fullPath = path.join(root, "profiles", entry);
+    try {
+      if ((await lstat(fullPath)).isDirectory()) dirs.push(fullPath);
+    } catch {
+      continue;
+    }
+  }
+  return dirs;
 }
 
 async function validateYamlFile<T>(
@@ -356,7 +391,7 @@ async function validateYamlFile<T>(
 ): Promise<ManifestValidationResult | null> {
   if (!(await fileExists(file))) return null;
   try {
-    schema.parse(YAML.parse(await readFile(file, "utf8")));
+    await parseYaml(file, schema);
     return { file, ok: true };
   } catch (error) {
     return { file, ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -376,28 +411,11 @@ export async function validateManifests(
 
   const effectiveHome = home ?? process.env.HOME;
   if (effectiveHome) {
-    files.push({
-      file: path.join(effectiveHome, ".mindframe-z", "config.yml"),
-      schema: machineSchema
-    });
+    files.push({ file: machineConfigPath(effectiveHome), schema: machineSchema });
   }
 
-  const profilesDir = path.join(root, "profiles");
-  try {
-    for (const entry of await readdir(profilesDir)) {
-      const fullPath = path.join(profilesDir, entry);
-      let stat;
-      try {
-        stat = await lstat(fullPath);
-      } catch {
-        continue;
-      }
-      if (stat.isDirectory()) {
-        files.push({ file: path.join(fullPath, "profile.yml"), schema: profileSchema });
-      }
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  for (const dir of await listProfileDirs(root)) {
+    files.push({ file: path.join(dir, "profile.yml"), schema: profileSchema });
   }
 
   const results: ManifestValidationResult[] = [];
@@ -432,7 +450,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
     );
   }
-  const homeManifest = await readYaml(path.join(root, "mfz_home.yml"), homeManifestSchema, {});
+  const homeManifest = await parseYaml(path.join(root, "mfz_home.yml"), homeManifestSchema);
   const effectiveHome = home ?? process.env.HOME ?? "";
   const upstream = homeManifest.extends
     ? await loadManifests(
@@ -454,84 +472,32 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     servers: {}
   });
   const machine = effectiveHome
-    ? await readYaml(path.join(effectiveHome, ".mindframe-z", "config.yml"), machineSchema, {
-        references_dir: "~/.mindframe-z/references",
-        extra_folders: [],
-        git: {},
-        sandbox: {},
-        thread: { destinations: [] },
-        archives: [],
-        opencode: {},
-        claude: {}
-      })
-    : {
-        references_dir: "~/.mindframe-z/references" as const,
-        extra_folders: [],
-        git: {},
-        sandbox: {},
-        thread: { destinations: [] },
-        archives: [],
-        opencode: {},
-        claude: {}
-      };
+    ? await readYaml(machineConfigPath(effectiveHome), machineSchema, machineDefaults())
+    : machineDefaults();
   const profileMap = new Map<string, ProfileManifest>();
-  const profilesDir = path.join(root, "profiles");
-  try {
-    for (const entry of await readdir(profilesDir)) {
-      const fullPath = path.join(profilesDir, entry);
-      let stat;
+  for (const profileDir of await listProfileDirs(root)) {
+    const profileYaml = path.join(profileDir, "profile.yml");
+    if (!(await fileExists(profileYaml))) continue;
+    const profile = await parseYaml(profileYaml, profileSchema);
+
+    const miseToml = path.join(profileDir, "mise.toml");
+    if (await fileExists(miseToml)) {
       try {
-        stat = await lstat(fullPath);
+        const toml = miseTomlSchema.parse(parse(await readFile(miseToml, "utf8")));
+        profile.mise.tools = toml.tools;
+        profile.mise.env = toml.env;
+        profile.mise.tool_alias = toml.tool_alias;
+        profile.mise.settings = toml.settings;
       } catch {
-        continue;
+        // Malformed TOML — skip, keep YAML defaults
       }
-      if (!stat.isDirectory()) continue;
-      const profileYaml = path.join(fullPath, "profile.yml");
-      if (!(await fileExists(profileYaml))) continue;
-      const profile = await readYaml(profileYaml, profileSchema, {
-        name: entry,
-        agents: ["opencode", "claude-code", "codex"],
-        instructions: [],
-        references: [],
-        skills: {},
-        mcp: {},
-        opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
-        claude: { settings: {} },
-        codex: { config: {}, plugins: {} },
-        pi: { settings: {}, subagent_config: {} },
-        mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
-        thread: {
-          destinations: [],
-          defaults: {},
-          credentials: "subscription"
-        },
-        dotfiles: {},
-        extra_folders: [],
-        description: ""
-      });
-
-      const miseToml = path.join(fullPath, "mise.toml");
-      if (await fileExists(miseToml)) {
-        try {
-          const raw = await readFile(miseToml, "utf8");
-          const toml = miseTomlSchema.parse(parse(raw));
-          profile.mise.tools = toml.tools;
-          profile.mise.env = toml.env;
-          profile.mise.tool_alias = toml.tool_alias;
-          profile.mise.settings = toml.settings;
-        } catch {
-          // Malformed TOML — skip, keep YAML defaults
-        }
-      }
-
-      for (const [rel, content] of await readDotfileEntries(fullPath)) {
-        profile.dotfiles[rel] = content;
-      }
-
-      profileMap.set(profile.name, profile);
     }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+
+    for (const [rel, content] of await readDotfileEntries(profileDir)) {
+      profile.dotfiles[rel] = content;
+    }
+
+    profileMap.set(profile.name, profile);
   }
   return {
     homeManifest,
