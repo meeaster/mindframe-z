@@ -952,6 +952,66 @@ describe("apply integration", () => {
     expect(opencode).toContain("context7");
   });
 
+  it("transforms env-referenced MCP headers per target", async () => {
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  exa:",
+        "    description: Search.",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://mcp.exa.ai/mcp",
+        "    headers:",
+        '      Authorization: "{env:EXA_API_KEY}"',
+        "      X-Client: literal-value",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [opencode, claude-code, codex]",
+        "mcp:",
+        "  exa:",
+        "    agents: { opencode: true, claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    // OpenCode passes the {env:NAME} reference through untouched.
+    const opencode = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { mcp: Record<string, unknown> };
+    expect(opencode.mcp).toMatchObject({
+      exa: { headers: { Authorization: "{env:EXA_API_KEY}", "X-Client": "literal-value" } }
+    });
+
+    // Claude rewrites the reference to shell-style ${NAME} interpolation.
+    const claudeMcp = JSON.parse(
+      await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(claudeMcp).toMatchObject({
+      exa: { headers: { Authorization: "${EXA_API_KEY}", "X-Client": "literal-value" } }
+    });
+
+    // Codex splits literal headers from env-referenced ones into distinct tables.
+    const codex = parse(
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
+    ) as { mcp_servers: Record<string, unknown> };
+    expect(codex.mcp_servers).toMatchObject({
+      exa: {
+        env_http_headers: { Authorization: "EXA_API_KEY" },
+        http_headers: { "X-Client": "literal-value" }
+      }
+    });
+  });
+
   it("filters agent rendering with --agent", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
