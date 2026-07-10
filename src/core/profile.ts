@@ -19,6 +19,7 @@ type SourceKind =
   | CatalogKind
   | "instruction"
   | "opencode plugin"
+  | "opencode TUI plugin"
   | "opencode command"
   | "opencode agent";
 
@@ -245,6 +246,13 @@ function normalizeProfile(home: LoadedManifests, profile: ProfileManifest): Prof
       "opencode plugin",
       "OpenCode plugin"
     ),
+    tui_plugins: normalizeSourceNames(
+      home,
+      profile.opencode.tui_plugins,
+      sources.plugins,
+      "opencode TUI plugin",
+      "OpenCode TUI plugin"
+    ),
     commands: normalizeSourceNames(
       home,
       profile.opencode.commands,
@@ -313,6 +321,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
+      tui: deepMerge(base.opencode.tui, child.opencode.tui),
+      tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
       agent_task: child.opencode.agent_task ?? base.opencode.agent_task

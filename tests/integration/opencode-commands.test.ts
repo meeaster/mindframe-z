@@ -54,6 +54,49 @@ describe("opencode commands integration", () => {
     ).resolves.toBe("# Garden agent\n");
   });
 
+  it("renders configured OpenCode TUI plugins into tui.json", async () => {
+    await mkdir(path.join(root, "opencode", "plugins", "status"), { recursive: true });
+    await writeFile(
+      path.join(root, "opencode", "plugins", "status", "index.tsx"),
+      "export default {}\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  tui:",
+        "    leader_timeout: 2000",
+        "  tui_plugins:",
+        "    - status",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    await expect(
+      readFile(configsPath(home, "personal", "opencode", "plugins", "status", "index.tsx"), "utf8")
+    ).resolves.toBe("export default {}\n");
+    await expect(
+      readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+    ).resolves.toContain('"plugin": [\n    "file://');
+  });
+
+  it("does not render tui.json without TUI configuration", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    await expect(
+      readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
   it("throws when a profile references a missing agent file", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),

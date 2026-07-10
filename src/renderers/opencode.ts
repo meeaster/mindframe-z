@@ -25,7 +25,7 @@ async function copyDirContents(
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
       await copyDirContents(srcPath, destPath, files);
-    } else if (entry.isFile() && !/\.test\.[cm]?[jt]s$/.test(entry.name)) {
+    } else if (entry.isFile() && !/\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
       files.push({
         path: destPath,
         content: await readFile(srcPath, "utf8")
@@ -38,12 +38,14 @@ async function collectPluginFiles(
   localRoot: string,
   rootByName: (name: string) => string,
   configsOpencode: string,
-  pluginNames: readonly string[]
+  pluginNames: readonly string[],
+  directoryEntry?: boolean,
+  discover = true
 ): Promise<{ files: RenderResult["files"]; entries: string[] }> {
   let names: string[];
   if (pluginNames.length > 0) {
     names = [...pluginNames];
-  } else {
+  } else if (discover) {
     const sourceDir = path.join(localRoot, "opencode", "plugins");
     try {
       await stat(sourceDir);
@@ -57,16 +59,18 @@ async function collectPluginFiles(
       if (entry.isDirectory()) {
         discovered.add(entry.name);
       } else if (entry.isFile()) {
-        const match = entry.name.match(/^(.+)\.[cm]?[jt]s$/);
+        const match = entry.name.match(/^(.+)\.[cm]?[jt]sx?$/);
         if (match) discovered.add(match[1]!);
       }
     }
     names = [...discovered];
+  } else {
+    names = [];
   }
 
   const files: RenderResult["files"] = [];
   const entries: string[] = [];
-  const sourceExtensions = [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"];
+  const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
   for (const name of names) {
     const sourceDir = path.join(rootByName(name), "opencode", "plugins");
@@ -81,7 +85,24 @@ async function collectPluginFiles(
 
     if (isDir) {
       await copyDirContents(dirPath, path.join(configsOpencode, "plugins", name), files);
-      entries.push(`file://${path.join(configsOpencode, "plugins", name)}`);
+      if (directoryEntry) {
+        const entry = await sourceExtensions.reduce<Promise<string | undefined>>(
+          async (found, ext) => {
+            if (await found) return found;
+            try {
+              await stat(path.join(dirPath, `index${ext}`));
+              return `index${ext}`;
+            } catch {
+              return undefined;
+            }
+          },
+          Promise.resolve(undefined)
+        );
+        if (!entry) throw new Error(`Unknown OpenCode TUI plugin: ${name} (missing index module)`);
+        entries.push(`file://${path.join(configsOpencode, "plugins", name, entry)}`);
+      } else {
+        entries.push(`file://${path.join(configsOpencode, "plugins", name)}`);
+      }
       continue;
     }
 
@@ -145,11 +166,20 @@ export async function renderOpenCode(
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpencode = path.join(configsProfile, "opencode");
   const configPath = path.join(configsOpencode, "opencode.jsonc");
+  const tuiConfigPath = path.join(configsOpencode, "tui.json");
   const pluginResult = await collectPluginFiles(
     paths.root,
     (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
     configsOpencode,
     profile.profile.opencode.plugins
+  );
+  const tuiPluginResult = await collectPluginFiles(
+    paths.root,
+    (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
+    configsOpencode,
+    profile.profile.opencode.tui_plugins,
+    true,
+    false
   );
   const plugin = pluginResult.entries;
   const commandFiles = await collectMarkdownFiles(
@@ -240,15 +270,29 @@ export async function renderOpenCode(
     mcp
   };
   const renderedConfig = mergeSkillOverrides("opencode", config, options.skillOverrides ?? {});
+  const hasTuiConfig =
+    Object.keys(profile.profile.opencode.tui).length > 0 || tuiPluginResult.entries.length > 0;
+  const tuiConfig = hasTuiConfig
+    ? {
+        ...profile.profile.opencode.tui,
+        $schema: "https://opencode.ai/tui.json",
+        plugin: tuiPluginResult.entries
+      }
+    : undefined;
 
   const files: RenderResult["files"] = [
     ...pluginResult.files,
+    ...tuiPluginResult.files,
     ...commandFiles,
     ...agentFiles,
-    { path: configPath, content: toJsonc(renderedConfig) }
+    { path: configPath, content: toJsonc(renderedConfig) },
+    ...(tuiConfig ? [{ path: tuiConfigPath, content: toJsonc(tuiConfig) }] : [])
   ];
   const links: RenderResult["links"] = [
     { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
+    ...(tuiConfig
+      ? [{ linkPath: path.join(paths.opencodeConfigDir, "tui.json"), targetPath: tuiConfigPath }]
+      : []),
     {
       linkPath: path.join(paths.opencodeConfigDir, "commands"),
       targetPath: path.join(configsOpencode, "commands")

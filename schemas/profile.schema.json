@@ -108,6 +108,8 @@
       "default": {
         "config": {},
         "plugins": [],
+        "tui": {},
+        "tui_plugins": [],
         "commands": [],
         "agents": []
       },
@@ -122,6 +124,21 @@
           "additionalProperties": {}
         },
         "plugins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tui": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "tui_plugins": {
           "default": [],
           "type": "array",
           "items": {

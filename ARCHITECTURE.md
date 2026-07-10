@@ -59,7 +59,7 @@ Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Sym
 
 Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
-- `opencode`: `opencode.jsonc`, plugins, commands, agents, permissions.
+- `opencode`: `opencode.jsonc`, `tui.json`, server and TUI plugins, commands, agents, permissions.
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `mise`: `config.toml`; injects `node = "24"` when no resolved node tool exists.

@@ -120,6 +120,28 @@ describe("mergeProfiles codex plugins", () => {
   });
 });
 
+describe("mergeProfiles OpenCode TUI", () => {
+  it("merges TUI configuration and deduplicates TUI plugins", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      opencode: {
+        tui: { leader_timeout: 1000, attention: { enabled: true } },
+        tui_plugins: ["context", "todo"]
+      }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      opencode: { tui: { attention: { sound: false } }, tui_plugins: ["todo", "advisor"] }
+    });
+
+    expect(mergeProfiles(base, child).opencode).toMatchObject({
+      tui: { leader_timeout: 1000, attention: { enabled: true, sound: false } },
+      tui_plugins: ["context", "todo", "advisor"]
+    });
+  });
+});
+
 describe("home inheritance", () => {
   it("resolves a qualified upstream profile and catalog entries", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));

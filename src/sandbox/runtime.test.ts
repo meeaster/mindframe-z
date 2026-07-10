@@ -53,7 +53,7 @@ function profile(
       references: [],
       skills: {},
       mcp: {},
-      opencode: { config: {}, plugins: [], commands: [], agents: [] },
+      opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },

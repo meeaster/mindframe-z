@@ -219,6 +219,8 @@ const machineThreadSchema = z
 const opencodeConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   plugins: z.array(z.string()).default([]),
+  tui: z.record(z.string(), z.unknown()).default({}),
+  tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([]),
   agent_task: agentTaskSchema.optional()
@@ -247,6 +249,8 @@ export const profileSchema = z
     opencode: opencodeConfigSchema.default({
       config: {},
       plugins: [],
+      tui: {},
+      tui_plugins: [],
       commands: [],
       agents: []
     }),
@@ -485,7 +489,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         references: [],
         skills: {},
         mcp: {},
-        opencode: { config: {}, plugins: [], commands: [], agents: [] },
+        opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         codex: { config: {}, plugins: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
