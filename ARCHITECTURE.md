@@ -62,6 +62,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `opencode`: `opencode.jsonc`, `tui.json`, server and TUI plugins, commands, agents, permissions.
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
+- `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
 - `mise`: `config.toml`; injects `node = "24"` when no resolved node tool exists.
 - `dotfiles`: profile dotfiles; managed `.zshrc` guarantees `~/.mindframe-z/bin` on `PATH`.
 
@@ -141,4 +142,5 @@ CI build artifacts — needed for inspecting test failures
 | `OPENCODE_CONFIG_DIR` | OpenCode global config dir | `~/.config/opencode` |
 | `CLAUDE_CONFIG_DIR` | Claude config dir | `~/.claude` |
 | `CODEX_HOME` | Codex home/config dir | `~/.codex` |
+| `PI_CODING_AGENT_DIR` | Pi user agent config dir | `~/.pi/agent` |
 | `MISE_CONFIG_DIR` | mise config dir | `~/.config/mise` |

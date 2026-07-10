@@ -61,7 +61,9 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
   ) {
     const initialTarget = profile.agents.includes("opencode")
       ? "opencode"
-      : (profile.agents[0] ?? "opencode");
+      : (profile.agents.find((agent): agent is SkillToggleTarget =>
+          targets.includes(agent as SkillToggleTarget)
+        ) ?? "opencode");
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
     super({

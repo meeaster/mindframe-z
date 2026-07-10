@@ -162,6 +162,26 @@ describe("dotfiles integration", () => {
     );
   });
 
+  it("renders and links managed .bashrc with engine bin on PATH", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", ".bashrc"),
+      "alias gs='git status'\n",
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+    expect(result.stdout).toContain("rendered");
+
+    const bashrc = await readFile(configsPath(home, "personal", "dotfiles", ".bashrc"), "utf8");
+    expect(bashrc).toContain("# Managed by mindframe-z.");
+    expect(bashrc).toContain(path.join(home, ".mindframe-z", "bin"));
+    expect(bashrc).toContain("alias gs='git status'");
+
+    await expect(realpath(path.join(home, ".bashrc"))).resolves.toBe(
+      configsPath(home, "personal", "dotfiles", ".bashrc")
+    );
+  });
+
   it("keeps managed .zshrc safe when local include files are absent", async () => {
     await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
 

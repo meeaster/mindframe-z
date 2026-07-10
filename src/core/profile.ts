@@ -335,6 +335,10 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
         child.codex.plugins
       ) as ProfileManifest["codex"]["plugins"]
     },
+    pi: {
+      settings: deepMerge(base.pi.settings, child.pi.settings),
+      subagent_config: deepMerge(base.pi.subagent_config, child.pi.subagent_config)
+    },
     mise: {
       tools: deepMerge(
         base.mise.tools as Record<string, unknown>,

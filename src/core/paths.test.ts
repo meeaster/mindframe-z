@@ -28,6 +28,7 @@ function paths(home: string): RuntimePaths {
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
+    piDir: path.join(home, ".pi", "agent"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -65,6 +66,7 @@ describe("createRuntimePaths", () => {
     "OPENCODE_CONFIG_DIR",
     "CLAUDE_CONFIG_DIR",
     "CODEX_HOME",
+    "PI_CODING_AGENT_DIR",
     "MISE_CONFIG_DIR"
   ] as const;
   const saved: Record<string, string | undefined> = {};
@@ -91,6 +93,7 @@ describe("createRuntimePaths", () => {
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", ".config", "opencode"));
     expect(runtime.claudeDir).toBe(path.join("/tmp/home", ".claude"));
     expect(runtime.codexDir).toBe(path.join("/tmp/home", ".codex"));
+    expect(runtime.piDir).toBe(path.join("/tmp/home", ".pi", "agent"));
     expect(runtime.miseConfigDir).toBe(path.join("/tmp/home", ".config", "mise"));
   });
 
@@ -98,11 +101,13 @@ describe("createRuntimePaths", () => {
     process.env.OPENCODE_CONFIG_DIR = "/env/opencode";
     process.env.CLAUDE_CONFIG_DIR = "/env/claude";
     process.env.CODEX_HOME = "/env/codex";
+    process.env.PI_CODING_AGENT_DIR = "/env/pi-agent";
     process.env.MISE_CONFIG_DIR = "/env/mise";
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.opencodeConfigDir).toBe("/env/opencode");
     expect(runtime.claudeDir).toBe("/env/claude");
     expect(runtime.codexDir).toBe("/env/codex");
+    expect(runtime.piDir).toBe("/env/pi-agent");
     expect(runtime.miseConfigDir).toBe("/env/mise");
   });
 
@@ -114,11 +119,13 @@ describe("createRuntimePaths", () => {
       home: "/tmp/home",
       opencodeConfigDir: "/opt/opencode",
       claudeDir: "/opt/claude",
-      codexDir: "/opt/codex"
+      codexDir: "/opt/codex",
+      piDir: "/opt/pi-agent"
     });
     expect(runtime.opencodeConfigDir).toBe("/opt/opencode");
     expect(runtime.claudeDir).toBe("/opt/claude");
     expect(runtime.codexDir).toBe("/opt/codex");
+    expect(runtime.piDir).toBe("/opt/pi-agent");
   });
 
   it("expands a ~-relative override against the resolved home", () => {

@@ -8,6 +8,7 @@ import { renderCodex } from "../renderers/codex.js";
 import { renderDotfiles } from "../renderers/dotfiles.js";
 import { renderMise } from "../renderers/mise.js";
 import { renderOpenCode } from "../renderers/opencode.js";
+import { renderPi } from "../renderers/pi.js";
 import type { LinkPlan } from "./symlinks.js";
 import { readSkillOverridesFile } from "./skill-overrides.js";
 
@@ -85,6 +86,9 @@ export async function renderTarget(
       break;
     case "codex":
       rendered = await renderCodex(paths, profile);
+      break;
+    case "pi":
+      rendered = await renderPi(paths, profile);
       break;
     case "mise":
       rendered = await renderMise(paths, profile);

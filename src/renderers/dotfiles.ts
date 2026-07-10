@@ -82,6 +82,26 @@ function renderZshrc(paths: RuntimePaths, content: string): string {
   ].join("\n");
 }
 
+function renderBashrc(paths: RuntimePaths, content: string): string {
+  const engineBin = path.join(paths.home, ".mindframe-z", "bin");
+  return [
+    "# Managed by mindframe-z. Edit the profile-owned .bashrc source, then run mfz apply.",
+    `case ":$PATH:" in`,
+    `  *":${engineBin}:"*) ;;`,
+    `  *) export PATH=${JSON.stringify(engineBin)}":$PATH" ;;`,
+    "esac",
+    "",
+    content.trimEnd(),
+    ""
+  ].join("\n");
+}
+
+function renderDotfile(paths: RuntimePaths, filename: string, content: string): string {
+  if (filename === ".zshrc") return renderZshrc(paths, content);
+  if (filename === ".bashrc") return renderBashrc(paths, content);
+  return content;
+}
+
 export async function renderDotfiles(
   paths: RuntimePaths,
   profile: ResolvedProfile
@@ -91,7 +111,7 @@ export async function renderDotfiles(
 
   const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => ({
     path: path.join(configsDotfiles, filename),
-    content: filename === ".zshrc" ? renderZshrc(paths, content) : content
+    content: renderDotfile(paths, filename, content)
   }));
 
   const links = Object.keys(profile.profile.dotfiles).map((filename) => ({

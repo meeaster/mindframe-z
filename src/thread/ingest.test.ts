@@ -29,6 +29,7 @@ function paths(home: string): RuntimePaths {
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
+    piDir: path.join(home, ".pi", "agent"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -61,6 +62,7 @@ function profile(): ResolvedProfile {
       opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
+      pi: { settings: {}, subagent_config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
         destinations: [{ name: "personal", default: true, no_push: false }],

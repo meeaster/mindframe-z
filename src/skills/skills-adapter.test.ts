@@ -26,6 +26,7 @@ describe("buildSkillsCommand", () => {
         opencodeConfigDir: "/home/tester/.config/opencode",
         claudeDir: "/home/tester/.claude",
         codexDir: "/home/tester/.codex",
+        piDir: "/home/tester/.pi/agent",
         miseConfigDir: "/home/tester/.config/mise"
       },
       {
@@ -61,6 +62,7 @@ describe("buildSkillsCommand", () => {
         opencodeConfigDir: "/home/tester/.config/opencode",
         claudeDir: "/home/tester/.claude",
         codexDir: "/home/tester/.codex",
+        piDir: "/home/tester/.pi/agent",
         miseConfigDir: "/home/tester/.config/mise"
       },
       {
@@ -173,6 +175,7 @@ describe("listInstalledSkills", () => {
         opencodeConfigDir: path.join(home, ".config", "opencode"),
         claudeDir: path.join(home, ".claude"),
         codexDir: path.join(home, ".codex"),
+        piDir: path.join(home, ".pi", "agent"),
         miseConfigDir: path.join(home, ".config", "mise")
       },
       "opencode"
@@ -201,6 +204,7 @@ describe("listInstalledSkills", () => {
         opencodeConfigDir: path.join(home, ".config", "opencode"),
         claudeDir: path.join(home, ".claude"),
         codexDir: path.join(home, ".codex"),
+        piDir: path.join(home, ".pi", "agent"),
         miseConfigDir: path.join(home, ".config", "mise")
       },
       "claude-code"

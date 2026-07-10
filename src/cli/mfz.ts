@@ -219,6 +219,7 @@ async function doctor(options: {
   console.log(`opencode config dir\t${paths.opencodeConfigDir}`);
   console.log(`claude dir\t${paths.claudeDir}`);
   console.log(`codex dir\t${paths.codexDir}`);
+  console.log(`pi dir\t${paths.piDir}`);
   console.log(`mise config dir\t${paths.miseConfigDir}`);
   const manifestResults = await validateManifests(paths.root, paths.home);
   const hasInvalidManifest = manifestResults.some((result) => !result.ok);
@@ -437,7 +438,7 @@ program
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option("--agent <agent>", "opencode, claude-code, codex, or all", "all")
+  .option("--agent <agent>", "opencode, claude-code, codex, pi, or all", "all")
   .option("--target <target>", "mise, dotfiles, or all", "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
@@ -747,6 +748,11 @@ function parseSkillTarget(target: string | undefined): SkillToggleTarget | undef
   throw new Error(`Unknown skill target: ${target}`);
 }
 
+function parseSkillAgentOption(agent: string | undefined): SkillToggleTarget | undefined {
+  if (!agent || agent === "all") return undefined;
+  return parseSkillTarget(agent);
+}
+
 async function setSkillEnabled(
   name: string,
   enabled: boolean,
@@ -758,7 +764,10 @@ async function setSkillEnabled(
   if (!skill) throw new Error(`Profile ${profile.name} does not declare skill: ${name}`);
   if (!skill.toggleable) throw new Error(`Skill "${name}" is not toggleable`);
   const requestedTarget = parseSkillTarget(options.target);
-  const targets = requestedTarget ? [requestedTarget] : skill.targets;
+  const targets = (requestedTarget ? [requestedTarget] : skill.targets).filter(
+    (target): target is SkillToggleTarget =>
+      skillTargets.includes(target as (typeof skillTargets)[number])
+  );
   for (const target of targets) {
     await setLocalSkillState(paths, profile, target, name, enabled);
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
@@ -797,8 +806,11 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
-    const targets = requestedAgent ? [requestedAgent] : profile.agents;
+    const requestedAgent = parseSkillAgentOption(options.agent);
+    const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
+      (target): target is (typeof skillTargets)[number] =>
+        skillTargets.includes(target as (typeof skillTargets)[number])
+    );
     const dryRun = options.dryRun ?? false;
     if (!dryRun && !(await skillsCliAvailable(paths))) {
       console.log(
@@ -892,8 +904,11 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = parseAgentOption(options.agent === "all" ? undefined : options.agent);
-    const targets = requestedAgent ? [requestedAgent] : profile.agents;
+    const requestedAgent = parseSkillAgentOption(options.agent);
+    const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
+      (target): target is (typeof skillTargets)[number] =>
+        skillTargets.includes(target as (typeof skillTargets)[number])
+    );
     const updatedGitSkills = new Set<string>();
     for (const target of targets) {
       for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
@@ -906,7 +921,8 @@ skills
 
 function parseAgentOption(agent: string | undefined): AgentName | undefined {
   if (!agent) return undefined;
-  if (agent === "opencode" || agent === "claude-code" || agent === "codex") return agent;
+  if (agent === "opencode" || agent === "claude-code" || agent === "codex" || agent === "pi")
+    return agent;
   throw new Error(`Unknown agent: ${agent}`);
 }
 
@@ -920,6 +936,9 @@ async function setMcpEnabled(
   const server = profile.mcpServers.find((entry) => entry.name === name);
   if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
   const requestedAgent = parseAgentOption(options.agent);
+  if (requestedAgent === "pi") {
+    throw new Error("Pi MCP toggles are not supported yet");
+  }
   const targets = requestedAgent ? [requestedAgent] : (Object.keys(server.agents) as AgentName[]);
   for (const target of targets) {
     if (server.agents[target] === undefined) {

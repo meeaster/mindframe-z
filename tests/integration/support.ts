@@ -19,6 +19,7 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
+    piDir: path.join(home, ".pi", "agent"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -199,6 +200,7 @@ export function cli(
       OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       CODEX_HOME: path.join(home, ".codex"),
+      PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
       ...env
     }
   };
@@ -231,7 +233,8 @@ export function cliWithMachineHomePath(home: string, args: string[]) {
         MFZ_ROOT: undefined,
         OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
         CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
-        CODEX_HOME: path.join(home, ".codex")
+        CODEX_HOME: path.join(home, ".codex"),
+        PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent")
       }
     }
   );

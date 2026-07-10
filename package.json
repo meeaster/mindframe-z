@@ -13,6 +13,7 @@
     "dev": "tsx src/cli/mfz.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
+    "install:local": "pnpm build && mkdir -p \"${MFZ_HOME:-$HOME}/.mindframe-z/bin\" && ln -sf \"$PWD/bin/mfz\" \"${MFZ_HOME:-$HOME}/.mindframe-z/bin/mfz\"",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "release": "node scripts/build-release.mjs",

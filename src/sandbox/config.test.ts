@@ -23,6 +23,7 @@ async function testPaths(): Promise<RuntimePaths> {
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
+    piDir: path.join(home, ".pi", "agent"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }

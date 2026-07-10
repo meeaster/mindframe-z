@@ -8,8 +8,8 @@ import { expandHome } from "./path-util.js";
 
 export { expandHome } from "./path-util.js";
 
-export type AgentName = "opencode" | "claude-code" | "codex";
-export type ToolTarget = "opencode" | "claude-code" | "codex" | "mise" | "dotfiles";
+export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
+export type ToolTarget = "opencode" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
 export type InfraTarget = "mise" | "dotfiles";
 export type ApplyAgent = AgentName | "all";
 
@@ -20,6 +20,7 @@ export interface RuntimePaths {
   opencodeConfigDir: string;
   claudeDir: string;
   codexDir: string;
+  piDir: string;
   miseConfigDir: string;
 }
 
@@ -29,6 +30,7 @@ export interface PathOptions {
   opencodeConfigDir?: string | undefined;
   claudeDir?: string | undefined;
   codexDir?: string | undefined;
+  piDir?: string | undefined;
 }
 
 export function packageRootFromImport(importMetaUrl: string): string {
@@ -84,6 +86,12 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
     ),
     codexDir: path.resolve(
       expandHome(options.codexDir ?? process.env.CODEX_HOME ?? path.join(home, ".codex"), home)
+    ),
+    piDir: path.resolve(
+      expandHome(
+        options.piDir ?? process.env.PI_CODING_AGENT_DIR ?? path.join(home, ".pi", "agent"),
+        home
+      )
     ),
     miseConfigDir: path.resolve(
       expandHome(process.env.MISE_CONFIG_DIR ?? path.join(home, ".config", "mise"), home)

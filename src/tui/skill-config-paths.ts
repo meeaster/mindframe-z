@@ -2,7 +2,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { globalSkillStatePath, type AgentName, type RuntimePaths } from "../core/paths.js";
 
-export type SkillToggleTarget = AgentName;
+export type SkillToggleTarget = Exclude<AgentName, "pi">;
 
 export type SkillConfigPaths =
   | {

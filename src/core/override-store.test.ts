@@ -19,6 +19,7 @@ async function tmpPaths(): Promise<RuntimePaths> {
     opencodeConfigDir: path.join(root, "opencode"),
     claudeDir: path.join(root, "claude"),
     codexDir: path.join(root, "codex"),
+    piDir: path.join(root, "pi", "agent"),
     miseConfigDir: path.join(root, "mise")
   };
 }

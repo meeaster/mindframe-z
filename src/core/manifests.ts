@@ -6,7 +6,7 @@ import { z } from "zod";
 import { fileExists } from "./fs-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
-export const agentSchema = z.enum(["opencode", "claude-code", "codex"]);
+export const agentSchema = z.enum(["opencode", "claude-code", "codex", "pi"]);
 const targetSchema = agentSchema;
 const agentsMapSchema = z
   .partialRecord(agentSchema, z.boolean())
@@ -236,6 +236,11 @@ const codexConfigSchema = z.object({
   plugins: z.record(z.string(), codexPluginSchema).default({})
 });
 
+const piConfigSchema = z.object({
+  settings: z.record(z.string(), z.unknown()).default({}),
+  subagent_config: z.record(z.string(), z.unknown()).default({})
+});
+
 export const profileSchema = z
   .object({
     name: z.string().min(1),
@@ -261,6 +266,7 @@ export const profileSchema = z
       })
       .default({ settings: {} }),
     codex: codexConfigSchema.default({ config: {}, plugins: {} }),
+    pi: piConfigSchema.default({ settings: {}, subagent_config: {} }),
     mise: z
       .object({
         tools: z.record(z.string(), miseToolValueSchema).default({}),
@@ -492,6 +498,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
         claude: { settings: {} },
         codex: { config: {}, plugins: {} },
+        pi: { settings: {}, subagent_config: {} },
         mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
         thread: {
           destinations: [],

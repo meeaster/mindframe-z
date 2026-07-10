@@ -14,6 +14,7 @@ function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
+    piDir: path.join(home, ".pi", "agent"),
     miseConfigDir: path.join(home, ".config", "mise")
   };
 }
@@ -56,6 +57,7 @@ function profile(
       opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
+      pi: { settings: {}, subagent_config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
         destinations: [],

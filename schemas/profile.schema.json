@@ -25,7 +25,8 @@
         "enum": [
           "opencode",
           "claude-code",
-          "codex"
+          "codex",
+          "pi"
         ]
       }
     },
@@ -59,7 +60,8 @@
               "enum": [
                 "opencode",
                 "claude-code",
-                "codex"
+                "codex",
+                "pi"
               ]
             },
             "additionalProperties": {
@@ -90,7 +92,8 @@
               "enum": [
                 "opencode",
                 "claude-code",
-                "codex"
+                "codex",
+                "pi"
               ]
             },
             "additionalProperties": {
@@ -277,6 +280,31 @@
               "enabled"
             ]
           }
+        }
+      }
+    },
+    "pi": {
+      "default": {
+        "settings": {},
+        "subagent_config": {}
+      },
+      "type": "object",
+      "properties": {
+        "settings": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "subagent_config": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       }
     },

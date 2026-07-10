@@ -235,6 +235,8 @@ async function renderPayload(
       : {};
   }
 
+  if (target === "pi") return {};
+
   const argv = Object.entries(mcp).flatMap(([name, enabled]) => [
     "-c",
     `mcp_servers.${name}.enabled=${enabled}`

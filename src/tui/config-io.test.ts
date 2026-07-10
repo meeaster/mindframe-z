@@ -46,6 +46,7 @@ function paths(root: string): RuntimePaths {
     opencodeConfigDir: path.join(root, ".config", "opencode"),
     claudeDir: path.join(root, ".claude"),
     codexDir: path.join(root, ".codex"),
+    piDir: path.join(root, ".pi", "agent"),
     miseConfigDir: path.join(root, ".config", "mise")
   };
 }

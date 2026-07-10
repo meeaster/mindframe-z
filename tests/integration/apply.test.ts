@@ -254,6 +254,118 @@ describe("apply integration", () => {
     expect(config).not.toHaveProperty("plugins");
   });
 
+  it("renders Pi settings and guidance without writing local files in no-link mode", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [pi]",
+        "instructions:",
+        "  - instructions/AGENTS.md",
+        "pi:",
+        "  settings:",
+        "    theme: dark",
+        "    defaultProvider: openai-codex",
+        "    defaultModel: gpt-5.5",
+        "    subagents:",
+        "      agentOverrides:",
+        "        scout:",
+        "          model: openai-codex/gpt-5.4-mini",
+        "          thinking: low",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".pi", "agent"), { recursive: true });
+    await writeFile(
+      path.join(home, ".pi", "agent", "settings.json"),
+      '{"theme":"light"}\n',
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "pi", "--no-link"]);
+
+    const snapshot = JSON.parse(
+      await readFile(configsPath(home, "personal", "pi", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(snapshot).toMatchObject({
+      theme: "dark",
+      defaultProvider: "openai-codex",
+      defaultModel: "gpt-5.5",
+      subagents: { agentOverrides: { scout: { thinking: "low" } } }
+    });
+    expect(await readFile(configsPath(home, "personal", "pi", "AGENTS.md"), "utf8")).toContain(
+      "# Test Agents"
+    );
+    expect(await readFile(path.join(home, ".pi", "agent", "settings.json"), "utf8")).toBe(
+      '{"theme":"light"}\n'
+    );
+  });
+
+  it("merges Pi settings and subagent config into local JSON files", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [pi]",
+        "instructions:",
+        "  - instructions/AGENTS.md",
+        "pi:",
+        "  settings:",
+        "    theme: dark",
+        "    defaultModel: gpt-5.5",
+        "    nested:",
+        "      generated: true",
+        "  subagent_config:",
+        "    toolDescriptionMode: compact",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".pi", "agent", "extensions", "subagent"), { recursive: true });
+    await writeFile(
+      path.join(home, ".pi", "agent", "settings.json"),
+      JSON.stringify({ theme: "light", keep: true, nested: { local: true } }, null, 2) + "\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(home, ".pi", "agent", "extensions", "subagent", "config.json"),
+      JSON.stringify({ keepLocal: true, toolDescriptionMode: "full" }, null, 2) + "\n",
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["apply", "--agent", "pi"]);
+
+    expect(result.stdout).toContain("wrote local");
+    const localSettings = JSON.parse(
+      await readFile(path.join(home, ".pi", "agent", "settings.json"), "utf8")
+    ) as Record<string, unknown>;
+    expect(localSettings).toMatchObject({
+      theme: "dark",
+      keep: true,
+      defaultModel: "gpt-5.5",
+      nested: { local: true, generated: true }
+    });
+    expect(await readFile(path.join(home, ".pi", "agent", "AGENTS.md"), "utf8")).toContain(
+      "# Test Agents"
+    );
+    const localSubagentConfig = JSON.parse(
+      await readFile(
+        path.join(home, ".pi", "agent", "extensions", "subagent", "config.json"),
+        "utf8"
+      )
+    ) as Record<string, unknown>;
+    expect(localSubagentConfig).toEqual({ keepLocal: true, toolDescriptionMode: "compact" });
+    const snapshotSubagentConfig = JSON.parse(
+      await readFile(
+        configsPath(home, "personal", "pi", "extensions", "subagent", "config.json"),
+        "utf8"
+      )
+    ) as Record<string, unknown>;
+    expect(snapshotSubagentConfig).toEqual({ toolDescriptionMode: "compact" });
+  });
+
   it("merges Codex config into local TOML without replacing unrelated keys", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
