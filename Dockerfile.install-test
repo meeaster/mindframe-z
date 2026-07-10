@@ -1,0 +1,16 @@
+FROM debian:13-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --home-dir /home/testuser testuser
+USER testuser
+WORKDIR /home/testuser
+
+# Run the installer from the raw script URL (simulates a fresh user)
+RUN curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/latest/scripts/install.sh | bash
+
+# Verify the binary exists and runs
+RUN ~/.mindframe-z/bin/mfz --version
+RUN ~/.mindframe-z/bin/mfz --help
