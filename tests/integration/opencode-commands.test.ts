@@ -46,7 +46,6 @@ describe("opencode commands integration", () => {
       ].join("\n"),
       "utf8"
     );
-
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     await expect(
@@ -76,15 +75,149 @@ describe("opencode commands integration", () => {
       ].join("\n"),
       "utf8"
     );
-
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode", "plugins", "status", "index.tsx"), "utf8")
+      readFile(
+        path.join(home, ".config", "opencode", "plugins", "mindframe-z", "status", "index.tsx"),
+        "utf8"
+      )
     ).resolves.toBe("export default {}\n");
     await expect(
       readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
     ).resolves.toContain('"plugin": [\n    "file://');
+  });
+
+  it("renders a directory server plugin at its index module URL", async () => {
+    await mkdir(path.join(root, "opencode", "plugins", "server"), { recursive: true });
+    await writeFile(
+      path.join(root, "opencode", "plugins", "server", "index.mts"),
+      "export default {}\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  plugins:",
+        "    - server",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const config = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { plugin: string[] };
+    expect(config.plugin).toEqual([
+      `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "server", "index.mts")}`
+    ]);
+  });
+
+  it("renders a package directory for both server and TUI entrypoints", async () => {
+    const pluginDir = path.join(root, "opencode", "plugins", "combined");
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "package.json"),
+      JSON.stringify({
+        name: "combined",
+        type: "module",
+        exports: { "./server": "./server.ts", "./tui": "./tui.tsx" }
+      }),
+      "utf8"
+    );
+    await writeFile(path.join(pluginDir, "server.ts"), "export default {}\n", "utf8");
+    await writeFile(path.join(pluginDir, "tui.tsx"), "export default {}\n", "utf8");
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  plugins:",
+        "    - combined",
+        "  tui_plugins:",
+        "    - combined",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    const stalePlugin = path.join(
+      home,
+      ".config",
+      "opencode",
+      "plugins",
+      "mindframe-z",
+      "legacy.ts"
+    );
+    await mkdir(path.dirname(stalePlugin), { recursive: true });
+    await writeFile(stalePlugin, "export default {}\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    const pluginDirUrl = `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "combined")}`;
+    const config = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { plugin: string[] };
+    const tui = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+    ) as { plugin: string[] };
+
+    expect(config.plugin).toEqual([pluginDirUrl]);
+    expect(tui.plugin).toEqual([pluginDirUrl]);
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(
+            home,
+            ".config",
+            "opencode",
+            "plugins",
+            "mindframe-z",
+            "combined",
+            "package.json"
+          ),
+          "utf8"
+        )
+      )
+    ).toMatchObject({ exports: { "./server": "./server.ts", "./tui": "./tui.tsx" } });
+    await expect(readFile(stalePlugin, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("renders a single-file server plugin at its file URL", async () => {
+    await writeFile(
+      path.join(root, "opencode", "plugins", "single.mjs"),
+      "export default {}\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  plugins:",
+        "    - single",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const config = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { plugin: string[] };
+    expect(config.plugin).toEqual([
+      `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "single.mjs")}`
+    ]);
   });
 
   it("does not render tui.json without TUI configuration", async () => {

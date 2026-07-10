@@ -59,7 +59,15 @@ function profile(): ResolvedProfile {
       references: [],
       skills: {},
       mcp: {},
-      opencode: { config: {}, plugins: [], tui: {}, tui_plugins: [], commands: [], agents: [] },
+      opencode: {
+        config: {},
+        dependencies: {},
+        plugins: [],
+        tui: {},
+        tui_plugins: [],
+        commands: [],
+        agents: []
+      },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },

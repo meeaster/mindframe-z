@@ -142,6 +142,61 @@ describe("mergeProfiles OpenCode TUI", () => {
   });
 });
 
+describe("mergeProfiles OpenCode dependencies", () => {
+  it("merges dependencies with child versions taking precedence", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      opencode: { dependencies: { "@acme/base": "1.2.3", shared: "1.0.0" } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      opencode: { dependencies: { "@acme/child": "2.3.4", shared: "2.0.0" } }
+    });
+
+    expect(mergeProfiles(base, child).opencode.dependencies).toEqual({
+      "@acme/base": "1.2.3",
+      "@acme/child": "2.3.4",
+      shared: "2.0.0"
+    });
+  });
+
+  it("rejects dependency ranges and tags", () => {
+    for (const version of ["^1.2.3", "latest"]) {
+      expect(() =>
+        profileSchema.parse({ name: "personal", opencode: { dependencies: { example: version } } })
+      ).toThrow("must be an exact semantic version");
+    }
+  });
+});
+
+describe("Delegate General model catalog", () => {
+  it("accepts exact model IDs with their required reasoning levels", () => {
+    const profile = profileSchema.parse({
+      name: "personal",
+      opencode: {
+        delegate_general: {
+          models: [
+            {
+              id: "openai/gpt-5.6-sol",
+              variants: ["none", "low", "medium", "high", "xhigh"]
+            }
+          ]
+        }
+      }
+    });
+
+    expect(profile.opencode.delegate_general).toEqual({
+      models: [
+        {
+          id: "openai/gpt-5.6-sol",
+          variants: ["none", "low", "medium", "high", "xhigh"]
+        }
+      ]
+    });
+  });
+});
+
 describe("home inheritance", () => {
   it("resolves a qualified upstream profile and catalog entries", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));

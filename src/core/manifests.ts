@@ -100,25 +100,16 @@ const miseTomlSchema = z.object({
   settings: z.record(z.string(), z.unknown()).default({})
 });
 
-const agentTaskModelSchema = z.object({
-  name: z.string().min(1),
-  variants: z.array(z.string()).optional(),
-  default_variant: z.string().optional(),
-  providers: z.array(z.string()).min(1)
+const delegateGeneralModelSchema = z.object({
+  id: z.string().min(1),
+  variants: z.array(z.string().min(1)).min(1)
 });
 
-const agentTaskAgentSchema = z.object({
-  name: z.string().min(1),
-  model: z.string().min(1),
-  variant: z.string().optional()
+const delegateGeneralSchema = z.object({
+  models: z.array(delegateGeneralModelSchema).default([])
 });
 
-const agentTaskSchema = z.object({
-  models: z.array(agentTaskModelSchema).default([]),
-  agents: z.array(agentTaskAgentSchema).default([])
-});
-
-export type AgentTaskConfig = z.infer<typeof agentTaskSchema>;
+export type DelegateGeneralConfig = z.infer<typeof delegateGeneralSchema>;
 
 export const threadHarnessSchema = z.enum(["claude-code", "opencode"]);
 
@@ -216,14 +207,22 @@ const machineThreadSchema = z
   })
   .default({ destinations: [] });
 
+const exactVersionSchema = z
+  .string()
+  .regex(
+    /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/,
+    "must be an exact semantic version"
+  );
+
 const opencodeConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
+  dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   plugins: z.array(z.string()).default([]),
   tui: z.record(z.string(), z.unknown()).default({}),
   tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([]),
-  agent_task: agentTaskSchema.optional()
+  delegate_general: delegateGeneralSchema.optional()
 });
 
 export const codexPluginSchema = z.object({
@@ -253,6 +252,7 @@ export const profileSchema = z
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
     opencode: opencodeConfigSchema.default({
       config: {},
+      dependencies: {},
       plugins: [],
       tui: {},
       tui_plugins: [],

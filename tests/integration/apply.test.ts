@@ -27,6 +27,14 @@ describe("apply integration", () => {
   }
 
   it("renders and links OpenCode and Claude config into temporary homes", async () => {
+    const renderedNodeModules = configsPath(home, "personal", "opencode", "node_modules");
+    const managedPlugins = path.join(home, ".config", "opencode", "plugins", "mindframe-z");
+    const stalePlugin = path.join(managedPlugins, "stale.ts");
+    await mkdir(path.dirname(renderedNodeModules), { recursive: true });
+    await symlink(path.join(home, ".config", "opencode", "node_modules"), renderedNodeModules);
+    await mkdir(managedPlugins, { recursive: true });
+    await writeFile(stalePlugin, "export default {}\n", "utf8");
+
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
@@ -36,12 +44,10 @@ describe("apply integration", () => {
     );
     expect(opencode).toContain("https://opencode.ai/config.json");
     expect(opencode).toContain("context7");
-    expect(
-      await readFile(
-        configsPath(home, "personal", "opencode", "plugins", "config-marker.ts"),
-        "utf8"
-      )
-    ).toContain("mindframe-z-plugin-loaded");
+    expect(await readFile(path.join(managedPlugins, "config-marker.ts"), "utf8")).toContain(
+      "mindframe-z-plugin-loaded"
+    );
+    await expect(lstat(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
     expect(
       await readFile(configsPath(home, "personal", "opencode", "commands", "test-cmd.md"), "utf8")
     ).toContain("Run the test command.");
@@ -63,6 +69,7 @@ describe("apply integration", () => {
     await expect(realpath(path.join(home, ".config", "opencode", "commands"))).resolves.toBe(
       configsPath(home, "personal", "opencode", "commands")
     );
+    await expect(lstat(renderedNodeModules)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
       configsPath(home, "personal", "claude", "CLAUDE.md")
     );
@@ -72,6 +79,109 @@ describe("apply integration", () => {
       mcpServers?: Record<string, unknown>;
     };
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
+  });
+
+  it("renders, links, and removes merged OpenCode runtime dependencies", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      [
+        "name: base",
+        "opencode:",
+        "  dependencies:",
+        "    '@acme/base': 1.2.3",
+        "    shared: 1.0.0",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  dependencies:",
+        "    '@acme/personal': 2.3.4",
+        "    shared: 2.0.0",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    const manifestPath = configsPath(home, "personal", "opencode", "package.json");
+    expect(JSON.parse(await readFile(manifestPath, "utf8"))).toEqual({
+      dependencies: { "@acme/base": "1.2.3", "@acme/personal": "2.3.4", shared: "2.0.0" }
+    });
+    await expect(realpath(path.join(home, ".config", "opencode", "package.json"))).resolves.toBe(
+      manifestPath
+    );
+
+    await writeFile(path.join(root, "profiles", "base", "profile.yml"), "name: base\n", "utf8");
+    await mkdir(path.join(root, "profiles", "clean"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "clean", "profile.yml"),
+      ["name: clean", "extends: base", "agents: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["--profile", "clean", "apply", "--agent", "opencode"]);
+
+    await expect(
+      lstat(path.join(home, ".config", "opencode", "package.json"))
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      lstat(path.join(home, ".config", "opencode", "package.json"))
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("migrates delegate general configuration from agent-task paths", async () => {
+    const renderedOpencode = configsPath(home, "personal", "opencode");
+    const oldRenderedConfig = path.join(renderedOpencode, "agent-task.json");
+    const oldLinkedConfig = path.join(home, ".config", "opencode", "agent-task.json");
+    await mkdir(path.dirname(oldRenderedConfig), { recursive: true });
+    await mkdir(path.dirname(oldLinkedConfig), { recursive: true });
+    await writeFile(oldRenderedConfig, '{"models":[]}\n', "utf8");
+    await symlink(oldRenderedConfig, oldLinkedConfig);
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  delegate_general:",
+        "    models:",
+        "      - id: openai/gpt-5.6-terra",
+        "        variants: [low]",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    const newRenderedConfig = path.join(renderedOpencode, "delegate-general.json");
+    const newLinkedConfig = path.join(home, ".config", "opencode", "delegate-general.json");
+    await expect(readFile(newRenderedConfig, "utf8")).resolves.toContain("openai/gpt-5.6-terra");
+    await expect(realpath(newLinkedConfig)).resolves.toBe(newRenderedConfig);
+    await expect(lstat(oldRenderedConfig)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(oldLinkedConfig)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("applies machine-local OpenCode permission overrides", async () => {

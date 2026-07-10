@@ -1,6 +1,6 @@
 import * as readline from "node:readline/promises";
 import path from "node:path";
-import { access, mkdir, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
@@ -25,7 +25,12 @@ import {
   renderAllPayloads,
   writeProjectOverrideDelta
 } from "../core/override-store.js";
-import { renderTarget, writeLocalFiles, writeRenderedFiles } from "../core/render.js";
+import {
+  removeRenderedFiles,
+  renderTarget,
+  writeLocalFiles,
+  writeRenderedFiles
+} from "../core/render.js";
 import {
   ensureGitConfigInclude,
   gitIdentityFragmentPath,
@@ -153,15 +158,27 @@ async function applyConfig(options: {
       const result = await renderTarget(paths, profile, target, {
         includeGlobalSkillState: !options.noLink
       });
+      if (!options.dryRun) await removeRenderedFiles(result.staleFiles ?? []);
       if (!options.dryRun) await writeRenderedFiles(result.files);
       for (const file of result.files)
         console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
       if (result.localFiles && !options.noLink) {
+        if (!options.dryRun) await removeRenderedFiles(result.localStaleFiles ?? []);
         if (!options.dryRun) await writeLocalFiles(result.localFiles);
         for (const file of result.localFiles)
           console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
       }
       if (!options.noLink) {
+        for (const link of result.staleLinks ?? []) {
+          const status = await verifyLink(link);
+          if (
+            status.state === "ok" ||
+            staleManagedConfigTarget(status.resolvedTarget, paths.configsDir)
+          ) {
+            if (!options.dryRun) await unlink(link.linkPath);
+            console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
+          }
+        }
         for (const link of result.links) {
           const status = await verifyLink(link);
           if (options.dryRun) {

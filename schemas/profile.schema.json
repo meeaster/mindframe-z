@@ -110,6 +110,7 @@
     "opencode": {
       "default": {
         "config": {},
+        "dependencies": {},
         "plugins": [],
         "tui": {},
         "tui_plugins": [],
@@ -125,6 +126,18 @@
             "type": "string"
           },
           "additionalProperties": {}
+        },
+        "dependencies": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+          }
         },
         "plugins": {
           "default": [],
@@ -162,7 +175,7 @@
             "type": "string"
           }
         },
-        "agent_task": {
+        "delegate_general": {
           "type": "object",
           "properties": {
             "models": {
@@ -171,54 +184,22 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "name": {
+                  "id": {
                     "type": "string",
                     "minLength": 1
                   },
                   "variants": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "default_variant": {
-                    "type": "string"
-                  },
-                  "providers": {
                     "minItems": 1,
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1
                     }
                   }
                 },
                 "required": [
-                  "name",
-                  "providers"
-                ]
-              }
-            },
-            "agents": {
-              "default": [],
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "model": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "variant": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "name",
-                  "model"
+                  "id",
+                  "variants"
                 ]
               }
             }

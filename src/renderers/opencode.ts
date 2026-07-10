@@ -37,9 +37,9 @@ async function copyDirContents(
 async function collectPluginFiles(
   localRoot: string,
   rootByName: (name: string) => string,
-  configsOpencode: string,
+  pluginsDir: string,
   pluginNames: readonly string[],
-  directoryEntry?: boolean,
+  directoryEntry = true,
   discover = true
 ): Promise<{ files: RenderResult["files"]; entries: string[] }> {
   let names: string[];
@@ -84,8 +84,15 @@ async function collectPluginFiles(
     }
 
     if (isDir) {
-      await copyDirContents(dirPath, path.join(configsOpencode, "plugins", name), files);
+      await copyDirContents(dirPath, path.join(pluginsDir, name), files);
       if (directoryEntry) {
+        try {
+          await stat(path.join(dirPath, "package.json"));
+          entries.push(`file://${path.join(pluginsDir, name)}`);
+          continue;
+        } catch {
+          // Legacy local directory plugins use an index module.
+        }
         const entry = await sourceExtensions.reduce<Promise<string | undefined>>(
           async (found, ext) => {
             if (await found) return found;
@@ -98,10 +105,10 @@ async function collectPluginFiles(
           },
           Promise.resolve(undefined)
         );
-        if (!entry) throw new Error(`Unknown OpenCode TUI plugin: ${name} (missing index module)`);
-        entries.push(`file://${path.join(configsOpencode, "plugins", name, entry)}`);
+        if (!entry) throw new Error(`Unknown OpenCode plugin: ${name} (missing index module)`);
+        entries.push(`file://${path.join(pluginsDir, name, entry)}`);
       } else {
-        entries.push(`file://${path.join(configsOpencode, "plugins", name)}`);
+        entries.push(`file://${path.join(pluginsDir, name)}`);
       }
       continue;
     }
@@ -116,10 +123,10 @@ async function collectPluginFiles(
       }
       const destRel = `${name}${ext}`;
       files.push({
-        path: path.join(configsOpencode, "plugins", destRel),
+        path: path.join(pluginsDir, destRel),
         content
       });
-      entries.push(`file://${path.join(configsOpencode, "plugins", destRel)}`);
+      entries.push(`file://${path.join(pluginsDir, destRel)}`);
       break;
     }
   }
@@ -165,18 +172,21 @@ export async function renderOpenCode(
 ): Promise<RenderResult> {
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpencode = path.join(configsProfile, "opencode");
+  const pluginsPath = path.join(configsOpencode, "plugins");
+  const appliedPluginsPath = path.join(paths.opencodeConfigDir, "plugins", "mindframe-z");
   const configPath = path.join(configsOpencode, "opencode.jsonc");
   const tuiConfigPath = path.join(configsOpencode, "tui.json");
+  const packagePath = path.join(configsOpencode, "package.json");
   const pluginResult = await collectPluginFiles(
     paths.root,
     (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
-    configsOpencode,
+    appliedPluginsPath,
     profile.profile.opencode.plugins
   );
   const tuiPluginResult = await collectPluginFiles(
     paths.root,
     (name) => profile.sources.plugins.get(name)?.root ?? paths.root,
-    configsOpencode,
+    appliedPluginsPath,
     profile.profile.opencode.tui_plugins,
     true,
     false
@@ -279,19 +289,28 @@ export async function renderOpenCode(
         plugin: tuiPluginResult.entries
       }
     : undefined;
+  const dependencies = profile.profile.opencode.dependencies;
+  const hasDependencies = Object.keys(dependencies).length > 0;
 
+  const pluginFiles = [
+    ...new Map(
+      [...pluginResult.files, ...tuiPluginResult.files].map((file) => [file.path, file])
+    ).values()
+  ];
   const files: RenderResult["files"] = [
-    ...pluginResult.files,
-    ...tuiPluginResult.files,
     ...commandFiles,
     ...agentFiles,
     { path: configPath, content: toJsonc(renderedConfig) },
+    ...(hasDependencies ? [{ path: packagePath, content: toJsonc({ dependencies }) }] : []),
     ...(tuiConfig ? [{ path: tuiConfigPath, content: toJsonc(tuiConfig) }] : [])
   ];
   const links: RenderResult["links"] = [
     { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
     ...(tuiConfig
       ? [{ linkPath: path.join(paths.opencodeConfigDir, "tui.json"), targetPath: tuiConfigPath }]
+      : []),
+    ...(hasDependencies
+      ? [{ linkPath: path.join(paths.opencodeConfigDir, "package.json"), targetPath: packagePath }]
       : []),
     {
       linkPath: path.join(paths.opencodeConfigDir, "commands"),
@@ -303,15 +322,41 @@ export async function renderOpenCode(
     }
   ];
 
-  const agentTask = profile.profile.opencode.agent_task;
-  if (agentTask) {
-    const agentTaskPath = path.join(configsOpencode, "agent-task.json");
-    files.push({ path: agentTaskPath, content: toJsonc(agentTask) });
+  const delegateGeneral = profile.profile.opencode.delegate_general;
+  if (delegateGeneral) {
+    const delegateGeneralPath = path.join(configsOpencode, "delegate-general.json");
+    files.push({ path: delegateGeneralPath, content: toJsonc(delegateGeneral) });
     links.push({
-      linkPath: path.join(paths.opencodeConfigDir, "agent-task.json"),
-      targetPath: agentTaskPath
+      linkPath: path.join(paths.opencodeConfigDir, "delegate-general.json"),
+      targetPath: delegateGeneralPath
     });
   }
 
-  return { files, links };
+  return {
+    files,
+    localFiles: pluginFiles,
+    localStaleFiles: [appliedPluginsPath],
+    links,
+    staleFiles: hasDependencies
+      ? [pluginsPath, path.join(configsOpencode, "agent-task.json")]
+      : [pluginsPath, packagePath, path.join(configsOpencode, "agent-task.json")],
+    staleLinks: [
+      {
+        linkPath: path.join(configsOpencode, "node_modules"),
+        targetPath: path.join(paths.opencodeConfigDir, "node_modules")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "agent-task.json"),
+        targetPath: path.join(configsOpencode, "agent-task.json")
+      },
+      ...(!hasDependencies
+        ? [
+            {
+              linkPath: path.join(paths.opencodeConfigDir, "package.json"),
+              targetPath: packagePath
+            }
+          ]
+        : [])
+    ]
+  };
 }

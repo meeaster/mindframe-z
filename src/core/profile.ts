@@ -320,12 +320,13 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     mcp: deepMerge(base.mcp, child.mcp) as ProfileManifest["mcp"],
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
+      dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
       tui: deepMerge(base.opencode.tui, child.opencode.tui),
       tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
-      agent_task: child.opencode.agent_task ?? base.opencode.agent_task
+      delegate_general: child.opencode.delegate_general ?? base.opencode.delegate_general
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     codex: {
