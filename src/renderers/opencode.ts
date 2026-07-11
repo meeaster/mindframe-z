@@ -3,16 +3,13 @@ import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import { expandHome, profileConfigsDir } from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import { jsonFileContent } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
 interface OpenCodeRenderOptions {
   readonly skillOverrides?: Record<string, boolean>;
-}
-
-function toJsonc(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
 async function copyDirContents(
@@ -300,9 +297,9 @@ export async function renderOpenCode(
   const files: RenderResult["files"] = [
     ...commandFiles,
     ...agentFiles,
-    { path: configPath, content: toJsonc(renderedConfig) },
-    ...(hasDependencies ? [{ path: packagePath, content: toJsonc({ dependencies }) }] : []),
-    ...(tuiConfig ? [{ path: tuiConfigPath, content: toJsonc(tuiConfig) }] : [])
+    { path: configPath, content: jsonFileContent(renderedConfig) },
+    ...(hasDependencies ? [{ path: packagePath, content: jsonFileContent({ dependencies }) }] : []),
+    ...(tuiConfig ? [{ path: tuiConfigPath, content: jsonFileContent(tuiConfig) }] : [])
   ];
   const links: RenderResult["links"] = [
     { linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"), targetPath: configPath },
@@ -325,7 +322,7 @@ export async function renderOpenCode(
   const delegateGeneral = profile.profile.opencode.delegate_general;
   if (delegateGeneral) {
     const delegateGeneralPath = path.join(configsOpencode, "delegate-general.json");
-    files.push({ path: delegateGeneralPath, content: toJsonc(delegateGeneral) });
+    files.push({ path: delegateGeneralPath, content: jsonFileContent(delegateGeneral) });
     links.push({
       linkPath: path.join(paths.opencodeConfigDir, "delegate-general.json"),
       targetPath: delegateGeneralPath

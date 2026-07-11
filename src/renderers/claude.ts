@@ -3,7 +3,7 @@ import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { expandHome } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
-import { readJsonObject } from "../core/fs-util.js";
+import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
@@ -185,12 +185,12 @@ export async function renderClaude(
   return {
     files: [
       { path: claudeMdPath, content: claudeMd },
-      { path: settingsPath, content: `${JSON.stringify(settings, null, 2)}\n` },
-      { path: mcpPath, content: `${JSON.stringify(managedClaudeMcp, null, 2)}\n` }
+      { path: settingsPath, content: jsonFileContent(settings) },
+      { path: mcpPath, content: jsonFileContent(managedClaudeMcp) }
     ],
     localFiles: [
-      { path: localSettingsPath, content: `${JSON.stringify(mergedSettings, null, 2)}\n` },
-      { path: localClaudeJsonPath, content: `${JSON.stringify(mergedClaudeJson, null, 2)}\n` }
+      { path: localSettingsPath, content: jsonFileContent(mergedSettings) },
+      { path: localClaudeJsonPath, content: jsonFileContent(mergedClaudeJson) }
     ],
     links: [{ linkPath: path.join(paths.claudeDir, "CLAUDE.md"), targetPath: claudeMdPath }]
   };

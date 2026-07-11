@@ -3,12 +3,8 @@ import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { deepMerge, type ResolvedProfile } from "../core/profile.js";
-import { readJsonObject } from "../core/fs-util.js";
+import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
-
-function json(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
 
 function hasKeys(value: Record<string, unknown>): boolean {
   return Object.keys(value).length > 0;
@@ -50,13 +46,13 @@ export async function renderPi(
   const settings = profile.profile.pi.settings;
   const agents = await renderPiAgents(paths, profile);
   const files: RenderResult["files"] = [
-    { path: settingsPath, content: json(settings) },
+    { path: settingsPath, content: jsonFileContent(settings) },
     { path: agentsPath, content: agents }
   ];
   const localFiles: NonNullable<RenderResult["localFiles"]> = [
     {
       path: localSettingsPath,
-      content: json(deepMerge(await readJsonObject(localSettingsPath), settings))
+      content: jsonFileContent(deepMerge(await readJsonObject(localSettingsPath), settings))
     },
     { path: localAgentsPath, content: agents }
   ];
@@ -65,10 +61,12 @@ export async function renderPi(
   if (hasKeys(subagentConfig)) {
     const subagentConfigPath = path.join(configsPi, "extensions", "subagent", "config.json");
     const localSubagentConfigPath = path.join(paths.piDir, "extensions", "subagent", "config.json");
-    files.push({ path: subagentConfigPath, content: json(subagentConfig) });
+    files.push({ path: subagentConfigPath, content: jsonFileContent(subagentConfig) });
     localFiles.push({
       path: localSubagentConfigPath,
-      content: json(deepMerge(await readJsonObject(localSubagentConfigPath), subagentConfig))
+      content: jsonFileContent(
+        deepMerge(await readJsonObject(localSubagentConfigPath), subagentConfig)
+      )
     });
   }
 

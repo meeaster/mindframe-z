@@ -25,3 +25,13 @@ export async function readJsonObject(filePath: string): Promise<Record<string, u
     return {};
   }
 }
+
+/**
+ * Serialize a value as the textual content of a JSON config file: two-space
+ * indentation plus a trailing newline. This is the write-side counterpart to
+ * {@link readJsonObject}; renderers use it so every managed JSON (and JSONC)
+ * file shares one pretty-print and newline convention.
+ */
+export function jsonFileContent(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
