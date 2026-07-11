@@ -1,9 +1,9 @@
 import path from "node:path";
-import { readFile } from "node:fs/promises";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { expandHome } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
+import { readJsonObject } from "../core/fs-util.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
@@ -28,17 +28,6 @@ function mergeClaudePermissions(
   }
 
   return merged;
-}
-
-async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 function stripEnvRef(value: string): string {

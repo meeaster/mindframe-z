@@ -3,18 +3,8 @@ import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import { deepMerge, type ResolvedProfile } from "../core/profile.js";
+import { readJsonObject } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
-
-async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
 
 function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
