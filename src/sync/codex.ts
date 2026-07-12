@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { codexPluginSchema } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { readTomlObject } from "../core/skill-overrides.js";
+import { readTomlObject } from "../core/fs-util.js";
 import { CODEX_DERIVED_KEYS } from "../renderers/codex.js";
 import type { SyncCandidate, SyncResult } from "./types.js";
 
