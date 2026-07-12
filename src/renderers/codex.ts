@@ -5,7 +5,7 @@ import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.
 import { parseEnvRef } from "../core/env-ref.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
-import { readTomlObject } from "../core/skill-overrides.js";
+import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
 export const CODEX_DERIVED_KEYS = new Set([

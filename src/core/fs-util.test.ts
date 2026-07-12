@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { jsonFileContent, readJsonObject } from "./fs-util.js";
+import { jsonFileContent, parseTomlObject, readJsonObject, readTomlObject } from "./fs-util.js";
 
 describe("jsonFileContent", () => {
   it("pretty-prints with two-space indentation and a trailing newline", () => {
@@ -23,5 +23,39 @@ describe("jsonFileContent", () => {
     const value = { name: "personal", nested: { count: 3 } };
     await writeFile(file, jsonFileContent(value), "utf8");
     expect(await readJsonObject(file)).toEqual(value);
+  });
+});
+
+describe("parseTomlObject", () => {
+  it("parses a TOML table into a plain object", () => {
+    expect(parseTomlObject('name = "personal"\n[tools]\njq = "latest"\n')).toEqual({
+      name: "personal",
+      tools: { jq: "latest" }
+    });
+  });
+
+  it("returns an empty object for empty content", () => {
+    expect(parseTomlObject("")).toEqual({});
+  });
+});
+
+describe("readTomlObject", () => {
+  it("reads a config.toml from disk", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "config.toml");
+    await writeFile(file, '[settings]\nminimum_release_age = "3d"\n', "utf8");
+    expect(await readTomlObject(file)).toEqual({ settings: { minimum_release_age: "3d" } });
+  });
+
+  it("defaults to an empty object when the file is missing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    expect(await readTomlObject(path.join(dir, "absent.toml"))).toEqual({});
+  });
+
+  it("defaults to an empty object on malformed TOML", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "broken.toml");
+    await writeFile(file, "this is = = not valid toml", "utf8");
+    expect(await readTomlObject(file)).toEqual({});
   });
 });
