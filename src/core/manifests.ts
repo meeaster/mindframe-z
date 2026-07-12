@@ -102,7 +102,8 @@ const miseTomlSchema = z.object({
 
 const delegateGeneralModelSchema = z.object({
   id: z.string().min(1),
-  variants: z.array(z.string().min(1)).min(1)
+  variants: z.array(z.string().min(1)).min(1),
+  description: z.string().min(1).optional()
 });
 
 const delegateGeneralSchema = z.object({

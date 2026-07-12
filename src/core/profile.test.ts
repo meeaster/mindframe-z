@@ -179,7 +179,8 @@ describe("Delegate General model catalog", () => {
           models: [
             {
               id: "openai/gpt-5.6-sol",
-              variants: ["none", "low", "medium", "high", "xhigh"]
+              variants: ["none", "low", "medium", "high", "xhigh"],
+              description: "Larger model for difficult reasoning."
             }
           ]
         }
@@ -190,7 +191,8 @@ describe("Delegate General model catalog", () => {
       models: [
         {
           id: "openai/gpt-5.6-sol",
-          variants: ["none", "low", "medium", "high", "xhigh"]
+          variants: ["none", "low", "medium", "high", "xhigh"],
+          description: "Larger model for difficult reasoning."
         }
       ]
     });
