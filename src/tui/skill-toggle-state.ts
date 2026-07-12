@@ -1,6 +1,5 @@
-import { access } from "node:fs/promises";
 import path from "node:path";
-import type { RuntimePaths } from "../core/paths.js";
+import { pathExists, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
   projectOverrides,
@@ -276,15 +275,6 @@ async function writeContext(
     )
   );
   return { skillPaths };
-}
-
-async function pathExists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function resolveCodexSkillPath(
