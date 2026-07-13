@@ -71,21 +71,6 @@ function writeCodexEntries(
   return { ...data, skills: { ...skills, config: nextConfig } };
 }
 
-export function parseTomlObject(content: string): Record<string, unknown> {
-  const parsed = parseToml(content) as unknown;
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
-}
-
-export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
-  try {
-    return parseTomlObject(await readFile(file, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
 export async function readConfigFile(
   file: string,
   format: SkillCodec["format"]

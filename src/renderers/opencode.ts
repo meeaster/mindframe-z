@@ -1,7 +1,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
-import { expandHome, profileConfigsDir } from "../core/paths.js";
+import {
+  expandHome,
+  extraFoldersIndexPath,
+  profileConfigsDir,
+  referenceIndexPath
+} from "../core/paths.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
@@ -201,10 +206,7 @@ export async function renderOpenCode(
     "agents",
     profile.enabledAgents
   );
-  const instructions = [
-    path.join(configsProfile, "AGENTS.md"),
-    path.join(paths.home, ".mindframe-z", "references.md")
-  ];
+  const instructions = [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
   const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
@@ -261,7 +263,7 @@ export async function renderOpenCode(
     : folderPermission;
 
   if (extraFolders.length > 0) {
-    instructions.push(path.join(paths.home, ".mindframe-z", "extra_folders.md"));
+    instructions.push(extraFoldersIndexPath(paths));
   }
 
   const profilePermission = profile.profile.opencode.config.permission as

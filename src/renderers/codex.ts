@@ -1,11 +1,17 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify } from "smol-toml";
-import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import {
+  expandHome,
+  extraFoldersIndexPath,
+  profileConfigsDir,
+  referenceIndexPath,
+  type RuntimePaths
+} from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
-import { readTomlObject } from "../core/skill-overrides.js";
+import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 
 export const CODEX_DERIVED_KEYS = new Set([
@@ -106,10 +112,8 @@ async function renderCodexAgents(paths: RuntimePaths, profile: ResolvedProfile):
   const parts: string[] = [];
   for (const file of profile.instructionFiles) parts.push(await readFile(file, "utf8"));
   for (const file of [
-    path.join(paths.home, ".mindframe-z", "references.md"),
-    ...(profile.extraFolders.length > 0
-      ? [path.join(paths.home, ".mindframe-z", "extra_folders.md")]
-      : [])
+    referenceIndexPath(paths),
+    ...(profile.extraFolders.length > 0 ? [extraFoldersIndexPath(paths)] : [])
   ]) {
     try {
       parts.push(await readFile(file, "utf8"));

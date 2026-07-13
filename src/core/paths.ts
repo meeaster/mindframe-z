@@ -124,6 +124,17 @@ export function overrideStorePath(home: string): string {
   return path.join(home, ".mindframe-z", "overrides.json");
 }
 
+// Generated index of enabled references, embedded into every agent's instructions
+// (referenced by @-path for Claude, read inline for Codex, listed for OpenCode).
+export function referenceIndexPath(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "references.md");
+}
+
+// Companion index of extra folder grants; only embedded when the profile grants any.
+export function extraFoldersIndexPath(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "extra_folders.md");
+}
+
 export function threadStoreRoot(paths: RuntimePaths): string {
   return path.join(paths.home, ".mindframe-z", "threads");
 }

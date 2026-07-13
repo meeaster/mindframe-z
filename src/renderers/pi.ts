@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
-import { profileConfigsDir } from "../core/paths.js";
+import { extraFoldersIndexPath, profileConfigsDir, referenceIndexPath } from "../core/paths.js";
 import { deepMerge, type ResolvedProfile } from "../core/profile.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
@@ -14,10 +14,8 @@ async function renderPiAgents(paths: RuntimePaths, profile: ResolvedProfile): Pr
   const parts: string[] = [];
   for (const file of profile.instructionFiles) parts.push(await readFile(file, "utf8"));
   for (const file of [
-    path.join(paths.home, ".mindframe-z", "references.md"),
-    ...(profile.extraFolders.length > 0
-      ? [path.join(paths.home, ".mindframe-z", "extra_folders.md")]
-      : [])
+    referenceIndexPath(paths),
+    ...(profile.extraFolders.length > 0 ? [extraFoldersIndexPath(paths)] : [])
   ]) {
     try {
       parts.push(await readFile(file, "utf8"));
