@@ -5,11 +5,13 @@ import {
   archiveCacheRoot,
   createRuntimePaths,
   expandHome,
+  extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
   opencodeDataHome,
   opencodeDbPath,
   overrideStorePath,
+  referenceIndexPath,
   type RuntimePaths,
   threadCliLogPath,
   threadDestinationRoot,
@@ -170,6 +172,11 @@ describe(".mindframe-z store path contract", () => {
 
   it("pins the override store path from a home directory", () => {
     expect(overrideStorePath(home)).toBe(path.join(mfz, "overrides.json"));
+  });
+
+  it("pins the generated reference and extra-folder index paths", () => {
+    expect(referenceIndexPath(runtime)).toBe(path.join(mfz, "references.md"));
+    expect(extraFoldersIndexPath(runtime)).toBe(path.join(mfz, "extra_folders.md"));
   });
 
   it("pins the thread store root and per-slug path", () => {
