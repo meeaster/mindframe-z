@@ -1,10 +1,11 @@
 import * as readline from "node:readline/promises";
 import path from "node:path";
-import { access, mkdir, readFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, unlink } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import YAML from "yaml";
+import { fileExists } from "../core/fs-util.js";
 import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
@@ -325,15 +326,6 @@ async function shouldHintLegacyReferences(home: string): Promise<boolean> {
     // Missing or unreadable machine config means there is no references_dir override.
   }
   return fileExists(path.join(home, "references"));
-}
-
-async function fileExists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function schemas(options: { root?: string | undefined }): Promise<void> {
