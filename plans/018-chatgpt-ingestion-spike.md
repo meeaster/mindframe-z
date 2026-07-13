@@ -20,7 +20,7 @@
 
 ## Why this matters
 
-The thread system's value proposition is cross-harness distillation, and `ARCHITECTURE.md` explicitly lists "ChatGPT ingestion" among not-yet-implemented thread features. The architecture accommodates a new source cheaply at the identity level — sessions are source-qualified `source:id` (`CONTEXT.md` glossary; `src/thread/verdicts.ts:44-56` hardcodes the current pair) — but the sweep/watermark model assumes a **live local host store** (files/sqlite readable at any time, cheap "source signals" from mtimes). ChatGPT has no such store; ingestion likely rides on exported archives. Whether that breaks sweep/triage (making ChatGPT import-only) or can be adapted is the design question to answer *before* building anything.
+The thread system's value proposition is cross-harness distillation, and `ARCHITECTURE.md` explicitly lists "ChatGPT ingestion" among not-yet-implemented thread features. The architecture accommodates a new source cheaply at the identity level — sessions are source-qualified `source:id` (`src/thread/verdicts.ts:44-56` hardcodes the current pair) — but the sweep/watermark model assumes a **live local host store** (files/sqlite readable at any time, cheap "source signals" from mtimes). ChatGPT has no such store; ingestion likely rides on exported archives. Whether that breaks sweep/triage (making ChatGPT import-only) or can be adapted is the design question to answer *before* building anything.
 
 ## Current state
 
@@ -28,11 +28,11 @@ What the current two sources provide, which a ChatGPT source must map onto or ex
 
 - **Identity**: `parseSourceQualifiedId` (`src/thread/verdicts.ts:48-56`) accepts only `"claude-code" | "opencode"`; the `ThreadHarness` type in `src/core/manifests.ts` gates schemas, personas, and dispatch.
 - **Watermark** (`src/thread/watermark.ts:12-16`): `{ message_count, last_message_id, last_activity_at }` — a tail signature read cheaply from the host store; drives member drift detection and verdict pinning.
-- **Source signal** (`CONTEXT.md`): per-session freshness (file mtime / store row times) used to pick sweep candidates without reading transcripts.
+- **Source signal**: per-session freshness (file mtime / store row times) used to pick sweep candidates without reading transcripts.
 - **Statuses** (`watermark.ts:18-24`): `changed | unchanged | vanished | shrank` — `vanished` triggers hydration from the archive-cache; `shrank` is left untouched.
 - **Reading**: dispatch agents read transcripts via read-only mounts (`/mnt/claude-sessions`, `/mnt/opencode-data` — `src/thread/runner.ts:369-392`); the `agent-sessions` skill resolves stores from those mounts. Hydrated (vanished) sessions are served from `~/.mindframe-z/archive-cache` (`src/thread/runner.ts:36-40`).
 - **Backup precedent**: `src/sessions/` backs up both harnesses' raw stores to S3; `archives` (raw sessions) vs thread `destinations` (synthesized store) is a load-bearing distinction (`AGENTS.md`).
-- **Glossary discipline**: `CONTEXT.md` defines Baseline/Quiescence/Triage/Refresh semantics — the design note must use these terms and state, per concept, whether it applies to an export-based source.
+- **Glossary discipline**: use Baseline/Quiescence/Triage/Refresh consistently, and state per concept whether it applies to an export-based source.
 
 ## Commands you will need
 
@@ -113,4 +113,4 @@ Stop and report back (do not improvise) if:
 ## Maintenance notes
 
 - If the recommendation is adopted, `parseSourceQualifiedId`'s hardcoded source union (`verdicts.ts:52`) and the `ThreadHarness` manifest type are the first code touchpoints — whoever implements should re-run `pnpm schemas` after widening manifest enums (repo rule).
-- CONTEXT.md's glossary must gain any new terms the design introduces (e.g. "export drop") — same-change documentation per `AGENTS.md`.
+- Define any new terms the design introduces (e.g. "export drop") in the same-change documentation.

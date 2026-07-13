@@ -67,7 +67,7 @@ The README — the primary onboarding doc — documents commands that don't exis
 ### Step 1: Find every stale occurrence
 
 ```sh
-grep -rn "sandbox observe\|sandbox cc\|sandbox oc" README.md docs/ AGENTS.md ARCHITECTURE.md CONTEXT.md
+grep -rn "sandbox observe\|sandbox cc\|sandbox oc" README.md docs/ AGENTS.md ARCHITECTURE.md
 ```
 
 **Verify**: you have the complete list (expected: README.md:148 and possibly the sandbox framing at :146).

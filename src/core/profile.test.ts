@@ -345,6 +345,41 @@ describe("home inheritance", () => {
     expect(resolved.sources.skills.get("common-skill")?.root).toBe(common);
   });
 
+  it("only enables skills for agents explicitly set to true", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-skill-targets-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-skill-targets-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      [
+        "skills:",
+        "  - name: selective-skill",
+        "    source: git",
+        "    repo: https://github.com/example/skills",
+        "    skill: selective-skill",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      [
+        "name: work",
+        "agents: [opencode, claude-code, codex]",
+        "skills:",
+        "  selective-skill:",
+        "    agents: { opencode: true, claude-code: false, codex: false }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
+
+    expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
+  });
+
   it("clones git upstream homes under the machine-local homes directory", async () => {
     const upstreamSource = await mkdtemp(path.join(os.tmpdir(), "mfz-upstream-source-"));
     const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));

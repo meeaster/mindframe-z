@@ -148,8 +148,11 @@ export async function listInstalledSkills(
   const skillsDir = targetSkillsDir(paths, target);
   if (!skillsDir) return new Set();
 
-  const installed = await listSkillDirectories(skillsDir);
   const cliSkills = await listCliInstalledSkills(paths);
+  const registeredNames = new Set(cliSkills.map((skill) => skill.name));
+  const installed = new Set(
+    [...(await listSkillDirectories(skillsDir))].filter((name) => !registeredNames.has(name))
+  );
   const targetAgent = targetAgentDisplayName(target);
   for (const skill of cliSkills) {
     if (skill.agents?.includes(targetAgent)) installed.add(skill.name);

@@ -214,4 +214,30 @@ describe("listInstalledSkills", () => {
     expect(installed.has("pr-writer")).toBe(true);
     expect(installed.has("jira-writer")).toBe(false);
   });
+
+  it("does not treat an OpenCode-only shared skill as installed for Codex", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-skills-"));
+    const sharedSkillDir = path.join(home, ".agents", "skills", "openspec-orchestrate");
+    await mkdir(sharedSkillDir, { recursive: true });
+    await writeFile(path.join(sharedSkillDir, "SKILL.md"), "# OpenSpec Orchestrate\n", "utf8");
+    vi.mocked(execa).mockResolvedValue({
+      stdout: JSON.stringify([{ name: "openspec-orchestrate", agents: ["OpenCode"] }])
+    } as Awaited<ReturnType<typeof execa>>);
+
+    const installed = await listInstalledSkills(
+      {
+        root: "/repo",
+        home,
+        configsDir: "/repo/configs",
+        opencodeConfigDir: path.join(home, ".config", "opencode"),
+        claudeDir: path.join(home, ".claude"),
+        codexDir: path.join(home, ".codex"),
+        piDir: path.join(home, ".pi", "agent"),
+        miseConfigDir: path.join(home, ".config", "mise")
+      },
+      "codex"
+    );
+
+    expect(installed.has("openspec-orchestrate")).toBe(false);
+  });
 });

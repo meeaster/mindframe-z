@@ -371,9 +371,10 @@ function resolveSkillConfig(
   if (!config?.agents) {
     throw new Error("Skill entries must declare agents after profile inheritance is resolved");
   }
-  const targets = Object.keys(config.agents).filter((target): target is ToolTargetName =>
-    agents.includes(target as AgentName)
-  );
+  const targets = Object.entries(config.agents)
+    .filter(([, enabled]) => enabled)
+    .map(([target]) => target)
+    .filter((target): target is ToolTargetName => agents.includes(target as AgentName));
   return {
     agents: config.agents,
     toggleable: config.toggleable,
