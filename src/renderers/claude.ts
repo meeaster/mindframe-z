@@ -1,7 +1,11 @@
 import path from "node:path";
 import type { RuntimePaths } from "../core/paths.js";
-import { profileConfigsDir } from "../core/paths.js";
-import { expandHome } from "../core/paths.js";
+import {
+  expandHome,
+  extraFoldersIndexPath,
+  profileConfigsDir,
+  referenceIndexPath
+} from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
@@ -134,10 +138,10 @@ export async function renderClaude(
     "# CLAUDE.md",
     "",
     `@${path.join(configsProfile, "AGENTS.md")}`,
-    `@${path.join(paths.home, ".mindframe-z", "references.md")}`
+    `@${referenceIndexPath(paths)}`
   ];
   if (extraFolders.length > 0) {
-    claudeMdLines.push(`@${path.join(paths.home, ".mindframe-z", "extra_folders.md")}`);
+    claudeMdLines.push(`@${extraFoldersIndexPath(paths)}`);
   }
   claudeMdLines.push(
     "",

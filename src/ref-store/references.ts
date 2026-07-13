@@ -2,7 +2,12 @@ import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import type { ReferenceEntry } from "../core/manifests.js";
-import { expandHome, type RuntimePaths } from "../core/paths.js";
+import {
+  expandHome,
+  extraFoldersIndexPath,
+  referenceIndexPath,
+  type RuntimePaths
+} from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 
 export function referencePath(profile: ResolvedProfile, reference: ReferenceEntry): string {
@@ -23,7 +28,7 @@ export async function writeReferenceIndex(
     lines.push(`- \`${ref.name}\`: ${ref.description} Path: \`${referencePath(profile, ref)}\`.`);
   }
   lines.push("");
-  const indexPath = path.join(paths.home, ".mindframe-z", "references.md");
+  const indexPath = referenceIndexPath(paths);
   await mkdir(path.dirname(indexPath), { recursive: true });
   await writeFile(indexPath, lines.join("\n"), "utf8");
   return indexPath;
@@ -77,7 +82,7 @@ export async function writeExtraFoldersIndex(
   profile: ResolvedProfile
 ): Promise<string | undefined> {
   const folders = profile.extraFolders;
-  const indexPath = path.join(paths.home, ".mindframe-z", "extra_folders.md");
+  const indexPath = extraFoldersIndexPath(paths);
 
   if (folders.length === 0) {
     await rm(indexPath, { force: true });
