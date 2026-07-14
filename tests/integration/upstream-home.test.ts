@@ -116,6 +116,39 @@ describe("upstream home integration", () => {
     );
   });
 
+  it("skips pulling an upstream home clone with unpushed commits during apply", async () => {
+    const home = await makeTempDir();
+    const upstream = await createUpstreamRemote();
+    const child = await createChildHome(home, upstream.repo);
+    const clone = managedClone(home);
+
+    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    // Commit a local change so the clone is ahead of upstream but has a clean tree,
+    // isolating the ahead branch from the dirty branch checked first.
+    await git(clone, ["config", "user.email", "test@example.com"]);
+    await git(clone, ["config", "user.name", "Test User"]);
+    await writeFile(path.join(clone, "ahead.txt"), "local commit\n", "utf8");
+    await commitAll(clone, "local ahead");
+
+    await writeFile(
+      path.join(upstream.source, "instructions", "AGENTS.md"),
+      "# Remote Update\n",
+      "utf8"
+    );
+    await commitAll(upstream.source, "remote update");
+    await git(upstream.source, ["push"]);
+
+    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    expect(result.stderr).toContain(
+      "upstream home personal has unpushed commits; skipping git pull"
+    );
+    await expect(readFile(configsPath(home, "work", "AGENTS.md"), "utf8")).resolves.not.toContain(
+      "# Remote Update"
+    );
+  });
+
   it("keeps using an existing upstream clone when pull fails", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
