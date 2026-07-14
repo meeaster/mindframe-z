@@ -1022,4 +1022,75 @@ describe("apply integration", () => {
       readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("translates {env:NAME} MCP header refs per agent without leaking literals", async () => {
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  secured:",
+        "    description: Secured remote.",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://secure.example.invalid/mcp",
+        "    headers:",
+        '      Authorization: "{env:SECURED_TOKEN}"',
+        "      X-Client: literal-value",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      [
+        "name: base",
+        "mcp:",
+        "  secured:",
+        "    agents: { claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [claude-code, codex]",
+        "instructions:",
+        "  - instructions/AGENTS.md",
+        "mcp:",
+        "  secured:",
+        "    agents: { claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const codexConfig = parse(
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
+    ) as { mcp_servers: { secured: Record<string, unknown> } };
+    // Codex keeps the env-ref name in env_http_headers and only literals in http_headers.
+    expect(codexConfig.mcp_servers.secured.env_http_headers).toEqual({
+      Authorization: "SECURED_TOKEN"
+    });
+    expect(codexConfig.mcp_servers.secured.http_headers).toEqual({ "X-Client": "literal-value" });
+
+    const claudeMcp = JSON.parse(
+      await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
+    ) as { secured: { headers: Record<string, string> } };
+    // Claude rewrites the env-ref into ${NAME} while passing literals through verbatim.
+    expect(claudeMcp.secured.headers).toEqual({
+      Authorization: "${SECURED_TOKEN}",
+      "X-Client": "literal-value"
+    });
+
+    // The raw token literal must never reach either rendered config.
+    const codexRaw = await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8");
+    const claudeRaw = await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8");
+    expect(codexRaw).not.toContain("{env:SECURED_TOKEN}");
+    expect(claudeRaw).not.toContain("{env:SECURED_TOKEN}");
+  });
 });
