@@ -14,10 +14,7 @@ export function referencePath(profile: ResolvedProfile, reference: ReferenceEntr
   return path.join(profile.referencesDir, reference.name);
 }
 
-export async function writeReferenceIndex(
-  paths: RuntimePaths,
-  profile: ResolvedProfile
-): Promise<string> {
+export function referenceIndexContent(profile: ResolvedProfile): string {
   const lines = [
     "# Enabled References",
     "",
@@ -28,9 +25,17 @@ export async function writeReferenceIndex(
     lines.push(`- \`${ref.name}\`: ${ref.description} Path: \`${referencePath(profile, ref)}\`.`);
   }
   lines.push("");
+  return lines.join("\n");
+}
+
+export async function writeReferenceIndex(
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<string> {
+  const content = referenceIndexContent(profile);
   const indexPath = referenceIndexPath(paths);
   await mkdir(path.dirname(indexPath), { recursive: true });
-  await writeFile(indexPath, lines.join("\n"), "utf8");
+  await writeFile(indexPath, content, "utf8");
   return indexPath;
 }
 
@@ -89,6 +94,14 @@ export async function writeExtraFoldersIndex(
     return undefined;
   }
 
+  const content = extraFoldersIndexContent(paths, profile);
+  await mkdir(path.dirname(indexPath), { recursive: true });
+  await writeFile(indexPath, content, "utf8");
+  return indexPath;
+}
+
+export function extraFoldersIndexContent(paths: RuntimePaths, profile: ResolvedProfile): string {
+  const folders = profile.extraFolders;
   const lines = [
     "# Extra Folders",
     "",
@@ -101,10 +114,7 @@ export async function writeExtraFoldersIndex(
     lines.push(`- \`${absPath}\`${suffix} (read: ${folder.read}, edit: ${folder.edit})`);
   }
   lines.push("");
-
-  await mkdir(path.dirname(indexPath), { recursive: true });
-  await writeFile(indexPath, lines.join("\n"), "utf8");
-  return indexPath;
+  return lines.join("\n");
 }
 
 export function referenceRows(profile: ResolvedProfile): string[] {

@@ -18,6 +18,7 @@
     "lint:fix": "oxlint --fix",
     "release": "node scripts/build-release.mjs",
     "schemas": "tsx scripts/generate-schemas.ts",
+    "prototype:context": "tsx sandbox/prototypes/context-footprint/terminal.ts",
     "test": "vitest run src",
     "test:all": "vitest run",
     "test:apply": "vitest run tests/integration/apply.test.ts",

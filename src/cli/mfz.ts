@@ -88,6 +88,13 @@ import {
   hasHomeGuidance,
   materializeEngineSkill
 } from "../core/engine-skill.js";
+import {
+  buildContextHistoryReport,
+  buildContextReport,
+  formatContextHistoryReport,
+  formatContextReport
+} from "../context/report.js";
+import type { ContextHarness } from "../context/model.js";
 
 async function confirmReplace(
   rl: readline.Interface | null,
@@ -368,6 +375,58 @@ async function statusFn(options: {
   );
 }
 
+function parseContextAgent(agent: string): ContextHarness {
+  if (agent === "opencode" || agent === "claude-code") return agent;
+  throw new Error(`Unknown context agent: ${agent}; expected opencode or claude-code`);
+}
+
+function parseHistoryDays(value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`Invalid history window: ${value}; expected a positive whole number of days`);
+  }
+  const days = Number(value);
+  if (!Number.isSafeInteger(days) || days <= 0) {
+    throw new Error(`Invalid history window: ${value}; expected a positive whole number of days`);
+  }
+  return days;
+}
+
+async function contextReport(options: {
+  root?: string;
+  home?: string;
+  profile?: string;
+  agent?: ContextHarness;
+  probeMcp?: boolean;
+}) {
+  const paths = createRuntimePaths({ root: options.root, home: options.home });
+  const profile = await resolveProfile(paths, options.profile);
+  const report = await buildContextReport(paths, profile, {
+    agent: options.agent,
+    probeMcp: options.probeMcp
+  });
+  console.log(formatContextReport(report));
+}
+
+async function contextHistoryReport(options: {
+  root?: string;
+  home?: string;
+  profile?: string;
+  agent?: ContextHarness;
+  days: number;
+  probeMcp?: boolean;
+}) {
+  if (options.probeMcp) {
+    throw new Error("--probe-mcp is only available with mfz context, not context history");
+  }
+  const paths = createRuntimePaths({ root: options.root, home: options.home });
+  const profile = await resolveProfile(paths, options.profile);
+  console.log(
+    formatContextHistoryReport(
+      await buildContextHistoryReport(paths, profile, options.agent, options.days)
+    )
+  );
+}
+
 async function opencodeSmoke(options: {
   root?: string | undefined;
   home?: string | undefined;
@@ -420,6 +479,21 @@ program
   .command("status")
   .description("Print resolved profile status")
   .action(async () => statusFn(program.opts()));
+
+const context = program
+  .command("context")
+  .description("Report current agent context contributors")
+  .option("--agent <agent>", "opencode or claude-code", parseContextAgent)
+  .option("--probe-mcp", "sequentially measure every effectively enabled MCP server")
+  .action(async (options) => contextReport({ ...program.opts(), ...options }));
+
+context
+  .command("history")
+  .description("Report telemetry-only session history")
+  .requiredOption("--days <days>", "preceding days", parseHistoryDays)
+  .action(async (options) =>
+    contextHistoryReport({ ...program.opts(), ...context.opts(), ...options })
+  );
 
 program
   .command("schemas")

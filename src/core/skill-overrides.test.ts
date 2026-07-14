@@ -5,6 +5,7 @@ import { makeTempDir } from "../../tests/integration/support.js";
 import {
   mergeSkillOverrides,
   mergeSkillOverridesIntoFile,
+  evaluateOpenCodeSkillPermission,
   readSkillOverrides,
   readSkillOverridesFile,
   readSkillOverridesFromFile,
@@ -33,6 +34,68 @@ describe("skill override codec decoding", () => {
   it("returns an empty map when the target section is absent", () => {
     expect(readSkillOverrides("opencode", {})).toEqual({});
     expect(readSkillOverrides("claude-code", {})).toEqual({});
+  });
+});
+
+describe("OpenCode skill permission evaluation", () => {
+  it("uses the last matching wildcard rule", () => {
+    expect(
+      evaluateOpenCodeSkillPermission(
+        "local-skill",
+        { skill: { "*": "deny", "local-*": "allow", "local-skill": "deny" } },
+        {},
+        {}
+      )
+    ).toEqual({ effect: "deny", source: "profile" });
+  });
+
+  it("layers global and project overrides after profile rules", () => {
+    expect(
+      evaluateOpenCodeSkillPermission(
+        "local-skill",
+        { skill: { "*": "deny" } },
+        { "local-skill": true },
+        { "local-skill": false }
+      )
+    ).toEqual({ effect: "deny", source: "project" });
+    expect(
+      evaluateOpenCodeSkillPermission(
+        "other-skill",
+        { skill: { "*": "deny" } },
+        { "other-skill": true },
+        {}
+      )
+    ).toEqual({ effect: "allow", source: "global" });
+  });
+
+  it("defaults unmatched skills to ask", () => {
+    expect(evaluateOpenCodeSkillPermission("local-skill", {}, {}, {})).toEqual({
+      effect: "ask",
+      source: "default"
+    });
+  });
+
+  it("preserves rendered object-key order when an override replaces an existing rule", () => {
+    expect(
+      evaluateOpenCodeSkillPermission(
+        "local-skill",
+        { skill: { "local-skill": "deny", "*": "allow" } },
+        { "local-skill": false },
+        {}
+      )
+    ).toEqual({ effect: "allow", source: "profile" });
+  });
+
+  it("preserves machine permission provenance", () => {
+    expect(
+      evaluateOpenCodeSkillPermission(
+        "local-skill",
+        { skill: { "*": "allow" } },
+        {},
+        {},
+        { skill: { "local-skill": "deny" } }
+      )
+    ).toEqual({ effect: "deny", source: "machine" });
   });
 });
 

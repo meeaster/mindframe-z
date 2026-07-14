@@ -5,6 +5,13 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
 export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
 
+export type OpenCodePermissionEffect = "allow" | "ask" | "deny";
+
+export interface OpenCodeSkillPermission {
+  effect: OpenCodePermissionEffect;
+  source: "profile" | "machine" | "global" | "project" | "default";
+}
+
 export interface SkillOverrideContext {
   readonly skillNames?: ReadonlySet<string>;
   readonly skillPaths?: Readonly<Record<string, string>>;
@@ -106,6 +113,91 @@ function stringRecord(value: unknown): Record<string, string> {
     if (typeof entry === "string") result[key] = entry;
   }
   return result;
+}
+
+function wildcardMatches(input: string, pattern: string): boolean {
+  const normalized = input.replaceAll("\\", "/");
+  let escaped = pattern
+    .replaceAll("\\", "/")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?";
+  return new RegExp(`^${escaped}$`, process.platform === "win32" ? "si" : "s").test(normalized);
+}
+
+function permissionEntries(value: unknown): Array<[string, OpenCodePermissionEffect]> {
+  if (typeof value === "string") {
+    return isOpenCodePermissionEffect(value) ? [["*", value]] : [];
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  return Object.entries(value).flatMap(([pattern, effect]) =>
+    isOpenCodePermissionEffect(effect) ? [[pattern, effect]] : []
+  );
+}
+
+function isOpenCodePermissionEffect(value: unknown): value is OpenCodePermissionEffect {
+  return value === "allow" || value === "ask" || value === "deny";
+}
+
+export function evaluateOpenCodeSkillPermission(
+  skillName: string,
+  profilePermission: unknown,
+  globalOverrides: Record<string, boolean>,
+  projectOverrides: Record<string, boolean>,
+  machinePermission?: unknown
+): OpenCodeSkillPermission {
+  const rules: Array<
+    readonly [string, OpenCodePermissionEffect, OpenCodeSkillPermission["source"]]
+  > = [];
+  const upsert = (
+    entries: Array<[string, OpenCodePermissionEffect]>,
+    source: OpenCodeSkillPermission["source"]
+  ) => {
+    for (const [pattern, effect] of entries) {
+      const index = rules.findIndex(([existing]) => existing === pattern);
+      const rule = [pattern, effect, source] as const;
+      if (index < 0) rules.push(rule);
+      else rules[index] = rule;
+    }
+  };
+
+  upsert(
+    permissionEntries(
+      typeof profilePermission === "object" &&
+        profilePermission !== null &&
+        !Array.isArray(profilePermission)
+        ? (profilePermission as Record<string, unknown>).skill
+        : undefined
+    ),
+    "profile"
+  );
+  upsert(
+    permissionEntries(
+      typeof machinePermission === "object" &&
+        machinePermission !== null &&
+        !Array.isArray(machinePermission)
+        ? (machinePermission as Record<string, unknown>).skill
+        : undefined
+    ),
+    "machine"
+  );
+  upsert(
+    Object.entries(globalOverrides).map(([name, enabled]) => [name, enabled ? "allow" : "deny"]),
+    "global"
+  );
+  upsert(
+    Object.entries(projectOverrides).map(([name, enabled]) => [name, enabled ? "allow" : "deny"]),
+    "project"
+  );
+
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const rule = rules[index];
+    if (rule && wildcardMatches(skillName, rule[0])) {
+      return { effect: rule[1], source: rule[2] };
+    }
+  }
+  return { effect: "ask", source: "default" };
 }
 
 function record(value: unknown): Record<string, unknown> {
