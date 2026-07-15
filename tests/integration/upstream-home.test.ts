@@ -93,6 +93,33 @@ describe("upstream home integration", () => {
     );
   });
 
+  it("serializes concurrent updates to an upstream clone", async () => {
+    const home = await makeTempDir();
+    const upstream = await createUpstreamRemote();
+    const child = await createChildHome(home, upstream.repo);
+
+    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await writeFile(
+      path.join(upstream.source, "instructions", "AGENTS.md"),
+      "# Concurrent Update\n",
+      "utf8"
+    );
+    await commitAll(upstream.source, "concurrent update");
+    await git(upstream.source, ["push"]);
+
+    const results = await Promise.all([
+      cli("mfz", child, home, ["doctor"]),
+      cli("mfz", child, home, ["doctor"])
+    ]);
+
+    for (const result of results) {
+      expect(result.stderr).not.toContain("Cannot fast-forward to multiple branches");
+    }
+    await expect(
+      readFile(path.join(managedClone(home), "instructions", "AGENTS.md"), "utf8")
+    ).resolves.toContain("# Concurrent Update");
+  });
+
   it("skips pulling a dirty upstream home clone during apply", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
