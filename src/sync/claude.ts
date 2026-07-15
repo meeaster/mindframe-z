@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readJsonObject } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { SyncResult, SyncCandidate } from "./types.js";
 
@@ -7,13 +7,7 @@ export async function syncClaude(
   profile: ResolvedProfile
 ): Promise<SyncResult> {
   const candidates: SyncCandidate[] = [];
-
-  let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
-  } catch {
-    return { candidates };
-  }
+  const existing = await readJsonObject(settingsPath);
 
   const managedKeys = new Set(Object.keys(profile.profile.claude.settings));
   managedKeys.add("model");
