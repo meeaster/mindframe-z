@@ -16,11 +16,6 @@ else
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# node is still needed at runtime for the `skills` npm CLI. Install it without
-# writing a global mise config: `mfz apply` owns ~/.config/mise/config.toml, and a
-# config here would block it from linking.
-mise install node@24
-
 case "$(uname -s)" in
   Linux) os="linux" ;;
   Darwin) os="darwin" ;;
@@ -54,8 +49,8 @@ if [ -n "${SHELL:-}" ] && [ "$(basename "$SHELL")" = "bash" ]; then
   rc="$HOME/.bashrc"
   shell_kind="bash"
 fi
-# Put mfz on PATH and activate mise so node, npm, and npm-global tools (like the
-# skills CLI) resolve in the user's shells. Guarded so re-running installs once.
+# Put mfz on PATH and activate mise for the user's shells. Guarded so re-running
+# installs once.
 if ! grep -qs "Added by mindframe-z installer" "$rc"; then
   {
     printf '\n# Added by mindframe-z installer\n'

@@ -7,7 +7,12 @@ import {
   profileConfigsDir,
   referenceIndexPath
 } from "../core/paths.js";
-import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import {
+  deepMerge,
+  filterMcpForTarget,
+  skillRuntimeDefaults,
+  type ResolvedProfile
+} from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
@@ -278,7 +283,10 @@ export async function renderOpenCode(
     plugin,
     mcp
   };
-  const renderedConfig = mergeSkillOverrides("opencode", config, options.skillOverrides ?? {});
+  const renderedConfig = mergeSkillOverrides("opencode", config, {
+    ...skillRuntimeDefaults(profile, "opencode"),
+    ...options.skillOverrides
+  });
   const hasTuiConfig =
     Object.keys(profile.profile.opencode.tui).length > 0 || tuiPluginResult.entries.length > 0;
   const tuiConfig = hasTuiConfig

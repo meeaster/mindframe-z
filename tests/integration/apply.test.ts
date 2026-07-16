@@ -1,4 +1,13 @@
-import { access, lstat, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  stat,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -1092,5 +1101,137 @@ describe("apply integration", () => {
     const claudeRaw = await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8");
     expect(codexRaw).not.toContain("{env:SECURED_TOKEN}");
     expect(claudeRaw).not.toContain("{env:SECURED_TOKEN}");
+  });
+
+  it("links skills to the rendered snapshot and keeps source edits inactive until apply", async () => {
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+    const snapshotSkill = configsPath(home, "personal", "skills", "local-skill", "SKILL.md");
+    const oldContent = await readFile(snapshotSkill, "utf8");
+    const sourceSkill = path.join(root, "skills", "local-skill", "SKILL.md");
+    await writeFile(
+      sourceSkill,
+      oldContent.replace("Local test skill.", "Changed test skill."),
+      "utf8"
+    );
+    expect(await readFile(snapshotSkill, "utf8")).toBe(oldContent);
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await expect(realpath(path.join(home, ".agents", "skills", "local-skill"))).resolves.toBe(
+      snapshotSkill.replace(/\/SKILL\.md$/, "")
+    );
+    expect(await readFile(snapshotSkill, "utf8")).toContain("Changed test skill.");
+  });
+
+  it("keeps skill runtime state unchanged during apply dry-run", async () => {
+    const result = await cli("mfz", root, home, ["apply", "--dry-run"]);
+    expect(result.stdout).toContain("would render skill");
+    await expect(
+      readFile(
+        path.join(
+          home,
+          ".mindframe-z",
+          "engine-skills",
+          "skills",
+          "skill-update-review",
+          "SKILL.md"
+        )
+      )
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(configsPath(home, "personal", "skills", ".mfz-manifest.yml"))
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("fails before replacing a snapshot when an unmanaged skill path conflicts", async () => {
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+    const snapshotSkill = configsPath(home, "personal", "skills", "local-skill", "SKILL.md");
+    const prior = await readFile(snapshotSkill, "utf8");
+    await mkdir(path.join(home, ".agents", "skills", "local-skill"), { recursive: true });
+
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode"]).catch(
+      (error) => error
+    );
+    expect(result.stderr).toContain("Unmanaged skill link conflict");
+    expect(await readFile(snapshotSkill, "utf8")).toBe(prior);
+  });
+
+  it("removes stale owned links when a target has no remaining skills", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    const link = path.join(home, ".agents", "skills", "local-skill");
+    await expect(realpath(link)).resolves.toBe(
+      configsPath(home, "personal", "skills", "local-skill")
+    );
+
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    await expect(lstat(link)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      lstat(configsPath(home, "personal", "skills", "local-skill"))
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not rewrite a matching snapshot", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    const snapshotSkill = configsPath(home, "personal", "skills", "local-skill", "SKILL.md");
+    const before = (await stat(snapshotSkill)).ino;
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    expect((await stat(snapshotSkill)).ino).toBe(before);
+  });
+
+  it("renders explicit shared-directory runtime restrictions", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode, codex]",
+        "skills:",
+        "  local-skill:",
+        "    agents: { opencode: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "all"]);
+
+    const opencode = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { permission?: { skill?: Record<string, string> } };
+    expect(opencode.permission?.skill?.["local-skill"]).toBe("allow");
+    const codex = parse(
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
+    ) as { skills?: { config?: Array<{ path: string; enabled: boolean }> } };
+    expect(codex.skills?.config).toContainEqual({
+      path: path.join(home, ".agents", "skills", "local-skill", "SKILL.md"),
+      enabled: false
+    });
+  });
+
+  it("preserves the OpenCode/Codex physical skill union for targeted apply", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode, codex]",
+        "skills:",
+        "  local-skill:",
+        "    agents: { opencode: true }",
+        "  all-skill:",
+        "    agents: { codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "all"]);
+    await expect(lstat(path.join(home, ".agents", "skills", "all-skill"))).resolves.toBeDefined();
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await expect(lstat(path.join(home, ".agents", "skills", "all-skill"))).resolves.toBeDefined();
   });
 });

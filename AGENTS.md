@@ -11,7 +11,7 @@ pnpm test:integration  # integration suite only
 pnpm test:thread       # thread source tests
 pnpm test:sessions     # session backup/hydration source tests
 pnpm test:sandbox      # sandbox source tests plus current sandbox CLI integration seams
-pnpm test:skills       # skills/TUI source tests plus skills CLI integration seams
+pnpm test:skills       # skills/TUI source tests plus vendored skill integration seams
 pnpm test:plugins      # OpenCode plugin tests
 pnpm test:apply        # broad apply/render/link CLI integration bucket
 pnpm test:doctor       # doctor/status manifest integration seams

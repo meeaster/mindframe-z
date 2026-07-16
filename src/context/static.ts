@@ -58,11 +58,17 @@ async function readSkillFile(
     harness === "opencode"
       ? path.join(paths.home, ".agents", "skills")
       : path.join(paths.claudeDir, "skills");
-  const skillName = skill.skill ?? skill.name;
+  const skillName = skill.source === "local" ? (skill.skill ?? skill.name) : skill.name;
   const candidates = [
     path.join(targetRoot, skill.name, "SKILL.md"),
     path.join(targetRoot, skillName, "SKILL.md"),
-    path.join(skill.sourceRoot, "skills", skillName, "SKILL.md")
+    path.join(
+      skill.sourceRoot,
+      "skills",
+      skill.source === "vendored" ? "vendor" : "",
+      skillName,
+      "SKILL.md"
+    )
   ];
   for (const candidate of new Set(candidates)) {
     try {

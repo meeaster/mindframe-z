@@ -91,9 +91,9 @@ describe("context overrides and MCP probes", () => {
       root
     );
     expect(projectResult.stdout).toContain(
-      "local-skill  ~13 catalogue; unmeasured body inventory on invocation"
+      "local-skill  ~22 catalogue; ~18 body inventory on invocation"
     );
-    expect(projectResult.stdout).toContain("Skills (1 skill | ~13 catalogue");
+    expect(projectResult.stdout).toContain("Skills (1 skill | ~22 catalogue");
     expect(projectResult.stdout).not.toContain("all-skill  ");
 
     const otherRoot = await makeTempDir();

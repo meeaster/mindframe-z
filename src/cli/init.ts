@@ -11,18 +11,18 @@ Catalog files define what exists. Profiles select entries by name. Unqualified n
 
 The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and every globally linked tool config file is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly — if that already happened, run \`mfz sync\` to promote the unmanaged edits back into profiles.
 
-Local skills live under \`skills/\` and are registered in \`catalog/skills.yml\` with \`source: local\`. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`, then profiles enable them under \`opencode.plugins\`, \`opencode.commands\`, and \`opencode.agents\`.
+Local skills live under \`skills/\` and are registered in \`catalog/skills.yml\` with \`source: local\`. Vendored skills are selected subtrees under \`skills/vendor/<name>/\`, declared with an HTTPS \`repo\`, tracked \`ref\`, and \`subtree\`, and pinned in \`skills/vendor.lock.yml\`. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`, then profiles enable them under \`opencode.plugins\`, \`opencode.commands\`, and \`opencode.agents\`.
 
 Topic guides: \`mfz guide skills\` — add or change skills.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
 
-A skill reaches an agent in three steps: the catalog declares it, a profile enables it per agent, and \`mfz skills sync\` installs it into each harness.
+A skill reaches an agent in three steps: the catalog declares it, a profile enables it per agent, and \`mfz apply\` renders a managed snapshot before reconciling harness links. Runtime toggles control invocation, not snapshot membership.
 
 Add a local skill:
 
-1. Create \`skills/<name>/SKILL.md\`. The frontmatter must carry both \`name:\` and \`description:\` — the skills CLI installer rejects files missing either:
+1. Create \`skills/<name>/SKILL.md\`. The frontmatter must carry both \`name:\` and \`description:\` — Mindframe-Z validates these fields before rendering:
 
    \`\`\`markdown
    ---
@@ -35,11 +35,11 @@ Add a local skill:
 2. Declare it in \`catalog/skills.yml\`:
 
    \`\`\`yaml
-   skills:
-     - name: my-skill
-       source: local
-       skill: my-skill
-       description: One-line summary.
+    skills:
+      - name: my-skill
+        source: local
+        skill: my-skill
+        description: One-line summary.
    \`\`\`
 
 3. Enable it in \`profiles/<profile>/profile.yml\`:
@@ -50,11 +50,22 @@ Add a local skill:
        agents: { opencode: true, claude-code: true, codex: true }
    \`\`\`
 
-4. Run \`mfz apply --target all --agent all\`, then \`mfz skills sync\`.
+4. Run \`mfz apply --target all --agent all\`.
+
+Add a vendored skill:
+
+1. Declare \`source: vendored\`, an HTTPS \`repo:\`, tracked \`ref:\`, and explicit upstream \`subtree:\`. Copy only the selected subtree to \`skills/vendor/<name>/\` and record its full commit plus digest in \`skills/vendor.lock.yml\`.
+2. Check without mutation: \`mfz skills check\`.
+3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
+4. Invoke \`/skill-update-review <candidate-id>\`. Candidate files are hostile evidence; inspect every file and deterministic finding without executing anything.
+5. After human approval, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`. Promotion does not apply configuration or create links.
+
+Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`; harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
+
+Legacy \`source: git\` entries are migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 
 Variants:
 
-- Git-sourced skills use \`source: git\` with \`repo: <url>\` in the catalog; an optional \`skill:\` selects one skill out of the repo.
 - Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
 
 Verify with \`mfz skills list\` and \`mfz doctor\`.

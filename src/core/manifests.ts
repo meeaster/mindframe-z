@@ -51,14 +51,100 @@ export const homeManifestSchema = z
   })
   .strict();
 
-export const skillSchema = z.object({
-  name: z.string().min(1),
-  source: z.enum(["local", "git"]),
-  repo: z.string().optional(),
-  skill: z.string().optional(),
-  description: z.string().default(""),
-  installer: z.literal("skills").default("skills")
-});
+const skillNameSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "must be a safe skill directory name");
+
+const skillPathSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.\.?($|\/))(?!.*\/\/)(?!.*(?:^|\/)\.git(?:\/|$)).+$/i,
+    "must be a relative POSIX path"
+  )
+  .refine(
+    (value) =>
+      !path.isAbsolute(value) &&
+      !value.includes("\\") &&
+      !value.split("/").some((part) => part === "" || part === "." || part === ".."),
+    "must be a relative POSIX path without empty, . or .. segments"
+  )
+  .refine(
+    (value) =>
+      value.split("/").every(
+        (part) =>
+          !part.endsWith(".") &&
+          !part.endsWith(" ") &&
+          ![...part].some((character) => {
+            const code = character.charCodeAt(0);
+            return code < 0x20 || '<>:"|?*'.includes(character);
+          }) &&
+          !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(part) &&
+          part.toLowerCase() !== ".git"
+      ),
+    "must contain portable path components"
+  );
+
+const httpsRepositorySchema = z
+  .string()
+  .url()
+  .regex(/^https:\/\/(?![^/]*@)\S+$/, "must use HTTPS without credentials or whitespace")
+  .refine((value) => value.trim() === value && !/\s/u.test(value), "must not contain whitespace")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.username === "" && url.password === "";
+    } catch {
+      return false;
+    }
+  }, "must be an HTTPS repository URL without credentials");
+
+function safeGitRef(value: string): boolean {
+  return !value.startsWith("-") && [...value].every((character) => character.charCodeAt(0) > 32);
+}
+
+const skillFields = {
+  name: skillNameSchema,
+  description: z.string().default("")
+};
+
+const localSkillSchema = z
+  .object({
+    ...skillFields,
+    source: z.literal("local"),
+    skill: skillPathSchema.optional()
+  })
+  .strict();
+
+const vendoredSkillSchema = z
+  .object({
+    ...skillFields,
+    source: z.literal("vendored"),
+    repo: httpsRepositorySchema,
+    ref: z
+      .string()
+      .min(1)
+      .regex(/^(?!-)(?!.*\s).+$/, "must not start with an option marker or contain whitespace")
+      .refine(safeGitRef, "must be a Git ref without option or whitespace characters"),
+    subtree: skillPathSchema
+  })
+  .strict();
+
+export const skillSchema = z.discriminatedUnion("source", [localSkillSchema, vendoredSkillSchema]);
+
+export const vendorLockEntrySchema = z
+  .object({
+    commit: z.string().regex(/^[0-9a-f]{40}$/, "must be a full lowercase Git commit SHA"),
+    digest: z.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 content digest")
+  })
+  .strict();
+
+export const vendorLockSchema = z
+  .object({
+    skills: z.record(skillNameSchema, vendorLockEntrySchema).default({})
+  })
+  .strict();
 
 export const skillsManifestSchema = z.object({
   skills: z.array(skillSchema).default([])
@@ -307,6 +393,8 @@ export const machineSchema = z.object({
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
+export type VendorLock = z.infer<typeof vendorLockSchema>;
+export type VendorLockEntry = z.infer<typeof vendorLockEntrySchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
 export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
@@ -407,7 +495,8 @@ export async function validateManifests(
     { file: path.join(root, "mfz_home.yml"), schema: homeManifestSchema },
     { file: path.join(root, "catalog", "references.yml"), schema: refsManifestSchema },
     { file: path.join(root, "catalog", "skills.yml"), schema: skillsManifestSchema },
-    { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema }
+    { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema },
+    { file: path.join(root, "skills", "vendor.lock.yml"), schema: vendorLockSchema }
   ];
 
   const effectiveHome = home ?? process.env.HOME;

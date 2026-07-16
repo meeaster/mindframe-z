@@ -13,6 +13,8 @@ import {
   type SkillEntry,
   type ExtraFolder
 } from "./manifests.js";
+import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
+import { skillUpdateReviewName } from "./engine-skill.js";
 
 type CatalogKind = "reference" | "skill" | "mcp" | "profile";
 type SourceKind =
@@ -49,6 +51,13 @@ export type ResolvedSkill = SkillEntry & {
   toggleable: boolean;
   targets: ToolTargetName[];
   sourceRoot: string;
+  vendor?: {
+    repository: string;
+    ref: string;
+    subtree: string;
+    commit: string;
+    digest: string;
+  };
 };
 
 export type TargetedMcpServer = ResolvedMcpServer & { enabled: boolean };
@@ -423,14 +432,40 @@ export async function resolveProfile(
     if (!ref) throw new Error(`Profile ${name} references unknown reference: ${refName}`);
     return ref;
   });
-  const enabledSkills = Object.entries(profile.skills)
-    .map(([skillName, config]) => {
+  const enabledSkills: ResolvedSkill[] = Object.entries(profile.skills)
+    .map(([skillName, config]): ResolvedSkill => {
       const sourceHome = sources.skills.get(skillName) ?? manifests;
       const skill = sourceHome.skills.find((s) => s.name === skillName);
       if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
       return { ...skill, ...resolveSkillConfig(config, agents), sourceRoot: sourceHome.root };
     })
     .filter((entry) => entry.targets.length > 0);
+  const validatedVendorRoots = new Set<string>();
+  for (const skill of enabledSkills) {
+    if (skill.name === skillUpdateReviewName) {
+      throw new Error(
+        "Trust anchor invalid: engine-owned skill-update-review cannot be overridden by a home catalog entry"
+      );
+    }
+    if (skill.source === "vendored") {
+      if (!validatedVendorRoots.has(skill.sourceRoot)) {
+        const failures = await validateVendoredSkills(skill.sourceRoot);
+        if (failures.length > 0) throw new Error(failures.join("; "));
+        validatedVendorRoots.add(skill.sourceRoot);
+      }
+      const lock = await readVendorLock(skill.sourceRoot);
+      const entry = lock.skills[skill.name];
+      if (!entry) throw new Error(`Vendored skill ${skill.name} has no vendor lock entry`);
+      await validateVendoredSkill(skill.sourceRoot, skill, lock);
+      skill.vendor = {
+        repository: skill.repo,
+        ref: skill.ref,
+        subtree: skill.subtree,
+        commit: entry.commit,
+        digest: entry.digest
+      };
+    }
+  }
   const enabledCommands = dedupe(profile.opencode.commands);
   const enabledAgents = dedupe(profile.opencode.agents);
   const mcpServers = Object.entries(profile.mcp).map(([serverName, { agents: mcpAgents }]) => {
@@ -480,5 +515,16 @@ export function filterMcpForTarget(
 ): TargetedMcpServer[] {
   return profile.mcpServers.flatMap((entry) =>
     entry.agents[target] === undefined ? [] : [{ ...entry, enabled: entry.agents[target] }]
+  );
+}
+
+export function skillRuntimeDefaults(
+  profile: ResolvedProfile,
+  target: Extract<ToolTargetName, "opencode" | "codex">
+): Record<string, boolean> {
+  return Object.fromEntries(
+    profile.enabledSkills
+      .filter((skill) => skill.targets.some((entry) => entry === "opencode" || entry === "codex"))
+      .map((skill) => [skill.name, skill.targets.includes(target) && skill.agents[target] === true])
   );
 }

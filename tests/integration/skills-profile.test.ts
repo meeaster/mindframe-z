@@ -39,7 +39,7 @@ describe("skills profile integration", () => {
     expect(result.stdout).not.toContain("claude-code");
   });
 
-  it("sync removes extra installed skills not in profile", async () => {
+  it("sync preserves unmanaged skill entries", async () => {
     await mkdir(path.join(home, ".agents", "skills", "extra-skill"), { recursive: true });
     await writeFile(
       path.join(home, ".agents", "skills", "extra-skill", "SKILL.md"),
@@ -48,42 +48,14 @@ describe("skills profile integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    expect(result.stdout).toContain("skills remove extra-skill -g -y");
-    expect(result.stdout).toContain("skills add");
+    expect(result.stdout).not.toContain("extra-skill");
+    expect(result.stdout).toContain("would render skill");
   });
 
-  it("upgrade updates git skills for all configured targets", async () => {
-    await writeFile(
-      path.join(root, "catalog", "skills.yml"),
-      [
-        "skills:",
-        "  - name: shared-git-skill",
-        "    source: git",
-        "    repo: https://github.com/example/skills",
-        "    skill: shared-git-skill",
-        "    description: Shared git skill.",
-        "    installer: skills",
-        ""
-      ].join("\n"),
-      "utf8"
-    );
-    await writeFile(
-      path.join(root, "profiles", "personal", "profile.yml"),
-      [
-        "name: personal",
-        "extends: base",
-        "skills:",
-        "  shared-git-skill:",
-        "    agents: { opencode: true, claude-code: true }",
-        ""
-      ].join("\n"),
-      "utf8"
-    );
-
-    const result = await cli("mfz", root, home, ["skills", "upgrade", "--dry-run"]);
-    const lines = result.stdout.split("\n").filter((line) => line.includes("skills update"));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("skills update shared-git-skill -g -y");
+  it("replaces upgrade with lifecycle guidance", async () => {
+    const result = await cli("mfz", root, home, ["skills", "upgrade"]).catch((error) => error);
+    expect(result.stderr).toContain("mfz skills upgrade was removed");
+    expect(result.stderr).toContain("mfz skills check");
   });
 
   it("deep merges inherited skill config", async () => {
@@ -112,7 +84,7 @@ describe("skills profile integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["skills", "list"]);
-    expect(result.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
+    expect(result.stdout).toContain("local-skill\tclaude-code\tLocal test skill.");
   });
 
   it("rejects legacy empty skill target arrays", async () => {

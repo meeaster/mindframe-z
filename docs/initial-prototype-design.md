@@ -26,10 +26,10 @@ profile-aware renderer/orchestrator
         |
         +--> MCP config
         |
-        +--> skills installed through npx skills
+         +--> reviewed skill source -> rendered snapshots -> harness links
 ```
 
-The system owns catalog, profile, policy, and orchestration. Existing tools should own tool-specific installation details when they already solve the problem well. In particular, use `npx skills` as the initial skill installer/adapter rather than rebuilding skill installation.
+The system owns catalog, profile, policy, provenance, quarantine, rendering, and orchestration. Upstream Git is retrieval input only; no external skill installer or machine-local installer lock is an authority.
 
 ## Problem Statement
 
@@ -88,7 +88,7 @@ Start with the smallest useful system:
 Do not implement features just because the old workspace had them:
 
 - Do not build a full TUI yet.
-- Do not build native skill installation yet.
+- Do not execute candidate skill code or install candidate dependencies.
 - Do not build project-specific skills yet unless a real project requires it.
 - Do not implement upstream sidecar merge flows until third-party skill customization becomes painful.
 
@@ -96,11 +96,11 @@ Do not implement features just because the old workspace had them:
 
 Use clear, replaceable components:
 
-- Single Responsibility: manifests parse manifests; renderers render tool config; installers install; syncers sync references.
+- Single Responsibility: manifests parse manifests; vendoring stages exact source; renderers render tool config; syncers sync references.
 - Open/Closed: add new target tools via new renderers, not conditionals throughout the system.
-- Liskov Substitution: installer interfaces should allow swapping `NpxSkillsInstaller` for `NativeSkillsInstaller` later.
+- Liskov Substitution: skill source and harness reconciliation remain separate ports.
 - Interface Segregation: reference management, skill management, MCP rendering, and config rendering should have separate interfaces.
-- Dependency Inversion: high-level orchestration depends on abstract ports such as `SkillInstaller`, `ReferenceStore`, and `ConfigRenderer`, not concrete shell commands.
+- Dependency Inversion: high-level orchestration depends on source, snapshot, and renderer seams, not installer-specific shell commands.
 
 ## Non-Goals For The First Iteration
 
@@ -108,7 +108,7 @@ Use clear, replaceable components:
 - No mandatory workspace directory for projects.
 - No forced project registration for every repo.
 - No automatic modification of arbitrary project repositories.
-- No custom skill package manager unless `npx skills` proves insufficient.
+- No general skill package manager or dependency installer.
 - No complex upstream merge automation in phase 1.
 - No secret storage in Git.
 - No work-specific data in personal repos.
@@ -238,7 +238,7 @@ Then symlink where needed:
 ~/.claude/agents                  -> ~/mindframe-z/.runtime/claude/agents
 ```
 
-Skills are a special case. Initially, let `npx skills` install them into the correct target paths rather than symlinking them manually.
+Skills are a trust-boundary case. Keep local or reviewed vendored source in the home, render a managed snapshot, and link harnesses only to that snapshot.
 
 ## OpenCode Facts From Research
 
@@ -508,34 +508,11 @@ Example generated index:
 
 ## Skills Management Design
 
-Use `npx skills` as the initial installer/adapter.
+Skills cross a trust boundary in four explicit stages: check, stage, review, and promote. Local skills are home source. Vendored skills select an HTTPS upstream subtree, commit that subtree under `skills/vendor/<name>/`, and record the full upstream commit plus independent content digest in `skills/vendor.lock.yml`.
 
-Rationale:
+`mfz skills check` fetches tracked refs into a bare machine-local cache and compares only the selected subtree. `mfz skills stage <name>` extracts an exact revision into `~/.mindframe-z/skill-candidates/<candidate-id>/` with provenance, inventory, digest, deterministic findings, and a complete diff. It never checks out a worktree, runs hooks, recurses into submodules, downloads LFS content, installs dependencies, or executes candidate files.
 
-- It already supports multiple agents, including Claude Code and OpenCode.
-- It supports installing from GitHub, Git URLs, and local paths.
-- It handles agent-specific install paths.
-- It supports specific skill selection from repos.
-- It supports update workflows.
-- It supports symlink/copy behavior.
-
-The system should not initially reimplement:
-
-- Skill discovery.
-- Agent-specific skill paths.
-- Update detection.
-- Install/uninstall behavior.
-- Symlink vs copy behavior.
-- Cross-agent compatibility handling.
-
-The system should own:
-
-- Skill catalog.
-- Profile selection.
-- Work/personal policy boundaries.
-- Target agent selection.
-- Local vs remote source declarations.
-- Whether a skill is approved for work machines.
+The user-invoked `/skill-update-review` workflow treats candidate text as hostile evidence. It accounts for every retained and changed file and every required risk category without execution, then returns exactly one candidate-bound recommendation. Human confirmation is still required by `mfz skills promote <candidate-id>`, which atomically updates the home source and lock without applying configuration. `mfz apply` or `mfz skills sync` later copies valid source into `~/.mindframe-z/configs/<profile>/skills/` and reconciles only Mindframe-Z-owned relative harness links.
 
 Recommended manifest:
 
@@ -544,20 +521,14 @@ Recommended manifest:
 skills:
   - name: impeccable
     source: local
-    path: ~/mindframe-z/base/claude/skills/impeccable
     description: Frontend critique and UI polish skill.
-    targets: [opencode, claude-code]
-    profiles: [personal, work]
-    installer: npx-skills
 
   - name: vercel-web-design
-    source: git
-    repo: vercel-labs/agent-skills
-    skill: web-design-guidelines
+    source: vendored
+    repo: https://github.com/vercel-labs/agent-skills
+    ref: main
+    subtree: skills/web-design-guidelines
     description: Vercel web design guidance skill.
-    targets: [opencode, claude-code]
-    profiles: [personal]
-    installer: npx-skills
 ```
 
 Work overlay example:
@@ -567,11 +538,7 @@ Work overlay example:
 skills:
   - name: company-review
     source: local
-    path: ~/mindframe-z/work-overlay/claude/skills/company-review
     description: Company code review process and required checks.
-    targets: [claude-code, opencode]
-    profiles: [work]
-    installer: npx-skills
 ```
 
 CLI responsibilities:
@@ -580,35 +547,12 @@ CLI responsibilities:
 mindframe-z skills list
 mindframe-z skills enable <name> --profile <profile>
 mindframe-z skills disable <name> --profile <profile>
-mindframe-z skills apply --profile <profile> --target claude-code
-mindframe-z skills apply --profile <profile> --target opencode
-mindframe-z skills update --profile <profile>
+mindframe-z skills check
+mindframe-z skills stage <name> [--commit <full-sha>]
+mindframe-z skills promote <candidate-id>
+mindframe-z skills sync
 mindframe-z skills doctor
 ```
-
-Internally, the first implementation should shell out to `npx skills` through an adapter:
-
-```text
-SkillManager
-    |
-    v
-SkillInstaller interface
-    |
-    +--> NpxSkillsInstaller
-    |
-    +--> NativeSkillsInstaller later, only if needed
-```
-
-Conceptual commands the adapter may emit:
-
-```bash
-npx skills add ~/mindframe-z/base/claude/skills/impeccable -a claude-code -a opencode -g -y
-npx skills add vercel-labs/agent-skills --skill web-design-guidelines -a claude-code -g -y
-```
-
-Exact flags must be verified during implementation against current `npx skills` docs/help.
-
-Important design decision: `npx skills` is not the source of truth. It is an installer. The source of truth is `skills.yml` plus profile and machine state.
 
 ## MCP Management Design
 
@@ -847,8 +791,10 @@ Can be `mindframe-z skills ...` rather than a separate binary.
 mindframe-z skills list
 mindframe-z skills enable <name> --profile <profile>
 mindframe-z skills disable <name> --profile <profile>
-mindframe-z skills apply --profile <profile> --target claude-code
-mindframe-z skills update --profile <profile>
+mindframe-z skills check
+mindframe-z skills stage <name> [--commit <full-sha>]
+mindframe-z skills promote <candidate-id>
+mindframe-z skills sync
 mindframe-z skills doctor
 ```
 
@@ -856,8 +802,9 @@ Responsibilities:
 
 - Read skill catalogs.
 - Resolve profile-enabled skills.
-- Delegate install/update/remove to `npx skills` via an adapter.
-- Validate that installed skills match desired state.
+- Fetch tracked refs into a bare cache and stage exact subtrees into quarantine.
+- Render validated source into a profile snapshot and reconcile owned links.
+- Keep review advisory and require explicit human promotion.
 
 ### `mcpx`
 
@@ -897,13 +844,6 @@ interface ConfigRenderer {
   render(profile: ResolvedProfile): Promise<RenderedArtifact[]>;
 }
 
-interface SkillInstaller {
-  install(skill: ResolvedSkill, target: ToolTarget): Promise<void>;
-  update(skill: ResolvedSkill, target: ToolTarget): Promise<void>;
-  remove(skill: ResolvedSkill, target: ToolTarget): Promise<void>;
-  status(skill: ResolvedSkill, target: ToolTarget): Promise<SkillInstallStatus>;
-}
-
 interface ReferenceStore {
   sync(reference: ResolvedReference): Promise<ReferenceStatus>;
   status(reference: ResolvedReference): Promise<ReferenceStatus>;
@@ -922,7 +862,6 @@ YamlManifestLoader
 JsoncConfigLoader
 OpenCodeConfigRenderer
 ClaudeCodeConfigRenderer
-NpxSkillsInstaller
 GitReferenceStore
 NodeFsSymlinkManager
 ```
@@ -1055,7 +994,7 @@ Deliverables:
 - `mfz apply --profile personal --target opencode` renders OpenCode global config and symlinks it.
 - `mfz apply --profile personal --target claude-code` renders Claude Code global config and symlinks it.
 - `refctl list`, `refctl enable`, `refctl sync`, and `refctl index` work for references.
-- `mindframe-z skills apply` delegates to `npx skills` for local-path skills.
+- `mindframe-z skills sync` renders local and integrity-verified vendored source and reconciles managed harness links.
 
 Do not implement:
 
@@ -1063,7 +1002,7 @@ Do not implement:
 - TUI.
 - Project-specific repo wiring.
 - Claude Code plugin packaging.
-- Native skill installer.
+- Candidate execution or dependency installation.
 
 ## Second Implementation Phase
 
@@ -1073,7 +1012,7 @@ Deliverables:
 - MCP catalog rendering for OpenCode.
 - Claude Code user/project MCP strategy decided and implemented.
 - Profile inheritance.
-- Skill installation from remote Git sources through `npx skills`.
+- Vendored skill check, quarantine staging, hostile-evidence review, and explicit promotion.
 - Runtime diff command showing what would change before apply.
 
 ## Third Implementation Phase
@@ -1101,7 +1040,7 @@ Before writing code:
 
 1. Read this document fully.
 2. Inspect existing `/home/mark/code/dev-workspace` manifests and docs for reusable ideas, but do not assume the old workspace structure is the target.
-3. Verify current `npx skills` CLI flags with `npx skills --help` and relevant subcommand help.
+3. Read the current `mfz guide skills` lifecycle and verify the isolated-home test seams.
 4. Verify current OpenCode config schema before writing OpenCode config.
 5. Verify current Claude Code settings schema or docs before writing Claude Code config.
 6. Ask before making project-repo modifications or adding new top-level repos.
@@ -1114,7 +1053,7 @@ Implementation order:
 4. Implement `doctor` and `status` before destructive/apply behavior.
 5. Implement symlink creation with conflict checks.
 6. Implement reference sync.
-7. Implement `NpxSkillsInstaller` adapter.
+7. Implement vendored source staging and snapshot reconciliation.
 8. Implement MCP rendering.
 
 Conflict rules:
@@ -1130,8 +1069,7 @@ Conflict rules:
 - Keep project directories independent; no forced workspace structure.
 - Use global/machine-wide config first.
 - Use `AGENTS.md` as canonical shared instructions and generate/import `CLAUDE.md` for Claude Code.
-- Use `npx skills` initially as the skill installer/adapter.
-- Keep the system's source of truth in manifests, not in `npx skills` state.
+- Keep committed skill source and vendor lock metadata as the source of truth, not external installer state.
 - Build small CLIs/modules first; defer TUI.
 - Keep work-only content in company-owned repos.
 - Render runtime files into a visible `.runtime/` directory and symlink tool globals to them.

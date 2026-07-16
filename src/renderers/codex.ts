@@ -9,16 +9,23 @@ import {
   type RuntimePaths
 } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
-import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import {
+  deepMerge,
+  filterMcpForTarget,
+  skillRuntimeDefaults,
+  type ResolvedProfile
+} from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
+import { mergeSkillOverrides } from "../core/skill-overrides.js";
 
 export const CODEX_DERIVED_KEYS = new Set([
   "mcp_servers",
   "permissions",
   "default_permissions",
-  "plugins"
+  "plugins",
+  "skills"
 ]);
 
 function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, unknown> {
@@ -144,10 +151,18 @@ export async function renderCodex(
     mcp_servers: renderCodexMcp(profile, paths.home),
     ...(hasPlugins ? { plugins } : {})
   });
-  const configContent = stringify(config);
+  const skillDefaults = skillRuntimeDefaults(profile, "codex");
+  const skillPaths = Object.fromEntries(
+    Object.keys(skillDefaults).map((name) => [
+      name,
+      path.join(paths.home, ".agents", "skills", name, "SKILL.md")
+    ])
+  );
+  const renderedConfig = mergeSkillOverrides("codex", config, skillDefaults, { skillPaths });
+  const configContent = stringify(renderedConfig);
   const agentsContent = await renderCodexAgents(paths, profile);
   const localConfigPath = path.join(paths.codexDir, "config.toml");
-  const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), config);
+  const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), renderedConfig);
   if (hasPlugins) {
     mergedLocalConfig.plugins = config.plugins;
   } else {

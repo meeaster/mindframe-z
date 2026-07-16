@@ -21,7 +21,9 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 │   └── mcp.yml
 ├── instructions/
 ├── profiles/<name>/
-├── skills/
+├── skills/<local-name>/
+├── skills/vendor/<name>/
+├── skills/vendor.lock.yml
 ├── opencode/
 └── sandbox/
 ```
@@ -50,10 +52,12 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/homes/<alias>/
 ~/.mindframe-z/overrides.json
 ~/.mindframe-z/threads/
+~/.mindframe-z/cache/skills/
+~/.mindframe-z/skill-candidates/
 ~/.mindframe-z/bin/
 ```
 
-Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Symlinks and merged local files point at this rendered root.
+Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
 
 ## Renderers
 
@@ -65,12 +69,19 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
 - `mise`: `config.toml`; injects `node = "24"` when no resolved node tool exists.
 - `dotfiles`: profile dotfiles; managed `.zshrc` guarantees `~/.mindframe-z/bin` on `PATH`.
+- `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution.
 
 ## Sync
 
-`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. When an upstream clone is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream clones are reported as uncommitted.
+`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream clone is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream clones are reported as uncommitted.
+
+## Vendored Skills
+
+Catalog entries use `source: local` or `source: vendored`. A vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree. Its selected files live under `skills/vendor/<name>/`, while `skills/vendor.lock.yml` records the full commit and independent framed SHA-256 digest. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
+
+`mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
 
 ## Upstream Clones
 
@@ -106,6 +117,7 @@ Zod schemas live in `src/core/manifests.ts`. `pnpm schemas` writes committed JSO
 - `schemas/mcp.schema.json`
 - `schemas/profile.schema.json`
 - `schemas/machine.schema.json`
+- `schemas/skills-vendor-lock.schema.json`
 
 Scaffolded YAML files use first-line YAML language server modelines pointing at published schema URLs.
 

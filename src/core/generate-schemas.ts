@@ -7,13 +7,15 @@ import {
   mcpManifestSchema,
   profileSchema,
   refsManifestSchema,
-  skillsManifestSchema
+  skillsManifestSchema,
+  vendorLockSchema
 } from "./manifests.js";
 import { threadManifestSchema, threadRunsSchema } from "../thread/schema.js";
 
 const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
   { schema: refsManifestSchema, filename: "references.schema.json" },
   { schema: skillsManifestSchema, filename: "skills.schema.json" },
+  { schema: vendorLockSchema, filename: "skills-vendor-lock.schema.json" },
   { schema: mcpManifestSchema, filename: "mcp.schema.json" },
   { schema: profileSchema, filename: "profile.schema.json" },
   { schema: homeManifestSchema, filename: "mfz_home.schema.json" },

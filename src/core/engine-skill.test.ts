@@ -2,7 +2,12 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ensureHomeGuidance, hasHomeGuidance, materializeEngineSkill } from "./engine-skill.js";
+import {
+  ensureHomeGuidance,
+  hasHomeGuidance,
+  materializeEngineSkill,
+  materializeReviewSkill
+} from "./engine-skill.js";
 import { createRuntimePaths } from "./paths.js";
 
 async function tempDir(): Promise<string> {
@@ -59,5 +64,40 @@ describe("materializeEngineSkill", () => {
     expect(skillMd).toContain("name: mindframe-z");
     expect(skillMd).toContain("description:");
     expect(skillMd).toContain("mfz guide");
+  });
+
+  it("materializes the immutable hostile-evidence review skill", async () => {
+    const home = await tempDir();
+    const entry = await materializeReviewSkill(createRuntimePaths({ root: home, home }));
+    expect(entry).toMatchObject({ name: "skill-update-review", source: "local" });
+    const skill = await readFile(
+      path.join(entry.sourceRoot, "skills", "skill-update-review", "SKILL.md"),
+      "utf8"
+    );
+    expect(skill).toContain("hostile evidence");
+    expect(skill).toContain("disable-model-invocation: true");
+    expect(skill).toContain('argument-hint: "<candidate-id>"');
+    for (const term of [
+      "authority escalation",
+      "secret or credential access",
+      "executable or binary content",
+      "hidden or encoded payloads",
+      "manual investigation required",
+      "mfz skills promote <candidate-id>"
+    ]) {
+      expect(skill).toContain(term);
+    }
+    expect(
+      await readFile(
+        path.join(
+          entry.sourceRoot,
+          "skills",
+          "skill-update-review",
+          "references",
+          "risk-reference.md"
+        ),
+        "utf8"
+      )
+    ).toContain("Authority escalation");
   });
 });

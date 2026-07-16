@@ -21,7 +21,7 @@ describe("skill CLI integration", () => {
     delete process.env.MFZ_HOME;
   });
 
-  it("sync detects unmanaged git skills and promotes them to the chosen profile", async () => {
+  it("sync ignores external installer lock state", async () => {
     await mkdir(path.join(home, ".agents", "skills", "remote-skill"), { recursive: true });
     await writeFile(
       path.join(home, ".agents", ".skill-lock.json"),
@@ -49,27 +49,8 @@ describe("skill CLI integration", () => {
     );
 
     const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
-    expect(syncResult.stdout).toContain(
-      "Unmanaged skill: remote-skill (https://github.com/example/skills)"
-    );
-    expect(syncResult.stdout).toContain("Updated catalog/skills.yml");
-    expect(syncResult.stdout).toContain("Updated personal/profile.yml: skills.remote-skill");
-
-    const skillsYaml = await readFile(path.join(root, "catalog", "skills.yml"), "utf8");
-    expect(skillsYaml).toContain("name: remote-skill");
-    expect(skillsYaml).toContain("repo: https://github.com/example/skills");
-    expect(skillsYaml).toContain("skill: remote-skill");
-    expect(skillsYaml).toContain("description: Remote test skill.");
-    expect(skillsYaml).not.toContain("targets:");
-    expect(skillsYaml).toContain("installer: skills");
-
-    const profileYaml = await readFile(
-      path.join(root, "profiles", "personal", "profile.yml"),
-      "utf8"
-    );
-    expect(profileYaml).toContain("local-skill:");
-    expect(profileYaml).toContain("remote-skill:");
-    expect(profileYaml).toContain("- opencode");
+    expect(syncResult.stdout).not.toContain("remote-skill");
+    expect(syncResult.stdout).not.toContain("Updated catalog/skills.yml");
   });
 
   it("lists resolved skill targets from the profile", async () => {
@@ -79,19 +60,28 @@ describe("skill CLI integration", () => {
     expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll agents test skill.");
   });
 
-  it("sync installs missing skills and removes extra skills", async () => {
+  it("sync renders the managed snapshot and links", async () => {
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    const addLines = result.stdout.split("\n").filter((line) => line.includes("skills add"));
-    // Profile skills plus the engine-owned mindframe-z skill, one add per agent.
-    const engineLines = addLines.filter((line) => line.includes("engine-skills"));
-    expect(engineLines).toHaveLength(2);
-    expect(engineLines.every((line) => line.includes("--skill mindframe-z"))).toBe(true);
-    expect(addLines).toHaveLength(7);
-    expect(addLines.filter((line) => line.includes("-a opencode -g -y"))).toHaveLength(3);
-    expect(addLines.filter((line) => line.includes("-a claude-code -g -y"))).toHaveLength(4);
+    expect(result.stdout).toContain("would render skill\tlocal-skill");
+    expect(result.stdout).toContain("would render skill\tmindframe-z");
+    expect(result.stdout).toContain("would render skill\tskill-update-review");
+    expect(result.stdout).toContain("would link skill");
+    expect(result.stdout).not.toContain("skills add");
+    await expect(
+      readFile(
+        path.join(
+          home,
+          ".mindframe-z",
+          "engine-skills",
+          "skills",
+          "skill-update-review",
+          "SKILL.md"
+        )
+      )
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("sync installs disabled profile skills", async () => {
+  it("sync renders skills disabled by runtime override", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
@@ -100,15 +90,20 @@ describe("skill CLI integration", () => {
         "agents: [opencode]",
         "skills:",
         "  local-skill:",
-        "    agents: { opencode: false }",
+        "    agents: { opencode: true }",
         ""
       ].join("\n"),
       "utf8"
     );
+    await mkdir(path.join(home, ".mindframe-z", "skill-overrides"), { recursive: true });
+    await writeFile(
+      path.join(home, ".mindframe-z", "skill-overrides", "opencode.json"),
+      JSON.stringify({ "local-skill": false }),
+      "utf8"
+    );
 
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
-    expect(result.stdout).toContain("skills add");
-    expect(result.stdout).toContain("-a opencode -g -y");
+    expect(result.stdout).toContain("would render skill\tlocal-skill");
   });
 
   it("toggles project skill state in the override store", async () => {
@@ -207,7 +202,7 @@ describe("skill CLI integration", () => {
         "agents: [opencode, claude-code]",
         "skills:",
         "  local-skill:",
-        "    agents: { opencode: false }",
+        "    agents: { opencode: true }",
         "  claude-skill:",
         "    agents: { claude-code: true }",
         ""
@@ -230,7 +225,7 @@ describe("skill CLI integration", () => {
     const overrides = JSON.parse(
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
-    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(true);
+    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(false);
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });

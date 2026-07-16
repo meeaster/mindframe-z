@@ -6,38 +6,75 @@
       "default": [],
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "const": "local"
+              },
+              "skill": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "additionalProperties": false
           },
-          "source": {
-            "type": "string",
-            "enum": [
-              "local",
-              "git"
-            ]
-          },
-          "repo": {
-            "type": "string"
-          },
-          "skill": {
-            "type": "string"
-          },
-          "description": {
-            "default": "",
-            "type": "string"
-          },
-          "installer": {
-            "default": "skills",
-            "type": "string",
-            "const": "skills"
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "const": "vendored"
+              },
+              "repo": {
+                "type": "string",
+                "pattern": "^https:\\/\\/(?![^/]*@)\\S+$"
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!-)(?!.*\\s).+$"
+              },
+              "subtree": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "repo",
+              "ref",
+              "subtree"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "name",
-          "source"
         ]
       }
     }

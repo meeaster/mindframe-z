@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadManifests, validateManifests } from "./manifests.js";
+import { loadManifests, skillSchema, validateManifests, vendorLockSchema } from "./manifests.js";
 
 // Every case builds its own root + home under os.tmpdir() and passes `home`
 // explicitly, so nothing here reads the operator's real ~/.mindframe-z.
@@ -149,6 +149,21 @@ describe("loadManifests", () => {
   });
 });
 
+describe("generated skill schema", () => {
+  it("retains transport and ref safety constraints", async () => {
+    const schema = JSON.parse(
+      await readFile(path.join(process.cwd(), "schemas", "skills.schema.json"), "utf8")
+    ) as {
+      properties: {
+        skills: { items: { oneOf: Array<{ properties: Record<string, { pattern?: string }> }> } };
+      };
+    };
+    const vendored = schema.properties.skills.items.oneOf[1];
+    expect(vendored?.properties.repo?.pattern).toContain("@");
+    expect(vendored?.properties.ref?.pattern).toContain("\\s");
+  });
+});
+
 describe("validateManifests", () => {
   it("reports only the files that exist, one entry per profile dir", async () => {
     const { root, home } = await tmpHome();
@@ -191,5 +206,56 @@ describe("validateManifests", () => {
     const { root, home } = await tmpHome();
     const results = await validateManifests(root, home);
     expect(results.map((r) => path.basename(r.file))).toEqual(["mfz_home.yml"]);
+  });
+});
+
+describe("skill manifest schemas", () => {
+  it("accepts local and pinned vendored declarations", () => {
+    expect(skillSchema.parse({ name: "local", source: "local" })).toMatchObject({
+      name: "local",
+      source: "local"
+    });
+    expect(
+      skillSchema.parse({
+        name: "vendor",
+        source: "vendored",
+        repo: "https://example.invalid/skills.git",
+        ref: "main",
+        subtree: "skills/vendor"
+      })
+    ).toMatchObject({ source: "vendored", subtree: "skills/vendor" });
+  });
+
+  it("rejects legacy installer declarations and unsafe transports", () => {
+    expect(() =>
+      skillSchema.parse({ name: "old", source: "git", repo: "https://example.invalid" })
+    ).toThrow();
+    expect(() =>
+      skillSchema.parse({
+        name: "old",
+        source: "vendored",
+        repo: "ssh://example.invalid/skills",
+        ref: "main",
+        subtree: "skills/old"
+      })
+    ).toThrow();
+    expect(() =>
+      skillSchema.parse({
+        name: "old",
+        source: "vendored",
+        repo: "https://example.invalid/skills",
+        ref: "main",
+        subtree: "skills/.git"
+      })
+    ).toThrow();
+  });
+
+  it("requires complete strict vendor lock entries", () => {
+    expect(() => vendorLockSchema.parse({ skills: { old: { commit: "a".repeat(40) } } })).toThrow();
+    expect(() =>
+      vendorLockSchema.parse({
+        skills: { old: { commit: "a".repeat(40), digest: "b".repeat(64), extra: true } }
+      })
+    ).toThrow();
   });
 });

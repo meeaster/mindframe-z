@@ -12,7 +12,6 @@ import { syncMise } from "./mise.js";
 import { syncOpencode } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
-import { syncSkills, type UnknownSkill } from "./skills.js";
 import type { SyncCandidate } from "./types.js";
 
 type ProfileChoice =
@@ -141,51 +140,6 @@ async function promptUser(
   );
 }
 
-async function promptSkillUser(
-  skill: UnknownSkill,
-  profileNames: string[]
-): Promise<string | null> {
-  return promptProfileChoice(
-    `Unmanaged skill: ${skill.name} (${skill.entry.repo ?? ""})`,
-    profileNames
-  );
-}
-
-async function writeSkillsCatalog(root: string, skills: UnknownSkill[]): Promise<void> {
-  const yamlPath = path.join(root, "catalog", "skills.yml");
-  let doc: Record<string, unknown>;
-  try {
-    doc = YAML.parse(await readFile(yamlPath, "utf8")) as Record<string, unknown>;
-  } catch {
-    doc = { skills: [] };
-  }
-  if (!Array.isArray(doc.skills)) doc.skills = [];
-  const catalog = doc.skills as unknown[];
-  const existing = new Set(
-    catalog
-      .map((skill: unknown) =>
-        skill && typeof skill === "object" && !Array.isArray(skill)
-          ? (skill as Record<string, unknown>).name
-          : undefined
-      )
-      .filter((name: unknown): name is string => typeof name === "string")
-  );
-  for (const skill of skills) {
-    if (!existing.has(skill.name)) {
-      catalog.push(skill.entry);
-      existing.add(skill.name);
-    }
-  }
-  await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
-}
-
-async function enableSkillInProfile(root: string, targetProfile: string, skillName: string) {
-  const doc = await readProfileYaml(root, targetProfile);
-  const profileSkills = ensureRecord(doc, "skills");
-  if (!(skillName in profileSkills)) profileSkills[skillName] = ["opencode"];
-  await writeProfileYaml(root, targetProfile, doc);
-}
-
 interface UnknownCommand {
   name: string;
 }
@@ -290,27 +244,20 @@ export async function runSync(
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
-  const [
-    miseResult,
-    opencodeResult,
-    claudeResult,
-    codexResult,
-    skillCandidates,
-    commandCandidates
-  ] = await Promise.all([
-    syncMise(mcp, profile),
-    profile.agents.includes("opencode")
-      ? syncOpencode(ocp, profile)
-      : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("claude-code")
-      ? syncClaude(clp, profile)
-      : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("codex")
-      ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
-      : Promise.resolve({ candidates: [] }),
-    syncSkills(paths.home, profile.manifests, profile.agents),
-    profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
-  ]);
+  const [miseResult, opencodeResult, claudeResult, codexResult, commandCandidates] =
+    await Promise.all([
+      syncMise(mcp, profile),
+      profile.agents.includes("opencode")
+        ? syncOpencode(ocp, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("claude-code")
+        ? syncClaude(clp, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("codex")
+        ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
+    ]);
 
   const candidates = [
     ...miseResult.candidates,
@@ -319,7 +266,7 @@ export async function runSync(
     ...codexResult.candidates
   ];
 
-  if (candidates.length === 0 && skillCandidates.length === 0 && commandCandidates.length === 0) {
+  if (candidates.length === 0 && commandCandidates.length === 0) {
     console.log("No unmanaged keys found — everything is in sync.");
     return;
   }
@@ -329,32 +276,12 @@ export async function runSync(
   const targetByLabel = new Map(availableTargets.map((target) => [target.label, target]));
 
   const manualMoves = await resolveMoves(candidates, targetProfile, availableProfiles, promptUser);
-  const skillMoves = await resolveMoves(
-    skillCandidates,
-    targetProfile,
-    availableProfiles,
-    promptSkillUser
-  );
   const commandMoves = await resolveMoves(
     commandCandidates,
     targetProfile,
     availableProfiles,
     promptCommandUser
   );
-
-  if (skillMoves.length > 0) {
-    await writeSkillsCatalog(
-      paths.root,
-      skillMoves.map(({ item }) => item)
-    );
-    console.log("  Updated catalog/skills.yml");
-    for (const { item: skill, targetProfile } of skillMoves) {
-      const target = targetByLabel.get(targetProfile)!;
-      await enableSkillInProfile(target.root, target.profile, skill.name);
-      console.log(`  Updated ${target.label}/profile.yml: skills.${skill.name}`);
-      if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
-    }
-  }
 
   for (const { item: command, targetProfile } of commandMoves) {
     const target = targetByLabel.get(targetProfile)!;

@@ -116,6 +116,26 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
+export function skillCacheRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "cache", "skills");
+}
+
+export function skillCandidatesRoot(paths: RuntimePaths): string {
+  return path.join(paths.home, ".mindframe-z", "skill-candidates");
+}
+
+export function skillSnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "skills");
+}
+
+export function skillSnapshotManifestPath(paths: RuntimePaths, profileName: string): string {
+  return path.join(skillSnapshotDir(paths, profileName), ".mfz-manifest.yml");
+}
+
+export function vendorLockPath(root: string): string {
+  return path.join(root, "skills", "vendor.lock.yml");
+}
+
 export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): string {
   return path.join(paths.home, ".mindframe-z", "skill-overrides", `${target}.json`);
 }

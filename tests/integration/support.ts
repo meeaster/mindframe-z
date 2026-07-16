@@ -42,10 +42,26 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   await mkdir(path.join(root, "instructions"), { recursive: true });
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
   await mkdir(path.join(root, "opencode", "commands"), { recursive: true });
+  await mkdir(path.join(root, "skills", "local-skill"), { recursive: true });
+  await mkdir(path.join(root, "skills", "claude-skill"), { recursive: true });
+  await mkdir(path.join(root, "skills", "all-skill"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
   await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
   await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Test Agents\n", "utf8");
+  for (const [name, description] of [
+    ["local-skill", "Local test skill."],
+    ["claude-skill", "Claude test skill."],
+    ["all-skill", "All agents test skill."]
+  ] as const) {
+    await writeFile(
+      path.join(root, "skills", name, "SKILL.md"),
+      [`---`, `name: ${name}`, `description: ${description}`, `---`, ``, `# ${name}`, ``].join(
+        "\n"
+      ),
+      "utf8"
+    );
+  }
   await writeFile(
     path.join(root, "opencode", "plugins", "config-marker.ts"),
     [
@@ -83,15 +99,12 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "  - name: local-skill",
       "    source: local",
       "    description: Local test skill.",
-      "    installer: skills",
       "  - name: claude-skill",
       "    source: local",
       "    description: Claude test skill.",
-      "    installer: skills",
       "  - name: all-skill",
       "    source: local",
       "    description: All agents test skill.",
-      "    installer: skills",
       ""
     ].join("\n"),
     "utf8"

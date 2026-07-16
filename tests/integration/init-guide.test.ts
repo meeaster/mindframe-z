@@ -29,7 +29,8 @@ describe("init and guide integration", () => {
     const result = await mfz(home, ["guide", "skills"]);
     expect(result.stdout).toContain("# Skills Guide");
     expect(result.stdout).toContain("catalog/skills.yml");
-    expect(result.stdout).toContain("mfz skills sync");
+    expect(result.stdout).toContain("mfz skills check");
+    expect(result.stdout).toContain("mfz skills stage");
   });
 
   it("scaffolds a valid home and records home_path", async () => {

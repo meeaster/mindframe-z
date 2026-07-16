@@ -46,13 +46,16 @@ import {
   writeReferenceIndex
 } from "../ref-store/references.js";
 import {
-  applySkill,
-  listInstalledSkills,
-  removeSkill,
-  skillsCliAvailable,
-  updateSkill
-} from "../skills/skills-adapter.js";
-import type { SkillEntry } from "../core/manifests.js";
+  candidateReviewInvocation,
+  checkVendoredSkill,
+  migrationMessage,
+  promoteVendoredSkill,
+  readVendorLock,
+  readLegacyGitSkills,
+  stageVendoredSkill,
+  validateVendoredSkills
+} from "../skills/vendor.js";
+import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { runSync } from "../sync/index.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
@@ -84,10 +87,9 @@ import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 import { guide, initHome } from "./init.js";
 import {
-  engineSkillName,
   ensureHomeGuidance,
   hasHomeGuidance,
-  materializeEngineSkill
+  materializeReviewSkill
 } from "../core/engine-skill.js";
 import {
   buildContextHistoryReport,
@@ -227,6 +229,14 @@ async function applyConfig(options: {
     if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
       console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
     }
+    await syncSkillSnapshot(paths, profile, {
+      selectedTargets: agentList(options.agent, profile.agents).filter(
+        (target): target is SkillTarget =>
+          target === "opencode" || target === "claude-code" || target === "codex"
+      ),
+      dryRun: options.dryRun ?? false,
+      link: !options.noLink
+    });
   } finally {
     rl?.close();
   }
@@ -252,9 +262,27 @@ async function doctor(options: {
     console.log(`manifest:${result.ok ? "✓" : "✗"}\t${path.relative(paths.root, result.file)}`);
     if (result.error) console.log(result.error);
   }
+  for (const legacy of await readLegacyGitSkills(paths.root, paths.home)) {
+    console.log(`migration\t${migrationMessage(legacy.name)}`);
+  }
+  if (await fileExists(path.join(paths.home, ".agents", ".skill-lock.json"))) {
+    console.log(
+      `hint\tignoring external skill installer lock at ${path.join(paths.home, ".agents", ".skill-lock.json")}; it is untrusted migration evidence only`
+    );
+  }
   if (hasInvalidManifest) return;
 
-  const profile = await resolveProfile(paths, options.profile);
+  const vendoredFailures = await validateVendoredSkills(paths.root);
+  for (const failure of vendoredFailures) console.log(`skill:✗\t${failure}`);
+  if (vendoredFailures.length > 0) return;
+
+  let profile;
+  try {
+    profile = await resolveProfile(paths, options.profile);
+  } catch (error) {
+    console.log(`skill:✗\t${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
   console.log(`profile\t${profile.name}`);
   if (await hasHomeGuidance(paths.root)) {
     console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
@@ -816,7 +844,7 @@ program
 
 const skills = program
   .command("skills")
-  .description("Manage skills through skills")
+  .description("Inspect, stage, promote, and activate managed skills")
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
@@ -883,122 +911,139 @@ skills
 
 skills
   .command("sync")
-  .description("Mirror installed global skills to match the resolved profile")
+  .description("Render the profile skill snapshot and reconcile owned harness links")
   .option("--agent <agent>", "opencode, claude-code, or codex")
-  .option("--dry-run", "print skills commands without running them")
+  .option("--dry-run", "print the snapshot and link plan without changing state")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
     const requestedAgent = parseSkillAgentOption(options.agent);
     const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
-      (target): target is (typeof skillTargets)[number] =>
+      (target): target is SkillTarget =>
         skillTargets.includes(target as (typeof skillTargets)[number])
     );
-    const dryRun = options.dryRun ?? false;
-    if (!dryRun && !(await skillsCliAvailable(paths))) {
-      console.log(
-        "skills CLI not found; skipping skill sync. Install it (e.g. `npm install -g skills`), then re-run `mfz skills sync`."
-      );
-      return;
-    }
-    // The engine ships its own slim skill so every machine gets it via sync,
-    // versioned with the binary. A home that declares a skill of the same name
-    // owns it instead (including declaring-without-enabling to opt out).
-    const engineOwnsSkill =
-      !profile.enabledSkills.some((skill) => skill.name === engineSkillName) &&
-      !profile.manifests.skills.some((skill) => skill.name === engineSkillName);
-    const engineSkill = engineOwnsSkill ? await materializeEngineSkill(paths) : undefined;
-
-    const installedByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
-    const desiredByTarget = new Map<(typeof skillTargets)[number], Set<string>>();
-    const allSkillNames = new Set<string>();
-
-    for (const target of targets) {
-      const installed = await listInstalledSkills(paths, target);
-      const desired = new Set(
-        profile.enabledSkills
-          .filter((entry) => entry.targets.includes(target))
-          .map((entry) => entry.name)
-      );
-      if (engineSkill) desired.add(engineSkill.name);
-      installedByTarget.set(target, installed);
-      desiredByTarget.set(target, desired);
-      for (const name of installed) allSkillNames.add(name);
-      for (const name of desired) allSkillNames.add(name);
-    }
-
-    // Prefer the resolved skill: it carries the true source and sourceRoot,
-    // including for skills defined in an upstream home. The engine skill serves
-    // its own name; the local catalog and the git fallback only serve orphaned
-    // skills that are installed but no longer enabled.
-    const skillEntryFor = (name: string): SkillEntry & { sourceRoot?: string } =>
-      profile.enabledSkills.find((skill) => skill.name === name) ??
-      profile.manifests.skills.find((skill) => skill.name === name) ??
-      (name === engineSkill?.name
-        ? engineSkill
-        : {
-            name,
-            source: "git",
-            installer: "skills",
-            description: ""
-          });
-
-    for (const name of allSkillNames) {
-      const installedTargets = targets.filter((target) => installedByTarget.get(target)?.has(name));
-      const desiredTargets = targets.filter((target) => desiredByTarget.get(target)?.has(name));
-      const skillEntry = skillEntryFor(name);
-
-      if (installedTargets.length > 0 && desiredTargets.length === 0) {
-        console.log(await removeSkill(paths, skillEntry, undefined, dryRun));
-        continue;
-      }
-
-      if (installedTargets.includes("opencode") && !desiredTargets.includes("opencode")) {
-        console.log(await removeSkill(paths, skillEntry, undefined, dryRun));
-        for (const target of desiredTargets) {
-          console.log(await applySkill(paths, skillEntry, target, dryRun));
-        }
-        continue;
-      }
-
-      for (const target of installedTargets) {
-        if (!desiredByTarget.get(target)?.has(name)) {
-          console.log(
-            await removeSkill(paths, skillEntry, target, dryRun, installedByTarget.get(target))
-          );
-        }
-      }
-
-      for (const target of desiredTargets) {
-        if (!installedByTarget.get(target)?.has(name)) {
-          console.log(
-            await applySkill(paths, skillEntry, target, dryRun, installedByTarget.get(target))
-          );
-        }
-      }
-    }
+    await syncSkillSnapshot(paths, profile, {
+      selectedTargets: targets,
+      dryRun: options.dryRun ?? false
+    });
   });
 
 skills
   .command("upgrade")
-  .description("Update profile-enabled git skills to latest versions")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
-  .option("--dry-run", "print skills commands without running them")
-  .action(async (options) => {
+  .description("Removed: use skills check, stage, review, promote, then apply")
+  .action(async () => {
+    throw new Error(
+      "mfz skills upgrade was removed; use `mfz skills check`, `mfz skills stage <name>`, `/skill-update-review <candidate-id>`, `mfz skills promote <candidate-id>`, and `mfz apply`."
+    );
+  });
+
+skills
+  .command("check")
+  .description("Check tracked vendored refs without staging or activating updates")
+  .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const requestedAgent = parseSkillAgentOption(options.agent);
-    const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
-      (target): target is (typeof skillTargets)[number] =>
-        skillTargets.includes(target as (typeof skillTargets)[number])
+    const skills = profile.enabledSkills.filter(
+      (skill): skill is typeof skill & { source: "vendored" } => skill.source === "vendored"
     );
-    const updatedGitSkills = new Set<string>();
-    for (const target of targets) {
-      for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(target))) {
-        if (skill.source === "git" && updatedGitSkills.has(skill.name)) continue;
-        console.log(await updateSkill(paths, skill, target, options.dryRun ?? false));
-        if (skill.source === "git") updatedGitSkills.add(skill.name);
+    let failures = 0;
+    for (const skill of skills) {
+      try {
+        const result = await checkVendoredSkill(paths, skill, skill.sourceRoot);
+        const status = result.changed ? "update available" : "current";
+        const note = result.changed ? "selected subtree changed" : "selected subtree unchanged";
+        console.log(
+          `${status}\t${skill.name}\tpinned=${result.pinned.commit}\tobserved=${result.observedCommit}\t${note}`
+        );
+      } catch (error) {
+        failures += 1;
+        let pinned = "unknown";
+        try {
+          pinned = (await readVendorLock(skill.sourceRoot)).skills[skill.name]?.commit ?? "missing";
+        } catch {
+          // The manifest/lock error is included in the observational failure below.
+        }
+        console.log(
+          `remote failure\t${skill.name}\tpinned=${pinned}\t${error instanceof Error ? error.message : String(error)}`
+        );
       }
+    }
+    if (skills.length === 0) console.log("No vendored skills are enabled in the resolved profile.");
+    if (failures > 0) throw new Error(`${failures} vendored skill check(s) failed`);
+  });
+
+skills
+  .command("stage")
+  .description("Stage an exact vendored revision into machine-local quarantine")
+  .argument("<name>", "vendored skill name")
+  .option("--commit <commit>", "full upstream commit SHA instead of the tracked ref")
+  .option("--revision <revision>", "alias for --commit")
+  .action(async (name, options) => {
+    const paths = createRuntimePaths(program.opts());
+    let profile;
+    try {
+      profile = await resolveProfile(paths, program.opts().profile);
+    } catch (error) {
+      const legacy = (await readLegacyGitSkills(paths.root, paths.home)).find(
+        (entry) => entry.name === name
+      );
+      if (!legacy) throw error;
+      if (legacy.source !== "vendored") throw error;
+      await materializeReviewSkill(paths);
+      const candidate = await stageVendoredSkill(
+        paths,
+        legacy,
+        legacy.sourceRoot,
+        options.commit ?? options.revision
+      );
+      console.log(`candidate\t${candidate.provenance.candidateId}`);
+      console.log(`migration\t${migrationMessage(name)}`);
+      console.log(
+        `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
+      );
+      return;
+    }
+    const skill =
+      profile.enabledSkills.find((entry) => entry.name === name) ??
+      profile.manifests.skills.find((entry) => entry.name === name);
+    if (!skill || skill.source !== "vendored") {
+      throw new Error(`Profile ${profile.name} does not declare vendored skill: ${name}`);
+    }
+    const sourceRoot = profile.sources.skills.get(name)?.root ?? paths.root;
+    await materializeReviewSkill(paths);
+    const candidate = await stageVendoredSkill(
+      paths,
+      skill,
+      sourceRoot,
+      options.commit ?? options.revision
+    );
+    console.log(`candidate\t${candidate.provenance.candidateId}`);
+    console.log(
+      `provenance\t${candidate.provenance.oldCommit ?? "none"} -> ${candidate.provenance.commit}`
+    );
+    console.log(
+      `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
+    );
+  });
+
+skills
+  .command("promote")
+  .description("Promote one unchanged, reviewed candidate into the home without applying it")
+  .argument("<candidate-id>", "candidate identity printed by skills stage")
+  .action(async (candidateId) => {
+    const paths = createRuntimePaths(program.opts());
+    const rl = readline.createInterface({ input: processStdin, output: processStdout });
+    try {
+      const candidate = await promoteVendoredSkill(paths, candidateId, async (value) => {
+        const answer = await rl.question(
+          `Promote ${value.provenance.name} ${value.provenance.oldCommit ?? "none"} -> ${value.provenance.commit}? [y/N]: `
+        );
+        return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+      });
+      console.log(`promoted\t${candidate.provenance.candidateId}\t${candidate.provenance.name}`);
+      console.log("Active harness skills remain unchanged until `mfz apply`.");
+    } finally {
+      rl.close();
     }
   });
 

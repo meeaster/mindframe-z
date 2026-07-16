@@ -61,7 +61,9 @@ export async function resolveUpstreamHomeRoot(options: {
       return cloneRoot;
     }
     if (await isAhead(cloneRoot)) {
-      console.warn(`warning\tupstream home ${options.alias} has unpushed commits; skipping git pull`);
+      console.warn(
+        `warning\tupstream home ${options.alias} has unpushed commits; skipping git pull`
+      );
       return cloneRoot;
     }
 
