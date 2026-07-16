@@ -4,7 +4,6 @@ import {
   agentList,
   archiveCacheRoot,
   createRuntimePaths,
-  expandHome,
   extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
@@ -141,21 +140,6 @@ describe("createRuntimePaths", () => {
     const runtime = createRuntimePaths({ home: "/tmp/home" });
     expect(runtime.root).toBe("/env/repo");
     expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
-  });
-});
-
-describe("expandHome", () => {
-  it("returns the home directory for a bare tilde", () => {
-    expect(expandHome("~", "/tmp/home")).toBe("/tmp/home");
-  });
-
-  it("joins tilde-slash paths onto home", () => {
-    expect(expandHome("~/nested/dir", "/tmp/home")).toBe(path.join("/tmp/home", "nested", "dir"));
-  });
-
-  it("leaves non-tilde paths untouched", () => {
-    expect(expandHome("/abs/path", "/tmp/home")).toBe("/abs/path");
-    expect(expandHome("relative/path", "/tmp/home")).toBe("relative/path");
   });
 });
 

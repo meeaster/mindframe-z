@@ -60,6 +60,13 @@ describe("syncClaude", () => {
     const { candidates } = await syncClaude(path.join(dir, "absent.json"), profile);
     expect(candidates).toEqual([]);
   });
+
+  it("returns no candidates when the settings file is not a JSON object", async () => {
+    const dir = await makeTempDir();
+    const settingsPath = await writeJson(dir, "settings.json", ["theme", "dark"]);
+    const { candidates } = await syncClaude(settingsPath, profile);
+    expect(candidates).toEqual([]);
+  });
 });
 
 describe("syncOpencode", () => {
