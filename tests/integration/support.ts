@@ -132,9 +132,9 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "name: base",
       "mcp:",
       "  context7:",
-      "    agents: { opencode: true, claude-code: true, codex: true }",
+      "    agents: [opencode, claude-code, codex]",
       "  local-helper:",
-      "    agents: { claude-code: true }",
+      "    agents: [claude-code]",
       ""
     ].join("\n"),
     "utf8"
@@ -168,7 +168,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "    agents: { opencode: true, claude-code: true }",
       "mcp:",
       "  context7:",
-      "    agents: { opencode: true, claude-code: true }",
+      "    agents: [opencode, claude-code]",
       "opencode:",
       "  config:",
       "    model: test/model",

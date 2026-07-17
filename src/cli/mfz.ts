@@ -1,6 +1,6 @@
 import * as readline from "node:readline/promises";
 import path from "node:path";
-import { mkdir, readFile, unlink } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
@@ -10,41 +10,24 @@ import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
 import {
-  agentList,
   createRuntimePaths,
   infraTargetList,
   type AgentName,
   type ApplyAgent,
   type InfraTarget
 } from "../core/paths.js";
-import { resolveProfile } from "../core/profile.js";
+import { assertMcpToggleSupported, resolveProfile } from "../core/profile.js";
+import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
 import {
   effectiveProjectState,
   findProjectRoot,
   projectOverrides,
   readOverrideStore,
-  renderAllPayloads,
   writeProjectOverrideDelta
 } from "../core/override-store.js";
-import {
-  removeRenderedFiles,
-  renderTarget,
-  writeLocalFiles,
-  writeRenderedFiles
-} from "../core/render.js";
-import {
-  ensureGitConfigInclude,
-  gitIdentityFragmentPath,
-  globalGitConfigPath,
-  writeGitIdentityFragment
-} from "../core/git-config.js";
-import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
-import {
-  referenceRows,
-  syncReference,
-  writeExtraFoldersIndex,
-  writeReferenceIndex
-} from "../ref-store/references.js";
+import { renderTarget } from "../core/render.js";
+import { verifyLink } from "../core/symlinks.js";
+import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
 import {
   candidateReviewInvocation,
   checkVendoredSkill,
@@ -55,8 +38,8 @@ import {
   stageVendoredSkill,
   validateVendoredSkills
 } from "../skills/vendor.js";
-import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { runSync } from "../sync/index.js";
+import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
 import { runSeedOpenai } from "../sandbox/seed-openai.js";
@@ -86,11 +69,8 @@ import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js"
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 import { guide, initHome } from "./init.js";
-import {
-  ensureHomeGuidance,
-  hasHomeGuidance,
-  materializeReviewSkill
-} from "../core/engine-skill.js";
+import { hasHomeGuidance, materializeReviewSkill } from "../core/engine-skill.js";
+import { applyConfig } from "./apply.js";
 import {
   buildContextHistoryReport,
   buildContextReport,
@@ -98,149 +78,6 @@ import {
   formatContextReport
 } from "../context/report.js";
 import type { ContextHarness } from "../context/model.js";
-
-async function confirmReplace(
-  rl: readline.Interface | null,
-  linkPath: string,
-  backupPath: string
-): Promise<boolean> {
-  const replaceExisting = process.env.MFZ_REPLACE_EXISTING?.trim().toLowerCase();
-  if (replaceExisting === "y" || replaceExisting === "yes" || replaceExisting === "true") {
-    return true;
-  }
-  if (replaceExisting === "n" || replaceExisting === "no" || replaceExisting === "false") {
-    return false;
-  }
-
-  let answer = "";
-  if (rl) {
-    answer = await rl.question(`Replace existing ${linkPath}? Backup: ${backupPath} [y/N]: `);
-  } else {
-    return false;
-  }
-  const normalized = answer.trim().toLowerCase();
-  return normalized === "y" || normalized === "yes";
-}
-
-function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir: string): boolean {
-  if (!resolvedTarget) return false;
-  const relative = path.relative(configsDir, resolvedTarget);
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-}
-
-async function applyConfig(options: {
-  root?: string | undefined;
-  home?: string | undefined;
-  profile?: string | undefined;
-  agent: ApplyAgent;
-  target: InfraTarget | "all";
-  dryRun?: boolean | undefined;
-  noLink?: boolean | undefined;
-}): Promise<void> {
-  const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
-  const usePrompts = !options.dryRun && !options.noLink;
-  const rl =
-    usePrompts && processStdin.isTTY
-      ? readline.createInterface({ input: processStdin, output: processStdout })
-      : null;
-
-  try {
-    if (!options.dryRun) {
-      await writeReferenceIndex(paths, profile);
-      await writeExtraFoldersIndex(paths, profile);
-      await renderAllPayloads(paths, profile);
-    }
-    if (!options.noLink) {
-      const fragmentPath = gitIdentityFragmentPath(paths);
-      const configPath = globalGitConfigPath(paths);
-      if (!options.dryRun) {
-        await writeGitIdentityFragment(paths, profile.manifests.machine);
-        await ensureGitConfigInclude(paths);
-      }
-      console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${fragmentPath}`);
-      console.log(`${options.dryRun ? "would update" : "updated"}\t${configPath}`);
-    }
-    for (const target of [
-      ...agentList(options.agent, profile.agents),
-      ...infraTargetList(options.target)
-    ]) {
-      const result = await renderTarget(paths, profile, target, {
-        includeGlobalSkillState: !options.noLink
-      });
-      if (!options.dryRun) await removeRenderedFiles(result.staleFiles ?? []);
-      if (!options.dryRun) await writeRenderedFiles(result.files);
-      for (const file of result.files)
-        console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
-      if (result.localFiles && !options.noLink) {
-        if (!options.dryRun) await removeRenderedFiles(result.localStaleFiles ?? []);
-        if (!options.dryRun) await writeLocalFiles(result.localFiles);
-        for (const file of result.localFiles)
-          console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
-      }
-      if (!options.noLink) {
-        for (const link of result.staleLinks ?? []) {
-          const status = await verifyLink(link);
-          if (
-            status.state === "ok" ||
-            staleManagedConfigTarget(status.resolvedTarget, paths.configsDir)
-          ) {
-            if (!options.dryRun) await unlink(link.linkPath);
-            console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
-          }
-        }
-        for (const link of result.links) {
-          const status = await verifyLink(link);
-          if (options.dryRun) {
-            const action =
-              status.state === "missing"
-                ? "would link"
-                : status.state === "ok"
-                  ? "link ok"
-                  : "would replace after backup";
-            console.log(`${action}\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          if (status.state === "ok") {
-            console.log(`link ok\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          if (status.state === "missing") {
-            await createLink(link);
-            console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          const backupPath = backupPathFor(link.linkPath);
-          const autoReplace = staleManagedConfigTarget(status.resolvedTarget, paths.configsDir);
-          if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
-            console.log(`skipped\t${link.linkPath} (${status.detail})`);
-            continue;
-          }
-
-          await replaceWithBackup(link, backupPath);
-          console.log(`backed up\t${link.linkPath} -> ${backupPath}`);
-          console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
-        }
-      }
-    }
-    if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
-      console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
-    }
-    await syncSkillSnapshot(paths, profile, {
-      selectedTargets: agentList(options.agent, profile.agents).filter(
-        (target): target is SkillTarget =>
-          target === "opencode" || target === "claude-code" || target === "codex"
-      ),
-      dryRun: options.dryRun ?? false,
-      link: !options.noLink
-    });
-  } finally {
-    rl?.close();
-  }
-}
 
 async function doctor(options: {
   root?: string | undefined;
@@ -284,6 +121,9 @@ async function doctor(options: {
     return;
   }
   console.log(`profile\t${profile.name}`);
+  for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
+    console.log(line);
+  }
   if (await hasHomeGuidance(paths.root)) {
     console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
   } else {
@@ -375,6 +215,9 @@ async function statusFn(options: {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
+  for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
+    console.log(line);
+  }
   console.log(`agents\t${profile.agents.join(", ") || "none"}`);
   console.log(
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
@@ -384,11 +227,12 @@ async function statusFn(options: {
   console.log(
     `mcp\t${
       profile.mcpServers
-        .map(
-          (server) =>
-            `${server.name}:${Object.entries(server.agents)
-              .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
-              .join("|")}`
+        .map((server) =>
+          server.route === "executor"
+            ? `${server.name}:shared`
+            : `${server.name}:${Object.entries(server.agents)
+                .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
+                .join("|")}`
         )
         .join(", ") || "none"
     }`
@@ -1063,6 +907,11 @@ async function setMcpEnabled(
   const profile = await resolveProfile(paths, program.opts().profile);
   const server = profile.mcpServers.find((entry) => entry.name === name);
   if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
+  if (server.route === "executor") {
+    throw new Error(
+      `MCP server ${name} is Executor-routed and shared by every connected agent; change the profile instead of using a per-agent toggle`
+    );
+  }
   const requestedAgent = parseAgentOption(options.agent);
   if (requestedAgent === "pi") {
     throw new Error("Pi MCP toggles are not supported yet");
@@ -1072,6 +921,9 @@ async function setMcpEnabled(
     if (server.agents[target] === undefined) {
       throw new Error(`MCP server ${name} is not available for ${target}`);
     }
+  }
+  if (!enabled && targets.includes("claude-code")) {
+    assertMcpToggleSupported("claude-code", false);
   }
   const projectRoot = await findProjectRoot();
   if (!projectRoot) throw new Error("mfz mcp toggles must be run inside a git repository");
@@ -1090,6 +942,10 @@ async function printMcpStatus(): Promise<void> {
   const projectRoot = await findProjectRoot();
   const store = await readOverrideStore(paths.home);
   for (const server of profile.mcpServers) {
+    if (server.route === "executor") {
+      console.log(`${server.name}\tshared\texecutor`);
+      continue;
+    }
     for (const target of Object.keys(server.agents) as AgentName[]) {
       const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
       const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};

@@ -13,14 +13,76 @@ const agentsMapSchema = z
   .refine((agents) => Object.keys(agents).length > 0, {
     message: "agents must contain at least one harness"
   });
-const profileMcpConfigSchema = z
-  .object({
-    agents: agentsMapSchema
-  })
-  .strict()
-  .refine((config) => config.agents["claude-code"] !== false, {
-    message: "MCP entries cannot set claude-code to false"
+const mcpAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
+const mcpDisabledAgentSchema = mcpAgentSchema.exclude(["claude-code"]);
+type McpAgentName = z.infer<typeof mcpAgentSchema>;
+type NormalizedMcpAgents = Partial<Record<McpAgentName, boolean>>;
+
+const conciseMcpAgentsSchema = z
+  .array(mcpAgentSchema)
+  .min(1)
+  .refine((agents) => new Set(agents).size === agents.length, {
+    message: "agents must not contain duplicate harnesses"
   });
+const conciseDisabledMcpAgentsSchema = z
+  .array(mcpDisabledAgentSchema)
+  .min(1)
+  .refine((agents) => new Set(agents).size === agents.length, {
+    message: "agents must not contain duplicate harnesses"
+  });
+const groupedMcpAgentsSchema = z
+  .union([
+    z
+      .object({
+        enabled: conciseMcpAgentsSchema,
+        disabled: conciseDisabledMcpAgentsSchema.optional()
+      })
+      .strict(),
+    z
+      .object({
+        enabled: conciseMcpAgentsSchema.optional(),
+        disabled: conciseDisabledMcpAgentsSchema
+      })
+      .strict()
+  ])
+  .superRefine((agents, context) => {
+    const enabled = agents.enabled ?? [];
+    const disabled = agents.disabled ?? [];
+    const conflict = disabled.find((agent) => enabled.includes(agent));
+    if (conflict) {
+      context.addIssue({
+        code: "custom",
+        message: `harness ${conflict} cannot be both enabled and disabled`,
+        path: ["enabled"]
+      });
+    }
+  });
+const directMcpAgentsSchema = z
+  .union([conciseMcpAgentsSchema, groupedMcpAgentsSchema])
+  .transform((agents): NormalizedMcpAgents => {
+    const normalized: NormalizedMcpAgents = {};
+    if (Array.isArray(agents)) {
+      for (const agent of agents) normalized[agent] = true;
+      return normalized;
+    }
+    for (const agent of agents.enabled ?? []) normalized[agent] = true;
+    for (const agent of agents.disabled ?? []) normalized[agent] = false;
+    return normalized;
+  });
+const profileMcpConfigSchema = z.union([
+  z
+    .object({
+      route: z.literal("direct").optional(),
+      agents: directMcpAgentsSchema
+    })
+    .strict()
+    .transform(({ agents }) => ({ route: "direct" as const, agents })),
+  z
+    .object({
+      route: z.literal("executor")
+    })
+    .strict()
+]);
 const profileSkillConfigSchema = z
   .object({
     agents: agentsMapSchema.optional(),
@@ -155,7 +217,20 @@ const mcpServerBaseSchema = z.object({
   type: z.enum(["remote", "local"]),
   transport: z.enum(["http", "sse", "stdio"]).optional(),
   env: z.record(z.string(), z.string()).optional(),
-  headers: z.record(z.string(), z.string()).optional()
+  headers: z.record(z.string(), z.string()).optional(),
+  executor: z
+    .object({
+      transport: z.enum(["auto", "streamable-http", "sse"]).optional(),
+      oauth: z
+        .object({
+          template: z.string().min(1),
+          scopes: z.array(z.string().min(1)).default([])
+        })
+        .strict()
+        .optional()
+    })
+    .strict()
+    .optional()
 });
 
 export const mcpServerSchema = z.union([
@@ -337,6 +412,13 @@ export const profileSchema = z
     references: z.array(z.string()).default([]),
     skills: z.record(z.string(), profileSkillConfigSchema.optional()).default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
+    executor: z
+      .object({
+        elicitation: z.literal("browser").optional(),
+        timeout_ms: z.number().int().positive().optional()
+      })
+      .strict()
+      .optional(),
     opencode: opencodeConfigSchema.default({
       config: {},
       dependencies: {},
@@ -397,6 +479,7 @@ export type VendorLock = z.infer<typeof vendorLockSchema>;
 export type VendorLockEntry = z.infer<typeof vendorLockEntrySchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
 export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
+export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;

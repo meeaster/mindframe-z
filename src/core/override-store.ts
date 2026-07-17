@@ -140,7 +140,9 @@ export function effectiveProjectState(
 export function mcpDefaults(profile: ResolvedProfile, target: AgentName): Record<string, boolean> {
   return Object.fromEntries(
     (profile.mcpServers ?? []).flatMap((server) =>
-      server.agents[target] === undefined ? [] : [[server.name, server.agents[target]]]
+      server.route === "executor" || server.agents[target] === undefined
+        ? []
+        : [[server.name, server.agents[target]]]
     )
   );
 }

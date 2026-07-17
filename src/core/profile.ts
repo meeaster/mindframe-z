@@ -1,11 +1,13 @@
 import path from "node:path";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
+import { parseEnvRef } from "./env-ref.js";
 import {
   eachUpstream,
   homeDisplayName,
   loadManifests,
   type LoadedManifests,
   type McpServer,
+  type ProfileMcpConfig,
   type ProfileAgentDefaults,
   type ProfileManifest,
   type ToolTargetName,
@@ -40,11 +42,54 @@ interface ProfileBuild {
   sources: ProfileSources;
 }
 
-export interface ResolvedMcpServer {
-  name: string;
-  server: McpServer;
-  agents: ProfileAgentDefaults;
+export const executorBridgeName = "executor";
+
+export function validateExecutorMcpServer(name: string, server: McpServer): void {
+  if (server.type === "remote") {
+    if (server.transport === "stdio") {
+      throw new Error(`Executor route for ${name} cannot use stdio transport for a remote server`);
+    }
+    if (parseEnvRef(server.url) !== null || server.url.includes("{env:")) {
+      throw new Error(
+        `Executor route for ${name}.url contains an environment reference; keep it direct`
+      );
+    }
+    if (server.headers && Object.keys(server.headers).length > 0) {
+      throw new Error(`Executor route for ${name} contains headers; keep it direct`);
+    }
+    if (server.env && Object.keys(server.env).length > 0) {
+      throw new Error(`Executor route for ${name} contains environment values; keep it direct`);
+    }
+  } else {
+    if (server.transport !== undefined && server.transport !== "stdio") {
+      throw new Error(`Executor route for ${name} cannot use remote transport for a local server`);
+    }
+    if (server.executor?.transport !== undefined || server.executor?.oauth !== undefined) {
+      throw new Error(`Executor route for ${name} has remote-only settings on a local server`);
+    }
+    if (server.env && Object.keys(server.env).length > 0) {
+      throw new Error(`Executor route for ${name} contains environment values; keep it direct`);
+    }
+    if (server.command.some((part) => part.includes("{env:"))) {
+      throw new Error(
+        `Executor route for ${name}.command contains an environment reference; keep it direct`
+      );
+    }
+  }
 }
+
+export type ResolvedMcpServer =
+  | {
+      name: string;
+      server: McpServer;
+      route: "direct";
+      agents: ProfileAgentDefaults;
+    }
+  | {
+      name: string;
+      server: McpServer;
+      route: "executor";
+    };
 
 export type ResolvedSkill = SkillEntry & {
   agents: ProfileAgentDefaults;
@@ -60,7 +105,9 @@ export type ResolvedSkill = SkillEntry & {
   };
 };
 
-export type TargetedMcpServer = ResolvedMcpServer & { enabled: boolean };
+export type TargetedMcpServer = Extract<ResolvedMcpServer, { route: "direct" }> & {
+  enabled: boolean;
+};
 
 export interface ResolvedProfile {
   name: string;
@@ -326,7 +373,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       return [...map.values()];
     })(),
     skills: deepMerge(base.skills, child.skills) as ProfileManifest["skills"],
-    mcp: deepMerge(base.mcp, child.mcp) as ProfileManifest["mcp"],
+    mcp: mergeMcpConfigs(base.mcp, child.mcp),
+    executor: deepMerge(base.executor ?? {}, child.executor ?? {}) as ProfileManifest["executor"],
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
@@ -371,6 +419,29 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     },
     dotfiles
   };
+}
+
+function mcpRoute(config: ProfileMcpConfig): "direct" | "executor" {
+  return config && "route" in config && config.route === "executor" ? "executor" : "direct";
+}
+
+function mergeMcpConfigs(
+  base: ProfileManifest["mcp"],
+  child: ProfileManifest["mcp"]
+): ProfileManifest["mcp"] {
+  const merged: ProfileManifest["mcp"] = { ...base };
+  for (const [name, childConfig] of Object.entries(child)) {
+    const baseConfig = base[name];
+    if (!baseConfig || mcpRoute(baseConfig) !== mcpRoute(childConfig)) {
+      merged[name] = childConfig;
+      continue;
+    }
+    merged[name] = deepMerge(
+      baseConfig as unknown as Record<string, unknown>,
+      childConfig as unknown as Record<string, unknown>
+    ) as ProfileManifest["mcp"][string];
+  }
+  return merged;
 }
 
 function resolveSkillConfig(
@@ -468,12 +539,22 @@ export async function resolveProfile(
   }
   const enabledCommands = dedupe(profile.opencode.commands);
   const enabledAgents = dedupe(profile.opencode.agents);
-  const mcpServers = Object.entries(profile.mcp).map(([serverName, { agents: mcpAgents }]) => {
+  const mcpServers = Object.entries(profile.mcp).map(([serverName, config]): ResolvedMcpServer => {
     const sourceHome = sources.mcp.get(serverName) ?? manifests;
     const server = sourceHome.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    return { name: serverName, server, agents: mcpAgents };
+    if (mcpRoute(config) === "executor") {
+      validateExecutorMcpServer(serverName, server);
+      return { name: serverName, server, route: "executor" };
+    }
+    if (!("agents" in config)) throw new Error(`MCP server ${serverName} is missing direct agents`);
+    return { name: serverName, server, route: "direct", agents: config.agents };
   });
+  if (mcpServers.some((entry) => entry.name === executorBridgeName)) {
+    throw new Error(
+      `MCP server name ${executorBridgeName} is reserved for the generated Executor bridge`
+    );
+  }
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
@@ -513,9 +594,26 @@ export function filterMcpForTarget(
   profile: ResolvedProfile,
   target: ToolTargetName
 ): TargetedMcpServer[] {
-  return profile.mcpServers.flatMap((entry) =>
-    entry.agents[target] === undefined ? [] : [{ ...entry, enabled: entry.agents[target] }]
-  );
+  return profile.mcpServers.flatMap((entry) => {
+    if (entry.route !== "direct" || entry.agents[target] === undefined) return [];
+    return [{ ...entry, enabled: entry.agents[target] }];
+  });
+}
+
+export function executorMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] {
+  return profile.mcpServers.filter((entry) => entry.route === "executor");
+}
+
+export function requiresExecutorBridge(profile: ResolvedProfile): boolean {
+  return executorMcpServers(profile).length > 0;
+}
+
+export function assertMcpToggleSupported(target: AgentName, enabled: boolean): void {
+  if (target === "claude-code" && !enabled) {
+    throw new Error(
+      "Cannot disable MCP servers for Claude Code: user/local Claude MCP configuration has no supported configured-but-disabled state"
+    );
+  }
 }
 
 export function skillRuntimeDefaults(

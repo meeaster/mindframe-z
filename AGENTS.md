@@ -78,11 +78,13 @@ Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`;
 
 Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, `claude`, and `mise` are deep-merged with child keys overriding parent keys. `agents` is replaced by the child when set.
 
-MCP enablement is profile-owned: `shared/mcp.yml` defines connection details only; profiles use `mcp.<name>.enabled` and optional `targets` to render servers.
+MCP enablement is profile-owned: the MCP catalog defines connection details only; profiles use direct entries with concise `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, and shared entries with `route: executor`. Omitting `route` defaults to direct. Claude Code cannot be declared in a direct `disabled` group; Executor inventory is always configured once for every connected supported harness and is not per-agent toggleable.
 
 ## Rendering And Sync
 
 `mfz apply` writes rendered files under `configs/<profile>/`, writes machine-local `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` when configured, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
+
+When a profile routes MCP entries through Executor, apply validates the pinned Executor binary, reuses or starts the profile daemon, reconciles non-secret integration metadata and connections, and only then writes harness files. The generated bridge uses browser elicitation. Existing OAuth state is preserved; credentialed removal requires explicit Executor disconnection. `--dry-run` reports the plan without starting Executor or creating runtime files.
 
 Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
 

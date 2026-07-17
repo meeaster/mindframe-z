@@ -4,6 +4,11 @@ import {
   agentList,
   archiveCacheRoot,
   createRuntimePaths,
+  executorConfigPath,
+  executorDataDir,
+  executorDesiredPath,
+  executorManagedPath,
+  executorScopeDir,
   extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
@@ -186,6 +191,24 @@ describe(".mindframe-z store path contract", () => {
 
   it("pins the thread sweep root", () => {
     expect(threadSweepRoot(runtime)).toBe(path.join(mfz, "thread-sweep"));
+  });
+
+  it("pins the profile-scoped Executor runtime paths", () => {
+    expect(executorDataDir(runtime, "personal")).toBe(
+      path.join(mfz, "executor", "personal", "data")
+    );
+    expect(executorScopeDir(runtime, "personal")).toBe(
+      path.join(mfz, "configs", "personal", "executor")
+    );
+    expect(executorConfigPath(runtime, "personal")).toBe(
+      path.join(mfz, "configs", "personal", "executor", "executor.jsonc")
+    );
+    expect(executorDesiredPath(runtime, "personal")).toBe(
+      path.join(mfz, "configs", "personal", "executor", "desired.json")
+    );
+    expect(executorManagedPath(runtime, "personal")).toBe(
+      path.join(mfz, "configs", "personal", "executor", "managed.json")
+    );
   });
 });
 

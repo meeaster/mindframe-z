@@ -20,7 +20,7 @@ async function configureLocalProbe(root: string, script: string): Promise<void> 
   );
   const profilePath = path.join(root, "profiles", "personal", "profile.yml");
   const profile = await readFile(profilePath, "utf8");
-  const marker = "  context7:\n    agents: { opencode: true, claude-code: true }\n";
+  const marker = "  context7:\n    agents: [opencode, claude-code]\n";
   expect(profile).toContain(marker);
   await writeFile(
     profilePath,
@@ -28,9 +28,9 @@ async function configureLocalProbe(root: string, script: string): Promise<void> 
       marker,
       [
         "  context7:",
-        "    agents: { opencode: false }",
+        "    agents: { disabled: [opencode] }",
         "  probe-server:",
-        "    agents: { opencode: true }",
+        "    agents: [opencode]",
         ""
       ].join("\n")
     ),

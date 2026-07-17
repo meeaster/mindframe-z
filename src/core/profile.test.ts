@@ -87,6 +87,141 @@ describe("mergeProfiles thread defaults", () => {
   });
 });
 
+describe("MCP route selection", () => {
+  it("defaults concise and grouped direct entries and accepts the shared Executor branch", () => {
+    const profile = profileSchema.parse({
+      name: "routes",
+      mcp: {
+        concise: { agents: ["opencode"] },
+        grouped: { route: "direct", agents: { enabled: ["claude-code"], disabled: ["codex"] } },
+        shared: { route: "executor" }
+      }
+    });
+
+    expect(profile.mcp.concise).toEqual({ route: "direct", agents: { opencode: true } });
+    expect(profile.mcp.grouped).toEqual({
+      route: "direct",
+      agents: { "claude-code": true, codex: false }
+    });
+    expect(profile.mcp.shared).toEqual({ route: "executor" });
+  });
+
+  it("rejects boolean MCP agent maps", () => {
+    expect(() =>
+      profileSchema.parse({
+        name: "routes",
+        mcp: { legacy: { agents: { opencode: true } } }
+      })
+    ).toThrow();
+  });
+
+  it("rejects empty, overlapping, duplicate, and Claude-disabled direct selections", () => {
+    for (const agents of [
+      [],
+      { enabled: [], disabled: [] },
+      { enabled: ["opencode"], disabled: ["opencode"] },
+      { enabled: ["opencode", "opencode"] },
+      { enabled: ["opencode"], disabled: ["claude-code"] }
+    ]) {
+      expect(() => profileSchema.parse({ name: "routes", mcp: { direct: { agents } } })).toThrow();
+    }
+  });
+
+  it("rejects an Executor entry with per-agent state", () => {
+    expect(() =>
+      profileSchema.parse({
+        name: "routes",
+        mcp: { shared: { route: "executor", agents: ["opencode"] } }
+      })
+    ).toThrow();
+  });
+
+  it("replaces inherited MCP configuration when the route changes", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      mcp: { docs: { agents: ["opencode"] } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      mcp: { docs: { route: "executor" } }
+    });
+
+    expect(mergeProfiles(base, child).mcp.docs).toEqual({ route: "executor" });
+  });
+
+  it("overrides only named inherited direct harness states", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      mcp: { docs: { agents: ["opencode", "codex"] } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      mcp: { docs: { agents: { disabled: ["codex"] } } }
+    });
+
+    expect(mergeProfiles(base, child).mcp.docs).toEqual({
+      route: "direct",
+      agents: { opencode: true, codex: false }
+    });
+  });
+
+  it("switches an inherited Executor entry to direct when agents are declared", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      mcp: { docs: { route: "executor" } }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      mcp: { docs: { agents: ["opencode"] } }
+    });
+
+    expect(mergeProfiles(base, child).mcp.docs).toEqual({
+      route: "direct",
+      agents: { opencode: true }
+    });
+  });
+
+  it("inherits profile-owned Executor settings", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      executor: { timeout_ms: 45_000 }
+    });
+    const child = profileSchema.parse({ name: "child", extends: "base" });
+
+    expect(mergeProfiles(base, child).executor).toEqual({ timeout_ms: 45_000 });
+  });
+
+  it("reserves the generated Executor bridge name", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-name-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-name-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  executor:",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://example.invalid/mcp",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "mcp:", "  executor:", "    agents: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "base")).rejects.toThrow(
+      /reserved for the generated Executor bridge/
+    );
+  });
+});
+
 describe("mergeProfiles codex plugins", () => {
   it("merges child plugins with base plugins", () => {
     const base = profileSchema.parse({
@@ -259,7 +394,7 @@ describe("home inheritance", () => {
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
-      ["name: work", "mcp:", "  aws-knowledge:", "    agents: { opencode: true }", ""].join("\n"),
+      ["name: work", "mcp:", "  aws-knowledge:", "    agents: [opencode]", ""].join("\n"),
       "utf8"
     );
 

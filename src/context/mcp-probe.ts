@@ -5,9 +5,15 @@ import path from "node:path";
 import type { McpServer } from "../core/manifests.js";
 import { expandHome, type RuntimePaths } from "../core/paths.js";
 import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
-import { filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import {
+  executorBridgeName,
+  executorMcpServers,
+  filterMcpForTarget,
+  type ResolvedProfile
+} from "../core/profile.js";
 import type { ContextHarness, ContextMcpProbe } from "./model.js";
 import { measureText } from "./measurement.js";
+import { executorBridgeArgs, executorBridgeEnvironment } from "../renderers/executor.js";
 
 const protocolVersion = "2025-06-18";
 const clientVersion = "mfz-context-probe";
@@ -281,26 +287,39 @@ export async function probeMcpServer(
   projectRoot: string | undefined
 ): Promise<ContextMcpProbe> {
   const target = filterMcpForTarget(profile, harness).find((entry) => entry.name === serverName);
+  const sharedExecutor =
+    serverName === executorBridgeName && executorMcpServers(profile).length > 0;
   const overrides = await readOverrideStore(paths.home);
   const effective = effectiveProjectState(overrides, projectRoot, profile, harness, "mcp");
-  if (!target || effective[serverName] !== true) {
+  if ((!target && !sharedExecutor) || (!sharedExecutor && effective[serverName] !== true)) {
     throw new Error(
       `MCP server ${serverName} is not enabled for ${harness} in profile ${profile.name}`
     );
   }
-  if (target.server.type === "remote" && target.server.transport === "sse") {
+  if (target?.server.type === "remote" && target.server.transport === "sse") {
     throw new Error("MCP probe does not support remote SSE transport; no connection was made");
   }
 
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "mfz-context-mcp-"));
   let connection: McpConnection | undefined;
   try {
-    connection = createConnection(
-      target.server,
-      paths,
-      inspectedDirectory,
-      temporaryEnvironment(temporaryDirectory)
-    );
+    if (sharedExecutor) {
+      const child = spawn("executor", executorBridgeArgs(paths, profile), {
+        env: {
+          ...temporaryEnvironment(temporaryDirectory),
+          ...executorBridgeEnvironment(paths, profile)
+        },
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      connection = new StdioConnection(child);
+    } else {
+      connection = createConnection(
+        target!.server,
+        paths,
+        inspectedDirectory,
+        temporaryEnvironment(temporaryDirectory)
+      );
+    }
     const initialized = await connection.request(
       "initialize",
       {

@@ -47,6 +47,41 @@
                   "type": "string"
                 }
               },
+              "executor": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "streamable-http",
+                      "sse"
+                    ]
+                  },
+                  "oauth": {
+                    "type": "object",
+                    "properties": {
+                      "template": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scopes": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    "required": [
+                      "template"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
               "url": {
                 "type": "string",
                 "minLength": 1
@@ -93,6 +128,41 @@
                 "additionalProperties": {
                   "type": "string"
                 }
+              },
+              "executor": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "streamable-http",
+                      "sse"
+                    ]
+                  },
+                  "oauth": {
+                    "type": "object",
+                    "properties": {
+                      "template": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "scopes": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    "required": [
+                      "template"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
               },
               "command": {
                 "minItems": 1,

@@ -4,7 +4,9 @@ import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.
 import { parseEnvRef } from "../core/env-ref.js";
 import {
   deepMerge,
+  executorBridgeName,
   filterMcpForTarget,
+  requiresExecutorBridge,
   skillRuntimeDefaults,
   type ResolvedProfile
 } from "../core/profile.js";
@@ -13,6 +15,7 @@ import { renderInlinedAgents } from "./agents-doc.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
+import { codexExecutorEntry } from "./executor.js";
 
 export const CODEX_DERIVED_KEYS = new Set([
   "mcp_servers",
@@ -22,8 +25,8 @@ export const CODEX_DERIVED_KEYS = new Set([
   "skills"
 ]);
 
-function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, unknown> {
-  return Object.fromEntries(
+function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile): Record<string, unknown> {
+  const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "codex").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
         const literalHeaders: Record<string, string> = {};
@@ -47,7 +50,7 @@ function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, 
         ];
       }
 
-      const [command, ...args] = server.command.map((part) => expandHome(part, home));
+      const [command, ...args] = server.command.map((part) => expandHome(part, paths.home));
       return [
         name,
         {
@@ -59,6 +62,8 @@ function renderCodexMcp(profile: ResolvedProfile, home: string): Record<string, 
       ];
     })
   );
+  if (requiresExecutorBridge(profile)) mcp[executorBridgeName] = codexExecutorEntry(paths, profile);
+  return mcp;
 }
 
 function renderCodexPermissions(
@@ -121,7 +126,7 @@ export async function renderCodex(
   const hasPlugins = Object.keys(plugins).length > 0;
   const config = deepMerge(profile.profile.codex.config, {
     ...renderCodexPermissions(paths, profile),
-    mcp_servers: renderCodexMcp(profile, paths.home),
+    mcp_servers: renderCodexMcp(paths, profile),
     ...(hasPlugins ? { plugins } : {})
   });
   const skillDefaults = skillRuntimeDefaults(profile, "codex");

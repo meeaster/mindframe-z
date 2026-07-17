@@ -50,7 +50,7 @@ describe("mcp remote header rendering", () => {
         "  - instructions/AGENTS.md",
         "mcp:",
         "  exa:",
-        "    agents: { opencode: true, claude-code: true, codex: true }",
+        "    agents: [opencode, claude-code, codex]",
         ""
       ].join("\n"),
       "utf8"

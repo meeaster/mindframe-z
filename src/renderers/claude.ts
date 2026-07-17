@@ -8,9 +8,16 @@ import {
 } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
-import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import {
+  deepMerge,
+  executorBridgeName,
+  filterMcpForTarget,
+  requiresExecutorBridge,
+  type ResolvedProfile
+} from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
+import { claudeExecutorEntry } from "./executor.js";
 
 function claudePermissionPattern(absPath: string): string {
   const normalized = absPath.replace(/\/+$/, "") || "/";
@@ -170,18 +177,41 @@ export async function renderClaude(
   if (additionalDirectories.length > 0) {
     settings.additionalDirectories = additionalDirectories;
   }
-  const managedClaudeMcp = Object.fromEntries(
+  const managedClaudeMcp: Record<string, unknown> = Object.fromEntries(
     filterMcpForTarget(profile, "claude-code").map((server) => [
       server.name,
       renderClaudeMcpServer(server, paths.home)
     ])
   );
-  const managedClaudeServerNames = new Set(profile.mcpServers.map((server) => server.name));
+  if (requiresExecutorBridge(profile))
+    managedClaudeMcp[executorBridgeName] = claudeExecutorEntry(paths, profile);
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
+  const existingClaudeJson = await readJsonObject(localClaudeJsonPath);
+  const existingExecutor =
+    typeof existingClaudeJson.mcpServers === "object" &&
+    existingClaudeJson.mcpServers !== null &&
+    !Array.isArray(existingClaudeJson.mcpServers)
+      ? (existingClaudeJson.mcpServers as Record<string, unknown>)[executorBridgeName]
+      : undefined;
+  const hasGeneratedExecutor =
+    typeof existingExecutor === "object" &&
+    existingExecutor !== null &&
+    !Array.isArray(existingExecutor) &&
+    (existingExecutor as Record<string, unknown>).type === "stdio" &&
+    (existingExecutor as Record<string, unknown>).command === "executor" &&
+    Array.isArray((existingExecutor as Record<string, unknown>).args) &&
+    ((existingExecutor as Record<string, unknown>).args as unknown[]).includes("--scope") &&
+    typeof (existingExecutor as Record<string, unknown>).env === "object" &&
+    (existingExecutor as Record<string, unknown>).env !== null &&
+    "EXECUTOR_DATA_DIR" in ((existingExecutor as Record<string, unknown>).env as object);
+  const managedClaudeServerNames = new Set([
+    ...profile.mcpServers.map((server) => server.name),
+    ...(requiresExecutorBridge(profile) || hasGeneratedExecutor ? [executorBridgeName] : [])
+  ]);
   const mergedSettings = deepMerge(await readJsonObject(localSettingsPath), settings);
   const mergedClaudeJson = mergeClaudeMcp(
-    await readJsonObject(localClaudeJsonPath),
+    existingClaudeJson,
     managedClaudeMcp,
     managedClaudeServerNames
   );

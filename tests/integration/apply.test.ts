@@ -296,9 +296,9 @@ describe("apply integration", () => {
         "  - local-ref",
         "mcp:",
         "  context7:",
-        "    agents: { codex: true }",
+        "    agents: [codex]",
         "  local-helper:",
-        "    agents: { codex: false }",
+        "    agents: { disabled: [codex] }",
         "codex:",
         "  config:",
         "    model: test/codex",
@@ -869,9 +869,9 @@ describe("apply integration", () => {
         "extends: base",
         "mcp:",
         "  context7:",
-        "    agents: { opencode: true }",
+        "    agents: [opencode]",
         "  local-helper:",
-        "    agents: { claude-code: true }",
+        "    agents: [claude-code]",
         ""
       ].join("\n"),
       "utf8"
@@ -883,6 +883,12 @@ describe("apply integration", () => {
           installMethod: "native",
           mcpServers: {
             context7: { type: "http", url: "https://old.invalid" },
+            executor: {
+              type: "stdio",
+              command: "executor",
+              args: ["mcp", "--scope", "/tmp/mfz-generated-executor"],
+              env: { EXECUTOR_DATA_DIR: "/tmp/mfz-generated-executor-data" }
+            },
             manual: { type: "http", url: "https://manual.invalid" }
           },
           projects: {
@@ -913,6 +919,29 @@ describe("apply integration", () => {
     });
   });
 
+  it("preserves a user-owned all-direct Claude MCP entry named executor", async () => {
+    await writeFile(
+      path.join(home, ".claude.json"),
+      JSON.stringify({
+        mcpServers: {
+          executor: { type: "stdio", command: "executor" },
+          manual: { type: "http", url: "https://manual.invalid" }
+        }
+      }) + "\n",
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
+
+    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
+      mcpServers?: Record<string, unknown>;
+    };
+    expect(localClaudeJson.mcpServers).toMatchObject({
+      executor: { type: "stdio", command: "executor" },
+      manual: { type: "http", url: "https://manual.invalid" }
+    });
+  });
+
   it("does not render Claude config for an opencode-only profile", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
@@ -924,7 +953,7 @@ describe("apply integration", () => {
         "  - instructions/AGENTS.md",
         "mcp:",
         "  context7:",
-        "    agents: { opencode: true }",
+        "    agents: [opencode]",
         ""
       ].join("\n"),
       "utf8"
@@ -951,7 +980,7 @@ describe("apply integration", () => {
         "  - instructions/AGENTS.md",
         "mcp:",
         "  context7:",
-        "    agents: { opencode: true }",
+        "    agents: [opencode]",
         ""
       ].join("\n"),
       "utf8"
@@ -989,7 +1018,7 @@ describe("apply integration", () => {
         "agents: [opencode, claude-code, codex]",
         "mcp:",
         "  exa:",
-        "    agents: { opencode: true, claude-code: true, codex: true }",
+        "    agents: [opencode, claude-code, codex]",
         ""
       ].join("\n"),
       "utf8"
@@ -1055,13 +1084,7 @@ describe("apply integration", () => {
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      [
-        "name: base",
-        "mcp:",
-        "  secured:",
-        "    agents: { claude-code: true, codex: true }",
-        ""
-      ].join("\n"),
+      ["name: base", "mcp:", "  secured:", "    agents: [claude-code, codex]", ""].join("\n"),
       "utf8"
     );
     await writeFile(
@@ -1074,7 +1097,7 @@ describe("apply integration", () => {
         "  - instructions/AGENTS.md",
         "mcp:",
         "  secured:",
-        "    agents: { claude-code: true, codex: true }",
+        "    agents: [claude-code, codex]",
         ""
       ].join("\n"),
       "utf8"

@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { extraFoldersIndexContent, referenceIndexContent } from "../ref-store/references.js";
-import { filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
+import {
+  executorBridgeName,
+  executorMcpServers,
+  filterMcpForTarget,
+  type ResolvedProfile
+} from "../core/profile.js";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import {
   effectiveProjectState,
@@ -271,9 +276,20 @@ export async function analyzeHarnessStatic(
     ({ name }) => ({
       name,
       enabled: effectiveMcp[name] === true,
-      loading: mcpLoading
+      loading: mcpLoading,
+      route: "direct"
     })
   );
+  const shared = executorMcpServers(profile);
+  if (shared.length > 0) {
+    mcpServers.push({
+      name: executorBridgeName,
+      enabled: true,
+      loading: mcpLoading,
+      route: "executor",
+      sharedIntegrations: shared.map((entry) => entry.name).sort()
+    });
+  }
   for (const server of mcpServers) {
     if (!server.enabled) continue;
     contributors.push(

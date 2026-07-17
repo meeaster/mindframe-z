@@ -13,6 +13,22 @@ The editing model: home files are the source of truth; everything under \`~/.min
 
 Local skills live under \`skills/\` and are registered in \`catalog/skills.yml\` with \`source: local\`. Vendored skills are selected subtrees under \`skills/vendor/<name>/\`, declared with an HTTPS \`repo\`, tracked \`ref\`, and \`subtree\`, and pinned in \`skills/vendor.lock.yml\`. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`, then profiles enable them under \`opencode.plugins\`, \`opencode.commands\`, and \`opencode.agents\`.
 
+MCP entries are direct by default. Use a concise enabled list or a grouped state list:
+
+\`\`\`yaml
+mcp:
+  fff:
+    agents: [opencode, claude-code, codex]
+  exa:
+    agents:
+      enabled: [claude-code]
+      disabled: [opencode, codex]
+  context7:
+    route: executor
+\`\`\`
+
+Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state. Executor entries are always-configured shared inventory for OpenCode, Claude Code, and Codex, not per-agent toggles. A real \`mfz apply\` starts or reuses the profile-scoped Executor daemon, performs browser authorization when explicitly declared, and writes harness bridges only after required connections are healthy. It never imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
+
 Topic guides: \`mfz guide skills\` — add or change skills.
 `;
 

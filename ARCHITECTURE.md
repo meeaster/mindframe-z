@@ -48,6 +48,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ```text
 ~/.mindframe-z/config.yml
 ~/.mindframe-z/configs/<profile>/
+~/.mindframe-z/executor/<profile>/data/
 ~/.mindframe-z/references/
 ~/.mindframe-z/homes/<alias>/
 ~/.mindframe-z/overrides.json
@@ -58,6 +59,8 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ```
 
 Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
+
+Executor-routed MCP entries use one profile-scoped runtime under `executor/<profile>/data/` and one generated bridge under `configs/<profile>/executor/` for each selected OpenCode, Claude Code, or Codex renderer. The runtime owns the Executor SQLite database and OAuth state; `desired.json` and `managed.json` are non-secret inspectable snapshots. `mfz apply` reconciles this state before committing harness cutover, and `--dry-run` never starts Executor or writes runtime state.
 
 ## Renderers
 
@@ -71,11 +74,33 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `dotfiles`: profile dotfiles; managed `.zshrc` guarantees `~/.mindframe-z/bin` on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
+MCP profile entries are either direct (`agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, with optional `route: direct`) or shared (`route: executor`). Omitting `route` defaults to direct. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are always-configured shared inventory visible through one local `executor mcp --scope ... --elicitation-mode browser` bridge per selected supported harness and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; existing direct configuration remains installed until Executor health succeeds.
+
+### MCP Authoring And Migration
+
+The direct authoring model replaces boolean agent maps:
+
+```yaml
+mcp:
+  fff:
+    agents: [opencode, claude-code, codex]
+  exa:
+    agents:
+      enabled: [claude-code]
+      disabled: [opencode, codex]
+  context7:
+    route: executor
+```
+
+An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead. Executor-routed integrations remain configured in the shared inventory for every connected supported harness, so changing one harness's visibility is a profile route change rather than a project override.
+
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution.
 
 ## Sync
 
 `mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream clone is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream clones are reported as uncommitted.
+
+Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations are not removed automatically; apply blocks with a metadata-only remediation message until the user disconnects them explicitly.
 
 ## Vendored Skills
 
@@ -126,6 +151,8 @@ Scaffolded YAML files use first-line YAML language server modelines pointing at 
 Threads are machine-local orchestration state under `~/.mindframe-z/threads/` with per-destination git working copies. They resolve profile and machine config at runtime but are separate from rendering.
 
 Sandbox code remains engine-owned. Home-specific sandbox overlays belong in homes; engine sandbox files provide the shared image, broker, and runtime scaffolding.
+
+Sandbox remains a separate credential boundary. Profiles containing Executor-routed MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
 
 ## Description Convention
 

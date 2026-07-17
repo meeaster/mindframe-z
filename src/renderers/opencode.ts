@@ -9,10 +9,13 @@ import {
 } from "../core/paths.js";
 import {
   deepMerge,
+  executorBridgeName,
   filterMcpForTarget,
   skillRuntimeDefaults,
   type ResolvedProfile
 } from "../core/profile.js";
+import { openCodeExecutorEntry } from "./executor.js";
+import { requiresExecutorBridge } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
@@ -212,7 +215,7 @@ export async function renderOpenCode(
     profile.enabledAgents
   );
   const instructions = [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
-  const mcp = Object.fromEntries(
+  const mcp: Record<string, unknown> = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
         return [
@@ -236,6 +239,8 @@ export async function renderOpenCode(
       ];
     })
   );
+  if (requiresExecutorBridge(profile))
+    mcp[executorBridgeName] = openCodeExecutorEntry(paths, profile);
   const extraFolders = profile.extraFolders;
   const externalDirectory: Record<string, string> = {};
   const edit: Record<string, string> = {};

@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { ResolvedProfile } from "../core/profile.js";
+import { executorMcpServers } from "../core/profile.js";
 import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { readClaudeHistory } from "./claude-history.js";
@@ -169,6 +170,7 @@ export async function buildContextHistoryReport(
     )
       .filter(([, enabled]) => enabled)
       .map(([name]) => name);
+    if (executorMcpServers(profile).length > 0) mcpNames.push("executor");
     reports.push({
       harness,
       scopeNotes: [],
@@ -432,6 +434,9 @@ function formatMcp(report: ContextReport, harness: HarnessReport, established: b
 
   for (const server of enabled) {
     const result = probes.get(server.name);
+    if (server.sharedIntegrations && server.sharedIntegrations.length > 0) {
+      lines.push(`        shared inventory: ${server.sharedIntegrations.join(", ")}`);
+    }
     if (!result) {
       lines.push(`      ${server.name}  enabled | schemas unmeasured (not probed)`);
       continue;

@@ -116,6 +116,26 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
+export function executorScopeDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "executor");
+}
+
+export function executorDataDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(paths.home, ".mindframe-z", "executor", profileName, "data");
+}
+
+export function executorConfigPath(paths: RuntimePaths, profileName: string): string {
+  return path.join(executorScopeDir(paths, profileName), "executor.jsonc");
+}
+
+export function executorDesiredPath(paths: RuntimePaths, profileName: string): string {
+  return path.join(executorScopeDir(paths, profileName), "desired.json");
+}
+
+export function executorManagedPath(paths: RuntimePaths, profileName: string): string {
+  return path.join(executorScopeDir(paths, profileName), "managed.json");
+}
+
 export function skillCacheRoot(paths: RuntimePaths): string {
   return path.join(paths.home, ".mindframe-z", "cache", "skills");
 }

@@ -126,6 +126,7 @@ function remoteMcp(
 ): ResolvedMcpServer {
   return {
     name,
+    route: "direct",
     agents: Object.fromEntries(
       (options.targets ?? ["opencode", "claude-code"]).map((target) => [target, true])
     ),
@@ -166,6 +167,18 @@ describe("sandbox runtime inputs", () => {
     expect(runtime.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
     expect(runtime.env.ANTHROPIC_BEDROCK_BASE_URL).toBeUndefined();
     expect(runtime.noProxy).not.toContain("bedrock-sigv4-proxy");
+  });
+
+  it("rejects host Executor routes at the sandbox boundary", async () => {
+    const routed = profile("subscription");
+    routed.mcpServers.push({
+      ...remoteMcp("context7", "https://example.invalid/mcp"),
+      route: "executor"
+    });
+
+    await expect(
+      resolveSandboxRuntimeInputs(paths(), routed, { workspace: "/tmp/project" })
+    ).rejects.toThrow(/security boundary/);
   });
 
   it("maps rendered config read-only, writable state read-write, and workspace read-write", async () => {

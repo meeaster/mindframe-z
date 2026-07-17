@@ -164,6 +164,30 @@ describe("generated skill schema", () => {
   });
 });
 
+describe("generated profile MCP schema", () => {
+  it("describes concise and grouped direct authoring constraints", async () => {
+    const schema = JSON.parse(
+      await readFile(path.join(process.cwd(), "schemas", "profile.schema.json"), "utf8")
+    ) as Record<string, unknown>;
+    const properties = schema.properties as Record<string, Record<string, unknown>>;
+    const mcp = properties.mcp!;
+    const entries = mcp.additionalProperties as Record<string, unknown>;
+    const direct = (entries.anyOf as Record<string, unknown>[])[0]!;
+    const directProperties = direct.properties as Record<string, Record<string, unknown>>;
+    const agents = directProperties.agents!;
+    const branches = agents.anyOf as Record<string, unknown>[];
+
+    expect(branches[0]!.uniqueItems).toBe(true);
+    const grouped = branches[1]!;
+    expect(grouped.not).toBeDefined();
+    for (const variant of grouped.anyOf as Record<string, unknown>[]) {
+      const groupedProperties = variant.properties as Record<string, Record<string, unknown>>;
+      const disabledItems = groupedProperties.disabled!.items as Record<string, unknown>;
+      expect(disabledItems.enum).toEqual(["opencode", "codex"]);
+    }
+  });
+});
+
 describe("validateManifests", () => {
   it("reports only the files that exist, one entry per profile dir", async () => {
     const { root, home } = await tmpHome();

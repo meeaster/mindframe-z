@@ -10,9 +10,9 @@ import {
   readOverrideStore,
   writeProjectOverrideDelta
 } from "../core/override-store.js";
-import type { ResolvedProfile } from "../core/profile.js";
+import { assertMcpToggleSupported, type ResolvedProfile } from "../core/profile.js";
 
-type McpState = Record<string, boolean>;
+export type McpState = Record<string, boolean>;
 
 interface McpOption {
   value: string;
@@ -22,9 +22,21 @@ interface McpOption {
 
 const targets: AgentName[] = ["opencode", "claude-code", "codex"];
 
+export function validateMcpTuiStates(
+  profile: ResolvedProfile,
+  states: Partial<Record<AgentName, McpState>>
+): void {
+  for (const server of profile.mcpServers) {
+    if (server.route !== "direct" || server.agents["claude-code"] === undefined) continue;
+    if (states["claude-code"]?.[server.name] === false) {
+      assertMcpToggleSupported("claude-code", false);
+    }
+  }
+}
+
 function optionsForTarget(profile: ResolvedProfile, target: AgentName): McpOption[] {
   return profile.mcpServers
-    .filter((server) => server.agents[target] !== undefined)
+    .filter((server) => server.route !== "executor" && server.agents[target] !== undefined)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((server) => ({
       value: server.name,
@@ -142,23 +154,18 @@ export async function runMcpTui(
   const projectRoot = await findProjectRoot();
   if (!projectRoot) throw new Error("mfz mcp tui must be run inside a git repository");
   const store = await readOverrideStore(paths.home);
-  const states = Object.fromEntries(
+  const initialStates = Object.fromEntries(
     targets.map((target) => [
       target,
       effectiveProjectState(store, projectRoot, profile, target, "mcp")
     ])
   ) as Record<AgentName, McpState>;
-  const prompt = new McpTogglePrompt(profile, states, streams);
+  const prompt = new McpTogglePrompt(profile, initialStates, streams);
   const result = await prompt.prompt();
   if (isCancel(result) || !prompt.result.saved) return;
+  const nextStates = prompt.result.states;
+  validateMcpTuiStates(profile, nextStates);
   for (const target of targets) {
-    await writeProjectOverrideDelta(
-      paths,
-      profile,
-      projectRoot,
-      target,
-      "mcp",
-      prompt.result.states[target]
-    );
+    await writeProjectOverrideDelta(paths, profile, projectRoot, target, "mcp", nextStates[target]);
   }
 }

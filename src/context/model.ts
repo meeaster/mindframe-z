@@ -56,6 +56,8 @@ export interface ContextMcpMembership {
   name: string;
   enabled: boolean;
   loading: LoadingClass;
+  route?: "direct" | "executor";
+  sharedIntegrations?: string[];
 }
 
 export interface ContextHistory {
