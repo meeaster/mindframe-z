@@ -1,6 +1,5 @@
 import path from "node:path";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
-import { parseEnvRef } from "./env-ref.js";
 import {
   eachUpstream,
   homeDisplayName,
@@ -49,7 +48,7 @@ export function validateExecutorMcpServer(name: string, server: McpServer): void
     if (server.transport === "stdio") {
       throw new Error(`Executor route for ${name} cannot use stdio transport for a remote server`);
     }
-    if (parseEnvRef(server.url) !== null || server.url.includes("{env:")) {
+    if (server.url.includes("{env:")) {
       throw new Error(
         `Executor route for ${name}.url contains an environment reference; keep it direct`
       );
