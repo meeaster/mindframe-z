@@ -1,13 +1,6 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify } from "smol-toml";
-import {
-  expandHome,
-  extraFoldersIndexPath,
-  profileConfigsDir,
-  referenceIndexPath,
-  type RuntimePaths
-} from "../core/paths.js";
+import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
 import {
   deepMerge,
@@ -16,6 +9,7 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { renderInlinedAgents } from "./agents-doc.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
@@ -115,27 +109,6 @@ export function renderCodexPlugins(
   );
 }
 
-async function renderCodexAgents(paths: RuntimePaths, profile: ResolvedProfile): Promise<string> {
-  const parts: string[] = [];
-  for (const file of profile.instructionFiles) parts.push(await readFile(file, "utf8"));
-  for (const file of [
-    referenceIndexPath(paths),
-    ...(profile.extraFolders.length > 0 ? [extraFoldersIndexPath(paths)] : [])
-  ]) {
-    try {
-      parts.push(await readFile(file, "utf8"));
-    } catch {
-      // Dry-run renders may happen before local indexes are written.
-    }
-  }
-  return (
-    parts
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join("\n\n") + "\n"
-  );
-}
-
 export async function renderCodex(
   paths: RuntimePaths,
   profile: ResolvedProfile
@@ -160,7 +133,7 @@ export async function renderCodex(
   );
   const renderedConfig = mergeSkillOverrides("codex", config, skillDefaults, { skillPaths });
   const configContent = stringify(renderedConfig);
-  const agentsContent = await renderCodexAgents(paths, profile);
+  const agentsContent = await renderInlinedAgents(paths, profile);
   const localConfigPath = path.join(paths.codexDir, "config.toml");
   const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), renderedConfig);
   if (hasPlugins) {

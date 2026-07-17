@@ -345,9 +345,13 @@ describe("apply integration", () => {
         filesystem: { [path.join(home, "references")]: "read", [path.join(home, "work")]: "write" }
       }
     });
-    expect(await readFile(configsPath(home, "personal", "codex", "AGENTS.md"), "utf8")).toContain(
-      "# Test Agents"
-    );
+    const codexAgents = await readFile(configsPath(home, "personal", "codex", "AGENTS.md"), "utf8");
+    expect(codexAgents).toContain("# Test Agents");
+    // Codex cannot follow @import directives, so its AGENTS.md inlines the
+    // reference and extra-folder index contents alongside the instruction file.
+    expect(codexAgents).toContain("# Enabled References");
+    expect(codexAgents).toContain("# Extra Folders");
+    expect(codexAgents).toContain("Work code");
     expect(await exists(path.join(home, ".codex", "config.toml"))).toBe(false);
   });
 
