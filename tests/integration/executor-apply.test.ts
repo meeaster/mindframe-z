@@ -41,6 +41,12 @@ describe("Executor apply integration", () => {
       rendered.files.find((file) => file.path.endsWith("opencode.jsonc"))?.content ?? "";
     expect(config).toContain('"executor"');
     expect(config).not.toContain('"context7"');
+    expect(config).not.toContain("EXECUTOR_DATA_DIR");
+    expect(config).not.toContain("EXECUTOR_SCOPE_DIR");
+    expect(config).not.toContain("--scope");
+    await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
     await expect(access(path.join(home, ".mindframe-z", "executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -76,9 +82,7 @@ describe("Executor apply integration", () => {
     ]);
     expect(result.stdout).toContain("executor\tremove context7");
     expect(result.stdout).toContain("live state unavailable");
-    await expect(
-      access(path.join(home, ".mindframe-z", "executor", "personal", "data"))
-    ).rejects.toMatchObject({
+    await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
   });
@@ -120,7 +124,7 @@ describe("Executor apply integration", () => {
         expect(codexConfig).toContain("tool_timeout_sec");
       }
     }
-    await expect(access(path.join(home, ".mindframe-z", "executor"))).rejects.toMatchObject({
+    await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
   });
@@ -213,7 +217,7 @@ describe("Executor apply integration", () => {
       "--dry-run"
     ]);
     expect(result.stdout).not.toContain("executor\t");
-    await expect(access(path.join(home, ".mindframe-z", "executor"))).rejects.toMatchObject({
+    await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
   });

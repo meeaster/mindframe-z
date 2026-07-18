@@ -108,6 +108,10 @@ The normalized shape is:
 }
 ```
 
+## Executor Boundary
+
+The host Executor runtime is a separate credential boundary from the sandbox. A profile that routes an MCP server through Executor is rejected by sandbox startup until a dedicated host-to-sandbox design exists. Do not mount the native `~/.executor` store (or an intentionally configured `EXECUTOR_DATA_DIR`), control-manifest tokens, OAuth state, or generated Executor snapshots into the sandbox. Existing profile-scoped MFZ Executor directories are legacy state and are not migrated or deleted automatically. Direct MCP and the existing Agent Vault shim model remain the supported sandbox paths; their credential handoffs must not be reused as Executor connection input.
+
 ## Spike Findings
 
 - Agent Vault MITM streams long-lived responses with `io.Copy` and supports long-running CONNECT transfers, so MCP Streamable HTTP and SSE should pass without response buffering.

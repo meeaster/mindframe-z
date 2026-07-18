@@ -62,7 +62,7 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile): Record<s
       ];
     })
   );
-  if (requiresExecutorBridge(profile)) mcp[executorBridgeName] = codexExecutorEntry(paths, profile);
+  if (requiresExecutorBridge(profile)) mcp[executorBridgeName] = codexExecutorEntry(profile);
   return mcp;
 }
 

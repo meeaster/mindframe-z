@@ -1,36 +1,57 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { executorDesiredPath, executorManagedPath, type RuntimePaths } from "../core/paths.js";
 import { fileExists } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import {
-  createExecutorAdapter,
-  attachExecutorAdapter,
-  type ExecutorAdapter,
-  type ExecutorIntegration
-} from "./adapter.js";
+import { createExecutorAdapter, attachExecutorAdapter, type ExecutorAdapter } from "./adapter.js";
 import {
   buildExecutorDesiredState,
   executorConfigDigest,
   type ExecutorDesiredServer,
   type ExecutorDesiredState
 } from "./model.js";
+import {
+  classifyExecutorIntegration,
+  classifyExecutorRemoval,
+  type ExecutorConnectionClassification
+} from "./lifecycle.js";
 
 export interface ManagedState {
   version: 1;
   profile: string;
-  complete?: boolean;
-  integrations: Record<string, { digest: string; lastReconciledAt: string }>;
+  complete: boolean;
+  operation?: {
+    status: "incomplete" | "complete";
+    desiredIntegrations: string[];
+    startedAt: string;
+  };
+  integrations: Record<
+    string,
+    { digest: string; lastReconciledAt: string; connections?: Record<string, string> }
+  >;
 }
 
 const managedStateSchema = z.object({
   version: z.literal(1),
   profile: z.string(),
   complete: z.boolean().optional(),
+  operation: z
+    .object({
+      status: z.enum(["incomplete", "complete"]),
+      desiredIntegrations: z.array(z.string()),
+      startedAt: z.string()
+    })
+    .optional(),
   integrations: z.record(
     z.string(),
-    z.object({ digest: z.string(), lastReconciledAt: z.string() }).strict()
+    z
+      .object({
+        digest: z.string(),
+        lastReconciledAt: z.string(),
+        connections: z.record(z.string(), z.string()).optional()
+      })
+      .strict()
   )
 });
 
@@ -40,6 +61,9 @@ export interface ExecutorReconcileResult {
   updated: string[];
   reused: string[];
   removed: string[];
+  addedConnections: string[];
+  reusedConnections: string[];
+  retained: string[];
   planning?: "managed-digest-only" | "metadata-unavailable" | "live-metadata-unverified";
   blockers?: string[];
 }
@@ -49,12 +73,30 @@ export async function readManagedState(
   profileName: string
 ): Promise<ManagedState | undefined> {
   try {
-    return managedStateSchema.parse(
+    const parsed = managedStateSchema.parse(
       JSON.parse(await readFile(executorManagedPath(paths, profileName), "utf8"))
-    ) as ManagedState;
+    );
+    return { ...parsed, complete: parsed.complete === true } as ManagedState;
   } catch {
     return undefined;
   }
+}
+
+export async function readManagedStates(paths: RuntimePaths): Promise<ManagedState[]> {
+  let entries;
+  try {
+    entries = await readdir(paths.configsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const states: ManagedState[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const state = await readManagedState(paths, entry.name);
+    if (state) states.push({ ...state, profile: entry.name });
+  }
+  return states;
 }
 
 async function readManaged(paths: RuntimePaths, profileName: string): Promise<ManagedState> {
@@ -62,6 +104,7 @@ async function readManaged(paths: RuntimePaths, profileName: string): Promise<Ma
     (await readManagedState(paths, profileName)) ?? {
       version: 1,
       profile: profileName,
+      complete: false,
       integrations: {}
     }
   );
@@ -91,89 +134,27 @@ async function writeSnapshots(
   await writeJsonAtomic(executorManagedPath(paths, profileName), managed);
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function integrationConfig(integration: ExecutorIntegration): Record<string, unknown> {
-  return integration.config;
-}
-
-function authTemplates(config: Record<string, unknown>): unknown[] {
-  const templates = config.authenticationTemplate;
-  return Array.isArray(templates) ? templates : [];
-}
-
-function hasDurableState(
-  connections: readonly {
-    template: string;
-    provider?: string | null;
-    oauthClient?: string | null;
-    oauthScope?: string | null;
-    expiresAt?: number | null;
-  }[]
-): boolean {
-  return connections.some(
-    (connection) =>
-      connection.template !== "none" ||
-      (connection.provider !== "" && connection.provider !== "none") ||
-      connection.oauthClient != null ||
-      connection.oauthScope != null ||
-      connection.expiresAt != null
-  );
-}
-
-const dangerousConfigFields = [
-  "transport",
-  "endpoint",
-  "resource",
-  "remoteTransport",
-  "command",
-  "args",
-  "env"
-] as const;
-
-function changedDangerousConfigFields(
-  current: Record<string, unknown>,
-  desired: Record<string, unknown>
-): string[] {
-  return dangerousConfigFields.filter((field) => !sameJson(current[field], desired[field]));
-}
-
-function normalizedScopes(value: string): string {
-  return value.split(/\s+/).filter(Boolean).sort().join(" ");
-}
-
-function changedOAuthScopes(
-  connections: readonly { oauthScope?: string | null }[],
-  desired: ExecutorDesiredServer
-): boolean {
-  if (!desired.oauth) return false;
-  const requested = normalizedScopes(desired.oauth.scopes.join(" "));
-  return connections.some(
-    (connection) =>
-      connection.oauthScope != null && normalizedScopes(connection.oauthScope) !== requested
-  );
-}
-
-function desiredTemplates(server: ExecutorDesiredServer): unknown[] {
-  return authTemplates(server.config as unknown as Record<string, unknown>);
-}
-
-function templatesChanged(
-  integration: ExecutorIntegration,
-  desired: ExecutorDesiredServer
-): boolean {
-  return !sameJson(authTemplates(integrationConfig(integration)), desiredTemplates(desired));
-}
-
 function emptyResult(desired: ExecutorDesiredState): ExecutorReconcileResult {
-  return { desired, added: [], updated: [], reused: [], removed: [] };
+  return {
+    desired,
+    added: [],
+    updated: [],
+    reused: [],
+    removed: [],
+    addedConnections: [],
+    reusedConnections: [],
+    retained: []
+  };
+}
+
+function connectionKey(integration: string, name: string): string {
+  return `${integration}/${name}`;
 }
 
 export function planExecutor(
   desired: ExecutorDesiredState,
-  previous: ManagedState
+  previous: ManagedState,
+  sharedOwnedSlugs: ReadonlySet<string> = new Set()
 ): ExecutorReconcileResult {
   const desiredSlugs = new Set(desired.integrations.map((server) => server.slug));
   return {
@@ -192,7 +173,14 @@ export function planExecutor(
         (server) => previous.integrations[server.slug]?.digest === executorConfigDigest(server)
       )
       .map((server) => server.slug),
-    removed: Object.keys(previous.integrations).filter((slug) => !desiredSlugs.has(slug)),
+    removed: Object.keys(previous.integrations).filter(
+      (slug) => !desiredSlugs.has(slug) && !sharedOwnedSlugs.has(slug)
+    ),
+    addedConnections: [],
+    reusedConnections: [],
+    retained: Object.keys(previous.integrations).filter(
+      (slug) => !desiredSlugs.has(slug) && sharedOwnedSlugs.has(slug)
+    ),
     planning: "managed-digest-only"
   };
 }
@@ -206,71 +194,47 @@ async function planExecutorWithMetadata(
   const updated = new Set(base.updated);
   const reused = new Set(base.reused);
   const removed = new Set(base.removed);
+  const addedConnections = new Set(base.addedConnections);
+  const reusedConnections = new Set(base.reusedConnections);
   const blockers: string[] = [];
 
   for (const server of desired.integrations) {
     const current = await adapter.getIntegration(server.slug);
-    if (!current) {
+    const classification = classifyExecutorIntegration(server, {
+      current,
+      connections: current ? await adapter.listConnections(server.slug) : []
+    });
+    if (classification.integration === "missing") {
       added.add(server.slug);
       updated.delete(server.slug);
       reused.delete(server.slug);
-      continue;
-    }
-    const currentConfig = integrationConfig(current);
-    const desiredConfig = server.config as unknown as Record<string, unknown>;
-    const connections = await adapter.listConnections(server.slug);
-    const durable = hasDurableState(connections);
-    const dangerous = changedDangerousConfigFields(currentConfig, desiredConfig);
-    if (durable && dangerous.length > 0) {
-      blockers.push(
-        `Executor ${server.slug} has durable state and changed metadata: ${dangerous.join(", ")}`
-      );
-    }
-    if (durable && templatesChanged(current, server)) {
-      blockers.push(`Executor ${server.slug} has a durable auth-template change`);
-    }
-    if (durable && changedOAuthScopes(connections, server)) {
-      blockers.push(`Executor ${server.slug} has a durable OAuth scope change`);
-    }
-    const main = connections.find(
-      (connection) => connection.owner === "user" && connection.name === "main"
-    );
-    if (!main && server.oauth) {
-      blockers.push(`Executor OAuth authorization is required for ${server.slug}`);
-    }
-    if (main && server.oauth && main.missingOAuthScopes.length > 0) {
-      blockers.push(`Executor ${server.slug}/main is missing required OAuth scopes`);
-    }
-    const configChanged = !sameJson(
-      { ...currentConfig, authenticationTemplate: undefined },
-      { ...desiredConfig, authenticationTemplate: undefined }
-    );
-    if (
-      configChanged ||
-      current.description !== server.description ||
-      templatesChanged(current, server)
-    ) {
+    } else if (classification.integration === "updated") {
       updated.add(server.slug);
+      added.delete(server.slug);
       reused.delete(server.slug);
     } else {
       reused.add(server.slug);
       added.delete(server.slug);
       updated.delete(server.slug);
     }
+    for (const connection of classification.connections) {
+      if (connection.kind === "missing" && !connection.requiresConnection) {
+        addedConnections.add(connectionKey(server.slug, connection.name));
+      } else if (connection.kind === "compatible") {
+        reusedConnections.add(connectionKey(server.slug, connection.name));
+      }
+    }
+    blockers.push(...classification.blockers);
   }
 
   for (const slug of base.removed) {
     const current = await adapter.getIntegration(slug);
-    if (!current) {
-      removed.delete(slug);
-      continue;
-    }
-    const connections = await adapter.listConnections(slug);
-    if (hasDurableState(connections)) {
-      blockers.push(
-        `Executor ${slug} has durable state and requires explicit disconnect before removal`
-      );
-    }
+    const removal = classifyExecutorRemoval(
+      slug,
+      current,
+      current ? await adapter.listConnections(slug) : []
+    );
+    if (!removal.removable) blockers.push(...removal.blockers);
   }
 
   return {
@@ -279,6 +243,8 @@ async function planExecutorWithMetadata(
     updated: [...updated],
     reused: [...reused],
     removed: [...removed],
+    addedConnections: [...addedConnections],
+    reusedConnections: [...reusedConnections],
     planning: "live-metadata-unverified",
     blockers
   };
@@ -287,186 +253,185 @@ async function planExecutorWithMetadata(
 async function preflightReconciliation(
   adapter: ExecutorAdapter,
   desired: readonly ExecutorDesiredServer[],
-  previous: ManagedState
+  previous: ManagedState,
+  options: {
+    checkUndeclaredConnections?: boolean;
+    allowConnectionRepair?: boolean;
+    retainedSlugs?: ReadonlySet<string>;
+  } = {}
 ): Promise<void> {
   for (const server of desired) {
     const current = await adapter.getIntegration(server.slug);
-    if (!current) continue;
-    const connections = await adapter.listConnections(server.slug);
-    const currentConfig = integrationConfig(current);
-    const desiredConfig = server.config as unknown as Record<string, unknown>;
-    const durable = hasDurableState(connections);
-    const dangerous = changedDangerousConfigFields(currentConfig, desiredConfig);
-    if (durable && dangerous.length > 0) {
-      throw new Error(
-        `Executor ${server.slug} has durable connection state; refusing dangerous configuration changes: ${dangerous.join(", ")}`
-      );
-    }
-    if (templatesChanged(current, server) && durable) {
-      throw new Error(
-        `Executor auth-template change for ${server.slug} would strand existing connection state; disconnect it explicitly before applying`
-      );
-    }
-    if (durable && changedOAuthScopes(connections, server)) {
-      throw new Error(
-        `Executor OAuth scope change for ${server.slug} would strand existing connection state; disconnect it explicitly before applying`
-      );
-    }
+    const classification = classifyExecutorIntegration(
+      server,
+      {
+        current,
+        connections: current ? await adapter.listConnections(server.slug) : []
+      },
+      {
+        requireCredentialedConnections: false,
+        ...(options.allowConnectionRepair ? { allowConnectionRepair: true } : {})
+      }
+    );
+    const blockers =
+      options.checkUndeclaredConnections === false
+        ? classification.blockers.filter(
+            (blocker) => !blocker.includes("is durable but not declared")
+          )
+        : classification.blockers;
+    if (blockers.length > 0) throw new Error(blockers[0]);
   }
 
   const desiredSlugs = new Set(desired.map((server) => server.slug));
   for (const slug of Object.keys(previous.integrations)) {
     if (desiredSlugs.has(slug)) continue;
+    if (options.retainedSlugs?.has(slug)) continue;
     const current = await adapter.getIntegration(slug);
-    if (!current) continue;
-    if (hasDurableState(await adapter.listConnections(slug))) {
-      throw new Error(
-        `Executor integration ${slug} has durable connection state; disconnect it explicitly before removing it from the profile`
-      );
-    }
+    const removal = classifyExecutorRemoval(
+      slug,
+      current,
+      current ? await adapter.listConnections(slug) : []
+    );
+    if (removal.blockers.length > 0) throw new Error(removal.blockers[0]);
   }
 }
 
-async function assertNonInteractiveOAuthReady(
-  adapter: ExecutorAdapter,
-  desired: readonly ExecutorDesiredServer[]
-): Promise<void> {
-  for (const server of desired) {
-    if (!server.oauth) continue;
-    const current = await adapter.getIntegration(server.slug);
-    if (!current) {
-      throw new Error(
-        `Executor OAuth authorization is required for ${server.slug}; rerun apply interactively`
-      );
-    }
-    const connection = (await adapter.listConnections(server.slug)).find(
-      (item) => item.owner === "user" && item.name === "main"
-    );
-    if (!connection || connection.missingOAuthScopes.length > 0) {
-      throw new Error(
-        `Executor OAuth authorization is required for ${server.slug}; rerun apply interactively`
-      );
-    }
-  }
-}
+type ReconcileCheckpoint = (slug: string) => Promise<void>;
 
 async function reconcileServer(
   adapter: ExecutorAdapter,
   desired: ExecutorDesiredServer,
   result: ExecutorReconcileResult,
-  interactive: boolean
+  checkpoint: ReconcileCheckpoint
 ): Promise<void> {
   let current = await adapter.getIntegration(desired.slug);
   if (!current) {
     await adapter.addServer(desired);
+    await checkpoint(desired.slug);
     result.added.push(desired.slug);
     current = await adapter.getIntegration(desired.slug);
     if (!current) throw new Error(`Executor registered ${desired.slug} but could not read it back`);
   } else {
-    let mustRefresh = false;
-    if (current.description !== desired.description) {
-      await adapter.updateIntegration(desired.slug, { description: desired.description });
-      result.updated.push(desired.slug);
-      mustRefresh = true;
-    }
-    const currentConfig = integrationConfig(current);
-    const desiredConfig = desired.config as unknown as Record<string, unknown>;
-    const currentTemplates = authTemplates(currentConfig);
-    const nextTemplates = desiredTemplates(desired);
-    const templateChanged = !sameJson(currentTemplates, nextTemplates);
-    const configChanged = !sameJson(
-      { ...currentConfig, authenticationTemplate: undefined },
-      { ...desiredConfig, authenticationTemplate: undefined }
+    const classification = classifyExecutorIntegration(
+      desired,
+      { current, connections: await adapter.listConnections(desired.slug) },
+      { requireCredentialedConnections: false }
     );
-    const connections = await adapter.listConnections(desired.slug);
-    const durable = hasDurableState(connections);
-    const dangerous = changedDangerousConfigFields(currentConfig, desiredConfig);
-    if (durable && dangerous.length > 0) {
-      throw new Error(
-        `Executor ${desired.slug} has durable connection state; refusing dangerous configuration changes: ${dangerous.join(", ")}`
-      );
-    }
-    if (templateChanged && durable) {
-      throw new Error(
-        `Executor auth-template change for ${desired.slug} would strand existing connection state; disconnect it explicitly before applying`
-      );
-    }
-    if (durable && changedOAuthScopes(connections, desired)) {
-      throw new Error(
-        `Executor OAuth scope change for ${desired.slug} would strand existing connection state; disconnect it explicitly before applying`
-      );
-    }
-    if (configChanged) {
-      await adapter.configureServer(desired.slug, desiredConfig);
+    if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
+    let changed = false;
+    if (classification.descriptionChanged) {
+      await adapter.updateIntegration(desired.slug, { description: desired.description });
+      await checkpoint(desired.slug);
       result.updated.push(desired.slug);
-      mustRefresh = true;
+      changed = true;
+    }
+    if (classification.configurationChanged) {
+      const serverConfig = Object.fromEntries(
+        Object.entries(desired.config).filter(([key]) => key !== "authenticationTemplate")
+      );
+      await adapter.configureServer(desired.slug, serverConfig);
+      await checkpoint(desired.slug);
+      result.updated.push(desired.slug);
+      changed = true;
       current = (await adapter.getIntegration(desired.slug)) ?? current;
     }
-    if (templateChanged) {
-      await adapter.configureAuth(desired.slug, nextTemplates, "replace");
+    if (classification.authenticationChanged) {
+      const methods = desired.config.authenticationTemplate ?? [{ slug: "none", kind: "none" }];
+      await adapter.configureAuth(desired.slug, methods, "replace");
+      await checkpoint(desired.slug);
       result.updated.push(desired.slug);
-      mustRefresh = true;
+      changed = true;
     }
-    if (mustRefresh && connections.length > 0) {
-      const existingConnection = connections.find(
-        (item) => item.owner === "user" && item.name === "main"
-      );
-      if (existingConnection) await adapter.refreshConnection(desired.slug, "main");
-    }
+    if (!changed) result.reused.push(desired.slug);
   }
+}
 
-  const connections = await adapter.listConnections(desired.slug);
-  const connectionName = "main";
-  let connection = connections.find(
-    (item) => item.owner === "user" && item.name === connectionName
+export async function ensureExecutorIntegration(
+  adapter: ExecutorAdapter,
+  desired: ExecutorDesiredServer
+): Promise<void> {
+  const previous: ManagedState = {
+    version: 1,
+    profile: "connect",
+    complete: false,
+    integrations: {}
+  };
+  await preflightReconciliation(adapter, [desired], previous, {
+    checkUndeclaredConnections: false,
+    allowConnectionRepair: true
+  });
+  const result: ExecutorReconcileResult = {
+    desired: { version: 1, profile: "connect", integrations: [desired] },
+    added: [],
+    updated: [],
+    reused: [],
+    removed: [],
+    addedConnections: [],
+    reusedConnections: [],
+    retained: []
+  };
+  await reconcileServer(adapter, desired, result, async () => undefined);
+}
+
+async function ensureDeclaredConnection(
+  adapter: ExecutorAdapter,
+  server: ExecutorDesiredServer,
+  allowMissingConnections: boolean,
+  result: ExecutorReconcileResult,
+  checkpoint: ReconcileCheckpoint
+): Promise<void> {
+  const current = await adapter.getIntegration(server.slug);
+  const classification = classifyExecutorIntegration(
+    server,
+    {
+      current,
+      connections: current ? await adapter.listConnections(server.slug) : []
+    },
+    { requireCredentialedConnections: !allowMissingConnections }
   );
-  const hadConnection = connection !== undefined;
-  if (!connection) {
-    if (desired.oauth) {
-      await adapter.authorizeOAuth({
-        integration: desired.slug,
-        endpoint: desired.config.transport === "remote" ? desired.config.endpoint : desired.slug,
-        name: connectionName,
-        template: desired.oauth.template,
-        scopes: desired.oauth.scopes,
-        interactive
-      });
-    } else {
-      await adapter.createNoAuthConnection(desired.slug, connectionName);
+  const actionable = classification.connections.filter(
+    (connection): connection is Extract<ExecutorConnectionClassification, { kind: "missing" }> =>
+      connection.kind === "missing"
+  );
+  for (const connection of actionable) {
+    if (connection.method === "none") {
+      await adapter.createNoAuthConnection(server.slug, connection.name, connection.method);
+      await checkpoint(server.slug);
+      result.addedConnections.push(connectionKey(server.slug, connection.name));
     }
-    connection = (await adapter.listConnections(desired.slug)).find(
-      (item) => item.owner === "user" && item.name === connectionName
-    );
   }
-  if (!connection)
-    throw new Error(`Executor connection ${desired.slug}/${connectionName} was not created`);
-  if (desired.oauth && connection.missingOAuthScopes.length > 0) {
-    throw new Error(
-      `Executor connection ${desired.slug}/${connectionName} is missing required OAuth scopes; authorize it again in Executor`
-    );
+  const blockers = classification.blockers.filter(
+    (blocker) =>
+      !allowMissingConnections || !blocker.includes("Executor connection is required for")
+  );
+  if (blockers.length > 0) {
+    throw new Error(blockers[0]);
   }
-  const health = await adapter.checkHealth(desired.slug, connectionName);
-  if (health.status !== "healthy") {
-    throw new Error(
-      `Executor connection ${desired.slug}/${connectionName} is not healthy: ${health.status}`
-    );
+  for (const connection of classification.connections) {
+    if (connection.kind === "compatible") {
+      result.reusedConnections.push(connectionKey(server.slug, connection.name));
+    }
   }
-  if (desired.oauth && (health.missingOAuthScopes?.length ?? 0) > 0) {
-    throw new Error(
-      `Executor connection ${desired.slug}/${connectionName} is missing required OAuth scopes; authorize it again in Executor`
-    );
-  }
-  if (hadConnection) result.reused.push(desired.slug);
 }
 
 export async function reconcileExecutor(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  options: { dryRun?: boolean; interactive?: boolean; adapter?: ExecutorAdapter } = {}
+  options: {
+    dryRun?: boolean;
+    interactive?: boolean;
+    allowMissingConnections?: boolean;
+    adapter?: ExecutorAdapter;
+  } = {}
 ): Promise<ExecutorReconcileResult | undefined> {
   const desired = buildExecutorDesiredState(profile, paths.home);
   const managedFilePresent = await fileExists(executorManagedPath(paths, profile.name));
   const previous = await readManaged(paths, profile.name);
+  const sharedOwnedSlugs = new Set(
+    (await readManagedStates(paths))
+      .filter((state) => state.profile !== profile.name)
+      .flatMap((state) => Object.keys(state.integrations))
+  );
   if (desired.integrations.length === 0 && Object.keys(previous.integrations).length === 0) {
     if (managedFilePresent && (await readManagedState(paths, profile.name)) === undefined) {
       throw new Error(
@@ -477,9 +442,8 @@ export async function reconcileExecutor(
   }
   const result = emptyResult(desired);
   if (options.dryRun) {
-    const digestPlan = planExecutor(desired, previous);
-    const attached =
-      options.adapter ?? (await attachExecutorAdapter({ paths, profileName: profile.name }));
+    const digestPlan = planExecutor(desired, previous, sharedOwnedSlugs);
+    const attached = options.adapter ?? (await attachExecutorAdapter({}));
     if (!attached) {
       return {
         ...digestPlan,
@@ -494,40 +458,56 @@ export async function reconcileExecutor(
     }
   }
 
-  const adapter =
-    options.adapter ?? (await createExecutorAdapter({ paths, profileName: profile.name }));
+  const adapter = options.adapter ?? (await createExecutorAdapter({}));
   const managed: ManagedState = {
     version: 1,
     profile: profile.name,
     complete: false,
+    operation: {
+      status: "incomplete",
+      desiredIntegrations: desired.integrations.map((server) => server.slug),
+      startedAt: new Date().toISOString()
+    },
     integrations: { ...previous.integrations }
   };
-  if (!options.interactive) await assertNonInteractiveOAuthReady(adapter, desired.integrations);
-  await preflightReconciliation(adapter, desired.integrations, previous);
-  for (const server of desired.integrations) {
-    await reconcileServer(
-      adapter,
-      server,
-      result,
-      options.interactive ?? Boolean(process.stdin.isTTY)
-    );
-    managed.integrations[server.slug] = {
+  await writeSnapshots(paths, profile.name, desired, managed);
+  await preflightReconciliation(adapter, desired.integrations, previous, {
+    retainedSlugs: sharedOwnedSlugs
+  });
+  const checkpoint: ReconcileCheckpoint = async (slug) => {
+    const server = desired.integrations.find((entry) => entry.slug === slug);
+    if (!server) return;
+    managed.integrations[slug] = {
       digest: executorConfigDigest(server),
-      lastReconciledAt: new Date().toISOString()
+      lastReconciledAt: new Date().toISOString(),
+      connections: { ...server.connections }
     };
     await writeSnapshots(paths, profile.name, desired, managed);
+  };
+  for (const server of desired.integrations) {
+    await reconcileServer(adapter, server, result, checkpoint);
+    await ensureDeclaredConnection(
+      adapter,
+      server,
+      options.allowMissingConnections ?? false,
+      result,
+      checkpoint
+    );
+    await checkpoint(server.slug);
   }
 
   for (const slug of Object.keys(previous.integrations)) {
     if (desired.integrations.some((server) => server.slug === slug)) continue;
+    if (sharedOwnedSlugs.has(slug)) {
+      result.retained.push(slug);
+      delete managed.integrations[slug];
+      await writeSnapshots(paths, profile.name, desired, managed);
+      continue;
+    }
     const current = await adapter.getIntegration(slug);
     if (!current) continue;
-    const connections = await adapter.listConnections(slug);
-    if (hasDurableState(connections)) {
-      throw new Error(
-        `Executor integration ${slug} has durable connection state; disconnect it explicitly before removing it from the profile`
-      );
-    }
+    const removal = classifyExecutorRemoval(slug, current, await adapter.listConnections(slug));
+    if (removal.blockers.length > 0) throw new Error(removal.blockers[0]);
     await adapter.removeIntegration(slug);
     result.removed.push(slug);
     delete managed.integrations[slug];
@@ -535,6 +515,7 @@ export async function reconcileExecutor(
   }
 
   managed.complete = true;
+  if (managed.operation) managed.operation.status = "complete";
   await writeSnapshots(paths, profile.name, desired, managed);
   return result;
 }
@@ -545,7 +526,10 @@ export function executorPlanSummary(result: ExecutorReconcileResult | undefined)
     ...result.added.map((name) => `add ${name}`),
     ...result.updated.map((name) => `update ${name}`),
     ...result.removed.map((name) => `remove ${name}`),
-    ...result.reused.map((name) => `reuse ${name}`)
+    ...result.retained.map((name) => `retain ${name} (shared snapshot)`),
+    ...result.reused.map((name) => `reuse ${name}`),
+    ...result.addedConnections.map((name) => `add connection ${name}`),
+    ...result.reusedConnections.map((name) => `reuse connection ${name}`)
   ];
   const summary = actions.length > 0 ? actions.join(", ") : "no Executor changes";
   const planning =

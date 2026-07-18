@@ -58,6 +58,7 @@ export interface ContextMcpMembership {
   loading: LoadingClass;
   route?: "direct" | "executor";
   sharedIntegrations?: string[];
+  sharedConnections?: Record<string, string[]>;
 }
 
 export interface ContextHistory {

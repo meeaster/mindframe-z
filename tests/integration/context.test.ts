@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { cli, setupIntegrationFixture } from "./support.js";
@@ -28,6 +28,45 @@ describe("context command", () => {
 
     expect(result.stdout).toContain("opencode");
     expect(result.stdout).toContain("claude-code");
+  });
+
+  it("reports named Executor connections as shared routing metadata", async () => {
+    const { root, home } = await setupIntegrationFixture();
+    const catalogPath = path.join(root, "catalog", "mcp.yml");
+    await writeFile(
+      catalogPath,
+      `${await readFile(catalogPath, "utf8")}  datadog:\n    description: Datadog.\n    type: remote\n    transport: http\n    url: https://example.invalid/mcp\n    executor:\n      authentication:\n        - slug: oauth\n          kind: oauth2\n`,
+      "utf8"
+    );
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const profile = await readFile(profilePath, "utf8");
+    await writeFile(
+      profilePath,
+      profile.replace(
+        "opencode:\n",
+        [
+          "  datadog:",
+          "    route: executor",
+          "    connections:",
+          "      publicsafety: oauth",
+          "      tylertech: oauth",
+          "opencode:",
+          ""
+        ].join("\n")
+      ),
+      "utf8"
+    );
+
+    const result = await cli(
+      "mfz",
+      root,
+      home,
+      ["context", "--agent", "opencode"],
+      {},
+      undefined,
+      root
+    );
+    expect(result.stdout).toContain("datadog [publicsafety, tylertech]");
   });
 
   it("validates history before attempting a store read", async () => {

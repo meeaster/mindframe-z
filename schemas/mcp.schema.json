@@ -58,26 +58,139 @@
                       "sse"
                     ]
                   },
-                  "oauth": {
-                    "type": "object",
-                    "properties": {
-                      "template": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "scopes": {
-                        "default": [],
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
+                  "authentication": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "none"
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "oauth2"
+                            },
+                            "discoveryUrl": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "registrationScopes": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind"
+                          ],
+                          "additionalProperties": false,
+                          "allOf": [
+                            {
+                              "if": {
+                                "required": [
+                                  "discoveryUrl"
+                                ]
+                              },
+                              "then": {
+                                "required": [
+                                  "registrationScopes"
+                                ]
+                              }
+                            },
+                            {
+                              "if": {
+                                "required": [
+                                  "registrationScopes"
+                                ]
+                              },
+                              "then": {
+                                "required": [
+                                  "discoveryUrl"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "apikey"
+                            },
+                            "placements": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "carrier": {
+                                    "type": "string",
+                                    "enum": [
+                                      "header",
+                                      "query"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "variable": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "prefix": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "carrier",
+                                  "name",
+                                  "variable"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind",
+                            "placements"
+                          ],
+                          "additionalProperties": false
                         }
-                      }
-                    },
-                    "required": [
-                      "template"
-                    ],
-                    "additionalProperties": false
+                      ]
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -90,7 +203,8 @@
             "required": [
               "type",
               "url"
-            ]
+            ],
+            "additionalProperties": false
           },
           {
             "type": "object",
@@ -140,26 +254,139 @@
                       "sse"
                     ]
                   },
-                  "oauth": {
-                    "type": "object",
-                    "properties": {
-                      "template": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "scopes": {
-                        "default": [],
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
+                  "authentication": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "none"
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "oauth2"
+                            },
+                            "discoveryUrl": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "registrationScopes": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind"
+                          ],
+                          "additionalProperties": false,
+                          "allOf": [
+                            {
+                              "if": {
+                                "required": [
+                                  "discoveryUrl"
+                                ]
+                              },
+                              "then": {
+                                "required": [
+                                  "registrationScopes"
+                                ]
+                              }
+                            },
+                            {
+                              "if": {
+                                "required": [
+                                  "registrationScopes"
+                                ]
+                              },
+                              "then": {
+                                "required": [
+                                  "discoveryUrl"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "apikey"
+                            },
+                            "placements": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "carrier": {
+                                    "type": "string",
+                                    "enum": [
+                                      "header",
+                                      "query"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "variable": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "prefix": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "carrier",
+                                  "name",
+                                  "variable"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "kind",
+                            "placements"
+                          ],
+                          "additionalProperties": false
                         }
-                      }
-                    },
-                    "required": [
-                      "template"
-                    ],
-                    "additionalProperties": false
+                      ]
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -175,7 +402,8 @@
             "required": [
               "type",
               "command"
-            ]
+            ],
+            "additionalProperties": false
           }
         ]
       }

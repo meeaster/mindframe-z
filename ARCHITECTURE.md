@@ -48,7 +48,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ```text
 ~/.mindframe-z/config.yml
 ~/.mindframe-z/configs/<profile>/
-~/.mindframe-z/executor/<profile>/data/
+~/.executor/ (Executor-owned native default, unless EXECUTOR_DATA_DIR is set)
 ~/.mindframe-z/references/
 ~/.mindframe-z/homes/<alias>/
 ~/.mindframe-z/overrides.json
@@ -60,7 +60,11 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 
 Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
 
-Executor-routed MCP entries use one profile-scoped runtime under `executor/<profile>/data/` and one generated bridge under `configs/<profile>/executor/` for each selected OpenCode, Claude Code, or Codex renderer. The runtime owns the Executor SQLite database and OAuth state; `desired.json` and `managed.json` are non-secret inspectable snapshots. `mfz apply` reconciles this state before committing harness cutover, and `--dry-run` never starts Executor or writes runtime state.
+Executor-routed MCP entries use Executor's one native default runtime and store, normally `$HOME/.executor` or the user-selected `EXECUTOR_DATA_DIR`. MFZ never sets `EXECUTOR_DATA_DIR` or `EXECUTOR_SCOPE_DIR`, derives profile runtime data, starts a profile daemon, or passes `--scope`. Each profile may retain `configs/<profile>/executor/desired.json` and `managed.json` as non-secret inspectable desired/ownership snapshots; those snapshots do not become Executor scope input. MFZ owns integration inventory and connection-safe endpoint changes; Executor owns authentication methods, credentials, and connections. `mfz apply` reconciles the shared live state before committing harness cutover, and `--dry-run` never starts Executor or writes runtime state.
+
+Executor authentication has three ownership layers: the catalog may declare an integration's non-secret `authentication` methods, the profile selects exact named connections and method slugs, and Executor stores the resulting authentication templates and credentials. The explicit `mfz executor connect <integration> --connection <name>` command creates or repairs one connection only. Omitted connections resolve to `main` only when one method is unambiguous. Apply configures method structure but never opens OAuth or accepts a secret. A `none` method may create its selected named connection automatically; OAuth and API-key methods require connect before a direct-to-Executor cutover. Existing connection identities, OAuth clients, scopes, and refresh state are preserved independently. Removing or changing a method referenced by durable state blocks until the user disconnects that exact connection explicitly.
+
+Normal MCP OAuth discovers metadata from the integration endpoint and derives registration scopes from that discovery. Assisted OAuth is an explicit catalog exception: `discoveryUrl` points at a separate metadata endpoint, `registrationScopes` are used only for dynamic client registration, and the catalog endpoint remains the protected resource. The daemon's current callback and Executor's effective returned client slug are used at runtime; generated clients and credentials never enter home source. API-key setup opens Executor's browser handoff so the value is entered there, not passed through MFZ, argv, logs, or rendered snapshots.
 
 ## Renderers
 
@@ -74,7 +78,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `dotfiles`: profile dotfiles; managed `.zshrc` guarantees `~/.mindframe-z/bin` on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
-MCP profile entries are either direct (`agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, with optional `route: direct`) or shared (`route: executor`). Omitting `route` defaults to direct. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are always-configured shared inventory visible through one local `executor mcp --scope ... --elicitation-mode browser` bridge per selected supported harness and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; existing direct configuration remains installed until Executor health succeeds.
+MCP profile entries are either direct (`agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, with optional `route: direct`) or shared (`route: executor`). Omitting `route` defaults to direct. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are always-configured shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge per selected supported harness and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; existing direct configuration remains installed until Executor connection metadata succeeds.
 
 ### MCP Authoring And Migration
 
@@ -100,7 +104,7 @@ Renderer source files for inherited OpenCode plugins, commands, agents, and loca
 
 `mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream clone is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream clones are reported as uncommitted.
 
-Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations are not removed automatically; apply blocks with a metadata-only remediation message until the user disconnects them explicitly.
+Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations and named connections are not removed automatically; apply blocks with a metadata-only remediation message naming the exact connection until the user disconnects it explicitly.
 
 ## Vendored Skills
 
@@ -154,6 +158,8 @@ Sandbox code remains engine-owned. Home-specific sandbox overlays belong in home
 
 Sandbox remains a separate credential boundary. Profiles containing Executor-routed MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
 
+Existing profile-scoped MFZ Executor directories are legacy state, not an input to the native store. MFZ does not migrate, merge, delete, or authorize that state automatically. An operator who needs it must stop relevant Executor processes, back up and inspect the old `~/.mindframe-z/executor/<profile>/data/` directory, then use an explicitly approved Executor-supported or manual migration/cleanup procedure; only after that deliberate review may the legacy directory be removed.
+
 ## Description Convention
 
 Reference catalog entries and machine `extra_folders` descriptions are rendered into agent-visible indexes. Descriptions must be LLM-actionable: lead with stack/purpose, name useful entrypoints or packages, and keep them short.
@@ -178,6 +184,7 @@ CI build artifacts — needed for inspecting test failures
 | `MFZ_HOME` | Machine home directory | `$HOME` |
 | `MFZ_PROFILE` | Active profile name | machine profile or `personal` |
 | `MFZ_REFERENCES_DIR` | Reference clone directory | `~/.mindframe-z/references` |
+| `EXECUTOR_DATA_DIR` | Executor-owned native data-directory override | `~/.executor` |
 | `OPENCODE_CONFIG_DIR` | OpenCode global config dir | `~/.config/opencode` |
 | `CLAUDE_CONFIG_DIR` | Claude config dir | `~/.claude` |
 | `CODEX_HOME` | Codex home/config dir | `~/.codex` |

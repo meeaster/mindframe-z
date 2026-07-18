@@ -239,8 +239,7 @@ export async function renderOpenCode(
       ];
     })
   );
-  if (requiresExecutorBridge(profile))
-    mcp[executorBridgeName] = openCodeExecutorEntry(paths, profile);
+  if (requiresExecutorBridge(profile)) mcp[executorBridgeName] = openCodeExecutorEntry(profile);
   const extraFolders = profile.extraFolders;
   const externalDirectory: Record<string, string> = {};
   const edit: Record<string, string> = {};

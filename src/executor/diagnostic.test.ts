@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { profileSchema } from "../core/manifests.js";
 import { createRuntimePaths, executorDataDir, executorManagedPath } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -27,6 +27,7 @@ function profile(): ResolvedProfile {
       {
         name: "example",
         route: "executor",
+        connections: {},
         server: {
           type: "remote",
           description: "Example",
@@ -40,9 +41,12 @@ function profile(): ResolvedProfile {
 }
 
 describe("Executor diagnostics", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("reports missing runtime without creating it", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-diagnostic-"));
     const paths = createRuntimePaths({ root, home: root });
+    vi.stubEnv("EXECUTOR_DATA_DIR", path.join(root, ".executor"));
     const diagnostic = await inspectExecutor(paths, profile(), { binary: process.execPath });
 
     expect(diagnostic.runtime).toBe("absent");
@@ -59,7 +63,8 @@ describe("Executor diagnostics", () => {
   it("attaches read-only and reports cached metadata without a health mutation", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-diagnostic-live-"));
     const paths = createRuntimePaths({ root, home: root });
-    const dataDir = executorDataDir(paths, "personal");
+    vi.stubEnv("EXECUTOR_DATA_DIR", path.join(root, ".executor"));
+    const dataDir = executorDataDir();
     await mkdir(path.join(dataDir, "server-control"), { recursive: true });
     await writeFile(
       path.join(dataDir, "server-control", "server.json"),
@@ -117,6 +122,7 @@ describe("Executor diagnostics", () => {
               integration: "example",
               template: "none",
               provider: "none",
+              address: "tools.example.user.main",
               identityLabel: null,
               expiresAt: null,
               oauthClient: null,
@@ -134,7 +140,13 @@ describe("Executor diagnostics", () => {
     expect(diagnostic.runtime).toBe("attachable");
     expect(diagnostic.managed).toBe("complete");
     expect(diagnostic.connections).toEqual([
-      { integration: "example", name: "main", health: "healthy", missingOAuthScopes: [] }
+      {
+        integration: "example",
+        name: "main",
+        authentication: "none",
+        health: "healthy",
+        missingOAuthScopes: []
+      }
     ]);
     expect(calls.some((url) => url.includes("/health"))).toBe(false);
     expect(executorDiagnosticLines(diagnostic).join("\n")).not.toContain("not-output");

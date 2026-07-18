@@ -1,21 +1,32 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  createRuntimePaths,
-  executorConfigPath,
-  executorDataDir,
-  executorScopeDir
-} from "../core/paths.js";
+import { createRuntimePaths, executorConfigPath, executorDataDir } from "../core/paths.js";
 import {
   createExecutorAdapter,
   createExecutorHttpAdapter,
   redactExecutorError,
   type ExecutorAdapter
 } from "./adapter.js";
+import { executorConnectionAddress } from "./contract.js";
 
 const adapters: ExecutorAdapter[] = [];
+const executorInstalled = await execa("executor", ["--version"], { reject: false })
+  .then((result) => result.exitCode === 0)
+  .catch(() => false);
+
+async function withExecutorDataDir<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
+  const previous = process.env.EXECUTOR_DATA_DIR;
+  process.env.EXECUTOR_DATA_DIR = dataDir;
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.EXECUTOR_DATA_DIR;
+    else process.env.EXECUTOR_DATA_DIR = previous;
+  }
+}
 
 afterEach(async () => {
   await Promise.all(adapters.splice(0).map((adapter) => adapter.close()));
@@ -47,14 +58,16 @@ describe("Executor v1.5.33 adapter contract", () => {
       integration: "example",
       template: "oauth",
       provider: "oauth-provider",
+      address: executorConnectionAddress("user", "example", "main"),
       identityLabel: "test-user",
       expiresAt: Date.now() + 60_000,
       oauthClient: "effective-client",
       oauthClientOwner: "user",
       oauthScope: "read",
       missingOAuthScopes: [],
-      lastHealth: { status: "healthy", checkedAt: Date.now() }
+      lastHealth: null
     };
+    let completionPolls = 0;
     const adapter = createExecutorHttpAdapter({
       baseUrl: "http://127.0.0.1:1234",
       token: "loopback-secret",
@@ -87,21 +100,53 @@ describe("Executor v1.5.33 adapter contract", () => {
             { status: 200 }
           );
         }
-        if (url.includes("/api/connections?integration=example")) {
-          return new Response(JSON.stringify([connection]), { status: 200 });
+        if (url.endsWith("/api/oauth/await/state-secret")) {
+          completionPolls += 1;
+          if (completionPolls === 1) return new Response("null", { status: 200 });
+          return new Response(
+            JSON.stringify({ ok: true, sessionId: "state-secret", ...connection }),
+            { status: 200 }
+          );
+        }
+        if (url.endsWith("/api/connections/user/example/main/health")) {
+          return new Response(JSON.stringify({ status: "healthy", checkedAt: Date.now() }), {
+            status: 200
+          });
+        }
+        if (url.endsWith("/api/connections/user/example/main/refresh")) {
+          return new Response(
+            JSON.stringify([
+              {
+                address: "tools.example.user.main.example_tool",
+                owner: "user",
+                integration: "example",
+                connection: "main",
+                name: "example_tool",
+                pluginId: "test",
+                description: "Example tool"
+              }
+            ]),
+            { status: 200 }
+          );
         }
         return new Response("{}", { status: 200 });
       }
     });
 
-    await adapter.authorizeOAuth({
-      integration: "example",
-      endpoint: "https://example.test/mcp",
-      name: "main",
-      template: "oauth",
-      scopes: ["read"],
-      interactive: true
+    await expect(
+      adapter.authorizeOAuth({
+        integration: "example",
+        endpoint: "https://example.test/mcp",
+        name: "main",
+        template: "oauth",
+        scopes: ["read"],
+        interactive: true
+      })
+    ).resolves.toMatchObject({ lastHealth: null });
+    await expect(adapter.checkHealth("example", "main")).resolves.toMatchObject({
+      status: "healthy"
     });
+    await expect(adapter.refreshConnection("example", "main")).resolves.toHaveLength(1);
 
     const startCall = calls.find((call) => call.url.endsWith("/api/oauth/start"));
     expect(JSON.parse(String(startCall?.init?.body))).toMatchObject({ client: "effective-client" });
@@ -109,59 +154,300 @@ describe("Executor v1.5.33 adapter contract", () => {
     expect(opened[0]).not.toContain("state-secret");
   });
 
-  it("registers, reads, and creates a no-auth connection in disposable state", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-contract-"));
-    const adapter = await createExecutorAdapter({
-      paths: createRuntimePaths({ root, home: root }),
-      profileName: "contract"
-    });
-    adapters.push(adapter);
-
-    await adapter.addServer({
-      slug: "contract-server",
-      name: "contract-server",
-      description: "Disposable contract server",
-      config: {
-        transport: "remote",
-        endpoint: "https://example.invalid/mcp",
-        remoteTransport: "auto",
-        authenticationTemplate: [{ slug: "none", kind: "none" }]
+  it("separates assisted OAuth discovery, protected resource, and registration scopes", async () => {
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const connected = {
+      owner: "user",
+      name: "main",
+      integration: "example",
+      template: "oauth",
+      provider: "oauth-provider",
+      address: executorConnectionAddress("user", "example", "main"),
+      identityLabel: null,
+      expiresAt: null,
+      oauthClient: "effective-client",
+      oauthClientOwner: "user",
+      oauthScope: "read",
+      missingOAuthScopes: [],
+      lastHealth: null
+    };
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async (input, init) => {
+        const url = String(input);
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+        requests.push({ url, body });
+        if (url.endsWith("/api/oauth/probe")) {
+          return new Response(
+            JSON.stringify({
+              issuer: "https://issuer.test",
+              authorizationUrl: "https://issuer.test/authorize",
+              tokenUrl: "https://issuer.test/token",
+              registrationEndpoint: "https://issuer.test/register"
+            }),
+            { status: 200 }
+          );
+        }
+        if (url.endsWith("/api/oauth/clients/register-dynamic")) {
+          return new Response(JSON.stringify({ client: "effective-client" }), { status: 200 });
+        }
+        if (url.endsWith("/api/oauth/start")) {
+          return new Response(JSON.stringify({ status: "connected", connection: connected }), {
+            status: 200
+          });
+        }
+        return new Response("{}", { status: 200 });
       }
     });
 
-    await expect(adapter.getIntegration("contract-server")).resolves.toMatchObject({
-      slug: "contract-server",
-      config: { endpoint: "https://example.invalid/mcp" }
+    await adapter.authorizeOAuth({
+      integration: "example",
+      endpoint: "https://resource.test/mcp",
+      discoveryUrl: "https://resource.test/authv2",
+      registrationScopes: ["confluence:write"],
+      name: "main",
+      template: "oauth",
+      interactive: true
     });
-    await adapter.createNoAuthConnection("contract-server", "main");
-    await expect(adapter.listConnections("contract-server")).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          owner: "user",
-          name: "main",
-          template: "none"
-        })
-      ])
+
+    const registration = requests.find((request) => request.url.endsWith("register-dynamic"));
+    expect(registration?.body).toMatchObject({
+      resource: "https://resource.test/mcp",
+      scopes: ["confluence:write"],
+      redirectUri: "http://127.0.0.1:1234/api/oauth/callback"
+    });
+    expect(requests.find((request) => request.url.endsWith("/api/oauth/probe"))?.body).toEqual({
+      url: "https://resource.test/authv2"
+    });
+  });
+
+  it("starts API-key setup with a secret-free Executor browser handoff", async () => {
+    const opened: string[] = [];
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+      fetch: async () => new Response("{}", { status: 200 })
+    });
+    await adapter.startApiKeyHandoff({
+      integration: "example",
+      template: "api-key",
+      label: "publicsafety"
+    });
+    expect(opened).toEqual([
+      "http://127.0.0.1:1234/integrations/example?addAccount=1&owner=user&template=api-key&label=publicsafety"
+    ]);
+    expect(opened.join(" ")).not.toMatch(/secret|token|value/i);
+    await expect(
+      adapter.startApiKeyHandoff({
+        integration: "example",
+        template: "api-key",
+        label: "public-safety"
+      })
+    ).rejects.toThrow(/address-safe/);
+  });
+
+  it("rejects connection and tool responses whose address identity is malformed", async () => {
+    const connectionAdapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async () =>
+        new Response(
+          JSON.stringify([
+            {
+              owner: "user",
+              name: "publicsafety",
+              integration: "example",
+              template: "none",
+              provider: "none",
+              address: "tools.example.user.publicsafety.wrong",
+              identityLabel: null,
+              expiresAt: null,
+              oauthClient: null,
+              oauthClientOwner: null,
+              oauthScope: null,
+              missingOAuthScopes: [],
+              lastHealth: null
+            }
+          ]),
+          { status: 200 }
+        )
+    });
+    await expect(connectionAdapter.listConnections("example")).rejects.toThrow(/invalid response/);
+
+    const toolAdapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async () =>
+        new Response(
+          JSON.stringify([
+            {
+              address: "tools.example.user.publicsafety.example_tool",
+              owner: "user",
+              integration: "example",
+              connection: "publicsafety",
+              name: "example_tool",
+              pluginId: "test",
+              description: "Example tool"
+            }
+          ]),
+          { status: 200 }
+        )
+    });
+    await expect(toolAdapter.refreshConnection("example", "publicsafety")).resolves.toHaveLength(1);
+  });
+
+  it("rejects unsafe connection names before they can become dotted addresses", async () => {
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async () => new Response("[]", { status: 200 })
+    });
+    await expect(adapter.createNoAuthConnection("example", "public.safety")).rejects.toThrow(
+      /address-safe/
     );
+  });
 
-    await adapter.close();
-    await rm(root, { recursive: true, force: true });
-  }, 30_000);
+  it("cancels an OAuth session when completion times out", async () => {
+    const calls: string[] = [];
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      oauthWaitTimeoutMs: 1,
+      openExternal: async () => undefined,
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.endsWith("/api/oauth/probe")) {
+          return new Response(
+            JSON.stringify({
+              authorizationUrl: "https://provider.test/authorize",
+              tokenUrl: "https://provider.test/token",
+              registrationEndpoint: "https://provider.test/register"
+            }),
+            { status: 200 }
+          );
+        }
+        if (url.endsWith("/api/oauth/clients/register-dynamic")) {
+          return new Response(JSON.stringify({ client: "effective-client" }), { status: 200 });
+        }
+        if (url.endsWith("/api/oauth/start")) {
+          return new Response(
+            JSON.stringify({
+              status: "redirect",
+              authorizationUrl: "https://provider.test/authorize?state=state-secret",
+              state: "state-secret"
+            }),
+            { status: 200 }
+          );
+        }
+        if (url.endsWith("/api/oauth/await/state-secret")) {
+          return new Response("null", { status: 200 });
+        }
+        if (url.endsWith("/api/oauth/cancel")) {
+          calls.push("cancel");
+          return new Response("{}", { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }
+    });
 
-  it("reuses a profile daemon and isolates another profile scope", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-daemon-"));
-    const paths = createRuntimePaths({ root, home: root });
-    const first = await createExecutorAdapter({ paths, profileName: "personal" });
-    const second = await createExecutorAdapter({ paths, profileName: "personal" });
-    const other = await createExecutorAdapter({ paths, profileName: "other" });
-    adapters.push(first, second, other);
+    await expect(
+      adapter.authorizeOAuth({
+        integration: "example",
+        endpoint: "https://example.test/mcp",
+        name: "main",
+        template: "oauth",
+        interactive: true
+      })
+    ).rejects.toThrow(/timeout/);
+    expect(calls).toEqual(["cancel"]);
+  });
 
-    expect(second.baseUrl).toBe(first.baseUrl);
-    expect(other.baseUrl).not.toBe(first.baseUrl);
-    expect(other.dataDir).not.toBe(first.dataDir);
-    await Promise.all([first.close(), second.close(), other.close()]);
-    await rm(root, { recursive: true, force: true });
-  }, 30_000);
+  it("redacts provider rejection details during OAuth probe", async () => {
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async () =>
+        new Response("provider rejected access_token=provider-secret", { status: 400 })
+    });
+    await expect(
+      adapter.authorizeOAuth({
+        integration: "example",
+        endpoint: "https://example.test/mcp",
+        name: "main",
+        template: "oauth",
+        interactive: true
+      })
+    ).rejects.toThrow(/\[redacted\]/);
+  });
+
+  it.skipIf(!executorInstalled)(
+    "registers, reads, and creates a no-auth connection in disposable state",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-contract-"));
+      await withExecutorDataDir(path.join(root, ".executor"), async () => {
+        const adapter = await createExecutorAdapter({});
+        adapters.push(adapter);
+
+        await adapter.addServer({
+          slug: "contract-server",
+          name: "contract-server",
+          description: "Disposable contract server",
+          connections: {},
+          config: {
+            transport: "remote",
+            endpoint: "https://example.invalid/mcp",
+            remoteTransport: "auto"
+          }
+        });
+
+        await expect(adapter.getIntegration("contract-server")).resolves.toMatchObject({
+          slug: "contract-server",
+          config: { endpoint: "https://example.invalid/mcp" }
+        });
+        await adapter.createNoAuthConnection("contract-server", "main");
+        await expect(adapter.listConnections("contract-server")).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              owner: "user",
+              name: "main",
+              template: "none"
+            })
+          ])
+        );
+        await adapter.close();
+      });
+      await rm(root, { recursive: true, force: true });
+    },
+    30_000
+  );
+
+  it.skipIf(!executorInstalled)(
+    "attaches every profile to the shared native Executor daemon and store",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-daemon-"));
+      await withExecutorDataDir(path.join(root, ".executor"), async () => {
+        const first = await createExecutorAdapter({});
+        const second = await createExecutorAdapter({});
+        const other = await createExecutorAdapter({});
+        adapters.push(first, second, other);
+
+        expect(second.baseUrl).toBe(first.baseUrl);
+        expect(other.baseUrl).toBe(first.baseUrl);
+        expect(other.dataDir).toBe(first.dataDir);
+        const manifest = JSON.parse(
+          await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
+        ) as { scopeDir?: string | null };
+        expect(manifest.scopeDir).toBeNull();
+        await Promise.all([first.close(), second.close(), other.close()]);
+      });
+      await rm(root, { recursive: true, force: true });
+    },
+    30_000
+  );
 
   it("uses metadata-only HTTP calls and never submits guessed credentials", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
@@ -257,20 +543,59 @@ describe("Executor v1.5.33 adapter contract", () => {
     expect(calls[1]?.init?.method).toBe("DELETE");
   });
 
+  it("encodes API-key placements through the adapter contract without values", async () => {
+    let body: Record<string, unknown> | undefined;
+    const adapter = createExecutorHttpAdapter({
+      baseUrl: "http://127.0.0.1:1234",
+      token: "loopback-secret",
+      fetch: async (_input, init) => {
+        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response("{}", { status: 200 });
+      }
+    });
+    await adapter.configureAuth(
+      "example",
+      [
+        {
+          slug: "api-key",
+          kind: "apikey",
+          placements: [
+            { carrier: "header", name: "X-API-Key", variable: "api_key", prefix: "Bearer " },
+            { carrier: "query", name: "tenant", variable: "tenant_id" }
+          ]
+        }
+      ],
+      "replace"
+    );
+    expect(body).toMatchObject({
+      mode: "replace",
+      authenticationTemplate: [
+        {
+          slug: "api-key",
+          type: "apiKey",
+          headers: {
+            "X-API-Key": ["Bearer ", { type: "variable", name: "api_key" }]
+          },
+          queryParams: {
+            tenant: [{ type: "variable", name: "tenant_id" }]
+          }
+        }
+      ]
+    });
+    expect(JSON.stringify(body)).not.toMatch(/secret|token|value/i);
+  });
+
   it("rejects an unsupported Executor binary before daemon startup", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-version-"));
     const paths = createRuntimePaths({ root, home: root });
-    await expect(
-      createExecutorAdapter({ paths, profileName: "version", binary: process.execPath })
-    ).rejects.toThrow(/Unsupported Executor version/);
-    await expect(access(executorDataDir(paths, "version"))).rejects.toMatchObject({
-      code: "ENOENT"
-    });
-    await expect(access(executorScopeDir(paths, "version"))).rejects.toMatchObject({
-      code: "ENOENT"
-    });
-    await expect(access(executorConfigPath(paths, "version"))).rejects.toMatchObject({
-      code: "ENOENT"
+    await withExecutorDataDir(path.join(root, ".executor"), async () => {
+      await expect(createExecutorAdapter({ binary: process.execPath })).rejects.toThrow(
+        /Unsupported Executor version/
+      );
+      await expect(access(executorDataDir())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(executorConfigPath(paths, "version"))).rejects.toMatchObject({
+        code: "ENOENT"
+      });
     });
     await rm(root, { recursive: true, force: true });
   });

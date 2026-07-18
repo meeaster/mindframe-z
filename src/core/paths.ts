@@ -1,5 +1,6 @@
 import { access, mkdir } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -116,24 +117,20 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
-export function executorScopeDir(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "executor");
-}
-
-export function executorDataDir(paths: RuntimePaths, profileName: string): string {
-  return path.join(paths.home, ".mindframe-z", "executor", profileName, "data");
+export function executorDataDir(): string {
+  return path.resolve(process.env.EXECUTOR_DATA_DIR ?? path.join(homedir(), ".executor"));
 }
 
 export function executorConfigPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(executorScopeDir(paths, profileName), "executor.jsonc");
+  return path.join(profileConfigsDir(paths, profileName), "executor", "executor.jsonc");
 }
 
 export function executorDesiredPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(executorScopeDir(paths, profileName), "desired.json");
+  return path.join(profileConfigsDir(paths, profileName), "executor", "desired.json");
 }
 
 export function executorManagedPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(executorScopeDir(paths, profileName), "managed.json");
+  return path.join(profileConfigsDir(paths, profileName), "executor", "managed.json");
 }
 
 export function skillCacheRoot(paths: RuntimePaths): string {

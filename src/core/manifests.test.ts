@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadManifests, skillSchema, validateManifests, vendorLockSchema } from "./manifests.js";
+import {
+  loadManifests,
+  mcpServerSchema,
+  skillSchema,
+  validateManifests,
+  vendorLockSchema
+} from "./manifests.js";
 
 // Every case builds its own root + home under os.tmpdir() and passes `home`
 // explicitly, so nothing here reads the operator's real ~/.mindframe-z.
@@ -185,6 +191,143 @@ describe("generated profile MCP schema", () => {
       const disabledItems = groupedProperties.disabled!.items as Record<string, unknown>;
       expect(disabledItems.enum).toEqual(["opencode", "codex"]);
     }
+
+    const executor = (entries.anyOf as Record<string, unknown>[])[1]!;
+    const connections = (executor.properties as Record<string, Record<string, unknown>>)
+      .connections!;
+    expect(connections.minProperties).toBe(1);
+    expect((connections.additionalProperties as Record<string, unknown>).minLength).toBe(1);
+    expect((connections.propertyNames as Record<string, unknown>).pattern).toBe(
+      "^[a-z][a-z0-9_]*$"
+    );
+  });
+});
+
+describe("Executor authentication declarations", () => {
+  it("accepts no-auth, normal OAuth, assisted OAuth, and header/query API-key methods", async () => {
+    expect(
+      mcpServerSchema.parse({
+        type: "remote",
+        url: "https://example.test/mcp",
+        executor: {
+          authentication: [
+            { slug: "none", kind: "none" },
+            { slug: "oauth", kind: "oauth2" },
+            {
+              slug: "key",
+              kind: "apikey",
+              placements: [
+                { carrier: "header", name: "X-API-Key", variable: "api_key" },
+                { carrier: "query", name: "tenant", variable: "tenant_id" }
+              ]
+            }
+          ]
+        }
+      })
+    ).toMatchObject({ type: "remote" });
+
+    expect(
+      mcpServerSchema.parse({
+        type: "remote",
+        url: "https://example.test/mcp",
+        executor: {
+          authentication: [
+            {
+              slug: "oauth",
+              kind: "oauth2",
+              discoveryUrl: "https://example.test/oauth",
+              registrationScopes: ["read", "write"]
+            }
+          ]
+        }
+      })
+    ).toMatchObject({ type: "remote" });
+  });
+
+  it("rejects cross-kind assisted fields and every credential value", () => {
+    for (const method of [
+      { slug: "none", kind: "none", discoveryUrl: "https://example.test/oauth" },
+      { slug: "key", kind: "apikey", registrationScopes: ["read"], placements: [] },
+      {
+        slug: "oauth",
+        kind: "oauth2",
+        discoveryUrl: "https://example.test/oauth"
+      },
+      {
+        slug: "key",
+        kind: "apikey",
+        placements: [{ carrier: "header", name: "X-API-Key", variable: "key" }],
+        value: "secret"
+      }
+    ]) {
+      expect(() =>
+        mcpServerSchema.parse({
+          type: "remote",
+          url: "https://example.test/mcp",
+          executor: { authentication: [method] }
+        })
+      ).toThrow();
+    }
+    expect(() =>
+      mcpServerSchema.parse({
+        type: "remote",
+        url: "https://example.test/mcp",
+        token: "secret"
+      })
+    ).toThrow();
+    expect(() =>
+      mcpServerSchema.parse({
+        type: "remote",
+        url: "https://example.test/mcp",
+        executor: { authentication: [{ slug: "public", kind: "none" }] }
+      })
+    ).toThrow();
+  });
+
+  it("rejects duplicate method slugs and generated schema exposes the auth list", async () => {
+    expect(() =>
+      mcpServerSchema.parse({
+        type: "remote",
+        url: "https://example.test/mcp",
+        executor: {
+          authentication: [
+            { slug: "none", kind: "none" },
+            { slug: "none", kind: "none" }
+          ]
+        }
+      })
+    ).toThrow(/must be unique/);
+
+    const schema = JSON.parse(
+      await readFile(path.join(process.cwd(), "schemas", "mcp.schema.json"), "utf8")
+    ) as Record<string, unknown>;
+    const server = (schema.properties as Record<string, unknown>).servers as Record<
+      string,
+      unknown
+    >;
+    const branches = (server.additionalProperties as Record<string, unknown>).anyOf as Record<
+      string,
+      unknown
+    >[];
+    const executor = (branches[0]!.properties as Record<string, unknown>).executor as Record<
+      string,
+      unknown
+    >;
+    expect(executor.properties).toHaveProperty("authentication");
+    const methods = (executor.properties as Record<string, unknown>).authentication as Record<
+      string,
+      unknown
+    >;
+    const authBranches = (methods.items as Record<string, unknown>).anyOf as Record<
+      string,
+      unknown
+    >[];
+    const oauth = authBranches.find(
+      (branch) =>
+        ((branch.properties as Record<string, Record<string, unknown>>).kind?.const ?? null) ===
+        "oauth2"
+    );
+    expect(oauth?.allOf).toHaveLength(2);
   });
 });
 

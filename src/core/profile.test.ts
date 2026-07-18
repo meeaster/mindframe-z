@@ -136,6 +136,43 @@ describe("MCP route selection", () => {
     ).toThrow();
   });
 
+  it("accepts named Executor connections and rejects empty or unsafe maps", () => {
+    const profile = profileSchema.parse({
+      name: "routes",
+      mcp: {
+        datadog: {
+          route: "executor",
+          connections: { publicsafety: "oauth", tylertech: "oauth" }
+        }
+      }
+    });
+
+    expect(profile.mcp.datadog).toEqual({
+      route: "executor",
+      connections: { publicsafety: "oauth", tylertech: "oauth" }
+    });
+    expect(() =>
+      profileSchema.parse({
+        name: "routes",
+        mcp: { datadog: { route: "executor", connections: {} } }
+      })
+    ).toThrow();
+    expect(() =>
+      profileSchema.parse({
+        name: "routes",
+        mcp: { datadog: { route: "executor", connections: { "../secret": "oauth" } } }
+      })
+    ).toThrow();
+    for (const name of ["PublicSafety", "public-safety", "public.safety", "public safety"]) {
+      expect(() =>
+        profileSchema.parse({
+          name: "routes",
+          mcp: { datadog: { route: "executor", connections: { [name]: "oauth" } } }
+        })
+      ).toThrow(/address-safe/);
+    }
+  });
+
   it("replaces inherited MCP configuration when the route changes", () => {
     const base = profileSchema.parse({
       name: "base",
@@ -148,6 +185,33 @@ describe("MCP route selection", () => {
     });
 
     expect(mergeProfiles(base, child).mcp.docs).toEqual({ route: "executor" });
+  });
+
+  it("merges named Executor connections by exact profile name", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      mcp: {
+        datadog: {
+          route: "executor",
+          connections: { publicsafety: "oauth", shared: "oauth" }
+        }
+      }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      mcp: {
+        datadog: {
+          route: "executor",
+          connections: { tylertech: "oauth" }
+        }
+      }
+    });
+
+    expect(mergeProfiles(base, child).mcp.datadog).toEqual({
+      route: "executor",
+      connections: { publicsafety: "oauth", shared: "oauth", tylertech: "oauth" }
+    });
   });
 
   it("overrides only named inherited direct harness states", () => {
@@ -192,6 +256,77 @@ describe("MCP route selection", () => {
     const child = profileSchema.parse({ name: "child", extends: "base" });
 
     expect(mergeProfiles(base, child).executor).toEqual({ timeout_ms: 45_000 });
+  });
+
+  it("resolves one omitted Executor connection to main", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-connection-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-connection-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  datadog:",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://example.invalid/mcp",
+        "    executor:",
+        "      authentication:",
+        "        - slug: oauth",
+        "          kind: oauth2",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "mcp:", "  datadog:", "    route: executor", ""].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root, home }), "base");
+    expect(resolved.mcpServers[0]).toMatchObject({
+      name: "datadog",
+      route: "executor",
+      connections: { main: "oauth" }
+    });
+  });
+
+  it("rejects omitted connections when catalog authentication is ambiguous", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-ambiguous-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-ambiguous-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  example:",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://example.invalid/mcp",
+        "    executor:",
+        "      authentication:",
+        "        - slug: oauth",
+        "          kind: oauth2",
+        "        - slug: key",
+        "          kind: apikey",
+        "          placements:",
+        "            - carrier: header",
+        "              name: X-API-Key",
+        "              variable: api_key",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "mcp:", "  example:", "    route: executor", ""].join("\n"),
+      "utf8"
+    );
+
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "base")).rejects.toThrow(
+      /multiple authentication methods/
+    );
   });
 
   it("reserves the generated Executor bridge name", async () => {

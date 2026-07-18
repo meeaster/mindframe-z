@@ -13,7 +13,7 @@ import {
 } from "../core/profile.js";
 import type { ContextHarness, ContextMcpProbe } from "./model.js";
 import { measureText } from "./measurement.js";
-import { executorBridgeArgs, executorBridgeEnvironment } from "../renderers/executor.js";
+import { executorBridgeArgs } from "../renderers/executor.js";
 
 const protocolVersion = "2025-06-18";
 const clientVersion = "mfz-context-probe";
@@ -304,11 +304,8 @@ export async function probeMcpServer(
   let connection: McpConnection | undefined;
   try {
     if (sharedExecutor) {
-      const child = spawn("executor", executorBridgeArgs(paths, profile), {
-        env: {
-          ...temporaryEnvironment(temporaryDirectory),
-          ...executorBridgeEnvironment(paths, profile)
-        },
+      const child = spawn("executor", executorBridgeArgs(profile), {
+        env: temporaryEnvironment(temporaryDirectory),
         stdio: ["pipe", "pipe", "pipe"]
       });
       connection = new StdioConnection(child);

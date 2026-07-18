@@ -173,7 +173,8 @@ describe("sandbox runtime inputs", () => {
     const routed = profile("subscription");
     routed.mcpServers.push({
       ...remoteMcp("context7", "https://example.invalid/mcp"),
-      route: "executor"
+      route: "executor",
+      connections: {}
     });
 
     await expect(

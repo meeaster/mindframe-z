@@ -1,17 +1,21 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import {
-  executorConfigPath,
-  executorDataDir,
-  executorScopeDir,
-  type RuntimePaths
-} from "../core/paths.js";
+import { executorDataDir } from "../core/paths.js";
+import type { ExecutorAuthenticationMethod } from "../core/manifests.js";
 import type { ExecutorDesiredServer } from "./model.js";
 import { createHttpExecutorAdapter } from "./http.js";
 import { executorError } from "./errors.js";
+
+export {
+  assertExecutorConnectionIdentifier,
+  encodeExecutorAuthenticationMethod,
+  encodeExecutorAuthenticationMethods,
+  executorConnectionAddress,
+  isExecutorConnectionIdentifier
+} from "./contract.js";
 
 const SUPPORTED_EXECUTOR_VERSION = "1.5.33";
 const requestTimeoutMs = 30_000;
@@ -30,17 +34,19 @@ export interface ExecutorIntegration {
 }
 
 export interface ExecutorConnection {
-  owner: string;
+  owner: "user" | "org";
   name: string;
   integration: string;
   template: string;
   provider: string;
+  address: string;
   identityLabel: string | null;
   expiresAt: number | null;
   oauthClient: string | null;
   oauthClientOwner: string | null;
   oauthScope: string | null;
   missingOAuthScopes: string[];
+  credentialBindings?: Record<string, string> | undefined;
   lastHealth: { status: string; checkedAt: number; detail?: string | undefined } | null;
 }
 
@@ -51,9 +57,17 @@ export interface ExecutorHealth {
   missingOAuthScopes?: string[] | undefined;
 }
 
+export interface ExecutorTool {
+  address: string;
+  owner: string;
+  integration: string;
+  connection: string;
+  name: string;
+  pluginId: string;
+  description: string;
+}
+
 export interface ExecutorAdapterOptions {
-  paths: RuntimePaths;
-  profileName: string;
   binary?: string;
   fetch?: typeof globalThis.fetch;
   expectedVersion?: string;
@@ -63,9 +77,9 @@ export interface ExecutorHttpAdapterOptions {
   baseUrl: string;
   token: string;
   dataDir?: string;
-  scopeDir?: string;
   fetch?: typeof globalThis.fetch;
   requestTimeoutMs?: number;
+  oauthWaitTimeoutMs?: number;
   daemon?: ChildProcess | undefined;
   openExternal?: ((url: string) => Promise<void>) | undefined;
 }
@@ -73,29 +87,36 @@ export interface ExecutorHttpAdapterOptions {
 export interface ExecutorAdapter {
   readonly baseUrl: string;
   readonly dataDir: string;
-  readonly scopeDir: string;
   getIntegration(slug: string): Promise<ExecutorIntegration | null>;
   updateIntegration(slug: string, input: { description?: string; name?: string }): Promise<void>;
   addServer(server: ExecutorDesiredServer): Promise<void>;
   configureServer(slug: string, config: Record<string, unknown>): Promise<void>;
   configureAuth(
     slug: string,
-    authenticationTemplate: unknown[],
+    authenticationTemplate: readonly ExecutorAuthenticationMethod[],
     mode: "merge" | "replace"
   ): Promise<void>;
   removeIntegration(slug: string): Promise<void>;
   listConnections(integration: string): Promise<ExecutorConnection[]>;
-  createNoAuthConnection(integration: string, name: string): Promise<void>;
-  refreshConnection(integration: string, name: string): Promise<void>;
+  createNoAuthConnection(integration: string, name: string, template?: string): Promise<void>;
+  refreshConnection(integration: string, name: string): Promise<ExecutorTool[]>;
   checkHealth(integration: string, name: string): Promise<ExecutorHealth>;
+  cancelOAuth(state: string): Promise<void>;
+  startApiKeyHandoff(input: {
+    integration: string;
+    template: string;
+    label: string;
+  }): Promise<void>;
   authorizeOAuth(input: {
     integration: string;
     endpoint: string;
     name: string;
     template: string;
-    scopes: string[];
+    discoveryUrl?: string;
+    registrationScopes?: string[];
+    scopes?: string[];
     interactive: boolean;
-  }): Promise<void>;
+  }): Promise<ExecutorConnection>;
   close(): Promise<void>;
 }
 
@@ -157,28 +178,13 @@ async function validateBinary(binary: string, expectedVersion: string): Promise<
   }
 }
 
-async function startDaemon(
-  binary: string,
-  dataDir: string,
-  scopeDir: string,
-  origin: string
-): Promise<ChildProcess> {
+async function startDaemon(binary: string, origin: string): Promise<ChildProcess> {
   const url = new URL(origin);
   const child = spawn(
     binary,
-    [
-      "daemon",
-      "run",
-      "--foreground",
-      "--port",
-      url.port,
-      "--scope",
-      scopeDir,
-      "--log-level",
-      "error"
-    ],
+    ["daemon", "run", "--foreground", "--port", url.port, "--log-level", "error"],
     {
-      env: { ...process.env, EXECUTOR_DATA_DIR: dataDir, EXECUTOR_SCOPE_DIR: scopeDir },
+      env: { ...process.env },
       stdio: "ignore"
     }
   );
@@ -189,7 +195,6 @@ async function startDaemon(
 async function resolveRuntime(
   binary: string,
   dataDir: string,
-  scopeDir: string,
   requestFetch: typeof globalThis.fetch
 ): Promise<{ origin: string; token: string; daemon?: ChildProcess }> {
   const manifestPath = path.join(dataDir, "server-control", "server.json");
@@ -214,7 +219,7 @@ async function resolveRuntime(
 
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  const daemon = await startDaemon(binary, dataDir, scopeDir, origin);
+  const daemon = await startDaemon(binary, origin);
   return waitFor(async () => {
     const tokenRecord = await readJson<{ token?: unknown }>(tokenPath);
     const manifest = await readJson<ExecutorServerManifest>(manifestPath);
@@ -248,27 +253,12 @@ export async function createExecutorAdapter(
   const binary = options.binary ?? "executor";
   const expectedVersion = options.expectedVersion ?? SUPPORTED_EXECUTOR_VERSION;
   await validateBinary(binary, expectedVersion);
-  const dataDir = executorDataDir(options.paths, options.profileName);
-  const scopeDir = executorScopeDir(options.paths, options.profileName);
-  await mkdir(dataDir, { recursive: true });
-  await mkdir(scopeDir, { recursive: true });
-  const configPath = executorConfigPath(options.paths, options.profileName);
-  try {
-    await readFile(configPath, "utf8");
-  } catch {
-    await writeFile(configPath, '{\n  "version": 1\n}\n', "utf8");
-  }
-  const runtime = await resolveRuntime(
-    binary,
-    dataDir,
-    scopeDir,
-    options.fetch ?? globalThis.fetch
-  );
+  const dataDir = executorDataDir();
+  const runtime = await resolveRuntime(binary, dataDir, options.fetch ?? globalThis.fetch);
   return createHttpExecutorAdapter({
     baseUrl: runtime.origin,
     token: runtime.token,
     dataDir,
-    scopeDir,
     fetch: options.fetch ?? globalThis.fetch,
     daemon: runtime.daemon,
     requestTimeoutMs
@@ -276,12 +266,9 @@ export async function createExecutorAdapter(
 }
 
 export async function attachExecutorAdapter(options: {
-  paths: RuntimePaths;
-  profileName: string;
   fetch?: typeof globalThis.fetch;
 }): Promise<ExecutorAdapter | null> {
-  const dataDir = executorDataDir(options.paths, options.profileName);
-  const scopeDir = executorScopeDir(options.paths, options.profileName);
+  const dataDir = executorDataDir();
   const manifest = await readJson<ExecutorServerManifest>(
     path.join(dataDir, "server-control", "server.json")
   );
@@ -307,7 +294,6 @@ export async function attachExecutorAdapter(options: {
     baseUrl: canonicalLoopbackOrigin(origin),
     token,
     dataDir,
-    scopeDir,
     fetch: requestFetch,
     requestTimeoutMs: 2_000
   });

@@ -435,7 +435,16 @@ function formatMcp(report: ContextReport, harness: HarnessReport, established: b
   for (const server of enabled) {
     const result = probes.get(server.name);
     if (server.sharedIntegrations && server.sharedIntegrations.length > 0) {
-      lines.push(`        shared inventory: ${server.sharedIntegrations.join(", ")}`);
+      lines.push(
+        `        shared inventory: ${server.sharedIntegrations
+          .map((integration) => {
+            const connections = server.sharedConnections?.[integration] ?? [];
+            return connections.length > 0
+              ? `${integration} [${connections.join(", ")}]`
+              : integration;
+          })
+          .join(", ")}`
+      );
     }
     if (!result) {
       lines.push(`      ${server.name}  enabled | schemas unmeasured (not probed)`);

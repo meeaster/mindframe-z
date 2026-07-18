@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { McpServer } from "../core/manifests.js";
+import type { ExecutorAuthenticationMethod, McpServer } from "../core/manifests.js";
 import { expandHome } from "../core/paths.js";
 import {
   validateExecutorMcpServer,
@@ -7,11 +7,28 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 
+export interface ExecutorConnectionDurability {
+  template: string;
+  provider?: string | null;
+  credentialBindings?: Readonly<Record<string, string>> | undefined;
+  oauthClient?: string | null;
+  oauthScope?: string | null;
+  expiresAt?: number | null;
+}
+
+export function executorConnectionHasDurableState(
+  connection: ExecutorConnectionDurability
+): boolean {
+  const hasCredentialBindings = Object.keys(connection.credentialBindings ?? {}).length > 0;
+  if (connection.template === "none") return hasCredentialBindings;
+  return true;
+}
+
 export interface ExecutorRemoteConfig {
   transport: "remote";
   endpoint: string;
   remoteTransport: "auto" | "streamable-http" | "sse";
-  authenticationTemplate: Array<{ slug: string; kind: "none" | "oauth2" }>;
+  authenticationTemplate?: ExecutorAuthenticationMethod[];
 }
 
 export interface ExecutorStdioConfig {
@@ -19,7 +36,7 @@ export interface ExecutorStdioConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
-  authenticationTemplate: Array<{ slug: "none"; kind: "none" }>;
+  authenticationTemplate?: ExecutorAuthenticationMethod[];
 }
 
 export interface ExecutorDesiredServer {
@@ -27,10 +44,7 @@ export interface ExecutorDesiredServer {
   name: string;
   description: string;
   config: ExecutorRemoteConfig | ExecutorStdioConfig;
-  oauth?: {
-    template: string;
-    scopes: string[];
-  };
+  connections: Record<string, string>;
 }
 
 export interface ExecutorDesiredState {
@@ -39,28 +53,20 @@ export interface ExecutorDesiredState {
   integrations: ExecutorDesiredServer[];
 }
 
-function executorAuth(server: McpServer): ExecutorDesiredServer["oauth"] {
-  const oauth = server.executor?.oauth;
-  if (!oauth) return undefined;
-  return { template: oauth.template, scopes: [...oauth.scopes] };
+export function executorAuthentication(
+  server: ExecutorDesiredServer
+): ExecutorAuthenticationMethod[] {
+  return server.config.authenticationTemplate ?? [{ slug: "none", kind: "none" }];
 }
 
-function remoteConfig(
-  name: string,
-  server: Extract<McpServer, { type: "remote" }>
-): ExecutorRemoteConfig {
-  const oauth = executorAuth(server);
+function remoteConfig(server: Extract<McpServer, { type: "remote" }>): ExecutorRemoteConfig {
   const remoteTransport =
     server.executor?.transport ?? (server.transport === "sse" ? "sse" : "auto");
   return {
     transport: "remote",
     endpoint: server.url,
     remoteTransport,
-    authenticationTemplate: [
-      oauth
-        ? { slug: oauth.template, kind: "oauth2" as const }
-        : { slug: "none", kind: "none" as const }
-    ]
+    authenticationTemplate: server.executor?.authentication ?? [{ slug: "none", kind: "none" }]
   };
 }
 
@@ -75,7 +81,7 @@ function stdioConfig(
     transport: "stdio",
     command: expandHome(command, home),
     ...(args.length > 0 ? { args: args.map((arg) => expandHome(arg, home)) } : {}),
-    authenticationTemplate: [{ slug: "none", kind: "none" }]
+    authenticationTemplate: server.executor?.authentication ?? [{ slug: "none", kind: "none" }]
   };
 }
 
@@ -87,16 +93,27 @@ export function desiredExecutorServer(
     throw new Error(`MCP server ${entry.name} is not Executor-routed`);
   }
   validateExecutorMcpServer(entry.name, entry.server);
-  const oauth = executorAuth(entry.server);
+  const connections =
+    Object.keys(entry.connections).length > 0
+      ? entry.connections
+      : entry.server.executor?.authentication && entry.server.executor.authentication.length > 1
+        ? (() => {
+            throw new Error(
+              `Executor MCP server ${entry.name} declares multiple authentication methods; declare named connections with their authentication slugs`
+            );
+          })()
+        : { main: entry.server.executor?.authentication?.[0]?.slug ?? "none" };
   return {
     slug: entry.name,
     name: entry.name,
     description: entry.server.description,
+    connections: Object.fromEntries(
+      Object.entries(connections).sort(([left], [right]) => left.localeCompare(right))
+    ),
     config:
       entry.server.type === "remote"
-        ? remoteConfig(entry.name, entry.server)
-        : stdioConfig(entry.name, entry.server, home),
-    ...(oauth ? { oauth } : {})
+        ? remoteConfig(entry.server)
+        : stdioConfig(entry.name, entry.server, home)
   };
 }
 
@@ -119,7 +136,7 @@ export function normalizedExecutorConfig(server: ExecutorDesiredServer): Record<
     name: server.name,
     description: server.description,
     config: server.config,
-    ...(server.oauth ? { oauth: server.oauth } : {})
+    connections: server.connections
   };
 }
 

@@ -287,7 +287,16 @@ export async function analyzeHarnessStatic(
       enabled: true,
       loading: mcpLoading,
       route: "executor",
-      sharedIntegrations: shared.map((entry) => entry.name).sort()
+      sharedIntegrations: shared.map((entry) => entry.name).sort(),
+      sharedConnections: Object.fromEntries(
+        shared
+          .filter(
+            (entry): entry is Extract<typeof entry, { route: "executor" }> =>
+              entry.route === "executor"
+          )
+          .map((entry) => [entry.name, Object.keys(entry.connections ?? {}).sort()] as const)
+          .sort(([left], [right]) => left.localeCompare(right))
+      )
     });
   }
   for (const server of mcpServers) {

@@ -249,6 +249,19 @@
               "route": {
                 "type": "string",
                 "const": "executor"
+              },
+              "connections": {
+                "type": "object",
+                "minProperties": 1,
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             },
             "required": [

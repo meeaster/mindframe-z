@@ -8,7 +8,6 @@ import {
   executorDataDir,
   executorDesiredPath,
   executorManagedPath,
-  executorScopeDir,
   extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
@@ -193,13 +192,10 @@ describe(".mindframe-z store path contract", () => {
     expect(threadSweepRoot(runtime)).toBe(path.join(mfz, "thread-sweep"));
   });
 
-  it("pins the profile-scoped Executor runtime paths", () => {
-    expect(executorDataDir(runtime, "personal")).toBe(
-      path.join(mfz, "executor", "personal", "data")
-    );
-    expect(executorScopeDir(runtime, "personal")).toBe(
-      path.join(mfz, "configs", "personal", "executor")
-    );
+  it("pins the native Executor data path and profile snapshot paths", () => {
+    const original = process.env.EXECUTOR_DATA_DIR;
+    process.env.EXECUTOR_DATA_DIR = path.join(mfz, "executor-default");
+    expect(executorDataDir()).toBe(path.join(mfz, "executor-default"));
     expect(executorConfigPath(runtime, "personal")).toBe(
       path.join(mfz, "configs", "personal", "executor", "executor.jsonc")
     );
@@ -209,6 +205,8 @@ describe(".mindframe-z store path contract", () => {
     expect(executorManagedPath(runtime, "personal")).toBe(
       path.join(mfz, "configs", "personal", "executor", "managed.json")
     );
+    if (original === undefined) delete process.env.EXECUTOR_DATA_DIR;
+    else process.env.EXECUTOR_DATA_DIR = original;
   });
 });
 

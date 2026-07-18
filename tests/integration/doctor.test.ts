@@ -94,7 +94,7 @@ describe("doctor integration", () => {
     expect(result.stdout).toContain("executor version\tmissing");
     expect(result.stdout).toContain("executor runtime\tabsent\tmanaged absent");
     expect(result.stdout).toContain("executor blocker\tExecutor runtime is not attachable");
-    await expect(access(path.join(home, ".mindframe-z", "executor"))).rejects.toMatchObject({
+    await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
 

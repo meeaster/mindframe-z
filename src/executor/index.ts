@@ -2,6 +2,8 @@ export {
   executorConfigDigest,
   buildExecutorDesiredState,
   desiredExecutorServer,
+  executorAuthentication,
+  executorConnectionHasDurableState,
   type ExecutorDesiredServer,
   type ExecutorDesiredState
 } from "./model.js";
@@ -13,8 +15,10 @@ export {
   type ExecutorAdapter,
   type ExecutorConnection,
   type ExecutorHealth,
-  type ExecutorIntegration
+  type ExecutorIntegration,
+  type ExecutorTool
 } from "./adapter.js";
+export { connectExecutor } from "./connect.js";
 export {
   inspectExecutor,
   executorDiagnosticLines,
@@ -23,10 +27,19 @@ export {
 } from "./diagnostic.js";
 export {
   executorPlanSummary,
+  ensureExecutorIntegration,
   planExecutor,
   reconcileExecutor,
   hasManagedExecutorState,
   readManagedState,
+  readManagedStates,
   type ManagedState,
   type ExecutorReconcileResult
 } from "./reconcile.js";
+export {
+  classifyExecutorIntegration,
+  classifyExecutorRemoval,
+  type ExecutorConnectionClassification,
+  type ExecutorLifecycleClassification,
+  type ObservedExecutorIntegration
+} from "./lifecycle.js";

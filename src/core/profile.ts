@@ -63,8 +63,11 @@ export function validateExecutorMcpServer(name: string, server: McpServer): void
     if (server.transport !== undefined && server.transport !== "stdio") {
       throw new Error(`Executor route for ${name} cannot use remote transport for a local server`);
     }
-    if (server.executor?.transport !== undefined || server.executor?.oauth !== undefined) {
+    if (server.executor?.transport !== undefined) {
       throw new Error(`Executor route for ${name} has remote-only settings on a local server`);
+    }
+    if (server.executor?.authentication?.some((method) => method.kind === "oauth2")) {
+      throw new Error(`Executor route for ${name} cannot use OAuth for a local server`);
     }
     if (server.env && Object.keys(server.env).length > 0) {
       throw new Error(`Executor route for ${name} contains environment values; keep it direct`);
@@ -88,6 +91,7 @@ export type ResolvedMcpServer =
       name: string;
       server: McpServer;
       route: "executor";
+      connections: Record<string, string>;
     };
 
 export type ResolvedSkill = SkillEntry & {
@@ -424,6 +428,34 @@ function mcpRoute(config: ProfileMcpConfig): "direct" | "executor" {
   return config && "route" in config && config.route === "executor" ? "executor" : "direct";
 }
 
+function resolveExecutorConnections(
+  name: string,
+  server: McpServer,
+  config: Extract<ProfileMcpConfig, { route: "executor" }>
+): Record<string, string> {
+  const methods = server.executor?.authentication ?? [];
+  const selected = config.connections;
+  if (!selected) {
+    if (methods.length === 1) return { main: methods[0]!.slug };
+    if (methods.length > 1) {
+      throw new Error(
+        `Executor MCP server ${name} declares multiple authentication methods; declare named connections with their authentication slugs`
+      );
+    }
+    return { main: "none" };
+  }
+
+  const methodSlugs = new Set(methods.map((method) => method.slug));
+  for (const [connection, method] of Object.entries(selected)) {
+    if (!methodSlugs.has(method)) {
+      throw new Error(
+        `Executor MCP server ${name} connection ${connection} selects unknown authentication method ${method}`
+      );
+    }
+  }
+  return { ...selected };
+}
+
 function mergeMcpConfigs(
   base: ProfileManifest["mcp"],
   child: ProfileManifest["mcp"]
@@ -544,7 +576,16 @@ export async function resolveProfile(
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
     if (mcpRoute(config) === "executor") {
       validateExecutorMcpServer(serverName, server);
-      return { name: serverName, server, route: "executor" };
+      return {
+        name: serverName,
+        server,
+        route: "executor",
+        connections: resolveExecutorConnections(
+          serverName,
+          server,
+          config as Extract<ProfileMcpConfig, { route: "executor" }>
+        )
+      };
     }
     if (!("agents" in config)) throw new Error(`MCP server ${serverName} is missing direct agents`);
     return { name: serverName, server, route: "direct", agents: config.agents };

@@ -14,3 +14,5 @@ You are setting up mindframe-z on this machine.
 5. `mfz apply` renders local and reviewed vendored skills into the managed profile snapshot and links only that snapshot into each harness. For a vendored update, run `mfz skills check`, `mfz skills stage <name>`, invoke `/skill-update-review <candidate-id>` as a hostile-input review, obtain human approval, run `mfz skills promote <candidate-id>`, review and commit the home diff, then apply. Quarantine is machine-local and inactive; an unmanaged harness-link conflict fails without replacement. Recover an active mistake with a home Git revert followed by `mfz apply`.
 
 If the human shares another person's home URL, either clone it as the active home or create a new home and use the shared home as an upstream/copy source for catalog entries, depending on the human's preference and access.
+
+For Executor-routed integrations, profile connection names are non-secret routing identity. Connect each declared identity explicitly with `mfz executor connect <integration> --connection <name>`; do not duplicate one catalog integration per account or organization, and do not let an agent infer a connection from a default.

@@ -149,6 +149,10 @@ managed by \`mfz apply\` and rewritten on every run.
 - Never edit rendered output (\`~/.mindframe-z/configs/\` or globally linked
   tool config). Use \`mfz sync\` only to promote unmanaged configuration keys;
   skill source changes belong in the home and require \`mfz apply\`.
+- Executor-routed integrations are shared inventory. If one integration has
+  multiple named connections, use \`mfz executor connect <integration> --connection <name>\`
+  and call tools with the full integration/owner/connection address; never infer
+  an account or organization.
 ${guidanceEnd}
 `;
 

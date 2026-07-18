@@ -2,15 +2,23 @@ import { execa } from "execa";
 import { randomUUID } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
 import { z } from "zod";
+import type { ExecutorAuthenticationMethod } from "../core/manifests.js";
 import type { ExecutorDesiredServer } from "./model.js";
 import {
   type ExecutorAdapter,
   type ExecutorConnection,
   type ExecutorHealth,
   type ExecutorHttpAdapterOptions,
-  type ExecutorIntegration
+  type ExecutorIntegration,
+  type ExecutorTool
 } from "./adapter.js";
 import { executorError } from "./errors.js";
+import {
+  assertExecutorConnectionIdentifier,
+  encodeExecutorAuthenticationMethods,
+  executorConnectionAddress,
+  isExecutorConnectionIdentifier
+} from "./contract.js";
 
 const requestTimeoutMs = 30_000;
 
@@ -28,20 +36,55 @@ const integrationSchema = z.object({
   canRefresh: z.boolean(),
   config: z.record(z.string(), z.unknown())
 });
-const connectionSchema = z.object({
-  owner: z.string(),
-  name: z.string(),
-  integration: z.string(),
-  template: z.string(),
-  provider: z.string(),
-  identityLabel: z.string().nullable(),
-  expiresAt: z.number().nullable(),
-  oauthClient: z.string().nullable(),
-  oauthClientOwner: z.string().nullable(),
-  oauthScope: z.string().nullable(),
-  missingOAuthScopes: z.array(z.string()),
-  lastHealth: healthSchema.nullable()
-});
+const connectionSchema = z
+  .object({
+    owner: z.enum(["user", "org"]),
+    name: z.string().refine(isExecutorConnectionIdentifier),
+    integration: z.string(),
+    template: z.string(),
+    provider: z.string(),
+    address: z.string(),
+    identityLabel: z.string().nullable(),
+    expiresAt: z.number().nullable(),
+    oauthClient: z.string().nullable(),
+    oauthClientOwner: z.string().nullable(),
+    oauthScope: z.string().nullable(),
+    missingOAuthScopes: z.array(z.string()),
+    credentialBindings: z.record(z.string(), z.string()).optional(),
+    lastHealth: healthSchema
+      .nullable()
+      .optional()
+      .transform((value) => value ?? null)
+  })
+  .superRefine((connection, context) => {
+    const expected = executorConnectionAddress(
+      connection.owner,
+      connection.integration,
+      connection.name
+    );
+    if (connection.address !== expected) {
+      context.addIssue({
+        code: "custom",
+        message: "connection address does not match its identity"
+      });
+    }
+  });
+const toolSchema = z
+  .object({
+    address: z.string(),
+    owner: z.enum(["user", "org"]),
+    integration: z.string(),
+    connection: z.string().refine(isExecutorConnectionIdentifier),
+    name: z.string(),
+    pluginId: z.string(),
+    description: z.string()
+  })
+  .superRefine((tool, context) => {
+    const prefix = executorConnectionAddress(tool.owner, tool.integration, tool.connection);
+    if (!tool.address.startsWith(`${prefix}.`)) {
+      context.addIssue({ code: "custom", message: "tool address does not match its identity" });
+    }
+  });
 const oauthProbeSchema = z.object({
   issuer: z.string().nullable().optional(),
   authorizationUrl: z.string(),
@@ -56,6 +99,33 @@ const oauthStartSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("redirect"), authorizationUrl: z.string(), state: z.string() })
 ]);
 const oauthRegistrationSchema = z.object({ client: z.string().min(1) });
+const oauthCompletionSchema = z.union([
+  z.object({
+    ok: z.literal(false),
+    sessionId: z.string(),
+    error: z.string().optional(),
+    errorDetails: z.string().optional()
+  }),
+  z
+    .object({
+      ok: z.literal(true),
+      sessionId: z.string(),
+      ...connectionSchema.shape
+    })
+    .superRefine((connection, context) => {
+      const expected = executorConnectionAddress(
+        connection.owner,
+        connection.integration,
+        connection.name
+      );
+      if (connection.address !== expected) {
+        context.addIssue({
+          code: "custom",
+          message: "connection address does not match its identity"
+        });
+      }
+    })
+]);
 
 async function defaultOpenExternal(url: string): Promise<void> {
   const opener = process.platform === "darwin" ? "open" : "xdg-open";
@@ -109,10 +179,6 @@ async function openOAuthHandoff(
   return close;
 }
 
-function isHealthy(connection: ExecutorConnection): boolean {
-  return connection.lastHealth?.status === "healthy";
-}
-
 async function waitFor<T>(read: () => Promise<T | undefined>, timeout = 15_000): Promise<T> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -128,10 +194,10 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     public readonly baseUrl: string,
     private readonly token: string,
     public readonly dataDir: string,
-    public readonly scopeDir: string,
     private readonly requestFetch: typeof globalThis.fetch,
     private readonly daemon: import("node:child_process").ChildProcess | undefined,
     private readonly timeoutMs: number,
+    private readonly oauthWaitTimeoutMs: number,
     private readonly openExternal: (url: string) => Promise<void>
   ) {}
 
@@ -199,8 +265,10 @@ class HttpExecutorAdapter implements ExecutorAdapter {
             description: server.description,
             endpoint: config.endpoint,
             remoteTransport: config.remoteTransport,
-            slug: server.slug,
-            authenticationTemplate: config.authenticationTemplate
+            authenticationTemplate: encodeExecutorAuthenticationMethods(
+              config.authenticationTemplate ?? [{ slug: "none", kind: "none" }]
+            ),
+            slug: server.slug
           }
         : {
             transport: "stdio",
@@ -209,6 +277,9 @@ class HttpExecutorAdapter implements ExecutorAdapter {
             command: config.command,
             ...(config.args ? { args: config.args } : {}),
             ...(config.env ? { env: config.env } : {}),
+            authenticationTemplate: encodeExecutorAuthenticationMethods(
+              config.authenticationTemplate ?? [{ slug: "none", kind: "none" }]
+            ),
             slug: server.slug
           };
     await this.request("POST", "/mcp/servers", z.unknown(), body);
@@ -222,11 +293,13 @@ class HttpExecutorAdapter implements ExecutorAdapter {
 
   async configureAuth(
     slug: string,
-    authenticationTemplate: unknown[],
+    authenticationTemplate: readonly unknown[],
     mode: "merge" | "replace"
   ): Promise<void> {
     await this.request("POST", `/mcp/servers/${encodeURIComponent(slug)}/auth`, z.unknown(), {
-      authenticationTemplate,
+      authenticationTemplate: encodeExecutorAuthenticationMethods(
+        authenticationTemplate as readonly ExecutorAuthenticationMethod[]
+      ),
       mode
     });
   }
@@ -243,29 +316,57 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     );
   }
 
-  async createNoAuthConnection(integration: string, name: string): Promise<void> {
+  async createNoAuthConnection(
+    integration: string,
+    name: string,
+    template = "none"
+  ): Promise<void> {
+    assertExecutorConnectionIdentifier(name);
     await this.request("POST", "/connections", z.unknown(), {
       owner: "user",
       name,
       integration,
-      template: "none",
+      template,
       values: {}
     });
   }
 
-  async refreshConnection(integration: string, name: string): Promise<void> {
-    await this.request(
+  async refreshConnection(integration: string, name: string): Promise<ExecutorTool[]> {
+    assertExecutorConnectionIdentifier(name);
+    return this.request(
       "POST",
       `/connections/user/${encodeURIComponent(integration)}/${encodeURIComponent(name)}/refresh`,
-      z.unknown()
+      toolSchema.array()
     );
   }
 
   async checkHealth(integration: string, name: string): Promise<ExecutorHealth> {
+    assertExecutorConnectionIdentifier(name);
     return this.request(
       "POST",
       `/connections/user/${encodeURIComponent(integration)}/${encodeURIComponent(name)}/health`,
       healthSchema
+    );
+  }
+
+  async cancelOAuth(state: string): Promise<void> {
+    await this.request("POST", "/oauth/cancel", z.unknown(), { state });
+  }
+
+  async startApiKeyHandoff(input: {
+    integration: string;
+    template: string;
+    label: string;
+  }): Promise<void> {
+    assertExecutorConnectionIdentifier(input.label, "API-key connection");
+    const search = new URLSearchParams({
+      addAccount: "1",
+      owner: "user",
+      template: input.template,
+      label: input.label
+    });
+    await this.openExternal(
+      `${this.baseUrl}/integrations/${encodeURIComponent(input.integration)}?${search.toString()}`
     );
   }
 
@@ -274,16 +375,19 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     endpoint: string;
     name: string;
     template: string;
-    scopes: string[];
+    discoveryUrl?: string;
+    registrationScopes?: string[];
+    scopes?: string[];
     interactive: boolean;
-  }): Promise<void> {
+  }): Promise<ExecutorConnection> {
     if (!input.interactive) {
       throw executorError(
         `Executor OAuth authorization is required for ${input.integration}; rerun interactively`
       );
     }
+    assertExecutorConnectionIdentifier(input.name);
     const probed = await this.request("POST", "/oauth/probe", oauthProbeSchema, {
-      url: input.endpoint
+      url: input.discoveryUrl ?? input.endpoint
     });
     if (!probed.registrationEndpoint) {
       throw executorError(
@@ -291,6 +395,9 @@ class HttpExecutorAdapter implements ExecutorAdapter {
       );
     }
     const clientSlug = `${input.integration}-mfz`;
+    const redirectUri = `${this.baseUrl}/api/oauth/callback`;
+    const registrationScopes =
+      input.registrationScopes ?? input.scopes ?? probed.scopesSupported ?? [];
     const registered = await this.request(
       "POST",
       "/oauth/clients/register-dynamic",
@@ -302,10 +409,11 @@ class HttpExecutorAdapter implements ExecutorAdapter {
         registrationEndpoint: probed.registrationEndpoint,
         authorizationUrl: probed.authorizationUrl,
         tokenUrl: probed.tokenUrl,
-        resource: probed.resource ?? null,
-        scopes: input.scopes,
+        resource: input.discoveryUrl ? input.endpoint : (probed.resource ?? null),
+        scopes: registrationScopes,
         tokenEndpointAuthMethodsSupported: probed.tokenEndpointAuthMethodsSupported,
         clientName: "mindframe-z",
+        redirectUri,
         originIntegration: input.integration
       }
     );
@@ -315,16 +423,29 @@ class HttpExecutorAdapter implements ExecutorAdapter {
       owner: "user",
       name: input.name,
       integration: input.integration,
-      template: input.template
+      template: input.template,
+      redirectUri
     });
-    if (started.status === "connected") return;
+    if (started.status === "connected") return started.connection;
     const closeHandoff = await openOAuthHandoff(started.authorizationUrl, this.openExternal);
     try {
-      await waitFor(async () => {
-        const connections = await this.listConnections(input.integration);
-        const connection = connections.find((item) => item.name === input.name);
-        return connection && isHealthy(connection) ? connection : undefined;
-      }, 120_000);
+      return await waitFor(async () => {
+        const completion = await this.request(
+          "GET",
+          `/oauth/await/${encodeURIComponent(started.state)}`,
+          oauthCompletionSchema.nullable()
+        );
+        if (completion === null) return undefined;
+        if (!completion.ok) {
+          throw executorError(
+            `Executor OAuth authorization failed for ${input.integration}: ${completion.error ?? "unknown error"}`
+          );
+        }
+        return connectionSchema.parse(completion);
+      }, this.oauthWaitTimeoutMs);
+    } catch (error) {
+      await this.cancelOAuth(started.state).catch(() => undefined);
+      throw error;
     } finally {
       await closeHandoff();
     }
@@ -348,10 +469,10 @@ export function createHttpExecutorAdapter(options: ExecutorHttpAdapterOptions): 
     options.baseUrl,
     options.token,
     options.dataDir ?? "",
-    options.scopeDir ?? "",
     options.fetch ?? globalThis.fetch,
     options.daemon,
     options.requestTimeoutMs ?? requestTimeoutMs,
+    options.oauthWaitTimeoutMs ?? 120_000,
     options.openExternal ?? defaultOpenExternal
   );
 }

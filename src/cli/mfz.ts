@@ -78,6 +78,7 @@ import {
   formatContextReport
 } from "../context/report.js";
 import type { ContextHarness } from "../context/model.js";
+import { registerExecutorCommands } from "./executor.js";
 
 async function doctor(options: {
   root?: string | undefined;
@@ -229,7 +230,13 @@ async function statusFn(options: {
       profile.mcpServers
         .map((server) =>
           server.route === "executor"
-            ? `${server.name}:shared`
+            ? `${server.name}:shared${
+                Object.keys(server.connections).length > 0
+                  ? `[${Object.entries(server.connections)
+                      .map(([name, method]) => `${name}=${method}`)
+                      .join("|")}]`
+                  : ""
+              }`
             : `${server.name}:${Object.entries(server.agents)
                 .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
                 .join("|")}`
@@ -363,6 +370,8 @@ program
   .command("schemas")
   .description("Generate JSON Schemas for YAML manifests")
   .action(async () => schemas(program.opts()));
+
+registerExecutorCommands(program);
 
 program
   .command("guide")

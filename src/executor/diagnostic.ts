@@ -1,15 +1,11 @@
 import { execa } from "execa";
 import { fileExists } from "../core/fs-util.js";
-import {
-  executorDataDir,
-  executorManagedPath,
-  executorScopeDir,
-  type RuntimePaths
-} from "../core/paths.js";
+import { executorDataDir, executorManagedPath, type RuntimePaths } from "../core/paths.js";
 import { executorMcpServers, type ResolvedProfile } from "../core/profile.js";
-import { executorVersion, attachExecutorAdapter, type ExecutorConnection } from "./adapter.js";
+import { executorVersion, attachExecutorAdapter } from "./adapter.js";
 import { buildExecutorDesiredState } from "./model.js";
 import { readManagedState, type ManagedState } from "./reconcile.js";
+import { classifyExecutorIntegration, classifyExecutorRemoval } from "./lifecycle.js";
 
 export type ExecutorRuntimeStatus = "not-required" | "absent" | "unavailable" | "attachable";
 export type ExecutorManagedStatus = "absent" | "invalid" | "incomplete" | "complete";
@@ -17,6 +13,7 @@ export type ExecutorManagedStatus = "absent" | "invalid" | "incomplete" | "compl
 export interface ExecutorDiagnosticConnection {
   integration: string;
   name: string;
+  authentication: string;
   health: string;
   missingOAuthScopes: string[];
 }
@@ -26,22 +23,11 @@ export interface ExecutorDiagnostic {
   profile: string;
   installedVersion: string;
   expectedVersion: string;
-  scopeDir: string;
   dataDir: string;
   runtime: ExecutorRuntimeStatus;
   managed: ExecutorManagedStatus;
   connections: ExecutorDiagnosticConnection[];
   blockers: string[];
-}
-
-function durableConnection(connection: ExecutorConnection): boolean {
-  return (
-    connection.template !== "none" ||
-    (connection.provider !== "" && connection.provider !== "none") ||
-    connection.oauthClient !== null ||
-    connection.oauthScope !== null ||
-    connection.expiresAt !== null
-  );
 }
 
 async function installedVersion(binary: string): Promise<string> {
@@ -72,8 +58,7 @@ export async function inspectExecutor(
   } = {}
 ): Promise<ExecutorDiagnostic> {
   const required = executorMcpServers(profile).length > 0;
-  const dataDir = executorDataDir(paths, profile.name);
-  const scopeDir = executorScopeDir(paths, profile.name);
+  const dataDir = executorDataDir();
   const managedFilePresent = await fileExists(executorManagedPath(paths, profile.name));
   const managed = await readManagedState(paths, profile.name);
   const active = required || managedFilePresent;
@@ -84,7 +69,6 @@ export async function inspectExecutor(
       ? await installedVersion(options.binary ?? "executor")
       : "not required",
     expectedVersion: executorVersion,
-    scopeDir,
     dataDir,
     runtime: active ? "absent" : "not-required",
     managed: managedStatus(managedFilePresent, managed),
@@ -96,11 +80,7 @@ export async function inspectExecutor(
   }
   if (!active) return diagnostic;
 
-  const adapter = await attachExecutorAdapter({
-    paths,
-    profileName: profile.name,
-    ...(options.fetch ? { fetch: options.fetch } : {})
-  });
+  const adapter = await attachExecutorAdapter(options.fetch ? { fetch: options.fetch } : {});
   if (!adapter) {
     diagnostic.runtime = (await fileExists(dataDir)) ? "unavailable" : "absent";
     if (required || diagnostic.managed !== "absent") {
@@ -115,35 +95,40 @@ export async function inspectExecutor(
   try {
     for (const integration of desired.integrations) {
       const current = await adapter.getIntegration(integration.slug);
-      if (!current) {
+      const classification = classifyExecutorIntegration(integration, {
+        current,
+        connections: current ? await adapter.listConnections(integration.slug) : []
+      });
+      if (!classification.current) {
         diagnostic.blockers.push(`Executor integration ${integration.slug} is not registered`);
-        continue;
       }
-      const connections = await adapter.listConnections(integration.slug);
-      for (const connection of connections) {
+      for (const connection of classification.connections) {
+        const observed = connection.kind === "missing" ? undefined : connection.connection;
         diagnostic.connections.push({
           integration: integration.slug,
           name: connection.name,
+          authentication: connection.method,
+          health: observed?.lastHealth?.status ?? "missing",
+          missingOAuthScopes: observed ? [...observed.missingOAuthScopes] : []
+        });
+      }
+      for (const connection of classification.undeclaredDurableConnections) {
+        diagnostic.connections.push({
+          integration: integration.slug,
+          name: connection.name,
+          authentication: connection.template,
           health: connection.lastHealth?.status ?? "unknown",
           missingOAuthScopes: [...connection.missingOAuthScopes]
         });
-        if (connection.missingOAuthScopes.length > 0) {
-          diagnostic.blockers.push(
-            `Executor connection ${integration.slug}/${connection.name} is missing OAuth scopes`
-          );
-        }
       }
+      diagnostic.blockers.push(...classification.blockers);
     }
     for (const slug of Object.keys(managed?.integrations ?? {})) {
       if (desiredSlugs.has(slug)) continue;
       const current = await adapter.getIntegration(slug);
       if (!current) continue;
-      const connections = await adapter.listConnections(slug);
-      if (connections.some(durableConnection)) {
-        diagnostic.blockers.push(
-          `Executor integration ${slug} has durable state and requires explicit disconnect before removal`
-        );
-      }
+      const removal = classifyExecutorRemoval(slug, current, await adapter.listConnections(slug));
+      diagnostic.blockers.push(...removal.blockers);
     }
   } catch {
     diagnostic.blockers.push("Executor metadata could not be read safely");
@@ -157,12 +142,11 @@ export function executorDiagnosticLines(diagnostic: ExecutorDiagnostic): string[
   if (!diagnostic.required && diagnostic.managed === "absent") return [];
   return [
     `executor version\t${diagnostic.installedVersion}\texpected ${diagnostic.expectedVersion}`,
-    `executor scope\t${diagnostic.scopeDir}`,
     `executor data\t${diagnostic.dataDir}`,
     `executor runtime\t${diagnostic.runtime}\tmanaged ${diagnostic.managed}`,
     ...diagnostic.connections.map(
       (connection) =>
-        `executor connection\t${connection.integration}/${connection.name}\thealth ${connection.health}${
+        `executor connection\t${connection.integration}/${connection.name}\tauth ${connection.authentication}\thealth ${connection.health}${
           connection.missingOAuthScopes.length > 0
             ? `\tmissing scopes ${connection.missingOAuthScopes.join(",")}`
             : ""

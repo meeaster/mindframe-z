@@ -25,9 +25,33 @@ mcp:
       disabled: [opencode, codex]
   context7:
     route: executor
+  datadog:
+    route: executor
+    connections:
+       publicsafety: oauth
+       tylertech: oauth
 \`\`\`
 
-Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state. Executor entries are always-configured shared inventory for OpenCode, Claude Code, and Codex, not per-agent toggles. A real \`mfz apply\` starts or reuses the profile-scoped Executor daemon, performs browser authorization when explicitly declared, and writes harness bridges only after required connections are healthy. It never imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
+Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state. Executor entries are always-configured shared inventory for OpenCode, Claude Code, and Codex, not per-agent toggles. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only after required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. Browser authorization belongs to the explicit \`mfz executor connect <integration>\` command. MFZ never imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
+
+Declare Executor authentication structure in the catalog, never credential values:
+
+\`\`\`yaml
+executor:
+  authentication:
+    - slug: none
+      kind: none
+    - slug: oauth
+      kind: oauth2
+    - slug: api-key
+      kind: apikey
+      placements:
+        - carrier: header
+          name: X-API-Key
+          variable: api_key
+\`\`\`
+
+Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`discoveryUrl\` and \`registrationScopes\`; those scopes are used only while registering the public client. Profile connection names must be lowercase and address-safe because Executor v1.5.33 persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Run \`mfz executor connect <integration> --connection <name>\` for each named OAuth or API-key connection; omission is accepted only for exactly one resolved connection. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly. Apply may create only explicit no-auth connections and blocks credentialed cutover until every declared connection is verified. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
 
 Topic guides: \`mfz guide skills\` — add or change skills.
 `;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "../core/manifests.js";
-import { buildExecutorDesiredState, executorConfigDigest } from "./model.js";
+import {
+  buildExecutorDesiredState,
+  executorConfigDigest,
+  executorConnectionHasDurableState
+} from "./model.js";
 import type { ResolvedProfile } from "../core/profile.js";
 
 function profileWithServer(server: ResolvedProfile["mcpServers"][number]): ResolvedProfile {
@@ -22,10 +26,43 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
 }
 
 describe("Executor desired state", () => {
+  it("resolves omitted authentication to Executor's canonical no-auth main connection", () => {
+    const profile = profileWithServer({
+      name: "stdio",
+      route: "executor",
+      connections: {},
+      server: {
+        type: "local",
+        description: "Local tool",
+        command: ["tool"]
+      }
+    });
+    const desired = buildExecutorDesiredState(profile);
+    expect(desired.integrations[0]).toMatchObject({
+      connections: { main: "none" },
+      config: { authenticationTemplate: [{ slug: "none", kind: "none" }] }
+    });
+  });
+
+  it("does not treat a no-auth provider as durable without credential bindings", () => {
+    expect(executorConnectionHasDurableState({ template: "none", provider: "default" })).toBe(
+      false
+    );
+    expect(
+      executorConnectionHasDurableState({
+        template: "none",
+        provider: "default",
+        credentialBindings: { token: "item" }
+      })
+    ).toBe(true);
+    expect(executorConnectionHasDurableState({ template: "api-key", provider: "none" })).toBe(true);
+  });
+
   it("keeps catalog slugs and excludes secret environment references", () => {
     const profile = profileWithServer({
       name: "context7",
       route: "executor",
+      connections: {},
       server: {
         type: "remote",
         description: "Docs",
@@ -42,10 +79,32 @@ describe("Executor desired state", () => {
     expect(executorConfigDigest(desired.integrations[0]!)).toHaveLength(64);
   });
 
+  it("carries named connection method bindings into desired state and its digest", () => {
+    const profile = profileWithServer({
+      name: "datadog",
+      route: "executor",
+      connections: { publicsafety: "oauth", tylertech: "oauth" },
+      server: {
+        type: "remote",
+        description: "Datadog",
+        url: "https://example.test/mcp",
+        transport: "http",
+        executor: { authentication: [{ slug: "oauth", kind: "oauth2" }] }
+      }
+    });
+    const desired = buildExecutorDesiredState(profile);
+    expect(desired.integrations[0]?.connections).toEqual({
+      publicsafety: "oauth",
+      tylertech: "oauth"
+    });
+    expect(JSON.stringify(desired)).not.toContain("provider");
+  });
+
   it("rejects an environment-derived URL before Executor mutation", () => {
     const profile = profileWithServer({
       name: "private",
       route: "executor",
+      connections: {},
       server: {
         type: "remote",
         description: "Private",
@@ -63,6 +122,7 @@ describe("Executor desired state", () => {
     const profile = profileWithServer({
       name: "private",
       route: "executor",
+      connections: {},
       server: {
         type: "remote",
         description: "Private",
@@ -78,6 +138,7 @@ describe("Executor desired state", () => {
     const profile = profileWithServer({
       name: "local",
       route: "executor",
+      connections: {},
       server: {
         type: "local",
         description: "Local",
@@ -95,6 +156,7 @@ describe("Executor desired state", () => {
     const remoteWithStdio = profileWithServer({
       name: "remote",
       route: "executor",
+      connections: {},
       server: {
         type: "remote",
         description: "Remote",
@@ -107,13 +169,29 @@ describe("Executor desired state", () => {
     const localWithOAuth = profileWithServer({
       name: "local",
       route: "executor",
+      connections: {},
       server: {
         type: "local",
         description: "Local",
         command: ["tool"],
-        executor: { oauth: { template: "oauth", scopes: [] } }
+        executor: { authentication: [{ slug: "oauth", kind: "oauth2" }] }
       }
     });
-    expect(() => buildExecutorDesiredState(localWithOAuth)).toThrow(/remote-only settings/);
+    expect(() => buildExecutorDesiredState(localWithOAuth)).toThrow(/cannot use OAuth/);
+
+    const localWithNoAuth = profileWithServer({
+      name: "local-none",
+      route: "executor",
+      connections: { default: "none" },
+      server: {
+        type: "local",
+        description: "Local",
+        command: ["tool"],
+        executor: { authentication: [{ slug: "none", kind: "none" }] }
+      }
+    });
+    expect(buildExecutorDesiredState(localWithNoAuth).integrations[0]?.connections).toEqual({
+      default: "none"
+    });
   });
 });

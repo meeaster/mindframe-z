@@ -17,6 +17,18 @@ const mcpAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const mcpDisabledAgentSchema = mcpAgentSchema.exclude(["claude-code"]);
 type McpAgentName = z.infer<typeof mcpAgentSchema>;
 type NormalizedMcpAgents = Partial<Record<McpAgentName, boolean>>;
+export const executorConnectionNameSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^[a-z][a-z0-9_]*$/,
+    "must be a lowercase address-safe Executor connection name without dots, hyphens, or punctuation"
+  );
+const executorConnectionMapSchema = z
+  .record(executorConnectionNameSchema, z.string().min(1))
+  .refine((connections) => Object.keys(connections).length > 0, {
+    message: "connections must contain at least one named connection"
+  });
 
 const conciseMcpAgentsSchema = z
   .array(mcpAgentSchema)
@@ -79,7 +91,8 @@ const profileMcpConfigSchema = z.union([
     .transform(({ agents }) => ({ route: "direct" as const, agents })),
   z
     .object({
-      route: z.literal("executor")
+      route: z.literal("executor"),
+      connections: executorConnectionMapSchema.optional()
     })
     .strict()
 ]);
@@ -212,26 +225,78 @@ export const skillsManifestSchema = z.object({
   skills: z.array(skillSchema).default([])
 });
 
-const mcpServerBaseSchema = z.object({
-  description: z.string().default(""),
-  type: z.enum(["remote", "local"]),
-  transport: z.enum(["http", "sse", "stdio"]).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  executor: z
-    .object({
-      transport: z.enum(["auto", "streamable-http", "sse"]).optional(),
-      oauth: z
-        .object({
-          template: z.string().min(1),
-          scopes: z.array(z.string().min(1)).default([])
-        })
-        .strict()
-        .optional()
-    })
-    .strict()
-    .optional()
-});
+const mcpServerBaseSchema = z
+  .object({
+    description: z.string().default(""),
+    type: z.enum(["remote", "local"]),
+    transport: z.enum(["http", "sse", "stdio"]).optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    executor: z
+      .object({
+        transport: z.enum(["auto", "streamable-http", "sse"]).optional(),
+        authentication: z
+          .array(
+            z.union([
+              z.object({ slug: z.literal("none"), kind: z.literal("none") }).strict(),
+              z
+                .object({
+                  slug: z.string().min(1),
+                  kind: z.literal("oauth2"),
+                  discoveryUrl: z.string().url().optional(),
+                  registrationScopes: z.array(z.string().min(1)).min(1).optional()
+                })
+                .strict()
+                .superRefine((method, context) => {
+                  const hasDiscoveryUrl = method.discoveryUrl !== undefined;
+                  const hasRegistrationScopes = method.registrationScopes !== undefined;
+                  if (hasDiscoveryUrl !== hasRegistrationScopes) {
+                    context.addIssue({
+                      code: "custom",
+                      message: "assisted OAuth requires both discoveryUrl and registrationScopes"
+                    });
+                  }
+                }),
+              z
+                .object({
+                  slug: z.string().min(1),
+                  kind: z.literal("apikey"),
+                  placements: z
+                    .array(
+                      z
+                        .object({
+                          carrier: z.enum(["header", "query"]),
+                          name: z.string().min(1),
+                          variable: z.string().min(1),
+                          prefix: z.string().optional()
+                        })
+                        .strict()
+                    )
+                    .min(1)
+                })
+                .strict()
+            ])
+          )
+          .min(1)
+          .superRefine((methods, context) => {
+            const seen = new Set<string>();
+            for (const [index, method] of methods.entries()) {
+              if (seen.has(method.slug)) {
+                context.addIssue({
+                  code: "custom",
+                  message: `authentication method slug ${method.slug} must be unique`,
+                  path: [index, "slug"]
+                });
+              }
+              seen.add(method.slug);
+            }
+          })
+          .optional()
+      })
+      .strict()
+      .optional()
+  })
+  .strict();
 
 export const mcpServerSchema = z.union([
   mcpServerBaseSchema.extend({ type: z.literal("remote"), url: z.string().min(1) }),
@@ -481,6 +546,10 @@ export type ToolTargetName = z.infer<typeof targetSchema>;
 export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
 export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
+export type ExecutorAuthenticationMethod = NonNullable<
+  NonNullable<NonNullable<McpServer["executor"]>["authentication"]>[number]
+>;
+export type ExecutorConnectionMap = z.infer<typeof executorConnectionMapSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
 export type HomeManifest = z.infer<typeof homeManifestSchema>;

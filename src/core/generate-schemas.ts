@@ -50,6 +50,68 @@ function strengthenProfileMcpSchema(schema: Record<string, unknown>): void {
       }
     }))
   };
+
+  const executor = (entries.anyOf as Record<string, unknown>[])[1]!;
+  const executorProperties = executor.properties as Record<string, Record<string, unknown>>;
+  executorProperties.connections = {
+    type: "object",
+    minProperties: 1,
+    propertyNames: {
+      type: "string",
+      minLength: 1,
+      pattern: "^[a-z][a-z0-9_]*$"
+    },
+    additionalProperties: { type: "string", minLength: 1 }
+  };
+}
+
+function strengthenMcpSchema(schema: Record<string, unknown>): void {
+  const properties = schema.properties as Record<string, Record<string, unknown>>;
+  const servers = properties.servers;
+  if (!servers) throw new Error("mcp.schema.json is missing the servers property");
+  const branches = (servers.additionalProperties as Record<string, unknown> | undefined)?.anyOf;
+  if (!Array.isArray(branches)) {
+    throw new Error("mcp.schema.json servers must expose anyOf branches");
+  }
+  for (const branch of branches) {
+    const branchProperties = (branch as Record<string, unknown>).properties as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    if (!branchProperties) throw new Error("mcp.schema.json has a branch without properties");
+    const executor = branchProperties.executor;
+    if (!executor) continue;
+    const executorProperties = executor.properties as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    if (!executorProperties) throw new Error("mcp.schema.json Executor branch lacks properties");
+    const authentication = executorProperties.authentication;
+    if (!authentication) continue;
+    const methods = authentication.items as Record<string, unknown> | undefined;
+    const methodBranches = methods?.anyOf;
+    if (!Array.isArray(methodBranches)) {
+      throw new Error("mcp.schema.json Executor authentication lacks method branches");
+    }
+    const oauth = methodBranches.find((method) => {
+      const kind = (
+        (method as Record<string, unknown>).properties as
+          | Record<string, Record<string, unknown>>
+          | undefined
+      )?.kind;
+      return kind?.const === "oauth2";
+    }) as Record<string, unknown> | undefined;
+    if (!oauth) throw new Error("mcp.schema.json Executor authentication lacks an oauth2 branch");
+    const requireWhenPresent = (field: string, required: string): Record<string, unknown> => {
+      const rule: Record<string, unknown> = { if: { required: [field] } };
+      // JSON Schema's conditional keyword is intentionally named `then`.
+      // oxlint-disable-next-line unicorn/no-thenable
+      rule.then = { required: [required] };
+      return rule;
+    };
+    oauth.allOf = [
+      requireWhenPresent("discoveryUrl", "registrationScopes"),
+      requireWhenPresent("registrationScopes", "discoveryUrl")
+    ];
+  }
 }
 
 export async function generateSchemas(root = process.cwd()): Promise<string[]> {
@@ -63,6 +125,7 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
       unknown
     >;
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
+    if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
     const outputPath = path.join(schemasDir, entry.filename);
     await writeFile(outputPath, `${JSON.stringify(schema, null, 2)}\n`, "utf8");
     written.push(outputPath);
