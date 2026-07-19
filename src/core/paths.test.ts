@@ -11,6 +11,7 @@ import {
   extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
+  mindframeZDir,
   opencodeDataHome,
   opencodeDbPath,
   overrideStorePath,
@@ -151,6 +152,10 @@ describe(".mindframe-z store path contract", () => {
   const home = "/tmp/store-home";
   const runtime = paths(home);
   const mfz = path.join(home, ".mindframe-z");
+
+  it("pins the canonical .mindframe-z directory the rest of the layout hangs off", () => {
+    expect(mindframeZDir(home)).toBe(mfz);
+  });
 
   it("pins the per-agent skill override state path", () => {
     expect(globalSkillStatePath(runtime, "claude-code")).toBe(
