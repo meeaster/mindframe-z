@@ -34,6 +34,13 @@ export interface PathOptions {
   piDir?: string | undefined;
 }
 
+// Canonical location of the per-home `.mindframe-z` state directory. Every
+// on-disk path mfz owns hangs off this, so the directory name lives in exactly
+// one place (the store-path contract in paths.test.ts pins the layout below).
+export function mindframeZDir(home: string): string {
+  return path.join(home, ".mindframe-z");
+}
+
 export function packageRootFromImport(importMetaUrl: string): string {
   // Resolve the engine root by finding the nearest package.json, so it works
   // identically from source (src/*, two levels up) and the compiled dist tree
@@ -49,7 +56,7 @@ export function packageRootFromImport(importMetaUrl: string): string {
 
 function machineHomePath(home: string): string | undefined {
   try {
-    const parsed = YAML.parse(readFileSync(path.join(home, ".mindframe-z", "config.yml"), "utf8"));
+    const parsed = YAML.parse(readFileSync(path.join(mindframeZDir(home), "config.yml"), "utf8"));
     return machineSchema.parse(parsed).home_path;
   } catch {
     return undefined;
@@ -70,7 +77,7 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   return {
     root,
     home,
-    configsDir: path.join(home, ".mindframe-z", "configs"),
+    configsDir: path.join(mindframeZDir(home), "configs"),
     opencodeConfigDir: path.resolve(
       expandHome(
         options.opencodeConfigDir ??
@@ -134,11 +141,11 @@ export function executorManagedPath(paths: RuntimePaths, profileName: string): s
 }
 
 export function skillCacheRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "cache", "skills");
+  return path.join(mindframeZDir(paths.home), "cache", "skills");
 }
 
 export function skillCandidatesRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "skill-candidates");
+  return path.join(mindframeZDir(paths.home), "skill-candidates");
 }
 
 export function skillSnapshotDir(paths: RuntimePaths, profileName: string): string {
@@ -154,33 +161,33 @@ export function vendorLockPath(root: string): string {
 }
 
 export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): string {
-  return path.join(paths.home, ".mindframe-z", "skill-overrides", `${target}.json`);
+  return path.join(mindframeZDir(paths.home), "skill-overrides", `${target}.json`);
 }
 
 export function overrideStorePath(home: string): string {
-  return path.join(home, ".mindframe-z", "overrides.json");
+  return path.join(mindframeZDir(home), "overrides.json");
 }
 
 // Generated index of enabled references, embedded into every agent's instructions
 // (referenced by @-path for Claude, read inline for Codex, listed for OpenCode).
 export function referenceIndexPath(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "references.md");
+  return path.join(mindframeZDir(paths.home), "references.md");
 }
 
 // Companion index of extra folder grants; only embedded when the profile grants any.
 export function extraFoldersIndexPath(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "extra_folders.md");
+  return path.join(mindframeZDir(paths.home), "extra_folders.md");
 }
 
 export function threadStoreRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "threads");
+  return path.join(mindframeZDir(paths.home), "threads");
 }
 
 // Read-only, write-once cache of sessions hydrated from an S3 archive because they
 // vanished from their live harness store. Gitignored; mounted read-only into the
 // thread tools container (as a subtree of the existing whole-~/.mindframe-z mount).
 export function archiveCacheRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "archive-cache");
+  return path.join(mindframeZDir(paths.home), "archive-cache");
 }
 
 // OpenCode resolves its own data directory via `XDG_DATA_HOME` (falling back to
@@ -197,7 +204,7 @@ export function opencodeDbPath(paths: RuntimePaths): string {
 }
 
 export function threadDestinationRoot(paths: RuntimePaths, destination: string): string {
-  return path.join(paths.home, ".mindframe-z", "thread-destinations", destination);
+  return path.join(mindframeZDir(paths.home), "thread-destinations", destination);
 }
 
 export function threadPath(paths: RuntimePaths, slug: string): string {
@@ -205,11 +212,11 @@ export function threadPath(paths: RuntimePaths, slug: string): string {
 }
 
 export function threadRunsRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "thread-runs", "runs");
+  return path.join(mindframeZDir(paths.home), "thread-runs", "runs");
 }
 
 export function threadSweepRoot(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "thread-sweep");
+  return path.join(mindframeZDir(paths.home), "thread-sweep");
 }
 
 export function threadRunPath(paths: RuntimePaths, runId: string): string {
@@ -217,7 +224,7 @@ export function threadRunPath(paths: RuntimePaths, runId: string): string {
 }
 
 export function threadCliLogPath(paths: RuntimePaths): string {
-  return path.join(paths.home, ".mindframe-z", "thread-runs", "cli.log");
+  return path.join(mindframeZDir(paths.home), "thread-runs", "cli.log");
 }
 
 export function dedupe<T>(items: readonly T[]): T[] {
