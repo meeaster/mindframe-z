@@ -11,6 +11,16 @@ export async function fileExists(file: string): Promise<boolean> {
 }
 
 /**
+ * Narrow an unknown value to a plain object: a non-null, non-array object. This
+ * is the canonical guard behind the "parse to a plain object or fall back"
+ * seams (config merges and history record extraction), so the accepted shape
+ * stays identical wherever renderers, sync, and context readers rely on it.
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
  * Read a JSON object from disk, defaulting to an empty object when the file is
  * missing, unreadable, or does not parse to a plain object. Renderers use this
  * to merge managed settings into pre-existing local config without failing on a
@@ -19,9 +29,7 @@ export async function fileExists(file: string): Promise<boolean> {
 export async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
   try {
     const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return isPlainObject(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -32,9 +40,7 @@ export async function readJsonObject(filePath: string): Promise<Record<string, u
  * parse step. */
 export function parseTomlObject(content: string): Record<string, unknown> {
   const parsed = parseToml(content) as unknown;
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
+  return isPlainObject(parsed) ? parsed : {};
 }
 
 /**

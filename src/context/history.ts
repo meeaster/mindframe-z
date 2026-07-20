@@ -1,3 +1,4 @@
+import { isPlainObject } from "../core/fs-util.js";
 import {
   buildHistory,
   type ContextActivation,
@@ -10,9 +11,7 @@ export function numberField(value: unknown): number | undefined {
 }
 
 export function objectField(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isPlainObject(value) ? value : undefined;
 }
 
 export function addOpenCodeUsage(value: unknown): UsageComponents | undefined {
