@@ -2,7 +2,28 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { jsonFileContent, parseTomlObject, readJsonObject, readTomlObject } from "./fs-util.js";
+import {
+  isPlainObject,
+  jsonFileContent,
+  parseTomlObject,
+  readJsonObject,
+  readTomlObject
+} from "./fs-util.js";
+
+describe("isPlainObject", () => {
+  it("accepts a non-null, non-array object", () => {
+    expect(isPlainObject({})).toBe(true);
+    expect(isPlainObject({ name: "personal" })).toBe(true);
+  });
+
+  it("rejects null, arrays, and primitives", () => {
+    expect(isPlainObject(null)).toBe(false);
+    expect(isPlainObject([1, 2])).toBe(false);
+    expect(isPlainObject("personal")).toBe(false);
+    expect(isPlainObject(3)).toBe(false);
+    expect(isPlainObject(undefined)).toBe(false);
+  });
+});
 
 describe("jsonFileContent", () => {
   it("pretty-prints with two-space indentation and a trailing newline", () => {
