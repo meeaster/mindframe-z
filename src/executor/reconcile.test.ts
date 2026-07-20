@@ -142,16 +142,6 @@ function fakeAdapter(): {
     async checkHealth() {
       return { status: "healthy", checkedAt: Date.now() };
     },
-    async authorizeOAuth(input) {
-      mutations.push("unexpected-oauth");
-      return durableConnection(input.name, input.template);
-    },
-    async cancelOAuth() {
-      mutations.push("unexpected-cancel");
-    },
-    async startApiKeyHandoff() {
-      mutations.push("unexpected-handoff");
-    },
     async close() {}
   };
   return { adapter, mutations, integrations, connections };
@@ -251,7 +241,44 @@ describe("Executor reconciliation", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("configures credentialed declarations but blocks cutover until connect", async () => {
+  it("reuses an exact-name credentialed connection created by the Executor app", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-org-oauth-"));
+    const paths = createRuntimePaths({ root, home: root });
+    const { adapter, integrations, connections, mutations } = fakeAdapter();
+    const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
+      { slug: "oauth", kind: "oauth2" }
+    ]);
+    integrations.set("example", {
+      slug: "example",
+      description: "Example",
+      kind: "mcp",
+      canRemove: true,
+      canRefresh: true,
+      config: {
+        transport: "remote",
+        endpoint: "https://example.test/mcp",
+        remoteTransport: "auto",
+        authenticationTemplate: [{ slug: "oauth", kind: "oauth2" }]
+      }
+    });
+    connections.set("example", [
+      {
+        ...durableConnection("main", "oauth"),
+        owner: "org",
+        provider: "keychain",
+        address: executorConnectionAddress("org", "example", "main")
+      }
+    ]);
+
+    await expect(reconcileExecutor(paths, profile, { adapter })).resolves.toMatchObject({
+      reusedConnections: ["example/main"],
+      requiredConnections: []
+    });
+    expect(mutations).toEqual([]);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("configures credentialed declarations and directs setup to the Executor app", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-auth-required-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, mutations } = fakeAdapter();
@@ -263,7 +290,9 @@ describe("Executor reconciliation", () => {
         ]),
         { adapter }
       )
-    ).rejects.toThrow("mfz executor connect example");
+    ).rejects.toThrow(
+      'Add or update these connections in the Executor app before applying:\n- example: connection name "main" (OAuth)'
+    );
     expect(mutations).toEqual(["add:example"]);
     await rm(root, { recursive: true, force: true });
   });
@@ -279,7 +308,7 @@ describe("Executor reconciliation", () => {
         placements: [{ carrier: "header", name: "X-API-Key", variable: "api_key" }]
       }
     ]);
-    await reconcileExecutor(paths, profile, { adapter, allowMissingConnections: true });
+    await expect(reconcileExecutor(paths, profile, { adapter })).rejects.toThrow(/Executor app/);
     const integration = integrations.get("example");
     if (!integration) throw new Error("missing integration");
     integration.config.authenticationTemplate = [
@@ -406,7 +435,7 @@ describe("Executor reconciliation", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("requires every named credentialed connection before cutover", async () => {
+  it("reports every missing OAuth and API-key connection together after reconciliation", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-named-missing-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
@@ -417,6 +446,26 @@ describe("Executor reconciliation", () => {
       [{ slug: "oauth", kind: "oauth2" }],
       { publicsafety: "oauth", tylertech: "oauth" }
     );
+    profile.mcpServers.push({
+      name: "metrics",
+      route: "executor",
+      connections: { service: "api-key" },
+      server: {
+        type: "remote",
+        description: "Metrics",
+        url: "https://metrics.example.test/mcp",
+        transport: "http",
+        executor: {
+          authentication: [
+            {
+              slug: "api-key",
+              kind: "apikey",
+              placements: [{ carrier: "header", name: "X-API-Key", variable: "api_key" }]
+            }
+          ]
+        }
+      }
+    });
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -430,11 +479,36 @@ describe("Executor reconciliation", () => {
         authenticationTemplate: [{ slug: "oauth", kind: "oauth2" }]
       }
     });
+    integrations.set("metrics", {
+      slug: "metrics",
+      description: "Metrics",
+      kind: "mcp",
+      canRemove: true,
+      canRefresh: true,
+      config: {
+        transport: "remote",
+        endpoint: "https://metrics.example.test/mcp",
+        remoteTransport: "auto",
+        authenticationTemplate: [
+          {
+            slug: "api-key",
+            type: "apiKey",
+            headers: { "X-API-Key": [{ type: "variable", name: "api_key" }] }
+          }
+        ]
+      }
+    });
     connections.set("example", [durableConnection("publicsafety", "oauth")]);
 
-    await expect(reconcileExecutor(paths, profile, { adapter })).rejects.toThrow(
-      "example/tylertech"
-    );
+    let message = "";
+    try {
+      await reconcileExecutor(paths, profile, { adapter });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('- example: connection name "tylertech" (OAuth)');
+    expect(message).toContain('- metrics: connection name "service" (API key)');
+    expect(message).toContain("Use the exact connection names shown, then rerun mfz apply.");
     expect(mutations).toEqual([]);
     await rm(root, { recursive: true, force: true });
   });
@@ -464,11 +538,16 @@ describe("Executor reconciliation", () => {
     ]);
 
     const dryRun = await reconcileExecutor(paths, profile, { adapter, dryRun: true });
-    expect(dryRun?.blockers).toContain(
-      "Executor connection example/main is missing OAuth scopes; run mfz executor connect example --connection main"
-    );
+    expect(dryRun?.requiredConnections).toEqual([
+      {
+        integration: "example",
+        name: "main",
+        authentication: "oauth",
+        reason: "missing-oauth-scopes"
+      }
+    ]);
     await expect(reconcileExecutor(paths, profile, { adapter })).rejects.toThrow(
-      /missing OAuth scopes/
+      'connection name "main" (OAuth; reconnect for required scopes)'
     );
     await rm(root, { recursive: true, force: true });
   });

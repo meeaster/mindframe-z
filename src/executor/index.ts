@@ -18,7 +18,6 @@ export {
   type ExecutorIntegration,
   type ExecutorTool
 } from "./adapter.js";
-export { connectExecutor } from "./connect.js";
 export {
   inspectExecutor,
   executorDiagnosticLines,
@@ -27,14 +26,15 @@ export {
 } from "./diagnostic.js";
 export {
   executorPlanSummary,
-  ensureExecutorIntegration,
   planExecutor,
   reconcileExecutor,
   hasManagedExecutorState,
   readManagedState,
   readManagedStates,
   type ManagedState,
-  type ExecutorReconcileResult
+  requiredConnectionsMessage,
+  type ExecutorReconcileResult,
+  type ExecutorRequiredConnection
 } from "./reconcile.js";
 export {
   classifyExecutorIntegration,

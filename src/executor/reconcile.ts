@@ -64,8 +64,16 @@ export interface ExecutorReconcileResult {
   addedConnections: string[];
   reusedConnections: string[];
   retained: string[];
+  requiredConnections: ExecutorRequiredConnection[];
   planning?: "managed-digest-only" | "metadata-unavailable" | "live-metadata-unverified";
   blockers?: string[];
+}
+
+export interface ExecutorRequiredConnection {
+  integration: string;
+  name: string;
+  authentication: "oauth" | "api-key";
+  reason: "missing" | "missing-oauth-scopes";
 }
 
 export async function readManagedState(
@@ -143,7 +151,8 @@ function emptyResult(desired: ExecutorDesiredState): ExecutorReconcileResult {
     removed: [],
     addedConnections: [],
     reusedConnections: [],
-    retained: []
+    retained: [],
+    requiredConnections: []
   };
 }
 
@@ -181,6 +190,7 @@ export function planExecutor(
     retained: Object.keys(previous.integrations).filter(
       (slug) => !desiredSlugs.has(slug) && sharedOwnedSlugs.has(slug)
     ),
+    requiredConnections: [],
     planning: "managed-digest-only"
   };
 }
@@ -196,14 +206,19 @@ async function planExecutorWithMetadata(
   const removed = new Set(base.removed);
   const addedConnections = new Set(base.addedConnections);
   const reusedConnections = new Set(base.reusedConnections);
+  const requiredConnections: ExecutorRequiredConnection[] = [];
   const blockers: string[] = [];
 
   for (const server of desired.integrations) {
     const current = await adapter.getIntegration(server.slug);
-    const classification = classifyExecutorIntegration(server, {
-      current,
-      connections: current ? await adapter.listConnections(server.slug) : []
-    });
+    const classification = classifyExecutorIntegration(
+      server,
+      {
+        current,
+        connections: current ? await adapter.listConnections(server.slug) : []
+      },
+      { requireCredentialedConnections: false, allowConnectionRepair: true }
+    );
     if (classification.integration === "missing") {
       added.add(server.slug);
       updated.delete(server.slug);
@@ -223,6 +238,8 @@ async function planExecutorWithMetadata(
       } else if (connection.kind === "compatible") {
         reusedConnections.add(connectionKey(server.slug, connection.name));
       }
+      const required = requiredConnection(server, connection);
+      if (required) requiredConnections.push(required);
     }
     blockers.push(...classification.blockers);
   }
@@ -245,6 +262,7 @@ async function planExecutorWithMetadata(
     removed: [...removed],
     addedConnections: [...addedConnections],
     reusedConnections: [...reusedConnections],
+    requiredConnections,
     planning: "live-metadata-unverified",
     blockers
   };
@@ -255,8 +273,6 @@ async function preflightReconciliation(
   desired: readonly ExecutorDesiredServer[],
   previous: ManagedState,
   options: {
-    checkUndeclaredConnections?: boolean;
-    allowConnectionRepair?: boolean;
     retainedSlugs?: ReadonlySet<string>;
   } = {}
 ): Promise<void> {
@@ -270,16 +286,10 @@ async function preflightReconciliation(
       },
       {
         requireCredentialedConnections: false,
-        ...(options.allowConnectionRepair ? { allowConnectionRepair: true } : {})
+        allowConnectionRepair: true
       }
     );
-    const blockers =
-      options.checkUndeclaredConnections === false
-        ? classification.blockers.filter(
-            (blocker) => !blocker.includes("is durable but not declared")
-          )
-        : classification.blockers;
-    if (blockers.length > 0) throw new Error(blockers[0]);
+    if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
   }
 
   const desiredSlugs = new Set(desired.map((server) => server.slug));
@@ -315,7 +325,7 @@ async function reconcileServer(
     const classification = classifyExecutorIntegration(
       desired,
       { current, connections: await adapter.listConnections(desired.slug) },
-      { requireCredentialedConnections: false }
+      { requireCredentialedConnections: false, allowConnectionRepair: true }
     );
     if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
     let changed = false;
@@ -346,37 +356,9 @@ async function reconcileServer(
   }
 }
 
-export async function ensureExecutorIntegration(
-  adapter: ExecutorAdapter,
-  desired: ExecutorDesiredServer
-): Promise<void> {
-  const previous: ManagedState = {
-    version: 1,
-    profile: "connect",
-    complete: false,
-    integrations: {}
-  };
-  await preflightReconciliation(adapter, [desired], previous, {
-    checkUndeclaredConnections: false,
-    allowConnectionRepair: true
-  });
-  const result: ExecutorReconcileResult = {
-    desired: { version: 1, profile: "connect", integrations: [desired] },
-    added: [],
-    updated: [],
-    reused: [],
-    removed: [],
-    addedConnections: [],
-    reusedConnections: [],
-    retained: []
-  };
-  await reconcileServer(adapter, desired, result, async () => undefined);
-}
-
 async function ensureDeclaredConnection(
   adapter: ExecutorAdapter,
   server: ExecutorDesiredServer,
-  allowMissingConnections: boolean,
   result: ExecutorReconcileResult,
   checkpoint: ReconcileCheckpoint
 ): Promise<void> {
@@ -387,7 +369,7 @@ async function ensureDeclaredConnection(
       current,
       connections: current ? await adapter.listConnections(server.slug) : []
     },
-    { requireCredentialedConnections: !allowMissingConnections }
+    { requireCredentialedConnections: false, allowConnectionRepair: true }
   );
   const actionable = classification.connections.filter(
     (connection): connection is Extract<ExecutorConnectionClassification, { kind: "missing" }> =>
@@ -400,14 +382,10 @@ async function ensureDeclaredConnection(
       result.addedConnections.push(connectionKey(server.slug, connection.name));
     }
   }
-  const blockers = classification.blockers.filter(
-    (blocker) =>
-      !allowMissingConnections || !blocker.includes("Executor connection is required for")
-  );
-  if (blockers.length > 0) {
-    throw new Error(blockers[0]);
-  }
+  if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
   for (const connection of classification.connections) {
+    const required = requiredConnection(server, connection);
+    if (required) result.requiredConnections.push(required);
     if (connection.kind === "compatible") {
       result.reusedConnections.push(connectionKey(server.slug, connection.name));
     }
@@ -420,7 +398,6 @@ export async function reconcileExecutor(
   options: {
     dryRun?: boolean;
     interactive?: boolean;
-    allowMissingConnections?: boolean;
     adapter?: ExecutorAdapter;
   } = {}
 ): Promise<ExecutorReconcileResult | undefined> {
@@ -486,13 +463,7 @@ export async function reconcileExecutor(
   };
   for (const server of desired.integrations) {
     await reconcileServer(adapter, server, result, checkpoint);
-    await ensureDeclaredConnection(
-      adapter,
-      server,
-      options.allowMissingConnections ?? false,
-      result,
-      checkpoint
-    );
+    await ensureDeclaredConnection(adapter, server, result, checkpoint);
     await checkpoint(server.slug);
   }
 
@@ -514,10 +485,54 @@ export async function reconcileExecutor(
     await writeSnapshots(paths, profile.name, desired, managed);
   }
 
+  if (result.requiredConnections.length > 0) {
+    throw new Error(requiredConnectionsMessage(result.requiredConnections));
+  }
+
   managed.complete = true;
   if (managed.operation) managed.operation.status = "complete";
   await writeSnapshots(paths, profile.name, desired, managed);
   return result;
+}
+
+function requiredConnection(
+  server: ExecutorDesiredServer,
+  connection: ExecutorConnectionClassification
+): ExecutorRequiredConnection | undefined {
+  if (
+    !(
+      (connection.kind === "missing" && connection.requiresConnection) ||
+      connection.kind === "missing-oauth-scopes"
+    )
+  ) {
+    return undefined;
+  }
+  const method = server.config.authenticationTemplate?.find(
+    (candidate) => candidate.slug === connection.method
+  );
+  if (method?.kind !== "oauth2" && method?.kind !== "apikey") return undefined;
+  return {
+    integration: server.slug,
+    name: connection.name,
+    authentication: method.kind === "oauth2" ? "oauth" : "api-key",
+    reason: connection.kind === "missing-oauth-scopes" ? "missing-oauth-scopes" : "missing"
+  };
+}
+
+export function requiredConnectionsMessage(
+  connections: readonly ExecutorRequiredConnection[]
+): string {
+  const entries = connections.map((connection) => {
+    const authentication = connection.authentication === "oauth" ? "OAuth" : "API key";
+    const action =
+      connection.reason === "missing-oauth-scopes" ? "; reconnect for required scopes" : "";
+    return `- ${connection.integration}: connection name "${connection.name}" (${authentication}${action})`;
+  });
+  return [
+    "Add or update these connections in the Executor app before applying:",
+    ...entries,
+    "Use the exact connection names shown, then rerun mfz apply."
+  ].join("\n");
 }
 
 export function executorPlanSummary(result: ExecutorReconcileResult | undefined): string {
@@ -529,7 +544,11 @@ export function executorPlanSummary(result: ExecutorReconcileResult | undefined)
     ...result.retained.map((name) => `retain ${name} (shared snapshot)`),
     ...result.reused.map((name) => `reuse ${name}`),
     ...result.addedConnections.map((name) => `add connection ${name}`),
-    ...result.reusedConnections.map((name) => `reuse connection ${name}`)
+    ...result.reusedConnections.map((name) => `reuse connection ${name}`),
+    ...result.requiredConnections.map(
+      (connection) =>
+        `requires ${connection.authentication} connection ${connection.integration}/${connection.name}`
+    )
   ];
   const summary = actions.length > 0 ? actions.join(", ") : "no Executor changes";
   const planning =

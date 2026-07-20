@@ -150,9 +150,9 @@ managed by \`mfz apply\` and rewritten on every run.
   tool config). Use \`mfz sync\` only to promote unmanaged configuration keys;
   skill source changes belong in the home and require \`mfz apply\`.
 - Executor-routed integrations are shared inventory. If one integration has
-  multiple named connections, use \`mfz executor connect <integration> --connection <name>\`
-  and call tools with the full integration/owner/connection address; never infer
-  an account or organization.
+  multiple named connections, add each one in the Executor app using the exact
+  profile connection name. Call tools with the full integration/owner/connection
+  address; never infer an account or organization.
 ${guidanceEnd}
 `;
 

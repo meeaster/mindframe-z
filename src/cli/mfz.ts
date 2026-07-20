@@ -78,7 +78,6 @@ import {
   formatContextReport
 } from "../context/report.js";
 import type { ContextHarness } from "../context/model.js";
-import { registerExecutorCommands } from "./executor.js";
 
 async function doctor(options: {
   root?: string | undefined;
@@ -370,8 +369,6 @@ program
   .command("schemas")
   .description("Generate JSON Schemas for YAML manifests")
   .action(async () => schemas(program.opts()));
-
-registerExecutorCommands(program);
 
 program
   .command("guide")

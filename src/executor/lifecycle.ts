@@ -93,18 +93,13 @@ function changedConfigurationFields(
 }
 
 function currentManagedConnection(
-  desired: ExecutorDesiredServer,
   connections: readonly ExecutorConnection[],
-  name: string,
-  method: string
+  name: string
 ): ExecutorConnection | undefined {
   const userConnection = connections.find(
     (connection) => connection.owner === "user" && connection.name === name
   );
   if (userConnection) return userConnection;
-  if (desired.config.transport !== "stdio" || name !== "default" || method !== "none") {
-    return undefined;
-  }
   return connections.find((connection) => connection.owner === "org" && connection.name === name);
 }
 
@@ -162,7 +157,7 @@ export function classifyExecutorIntegration(
     : true;
   const connections: ExecutorConnectionClassification[] = Object.entries(desired.connections).map(
     ([name, method]) => {
-      const connection = currentManagedConnection(desired, observed.connections, name, method);
+      const connection = currentManagedConnection(observed.connections, name);
       if (!connection) {
         return {
           kind: "missing",
@@ -218,7 +213,7 @@ export function classifyExecutorIntegration(
     }
     if (connection.kind === "missing-oauth-scopes" && !allowConnectionRepair) {
       blockers.push(
-        `Executor connection ${connectionKey(desired.slug, connection.name)} is missing OAuth scopes; run mfz executor connect ${desired.slug} --connection ${connection.name}`
+        `Executor connection ${connectionKey(desired.slug, connection.name)} is missing OAuth scopes; reconnect it with the same name in the Executor app`
       );
     }
     if (
@@ -227,7 +222,7 @@ export function classifyExecutorIntegration(
       requireCredentialedConnections
     ) {
       blockers.push(
-        `Executor connection is required for ${connectionKey(desired.slug, connection.name)}; run mfz executor connect ${desired.slug} --connection ${connection.name}`
+        `Executor connection is required for ${connectionKey(desired.slug, connection.name)}; add it with the same name in the Executor app`
       );
     }
   }

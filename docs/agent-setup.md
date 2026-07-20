@@ -15,4 +15,4 @@ You are setting up mindframe-z on this machine.
 
 If the human shares another person's home URL, either clone it as the active home or create a new home and use the shared home as an upstream/copy source for catalog entries, depending on the human's preference and access.
 
-For Executor-routed integrations, profile connection names are non-secret routing identity. Connect each declared identity explicitly with `mfz executor connect <integration> --connection <name>`; do not duplicate one catalog integration per account or organization, and do not let an agent infer a connection from a default.
+For Executor-routed integrations, profile connection names are non-secret routing identity. Add each OAuth or API-key connection in the Executor app using the exact declared name; do not duplicate one catalog integration per account or organization, and do not let an agent infer a connection from a default. `mfz apply` reports all missing credentialed connections together after reconciling the integration inventory.

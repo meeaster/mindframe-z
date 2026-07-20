@@ -1,6 +1,3 @@
-import { execa } from "execa";
-import { randomUUID } from "node:crypto";
-import { createServer as createHttpServer } from "node:http";
 import { z } from "zod";
 import type { ExecutorAuthenticationMethod } from "../core/manifests.js";
 import type { ExecutorDesiredServer } from "./model.js";
@@ -85,110 +82,6 @@ const toolSchema = z
       context.addIssue({ code: "custom", message: "tool address does not match its identity" });
     }
   });
-const oauthProbeSchema = z.object({
-  issuer: z.string().nullable().optional(),
-  authorizationUrl: z.string(),
-  tokenUrl: z.string(),
-  resource: z.string().nullable().optional(),
-  scopesSupported: z.array(z.string()).optional(),
-  registrationEndpoint: z.string().nullable().optional(),
-  tokenEndpointAuthMethodsSupported: z.array(z.string()).optional()
-});
-const oauthStartSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("connected"), connection: connectionSchema }),
-  z.object({ status: z.literal("redirect"), authorizationUrl: z.string(), state: z.string() })
-]);
-const oauthRegistrationSchema = z.object({ client: z.string().min(1) });
-const oauthCompletionSchema = z.union([
-  z.object({
-    ok: z.literal(false),
-    sessionId: z.string(),
-    error: z.string().optional(),
-    errorDetails: z.string().optional()
-  }),
-  z
-    .object({
-      ok: z.literal(true),
-      sessionId: z.string(),
-      ...connectionSchema.shape
-    })
-    .superRefine((connection, context) => {
-      const expected = executorConnectionAddress(
-        connection.owner,
-        connection.integration,
-        connection.name
-      );
-      if (connection.address !== expected) {
-        context.addIssue({
-          code: "custom",
-          message: "connection address does not match its identity"
-        });
-      }
-    })
-]);
-
-async function defaultOpenExternal(url: string): Promise<void> {
-  const opener = process.platform === "darwin" ? "open" : "xdg-open";
-  const result = await execa(opener, [url], { reject: false });
-  if (result.exitCode !== 0) {
-    throw executorError(`Unable to open the Executor authorization handoff: ${result.stderr}`);
-  }
-}
-
-async function openOAuthHandoff(
-  authorizationUrl: string,
-  openExternal: (url: string) => Promise<void>
-): Promise<() => Promise<void>> {
-  const nonce = randomUUID();
-  const endpoint = `/oauth/${nonce}`;
-  const server = createHttpServer((request, response) => {
-    if (request.url !== endpoint) {
-      response.writeHead(404);
-      response.end();
-      return;
-    }
-    response.writeHead(302, {
-      location: authorizationUrl,
-      "cache-control": "no-store"
-    });
-    response.end();
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-  if (!port) {
-    server.close();
-    throw executorError("Unable to allocate the browser handoff port");
-  }
-
-  let closed = false;
-  const close = async (): Promise<void> => {
-    if (closed) return;
-    closed = true;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  };
-  try {
-    await openExternal(`http://127.0.0.1:${port}${endpoint}`);
-  } catch (error) {
-    await close();
-    throw executorError(error instanceof Error ? error.message : String(error));
-  }
-  return close;
-}
-
-async function waitFor<T>(read: () => Promise<T | undefined>, timeout = 15_000): Promise<T> {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const value = await read();
-    if (value !== undefined) return value;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw executorError("Executor daemon did not become ready before the timeout");
-}
-
 class HttpExecutorAdapter implements ExecutorAdapter {
   constructor(
     public readonly baseUrl: string,
@@ -196,9 +89,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     public readonly dataDir: string,
     private readonly requestFetch: typeof globalThis.fetch,
     private readonly daemon: import("node:child_process").ChildProcess | undefined,
-    private readonly timeoutMs: number,
-    private readonly oauthWaitTimeoutMs: number,
-    private readonly openExternal: (url: string) => Promise<void>
+    private readonly timeoutMs: number
   ) {}
 
   private async request<T>(
@@ -349,108 +240,6 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     );
   }
 
-  async cancelOAuth(state: string): Promise<void> {
-    await this.request("POST", "/oauth/cancel", z.unknown(), { state });
-  }
-
-  async startApiKeyHandoff(input: {
-    integration: string;
-    template: string;
-    label: string;
-  }): Promise<void> {
-    assertExecutorConnectionIdentifier(input.label, "API-key connection");
-    const search = new URLSearchParams({
-      addAccount: "1",
-      owner: "user",
-      template: input.template,
-      label: input.label
-    });
-    await this.openExternal(
-      `${this.baseUrl}/integrations/${encodeURIComponent(input.integration)}?${search.toString()}`
-    );
-  }
-
-  async authorizeOAuth(input: {
-    integration: string;
-    endpoint: string;
-    name: string;
-    template: string;
-    discoveryUrl?: string;
-    registrationScopes?: string[];
-    scopes?: string[];
-    interactive: boolean;
-  }): Promise<ExecutorConnection> {
-    if (!input.interactive) {
-      throw executorError(
-        `Executor OAuth authorization is required for ${input.integration}; rerun interactively`
-      );
-    }
-    assertExecutorConnectionIdentifier(input.name);
-    const probed = await this.request("POST", "/oauth/probe", oauthProbeSchema, {
-      url: input.discoveryUrl ?? input.endpoint
-    });
-    if (!probed.registrationEndpoint) {
-      throw executorError(
-        `Executor OAuth for ${input.integration} requires an explicit client registration`
-      );
-    }
-    const clientSlug = `${input.integration}-mfz`;
-    const redirectUri = `${this.baseUrl}/api/oauth/callback`;
-    const registrationScopes =
-      input.registrationScopes ?? input.scopes ?? probed.scopesSupported ?? [];
-    const registered = await this.request(
-      "POST",
-      "/oauth/clients/register-dynamic",
-      oauthRegistrationSchema,
-      {
-        owner: "user",
-        slug: clientSlug,
-        issuer: probed.issuer ?? null,
-        registrationEndpoint: probed.registrationEndpoint,
-        authorizationUrl: probed.authorizationUrl,
-        tokenUrl: probed.tokenUrl,
-        resource: input.discoveryUrl ? input.endpoint : (probed.resource ?? null),
-        scopes: registrationScopes,
-        tokenEndpointAuthMethodsSupported: probed.tokenEndpointAuthMethodsSupported,
-        clientName: "mindframe-z",
-        redirectUri,
-        originIntegration: input.integration
-      }
-    );
-    const started = await this.request("POST", "/oauth/start", oauthStartSchema, {
-      client: registered.client,
-      clientOwner: "user",
-      owner: "user",
-      name: input.name,
-      integration: input.integration,
-      template: input.template,
-      redirectUri
-    });
-    if (started.status === "connected") return started.connection;
-    const closeHandoff = await openOAuthHandoff(started.authorizationUrl, this.openExternal);
-    try {
-      return await waitFor(async () => {
-        const completion = await this.request(
-          "GET",
-          `/oauth/await/${encodeURIComponent(started.state)}`,
-          oauthCompletionSchema.nullable()
-        );
-        if (completion === null) return undefined;
-        if (!completion.ok) {
-          throw executorError(
-            `Executor OAuth authorization failed for ${input.integration}: ${completion.error ?? "unknown error"}`
-          );
-        }
-        return connectionSchema.parse(completion);
-      }, this.oauthWaitTimeoutMs);
-    } catch (error) {
-      await this.cancelOAuth(started.state).catch(() => undefined);
-      throw error;
-    } finally {
-      await closeHandoff();
-    }
-  }
-
   async close(): Promise<void> {
     if (!this.daemon || this.daemon.exitCode !== null) return;
     this.daemon.kill();
@@ -471,8 +260,6 @@ export function createHttpExecutorAdapter(options: ExecutorHttpAdapterOptions): 
     options.dataDir ?? "",
     options.fetch ?? globalThis.fetch,
     options.daemon,
-    options.requestTimeoutMs ?? requestTimeoutMs,
-    options.oauthWaitTimeoutMs ?? 120_000,
-    options.openExternal ?? defaultOpenExternal
+    options.requestTimeoutMs ?? requestTimeoutMs
   );
 }

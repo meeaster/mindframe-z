@@ -79,9 +79,7 @@ export interface ExecutorHttpAdapterOptions {
   dataDir?: string;
   fetch?: typeof globalThis.fetch;
   requestTimeoutMs?: number;
-  oauthWaitTimeoutMs?: number;
   daemon?: ChildProcess | undefined;
-  openExternal?: ((url: string) => Promise<void>) | undefined;
 }
 
 export interface ExecutorAdapter {
@@ -101,22 +99,6 @@ export interface ExecutorAdapter {
   createNoAuthConnection(integration: string, name: string, template?: string): Promise<void>;
   refreshConnection(integration: string, name: string): Promise<ExecutorTool[]>;
   checkHealth(integration: string, name: string): Promise<ExecutorHealth>;
-  cancelOAuth(state: string): Promise<void>;
-  startApiKeyHandoff(input: {
-    integration: string;
-    template: string;
-    label: string;
-  }): Promise<void>;
-  authorizeOAuth(input: {
-    integration: string;
-    endpoint: string;
-    name: string;
-    template: string;
-    discoveryUrl?: string;
-    registrationScopes?: string[];
-    scopes?: string[];
-    interactive: boolean;
-  }): Promise<ExecutorConnection>;
   close(): Promise<void>;
 }
 
