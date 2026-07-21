@@ -215,6 +215,36 @@ describe("dotfiles integration", () => {
     expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");
   });
 
+  it("renders per-project harness launchers that read the overrides store", async () => {
+    await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
+
+    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
+    const storePath = path.join(home, ".mindframe-z", "overrides.json");
+
+    // Every launcher reads the same machine-local overrides store.
+    expect(zshrc.split(`local store="${storePath}"`).length - 1).toBe(3);
+    expect(zshrc).toContain("local project=$(_mfz_project_root)");
+
+    // codex: injects the stored argv before user args.
+    expect(zshrc).toContain(".projects[$project].codex.payload.argv[]");
+    expect(zshrc).toContain('command codex "${mfz_argv[@]}" "$@"');
+
+    // opencode: injects the stored config via OPENCODE_CONFIG_CONTENT.
+    expect(zshrc).toContain(".projects[$project].opencode.payload.config");
+    expect(zshrc).toContain('OPENCODE_CONFIG_CONTENT="$config" command opencode "$@"');
+
+    // claude-code: injects the stored settings via --settings.
+    expect(zshrc).toContain('.projects[$project]["claude-code"].payload.settings');
+    expect(zshrc).toContain('command claude --settings "$settings" "$@"');
+
+    // Each launcher falls back to the bare command when no override applies.
+    expect(zshrc).toContain('command codex "$@"');
+    expect(zshrc).toContain('command opencode "$@"');
+    expect(zshrc).toContain('command claude "$@"');
+  });
+
   it("renders and links nested dotfiles from profile subdirectories", async () => {
     await mkdir(path.join(root, "profiles", "personal", ".config", "ccstatusline"), {
       recursive: true
