@@ -36,7 +36,7 @@ describe("portablePathPart", () => {
     ["empty", ""],
     ["trailing dot", "notes."],
     ["trailing space", "notes "],
-    ["control character", "notes.md"],
+    ["control character", "notes\u0001.md"],
     ["reserved Windows character", 'notes"quoted".md'],
     ["Windows device name", "CON"],
     ["Windows device name with extension", "lpt9.md"]
@@ -72,12 +72,23 @@ describe("parseSkillFrontmatter", () => {
     expect(parse("---\nname: demo\n")).toThrow(/unterminated YAML frontmatter/u);
   });
 
-  it("rejects frontmatter that is not a mapping", () => {
-    expect(parse("---\n- demo\n---\n")).toThrow(/frontmatter must be a mapping/u);
+  it.each([
+    ["a sequence", "---\n- demo\n---\n"],
+    ["empty", "---\n\n---\n"],
+    ["a scalar", "---\ndemo\n---\n"]
+  ])("rejects frontmatter that is %s rather than a mapping", (_label, raw) => {
+    expect(parse(raw)).toThrow(/frontmatter must be a mapping/u);
   });
 
-  it("rejects frontmatter missing string name and description", () => {
-    expect(parse("---\nname: demo\n---\n")).toThrow(
+  it.each([
+    ["description", "---\nname: demo\n---\n"],
+    ["name", "---\ndescription: a demo skill\n---\n"]
+  ])("rejects frontmatter missing a string %s", (_label, raw) => {
+    expect(parse(raw)).toThrow(/frontmatter requires string name and description/u);
+  });
+
+  it("rejects frontmatter whose name is not a string", () => {
+    expect(parse("---\nname: 7\ndescription: a demo skill\n---\n")).toThrow(
       /frontmatter requires string name and description/u
     );
   });
