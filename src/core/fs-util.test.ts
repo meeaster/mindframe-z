@@ -6,6 +6,7 @@ import {
   isPlainObject,
   jsonFileContent,
   parseTomlObject,
+  readJsoncObject,
   readJsonObject,
   readTomlObject
 } from "./fs-util.js";
@@ -44,6 +45,27 @@ describe("jsonFileContent", () => {
     const value = { name: "personal", nested: { count: 3 } };
     await writeFile(file, jsonFileContent(value), "utf8");
     expect(await readJsonObject(file)).toEqual(value);
+  });
+});
+
+describe("readJsoncObject", () => {
+  it("reads an object through comments and trailing commas", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "opencode.jsonc");
+    await writeFile(file, '{\n  // the theme\n  "theme": "dim",\n}\n', "utf8");
+    expect(await readJsoncObject(file)).toEqual({ theme: "dim" });
+  });
+
+  it("defaults to an empty object when the file is missing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    expect(await readJsoncObject(path.join(dir, "absent.jsonc"))).toEqual({});
+  });
+
+  it("defaults to an empty object when the content is not a plain object", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "array.jsonc");
+    await writeFile(file, '["theme", "dim"]', "utf8");
+    expect(await readJsoncObject(file)).toEqual({});
   });
 });
 

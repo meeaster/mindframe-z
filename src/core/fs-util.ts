@@ -1,4 +1,5 @@
 import { access, readFile } from "node:fs/promises";
+import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 
 export async function fileExists(file: string): Promise<boolean> {
@@ -29,6 +30,22 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 export async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
   try {
     const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+    return isPlainObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Read a JSONC object from disk, defaulting to an empty object when the file is
+ * missing, unreadable, or does not parse to a plain object. The comment-
+ * tolerant counterpart to {@link readJsonObject}; the OpenCode sync path uses
+ * it to inspect a hand-edited `opencode.jsonc` without failing on comments, a
+ * missing file, or broken content.
+ */
+export async function readJsoncObject(filePath: string): Promise<Record<string, unknown>> {
+  try {
+    const parsed = parseJsonc(await readFile(filePath, "utf8")) as unknown;
     return isPlainObject(parsed) ? parsed : {};
   } catch {
     return {};

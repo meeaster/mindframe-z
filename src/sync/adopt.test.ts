@@ -106,6 +106,13 @@ describe("syncOpencode", () => {
     const { candidates } = await syncOpencode(path.join(dir, "absent.jsonc"), profile);
     expect(candidates).toEqual([]);
   });
+
+  it("returns no candidates when the config file is not a JSON object", async () => {
+    const dir = await makeTempDir();
+    const file = await writeJson(dir, "opencode.jsonc", ["theme", "dim"]);
+    const { candidates } = await syncOpencode(file, profile);
+    expect(candidates).toEqual([]);
+  });
 });
 
 describe("syncCodex", () => {
