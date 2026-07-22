@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { parse } from "jsonc-parser";
+import { readJsoncObject } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { SyncResult, SyncCandidate } from "./types.js";
 
@@ -8,17 +7,7 @@ export async function syncOpencode(
   profile: ResolvedProfile
 ): Promise<SyncResult> {
   const candidates: SyncCandidate[] = [];
-
-  let existing: Record<string, unknown> = {};
-  try {
-    const raw = await readFile(configPath, "utf8");
-    const parsed = parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      existing = parsed as Record<string, unknown>;
-    }
-  } catch {
-    return { candidates };
-  }
+  const existing = await readJsoncObject(configPath);
 
   const derived = new Set(["$schema", "instructions", "plugin", "mcp", "permission"]);
   const managedKeys = new Set(Object.keys(profile.profile.opencode.config));
