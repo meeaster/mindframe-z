@@ -18,7 +18,7 @@ import {
   type RuntimePaths
 } from "../core/paths.js";
 import { pathExists } from "../core/fs-util.js";
-import { fetchCommit, normalizedRepository, readGitSkillFiles } from "./git.js";
+import { fetchCommit, normalizedRepository, readGitSkillFiles, safeGitRevision } from "./git.js";
 import { commitVendoredPromotion, recoverVendoredPromotion } from "./transaction.js";
 import {
   comparePosixBytes,
@@ -91,10 +91,6 @@ interface PromotionTarget {
   catalog: CatalogEntryResolution;
   lock: VendorLock;
   oldFiles: SkillFileRecord[];
-}
-
-function safeGitRevision(value: string): boolean {
-  return !value.startsWith("-") && [...value].every((character) => character.charCodeAt(0) > 32);
 }
 
 async function activeHomeRoots(
