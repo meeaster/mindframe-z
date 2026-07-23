@@ -3,12 +3,12 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 
 /**
- * Report whether a path is reachable on disk. This is the canonical existence
- * predicate behind every "skip when absent" branch (apply, thread storage,
- * skill overrides, executor reconcile), so the answer stays identical wherever
- * the check is made. It resolves symlinks, so a dangling link reads as absent,
- * and it does not distinguish files from directories — callers that care must
- * stat the path themselves.
+ * Report whether a path is reachable on disk. This is the canonical async
+ * existence predicate behind the "skip when absent" branches in apply, thread
+ * storage, skill overrides, and executor reconcile, so the answer stays
+ * identical wherever the check is made. It resolves symlinks, so a dangling
+ * link reads as absent, and it does not distinguish files from directories —
+ * callers that need that distinction stat the path themselves.
  */
 export async function pathExists(target: string): Promise<boolean> {
   try {
