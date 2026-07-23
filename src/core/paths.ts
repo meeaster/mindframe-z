@@ -1,4 +1,4 @@
-import { access, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -109,15 +109,6 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
 
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
-}
-
-export async function pathExists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function profileConfigsDir(paths: RuntimePaths, profileName: string): string {

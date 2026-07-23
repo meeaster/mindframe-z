@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,10 +6,45 @@ import {
   isPlainObject,
   jsonFileContent,
   parseTomlObject,
+  pathExists,
   readJsoncObject,
   readJsonObject,
   readTomlObject
 } from "./fs-util.js";
+
+describe("pathExists", () => {
+  it("reports files and directories alike as present", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "config.json");
+    const nested = path.join(dir, "skills");
+    await writeFile(file, "{}\n", "utf8");
+    await mkdir(nested);
+
+    expect(await pathExists(file)).toBe(true);
+    expect(await pathExists(nested)).toBe(true);
+    expect(await pathExists(dir)).toBe(true);
+  });
+
+  it("reports a missing path as absent instead of throwing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+
+    expect(await pathExists(path.join(dir, "absent.json"))).toBe(false);
+    expect(await pathExists(path.join(dir, "no", "such", "parent.json"))).toBe(false);
+  });
+
+  it("resolves symlinks, so a dangling link reads as absent", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const target = path.join(dir, "target.json");
+    const live = path.join(dir, "live.json");
+    const dangling = path.join(dir, "dangling.json");
+    await writeFile(target, "{}\n", "utf8");
+    await symlink(target, live);
+    await symlink(path.join(dir, "gone.json"), dangling);
+
+    expect(await pathExists(live)).toBe(true);
+    expect(await pathExists(dangling)).toBe(false);
+  });
+});
 
 describe("isPlainObject", () => {
   it("accepts a non-null, non-array object", () => {

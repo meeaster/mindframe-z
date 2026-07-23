@@ -1,6 +1,7 @@
 import { execa } from "execa";
 import type { RuntimePaths } from "../core/paths.js";
-import { opencodeDataHome, opencodeDbPath, pathExists } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { opencodeDataHome, opencodeDbPath } from "../core/paths.js";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { BackupItem } from "./backup-item.js";
 import { primaryRelPath } from "./archive.js";

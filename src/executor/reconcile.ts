@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { executorDesiredPath, executorManagedPath, type RuntimePaths } from "../core/paths.js";
-import { fileExists } from "../core/fs-util.js";
+import { pathExists } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { createExecutorAdapter, attachExecutorAdapter, type ExecutorAdapter } from "./adapter.js";
 import {
@@ -122,7 +122,7 @@ export async function hasManagedExecutorState(
   paths: RuntimePaths,
   profileName: string
 ): Promise<boolean> {
-  return fileExists(executorManagedPath(paths, profileName));
+  return pathExists(executorManagedPath(paths, profileName));
 }
 
 async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
@@ -402,7 +402,7 @@ export async function reconcileExecutor(
   } = {}
 ): Promise<ExecutorReconcileResult | undefined> {
   const desired = buildExecutorDesiredState(profile, paths.home);
-  const managedFilePresent = await fileExists(executorManagedPath(paths, profile.name));
+  const managedFilePresent = await pathExists(executorManagedPath(paths, profile.name));
   const previous = await readManaged(paths, profile.name);
   const sharedOwnedSlugs = new Set(
     (await readManagedStates(paths))

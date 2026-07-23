@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import { fileExists } from "./fs-util.js";
+import { pathExists } from "./fs-util.js";
 import { expandHome } from "./path-util.js";
 
 function isLocalRepoSpec(repo: string): boolean {
@@ -51,7 +51,7 @@ export async function resolveUpstreamHomeRoot(options: {
   await mkdir(path.dirname(cloneRoot), { recursive: true });
   const releaseLock = await acquireLock(`${cloneRoot}.lock`);
   try {
-    if (!(await fileExists(cloneRoot))) {
+    if (!(await pathExists(cloneRoot))) {
       await execa("git", ["clone", options.repo, cloneRoot]);
       return cloneRoot;
     }

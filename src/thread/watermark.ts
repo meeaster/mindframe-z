@@ -2,7 +2,8 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { RuntimePaths } from "../core/paths.js";
-import { opencodeDbPath, pathExists } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { opencodeDbPath } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import { cachedSessionPath } from "../sessions/archive.js";
 

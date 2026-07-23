@@ -5,7 +5,7 @@ import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import YAML from "yaml";
-import { fileExists } from "../core/fs-util.js";
+import { pathExists } from "../core/fs-util.js";
 import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
@@ -102,7 +102,7 @@ async function doctor(options: {
   for (const legacy of await readLegacyGitSkills(paths.root, paths.home)) {
     console.log(`migration\t${migrationMessage(legacy.name)}`);
   }
-  if (await fileExists(path.join(paths.home, ".agents", ".skill-lock.json"))) {
+  if (await pathExists(path.join(paths.home, ".agents", ".skill-lock.json"))) {
     console.log(
       `hint\tignoring external skill installer lock at ${path.join(paths.home, ".agents", ".skill-lock.json")}; it is untrusted migration evidence only`
     );
@@ -153,7 +153,7 @@ async function doctor(options: {
       path.join(projectRoot, ".claude", "settings.local.json"),
       path.join(projectRoot, ".codex", "config.toml")
     ]) {
-      if (await fileExists(file)) {
+      if (await pathExists(file)) {
         console.log(
           `stale-project-toggle\t${file}\tproject toggles now live in ~/.mindframe-z/overrides.json`
         );
@@ -200,7 +200,7 @@ async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.
   }
-  return fileExists(path.join(home, "references"));
+  return pathExists(path.join(home, "references"));
 }
 
 async function schemas(options: { root?: string | undefined }): Promise<void> {
