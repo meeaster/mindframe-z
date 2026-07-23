@@ -31,7 +31,8 @@ import {
 } from "./watermark.js";
 import { cachedSessionPath, primaryRelPath } from "../sessions/archive.js";
 import { hydrateSession } from "../sessions/hydrate.js";
-import { dedupe, pathExists } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { dedupe } from "../core/paths.js";
 import path from "node:path";
 import type { ThreadManifest } from "./schema.js";
 

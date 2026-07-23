@@ -1,10 +1,10 @@
 import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { pathExists } from "../core/fs-util.js";
 import {
   createRuntimePaths,
   threadPath,
   threadStoreRoot,
-  pathExists,
   type PathOptions
 } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";

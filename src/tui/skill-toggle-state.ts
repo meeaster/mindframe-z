@@ -1,5 +1,6 @@
 import path from "node:path";
-import { pathExists, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
   projectOverrides,

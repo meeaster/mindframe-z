@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
-import { fileExists } from "./fs-util.js";
+import { pathExists } from "./fs-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
 export const agentSchema = z.enum(["opencode", "claude-code", "codex", "pi"]);
@@ -590,7 +590,7 @@ async function parseYaml<T>(file: string, schema: z.ZodType<T>): Promise<T> {
 }
 
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
-  if (!(await fileExists(file))) return fallback;
+  if (!(await pathExists(file))) return fallback;
   return parseYaml(file, schema);
 }
 
@@ -630,7 +630,7 @@ async function validateYamlFile<T>(
   file: string,
   schema: z.ZodType<T>
 ): Promise<ManifestValidationResult | null> {
-  if (!(await fileExists(file))) return null;
+  if (!(await pathExists(file))) return null;
   try {
     await parseYaml(file, schema);
     return { file, ok: true };
@@ -687,7 +687,7 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
 }
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
-  if (!(await fileExists(path.join(root, "mfz_home.yml")))) {
+  if (!(await pathExists(path.join(root, "mfz_home.yml")))) {
     throw new Error(
       `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
     );
@@ -719,11 +719,11 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
   const profileMap = new Map<string, ProfileManifest>();
   for (const profileDir of await listProfileDirs(root)) {
     const profileYaml = path.join(profileDir, "profile.yml");
-    if (!(await fileExists(profileYaml))) continue;
+    if (!(await pathExists(profileYaml))) continue;
     const profile = await parseYaml(profileYaml, profileSchema);
 
     const miseToml = path.join(profileDir, "mise.toml");
-    if (await fileExists(miseToml)) {
+    if (await pathExists(miseToml)) {
       try {
         const toml = miseTomlSchema.parse(parse(await readFile(miseToml, "utf8")));
         profile.mise.tools = toml.tools;

@@ -2,9 +2,17 @@ import { access, readFile } from "node:fs/promises";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 
-export async function fileExists(file: string): Promise<boolean> {
+/**
+ * Report whether a path is reachable on disk. This is the canonical existence
+ * predicate behind every "skip when absent" branch (apply, thread storage,
+ * skill overrides, executor reconcile), so the answer stays identical wherever
+ * the check is made. It resolves symlinks, so a dangling link reads as absent,
+ * and it does not distinguish files from directories — callers that care must
+ * stat the path themselves.
+ */
+export async function pathExists(target: string): Promise<boolean> {
   try {
-    await access(file);
+    await access(target);
     return true;
   } catch {
     return false;

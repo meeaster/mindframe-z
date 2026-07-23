@@ -1,5 +1,5 @@
 import { execa } from "execa";
-import { fileExists } from "../core/fs-util.js";
+import { pathExists } from "../core/fs-util.js";
 import { executorDataDir, executorManagedPath, type RuntimePaths } from "../core/paths.js";
 import { executorMcpServers, type ResolvedProfile } from "../core/profile.js";
 import { executorVersion, attachExecutorAdapter } from "./adapter.js";
@@ -59,7 +59,7 @@ export async function inspectExecutor(
 ): Promise<ExecutorDiagnostic> {
   const required = executorMcpServers(profile).length > 0;
   const dataDir = executorDataDir();
-  const managedFilePresent = await fileExists(executorManagedPath(paths, profile.name));
+  const managedFilePresent = await pathExists(executorManagedPath(paths, profile.name));
   const managed = await readManagedState(paths, profile.name);
   const active = required || managedFilePresent;
   const diagnostic: ExecutorDiagnostic = {
@@ -82,7 +82,7 @@ export async function inspectExecutor(
 
   const adapter = await attachExecutorAdapter(options.fetch ? { fetch: options.fetch } : {});
   if (!adapter) {
-    diagnostic.runtime = (await fileExists(dataDir)) ? "unavailable" : "absent";
+    diagnostic.runtime = (await pathExists(dataDir)) ? "unavailable" : "absent";
     if (required || diagnostic.managed !== "absent") {
       diagnostic.blockers.push("Executor runtime is not attachable without starting a daemon");
     }

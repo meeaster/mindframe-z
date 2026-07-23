@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { pathExists, threadSweepRoot, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { threadSweepRoot, type RuntimePaths } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import type { Watermark } from "./watermark.js";
 

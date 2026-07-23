@@ -3,7 +3,8 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Archive } from "../core/manifests.js";
-import { archiveCacheRoot, pathExists, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
 import { absentMarkerPath, cachedSessionPath, harnessPrefix, listObjects } from "./archive.js";
 
 // Write-once: an existing cached copy is used without re-consulting the archive.

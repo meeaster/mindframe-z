@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { SandboxCredentialMode, ThreadHarness } from "../core/manifests.js";
-import { pathExists, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import type { RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
 import {
   bedrockContainerEnv,

@@ -1,7 +1,8 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import { pathExists, threadDestinationRoot, threadPath, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { threadDestinationRoot, threadPath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
   threadHarnessSchema,

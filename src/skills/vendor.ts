@@ -17,7 +17,7 @@ import {
   vendorLockPath,
   type RuntimePaths
 } from "../core/paths.js";
-import { fileExists } from "../core/fs-util.js";
+import { pathExists } from "../core/fs-util.js";
 import { fetchCommit, normalizedRepository, readGitSkillFiles } from "./git.js";
 import { commitVendoredPromotion, recoverVendoredPromotion } from "./transaction.js";
 import {
@@ -119,7 +119,7 @@ async function activeHomeRoots(
     const upstream = local
       ? path.resolve(expandHome(extension.repo, machineHome))
       : path.join(machineHome, ".mindframe-z", "homes", extension.name);
-    if (await fileExists(path.join(upstream, "mfz_home.yml"))) {
+    if (await pathExists(path.join(upstream, "mfz_home.yml"))) {
       roots.push(...(await activeHomeRoots(upstream, machineHome, seen)));
     }
   } catch {

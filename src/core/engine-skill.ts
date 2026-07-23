@@ -1,7 +1,8 @@
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SkillEntry } from "./manifests.js";
-import { pathExists, type RuntimePaths } from "./paths.js";
+import { pathExists } from "./fs-util.js";
+import type { RuntimePaths } from "./paths.js";
 import { assertNoSymlinkAncestors } from "../skills/tree.js";
 
 // The engine-owned skill and the home guidance block both ship inside the

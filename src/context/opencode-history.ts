@@ -1,4 +1,5 @@
-import { pathExists, opencodeDbPath, type RuntimePaths } from "../core/paths.js";
+import { pathExists } from "../core/fs-util.js";
+import { opencodeDbPath, type RuntimePaths } from "../core/paths.js";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import { HistoryCollector, addOpenCodeUsage, objectField, unavailableHistory } from "./history.js";
 import { isPathWithin } from "./repository.js";
