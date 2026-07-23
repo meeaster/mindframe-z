@@ -17,7 +17,6 @@ export {
   isExecutorConnectionIdentifier
 } from "./contract.js";
 
-const SUPPORTED_EXECUTOR_VERSION = "1.5.33";
 const requestTimeoutMs = 30_000;
 
 interface ExecutorServerManifest {
@@ -70,7 +69,6 @@ export interface ExecutorTool {
 export interface ExecutorAdapterOptions {
   binary?: string;
   fetch?: typeof globalThis.fetch;
-  expectedVersion?: string;
 }
 
 export interface ExecutorHttpAdapterOptions {
@@ -141,7 +139,7 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeout = 15_000):
   throw executorError("Executor daemon did not become ready before the timeout");
 }
 
-async function validateBinary(binary: string, expectedVersion: string): Promise<void> {
+async function validateBinary(binary: string): Promise<void> {
   let result;
   try {
     result = await execa(binary, ["--version"], { reject: false });
@@ -152,12 +150,6 @@ async function validateBinary(binary: string, expectedVersion: string): Promise<
   }
   if (result.exitCode !== 0)
     throw executorError(`Executor is unavailable: ${result.stderr || result.stdout}`);
-  const version = result.stdout.trim().match(/(?:v)?(\d+\.\d+\.\d+)/)?.[1];
-  if (version !== expectedVersion) {
-    throw executorError(
-      `Unsupported Executor version ${version ?? "unknown"}; expected ${expectedVersion}`
-    );
-  }
 }
 
 async function startDaemon(binary: string, origin: string): Promise<ChildProcess> {
@@ -233,8 +225,7 @@ export async function createExecutorAdapter(
   options: ExecutorAdapterOptions
 ): Promise<ExecutorAdapter> {
   const binary = options.binary ?? "executor";
-  const expectedVersion = options.expectedVersion ?? SUPPORTED_EXECUTOR_VERSION;
-  await validateBinary(binary, expectedVersion);
+  await validateBinary(binary);
   const dataDir = executorDataDir();
   const runtime = await resolveRuntime(binary, dataDir, options.fetch ?? globalThis.fetch);
   return createHttpExecutorAdapter({
@@ -280,5 +271,3 @@ export async function attachExecutorAdapter(options: {
     requestTimeoutMs: 2_000
   });
 }
-
-export const executorVersion = SUPPORTED_EXECUTOR_VERSION;

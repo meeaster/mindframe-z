@@ -11,7 +11,6 @@ export {
   createExecutorAdapter,
   attachExecutorAdapter,
   createExecutorHttpAdapter,
-  executorVersion,
   type ExecutorAdapter,
   type ExecutorConnection,
   type ExecutorHealth,

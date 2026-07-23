@@ -31,7 +31,7 @@ afterEach(async () => {
   await Promise.all(adapters.splice(0).map((adapter) => adapter.close()));
 });
 
-describe("Executor v1.5.33 adapter contract", () => {
+describe("Executor adapter contract", () => {
   it("redacts bearer, OAuth, API-key, and browser query secrets", () => {
     const output = redactExecutorError(
       "Bearer bearer-secret access_token=access-secret refresh_token=refresh-secret api-key=api-secret credential_provider=provider-secret client_secret=snake-secret client-secret=hyphen-secret clientSecret=camel-secret https://example.test/callback?code=code-secret&state=state-secret"
@@ -310,13 +310,13 @@ describe("Executor v1.5.33 adapter contract", () => {
     expect(JSON.stringify(body)).not.toMatch(/secret|token|value/i);
   });
 
-  it("rejects an unsupported Executor binary before daemon startup", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-version-"));
+  it("rejects an unavailable Executor binary before daemon startup", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-binary-"));
     const paths = createRuntimePaths({ root, home: root });
     await withExecutorDataDir(path.join(root, ".executor"), async () => {
-      await expect(createExecutorAdapter({ binary: process.execPath })).rejects.toThrow(
-        /Unsupported Executor version/
-      );
+      await expect(
+        createExecutorAdapter({ binary: path.join(root, "missing-executor") })
+      ).rejects.toThrow(/Executor is unavailable/);
       await expect(access(executorDataDir())).rejects.toMatchObject({ code: "ENOENT" });
       await expect(access(executorConfigPath(paths, "version"))).rejects.toMatchObject({
         code: "ENOENT"

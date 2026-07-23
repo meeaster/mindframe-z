@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import { executorDataDir, executorManagedPath, type RuntimePaths } from "../core/paths.js";
 import { executorMcpServers, type ResolvedProfile } from "../core/profile.js";
-import { executorVersion, attachExecutorAdapter } from "./adapter.js";
+import { attachExecutorAdapter } from "./adapter.js";
 import { buildExecutorDesiredState } from "./model.js";
 import { readManagedState, type ManagedState } from "./reconcile.js";
 import { classifyExecutorIntegration, classifyExecutorRemoval } from "./lifecycle.js";
@@ -22,7 +22,6 @@ export interface ExecutorDiagnostic {
   required: boolean;
   profile: string;
   installedVersion: string;
-  expectedVersion: string;
   dataDir: string;
   runtime: ExecutorRuntimeStatus;
   managed: ExecutorManagedStatus;
@@ -68,7 +67,6 @@ export async function inspectExecutor(
     installedVersion: active
       ? await installedVersion(options.binary ?? "executor")
       : "not required",
-    expectedVersion: executorVersion,
     dataDir,
     runtime: active ? "absent" : "not-required",
     managed: managedStatus(managedFilePresent, managed),
@@ -141,7 +139,7 @@ export async function inspectExecutor(
 export function executorDiagnosticLines(diagnostic: ExecutorDiagnostic): string[] {
   if (!diagnostic.required && diagnostic.managed === "absent") return [];
   return [
-    `executor version\t${diagnostic.installedVersion}\texpected ${diagnostic.expectedVersion}`,
+    `executor version\t${diagnostic.installedVersion}`,
     `executor data\t${diagnostic.dataDir}`,
     `executor runtime\t${diagnostic.runtime}\tmanaged ${diagnostic.managed}`,
     ...diagnostic.connections.map(
