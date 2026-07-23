@@ -37,7 +37,17 @@ export function normalizedRepository(value: string): string {
   return url.toString();
 }
 
-function safeGitRevision(value: string): boolean {
+/**
+ * Report whether a revision is safe to hand to Git as a positional argument.
+ * This is the canonical guard behind every place a caller-supplied ref reaches
+ * the Git command line: a leading `-` would be read as an option rather than a
+ * revision, and space or control characters are rejected so a ref cannot smuggle
+ * extra shell- or Git-visible tokens. It says nothing about whether the revision
+ * resolves — {@link fetchCommit} rejects unsafe refs before fetching, while the
+ * vendor lock schema pairs it with a non-empty check, so an empty string is left
+ * for those callers to reject.
+ */
+export function safeGitRevision(value: string): boolean {
   return !value.startsWith("-") && [...value].every((character) => character.charCodeAt(0) > 32);
 }
 
