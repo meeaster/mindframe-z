@@ -634,8 +634,7 @@ async function locatePromotionTarget(
 
 export async function promoteVendoredSkill(
   paths: RuntimePaths,
-  candidateId: string,
-  confirm: (candidate: SkillCandidate) => Promise<boolean>
+  candidateId: string
 ): Promise<SkillCandidate> {
   const candidate = await readCandidate(paths, candidateId);
   let candidateFiles = await revalidateCandidate(paths, candidate);
@@ -646,8 +645,6 @@ export async function promoteVendoredSkill(
   if (buildDiff(target.oldFiles, candidateFiles) !== candidate.diff) {
     throw new Error("Candidate diff evidence changed");
   }
-  if (!(await confirm(candidate)))
-    throw new Error("Promotion cancelled; vendored source and lock were unchanged");
 
   const confirmedCandidate = await readCandidate(paths, candidateId);
   if (

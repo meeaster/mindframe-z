@@ -1,7 +1,5 @@
-import * as readline from "node:readline/promises";
 import path from "node:path";
 import { mkdir, readFile } from "node:fs/promises";
-import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import YAML from "yaml";
@@ -882,19 +880,9 @@ skills
   .argument("<candidate-id>", "candidate identity printed by skills stage")
   .action(async (candidateId) => {
     const paths = createRuntimePaths(program.opts());
-    const rl = readline.createInterface({ input: processStdin, output: processStdout });
-    try {
-      const candidate = await promoteVendoredSkill(paths, candidateId, async (value) => {
-        const answer = await rl.question(
-          `Promote ${value.provenance.name} ${value.provenance.oldCommit ?? "none"} -> ${value.provenance.commit}? [y/N]: `
-        );
-        return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
-      });
-      console.log(`promoted\t${candidate.provenance.candidateId}\t${candidate.provenance.name}`);
-      console.log("Active harness skills remain unchanged until `mfz apply`.");
-    } finally {
-      rl.close();
-    }
+    const candidate = await promoteVendoredSkill(paths, candidateId);
+    console.log(`promoted\t${candidate.provenance.candidateId}\t${candidate.provenance.name}`);
+    console.log("Active harness skills remain unchanged until `mfz apply`.");
   });
 
 function parseAgentOption(agent: string | undefined): AgentName | undefined {

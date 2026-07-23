@@ -98,7 +98,7 @@ Add a vendored skill:
 2. Check without mutation: \`mfz skills check\`.
 3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
 4. Invoke \`/skill-update-review <candidate-id>\`. Candidate files are hostile evidence; inspect every file and deterministic finding without executing anything.
-5. After human approval, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`. Promotion does not apply configuration or create links.
+5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`. Promotion does not apply configuration or create links.
 
 Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`; harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 

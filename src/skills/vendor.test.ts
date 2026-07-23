@@ -270,7 +270,7 @@ describe("vendored skill contracts", () => {
     await writeFile(path.join(candidatePath, "diff.patch"), diff, "utf8");
     await writeFile(path.join(candidatePath, "digest"), digestContent, "utf8");
 
-    await promoteVendoredSkill(createRuntimePaths({ root, home }), candidateId, async () => true);
+    await promoteVendoredSkill(createRuntimePaths({ root, home }), candidateId);
 
     await expect(readFile(path.join(source, "SKILL.md"), "utf8")).resolves.toBe(newContent);
     await expect(readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8")).resolves.toContain(
