@@ -3,7 +3,7 @@ import { codexPluginSchema } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { CODEX_DERIVED_KEYS } from "../renderers/codex.js";
-import type { SyncCandidate, SyncResult } from "./types.js";
+import { unmanagedCandidates, type SyncCandidate, type SyncResult } from "./types.js";
 
 const codexPluginTableSchema = z.record(z.string(), codexPluginSchema).catch({});
 
@@ -28,10 +28,10 @@ export async function syncCodex(
     });
   }
 
-  const managedKeys = new Set(Object.keys(profile.profile.codex.config));
-  for (const [key, value] of Object.entries(existing)) {
-    if (CODEX_DERIVED_KEYS.has(key) || managedKeys.has(key)) continue;
-    candidates.push({ target: "codex", yamlPrefix: "codex.config", key, value });
-  }
+  const managedKeys = new Set([
+    ...CODEX_DERIVED_KEYS,
+    ...Object.keys(profile.profile.codex.config)
+  ]);
+  candidates.push(...unmanagedCandidates(existing, "codex", "codex.config", managedKeys));
   return { candidates };
 }
