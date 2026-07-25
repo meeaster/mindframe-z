@@ -7,6 +7,7 @@ import type { RuntimePaths } from "../core/paths.js";
 import { makeTempDir, testRuntimePaths, writeFixture } from "../../tests/integration/support.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
+import { syncMise } from "./mise.js";
 import { syncOpencode } from "./opencode.js";
 
 // The `personal` fixture profile manages `claude.settings.includeGitInstructions`
@@ -171,6 +172,55 @@ describe("syncCodex", () => {
 
     const { candidates } = await syncCodex(snapshotPath, localPath, declaring);
 
+    expect(candidates).toEqual([]);
+  });
+});
+
+describe("syncMise", () => {
+  async function writeToml(dir: string, name: string, value: Record<string, unknown>) {
+    const file = path.join(dir, name);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, stringifyToml(value), "utf8");
+    return file;
+  }
+
+  it("surfaces unmanaged keys across every section while suppressing default engine tools", async () => {
+    const dir = await makeTempDir();
+    // The base fixture manages `mise.tools.jq` and `mise.settings.minimum_release_age`.
+    // `node = "24"` matches ENGINE_MISE_DEFAULT_TOOLS and is undeclared, so it must stay silent.
+    const configPath = await writeToml(dir, "config.toml", {
+      tools: { node: "24", jq: "latest", deno: "2" },
+      env: { EDITOR: "vim" },
+      tool_alias: { node: "nodejs" },
+      settings: { minimum_release_age: "3d", status: "quiet" }
+    });
+
+    const { candidates } = await syncMise(configPath, profile);
+
+    expect(candidates).toEqual([
+      { target: "mise", yamlPrefix: "mise.tools", key: "deno", value: "2" },
+      { target: "mise", yamlPrefix: "mise.env", key: "EDITOR", value: "vim" },
+      { target: "mise", yamlPrefix: "mise.tool_alias", key: "node", value: "nodejs" },
+      { target: "mise", yamlPrefix: "mise.settings", key: "status", value: "quiet" }
+    ]);
+  });
+
+  it("surfaces a default-named tool whose value diverges from the engine default", async () => {
+    const dir = await makeTempDir();
+    const configPath = await writeToml(dir, "config.toml", {
+      tools: { node: "22" }
+    });
+
+    const { candidates } = await syncMise(configPath, profile);
+
+    expect(candidates).toEqual([
+      { target: "mise", yamlPrefix: "mise.tools", key: "node", value: "22" }
+    ]);
+  });
+
+  it("returns no candidates when the config file is missing", async () => {
+    const dir = await makeTempDir();
+    const { candidates } = await syncMise(path.join(dir, "absent.toml"), profile);
     expect(candidates).toEqual([]);
   });
 });
