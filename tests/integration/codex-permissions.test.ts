@@ -7,9 +7,11 @@ import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 // Codex has no per-path "ask" filesystem level, so the renderer collapses each
 // extra folder's mfz read/edit pair into one of deny/read/write. The apply suite
 // already pins the read (references_dir) and write (allow/allow) outcomes; this
-// suite pins the two remaining branches — a fully denied folder and an
-// ask-editable folder that degrades to read-only — so a future reshaping of the
-// permission mapping cannot silently widen or drop Codex filesystem access.
+// suite pins the remaining branches — a fully denied folder, an ask-editable
+// folder that degrades to read-only, and the two asymmetric-deny cases where a
+// single deny on either axis dominates an allow on the other — so a future
+// reshaping of the permission mapping (e.g. an "&&" that only denies when both
+// axes deny) cannot silently widen or drop Codex filesystem access.
 describe("codex extra-folder permission translation", () => {
   let root: string;
   let home: string;
@@ -25,7 +27,8 @@ describe("codex extra-folder permission translation", () => {
     );
     await writeFile(profilePath, profileYml, "utf8");
 
-    // Declare one denied folder and one ask-editable (read-only) folder.
+    // Declare a fully denied folder, an ask-editable (read-only) folder, and the
+    // two asymmetric cases where a single deny must dominate an allow.
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),
       [
@@ -39,6 +42,14 @@ describe("codex extra-folder permission translation", () => {
         "  - path: ~/readonly",
         "    description: Read-only folder",
         "    edit: ask",
+        "  - path: ~/editlocked",
+        "    description: Readable but edit-denied folder",
+        "    read: allow",
+        "    edit: deny",
+        "  - path: ~/readlocked",
+        "    description: Read-denied but editable folder",
+        "    read: deny",
+        "    edit: allow",
         ""
       ].join("\n"),
       "utf8"
@@ -60,7 +71,11 @@ describe("codex extra-folder permission translation", () => {
     expect(config.permissions.mfz.filesystem).toEqual({
       [path.join(home, "references")]: "read",
       [path.join(home, "denied")]: "deny",
-      [path.join(home, "readonly")]: "read"
+      [path.join(home, "readonly")]: "read",
+      // edit: deny dominates read: allow — must stay deny, not degrade to read/write.
+      [path.join(home, "editlocked")]: "deny",
+      // read: deny dominates edit: allow — must stay deny, not widen to write.
+      [path.join(home, "readlocked")]: "deny"
     });
   });
 });
