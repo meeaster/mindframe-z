@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+import { isPlainObject } from "./fs-util.js";
 
 export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
 
@@ -86,9 +87,7 @@ export async function readConfigFile(
     const raw = await readFile(file, "utf8");
     const parsed =
       format === "toml" ? parseToml(raw) : format === "jsonc" ? parseJsonc(raw) : JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error(`${file} must contain an object`);
-    }
+    if (!isPlainObject(parsed)) throw new Error(`${file} must contain an object`);
     return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
@@ -107,7 +106,7 @@ export async function writeConfigFile(
 }
 
 function stringRecord(value: unknown): Record<string, string> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  if (!isPlainObject(value)) return {};
   const result: Record<string, string> = {};
   for (const [key, entry] of Object.entries(value)) {
     if (typeof entry === "string") result[key] = entry;
@@ -130,7 +129,7 @@ function permissionEntries(value: unknown): Array<[string, OpenCodePermissionEff
   if (typeof value === "string") {
     return isOpenCodePermissionEffect(value) ? [["*", value]] : [];
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  if (!isPlainObject(value)) return [];
   return Object.entries(value).flatMap(([pattern, effect]) =>
     isOpenCodePermissionEffect(effect) ? [[pattern, effect]] : []
   );
@@ -162,26 +161,8 @@ export function evaluateOpenCodeSkillPermission(
     }
   };
 
-  upsert(
-    permissionEntries(
-      typeof profilePermission === "object" &&
-        profilePermission !== null &&
-        !Array.isArray(profilePermission)
-        ? (profilePermission as Record<string, unknown>).skill
-        : undefined
-    ),
-    "profile"
-  );
-  upsert(
-    permissionEntries(
-      typeof machinePermission === "object" &&
-        machinePermission !== null &&
-        !Array.isArray(machinePermission)
-        ? (machinePermission as Record<string, unknown>).skill
-        : undefined
-    ),
-    "machine"
-  );
+  upsert(permissionEntries(record(profilePermission).skill), "profile");
+  upsert(permissionEntries(record(machinePermission).skill), "machine");
   upsert(
     Object.entries(globalOverrides).map(([name, enabled]) => [name, enabled ? "allow" : "deny"]),
     "global"
@@ -201,9 +182,7 @@ export function evaluateOpenCodeSkillPermission(
 }
 
 function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isPlainObject(value) ? value : {};
 }
 
 const codecs: Record<SkillOverrideTarget, SkillCodec> = {
