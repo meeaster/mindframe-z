@@ -35,6 +35,20 @@ describe("skill override codec decoding", () => {
     expect(readSkillOverrides("opencode", {})).toEqual({});
     expect(readSkillOverrides("claude-code", {})).toEqual({});
   });
+
+  it("returns an empty map when a hand-edited config holds the wrong shape", () => {
+    expect(readSkillOverrides("opencode", { permission: "deny" })).toEqual({});
+    expect(readSkillOverrides("opencode", { permission: { skill: ["deny"] } })).toEqual({});
+    expect(readSkillOverrides("claude-code", { skillOverrides: "off" })).toEqual({});
+    expect(readSkillOverrides("codex", { skills: "off" })).toEqual({});
+    expect(readSkillOverrides("codex", { skills: { config: "off" } })).toEqual({});
+  });
+
+  it("drops non-string toggle values instead of decoding them", () => {
+    expect(readSkillOverrides("claude-code", { skillOverrides: { on: "on", broken: 1 } })).toEqual({
+      on: true
+    });
+  });
 });
 
 describe("OpenCode skill permission evaluation", () => {
@@ -84,6 +98,28 @@ describe("OpenCode skill permission evaluation", () => {
         {}
       )
     ).toEqual({ effect: "allow", source: "profile" });
+  });
+
+  it("reads a bare string permission as a wildcard rule", () => {
+    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: "deny" }, {}, {})).toEqual({
+      effect: "deny",
+      source: "profile"
+    });
+    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: "sometimes" }, {}, {})).toEqual({
+      effect: "ask",
+      source: "default"
+    });
+  });
+
+  it("ignores profile and machine permissions that are not objects", () => {
+    expect(evaluateOpenCodeSkillPermission("local-skill", "deny", {}, {}, ["deny"])).toEqual({
+      effect: "ask",
+      source: "default"
+    });
+    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: ["deny"] }, {}, {})).toEqual({
+      effect: "ask",
+      source: "default"
+    });
   });
 
   it("preserves machine permission provenance", () => {
@@ -169,6 +205,15 @@ describe("skill override file round-trips", () => {
     const dir = await makeTempDir();
     const missing = path.join(dir, "does-not-exist.json");
     expect(await readSkillOverridesFromFile("claude-code", missing)).toEqual({});
+  });
+
+  it("rejects a config file whose root is not an object", async () => {
+    const dir = await makeTempDir();
+    const file = path.join(dir, "settings.json");
+    await writeFile(file, JSON.stringify(["skillOverrides"]), "utf8");
+    await expect(readSkillOverridesFromFile("claude-code", file)).rejects.toThrow(
+      /must contain an object/
+    );
   });
 });
 
