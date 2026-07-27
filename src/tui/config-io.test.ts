@@ -253,6 +253,25 @@ describe("skill config global writes", () => {
     ]);
   });
 
+  it("drops the global override when a skill returns to its profile default", async () => {
+    process.chdir(root);
+    const runtimePaths = paths(root);
+    const profile = {
+      enabledSkills: [{ name: "changed", agents: { opencode: true }, targets: ["opencode"] }]
+    } as unknown as ResolvedProfile;
+
+    await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
+    expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ changed: false });
+
+    await setLocalSkillState(runtimePaths, profile, "opencode", "changed", true);
+
+    expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({});
+    const state = JSON.parse(
+      await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8")
+    ) as Record<string, boolean>;
+    expect(state).toEqual({});
+  });
+
   it("refuses codex toggles when the skill has no installed SKILL.md", async () => {
     process.chdir(root);
     const runtimePaths = paths(root);
