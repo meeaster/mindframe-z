@@ -74,24 +74,7 @@ export async function setLocalSkillState(
   skillName: string,
   enabled: boolean
 ): Promise<void> {
-  const configPaths = await resolveSkillConfigPaths(paths);
-  if (configPaths.scope === "repo") {
-    const base = await resolveSkillToggleBaseState(configPaths, profile, target);
-    await writeProjectOverrideDelta(
-      paths,
-      profile,
-      configPaths.repoRoot,
-      target,
-      "skills",
-      {
-        [skillName]: enabled
-      },
-      base
-    );
-    return;
-  }
-  const base = await resolveSkillToggleBaseState(configPaths, profile, target);
-  await writeSkillOverrideDelta(configPaths, target, base, { [skillName]: enabled });
+  await writeChangedSkillOverrides(paths, profile, target, { [skillName]: enabled });
 }
 
 export async function writeChangedSkillOverrides(
@@ -111,8 +94,8 @@ export async function writeChangedSkillOverridesForConfigPaths(
   target: SkillToggleTarget,
   next: SkillToggleState
 ): Promise<void> {
+  const base = await resolveSkillToggleBaseState(configPaths, profile, target);
   if (configPaths.scope === "repo") {
-    const base = await resolveSkillToggleBaseState(configPaths, profile, target);
     await writeProjectOverrideDelta(
       paths,
       profile,
@@ -124,7 +107,6 @@ export async function writeChangedSkillOverridesForConfigPaths(
     );
     return;
   }
-  const base = await resolveSkillToggleBaseState(configPaths, profile, target);
   await writeSkillOverrideDelta(configPaths, target, base, next);
 }
 
