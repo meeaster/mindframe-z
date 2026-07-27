@@ -1,6 +1,6 @@
 import { lstat, readFile, readdir, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
 
 // `mfz apply` is the only code path that renames a real file out of the user's
@@ -21,17 +21,15 @@ describe("apply link conflicts", () => {
     ({ root, home } = await setupIntegrationFixture());
   });
 
-  afterEach(() => {
-    root = "";
-    home = "";
-  });
-
   it("leaves an unmanaged user dotfile untouched when replacement is not confirmed", async () => {
     await writeFile(userNpmrc(), "registry=https://user.example\n", "utf8");
 
-    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+    // cli() inherits process.env, so blank the override to test the real default.
+    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"], {
+      MFZ_REPLACE_EXISTING: ""
+    });
 
-    expect(result.stdout).toContain(`skipped\t${userNpmrc()}`);
+    expect(result.stdout).toContain(`skipped\t${userNpmrc()} (path exists and is not a symlink)`);
     expect(await readFile(userNpmrc(), "utf8")).toBe("registry=https://user.example\n");
     expect((await lstat(userNpmrc())).isSymbolicLink()).toBe(false);
     expect(await backupsOf(".npmrc")).toEqual([]);
@@ -67,6 +65,7 @@ describe("apply link conflicts", () => {
   it("reports a pending replacement without touching the user dotfile in dry-run", async () => {
     await writeFile(userNpmrc(), "registry=https://user.example\n", "utf8");
 
+    // Authorizing the replacement must still not be enough to make dry-run act.
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--dry-run"], {
       MFZ_REPLACE_EXISTING: "y"
     });
