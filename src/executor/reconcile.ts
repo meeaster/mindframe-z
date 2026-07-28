@@ -1,8 +1,7 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile, readdir } from "node:fs/promises";
 import { z } from "zod";
 import { executorDesiredPath, executorManagedPath, type RuntimePaths } from "../core/paths.js";
-import { pathExists } from "../core/fs-util.js";
+import { pathExists, writeJsonFileAtomic } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { createExecutorAdapter, attachExecutorAdapter, type ExecutorAdapter } from "./adapter.js";
 import {
@@ -125,21 +124,14 @@ export async function hasManagedExecutorState(
   return pathExists(executorManagedPath(paths, profileName));
 }
 
-async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temp, file);
-}
-
 async function writeSnapshots(
   paths: RuntimePaths,
   profileName: string,
   desired: ExecutorDesiredState,
   managed: ManagedState
 ): Promise<void> {
-  await writeJsonAtomic(executorDesiredPath(paths, profileName), desired);
-  await writeJsonAtomic(executorManagedPath(paths, profileName), managed);
+  await writeJsonFileAtomic(executorDesiredPath(paths, profileName), desired);
+  await writeJsonFileAtomic(executorManagedPath(paths, profileName), managed);
 }
 
 function emptyResult(desired: ExecutorDesiredState): ExecutorReconcileResult {

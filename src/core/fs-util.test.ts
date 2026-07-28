@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,7 +9,8 @@ import {
   pathExists,
   readJsoncObject,
   readJsonObject,
-  readTomlObject
+  readTomlObject,
+  writeJsonFileAtomic
 } from "./fs-util.js";
 
 describe("pathExists", () => {
@@ -80,6 +81,54 @@ describe("jsonFileContent", () => {
     const value = { name: "personal", nested: { count: 3 } };
     await writeFile(file, jsonFileContent(value), "utf8");
     expect(await readJsonObject(file)).toEqual(value);
+  });
+});
+
+describe("writeJsonFileAtomic", () => {
+  it("writes the jsonFileContent form of the value", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "store.json");
+    const value = { projects: { "/repo": { mcp: { context7: false } } } };
+
+    await writeJsonFileAtomic(file, value);
+
+    expect(await readFile(file, "utf8")).toBe(jsonFileContent(value));
+  });
+
+  it("creates missing parent directories", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "state", "executor", "managed.json");
+
+    await writeJsonFileAtomic(file, { complete: true });
+
+    expect(await readJsonObject(file)).toEqual({ complete: true });
+  });
+
+  it("replaces existing content and leaves no temp file behind", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "manifest.json");
+    await writeFile(file, jsonFileContent({ phase: "scoping" }), "utf8");
+
+    await writeJsonFileAtomic(file, { phase: "delivering" });
+
+    expect(await readJsonObject(file)).toEqual({ phase: "delivering" });
+    expect(await readdir(dir)).toEqual(["manifest.json"]);
+  });
+
+  it("keeps concurrent writes to the same file whole", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "bindings.json");
+
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) => writeJsonFileAtomic(file, { revision: index }))
+    );
+
+    const content = await readFile(file, "utf8");
+    const wholeWrites = Array.from({ length: 8 }, (_, index) =>
+      jsonFileContent({ revision: index })
+    );
+    expect(wholeWrites).toContain(content);
+    expect(await readdir(dir)).toEqual(["bindings.json"]);
   });
 });
 

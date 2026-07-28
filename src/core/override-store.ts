@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { z } from "zod";
+import { writeJsonFileAtomic } from "./fs-util.js";
 import { overrideStorePath, type AgentName, type RuntimePaths } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
 
@@ -62,11 +63,7 @@ export async function readOverrideStore(home: string): Promise<OverrideStore> {
 }
 
 export async function writeOverrideStore(home: string, store: OverrideStore): Promise<void> {
-  const file = overrideStorePath(home);
-  await mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(temp, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-  await rename(temp, file);
+  await writeJsonFileAtomic(overrideStorePath(home), store);
 }
 
 export function projectOverrides(
