@@ -1,4 +1,5 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 
@@ -91,4 +92,19 @@ export async function readTomlObject(file: string): Promise<Record<string, unkno
  */
 export function jsonFileContent(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+/**
+ * Replace a JSON file atomically: create the parent directory, write the
+ * {@link jsonFileContent} form to a uniquely named sibling, then rename it over
+ * the destination. This is the canonical mutable-state write behind the
+ * override store, executor snapshots, and work-unit manifests, so a concurrent
+ * or interrupted `mfz` run either sees the previous file or the complete new
+ * one, never a half-written record.
+ */
+export async function writeJsonFileAtomic(file: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  await writeFile(temp, jsonFileContent(value), "utf8");
+  await rename(temp, file);
 }

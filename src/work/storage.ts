@@ -1,16 +1,7 @@
-import {
-  appendFile,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rmdir,
-  unlink,
-  writeFile
-} from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { pathExists } from "../core/fs-util.js";
+import { pathExists, writeJsonFileAtomic } from "../core/fs-util.js";
 import { workBindingsPath, workUnitPath, type RuntimePaths } from "../core/paths.js";
 import {
   sourceQualifiedSessionSchema,
@@ -114,13 +105,6 @@ export function workAuthoringPaths(
   };
 }
 
-async function writeAtomic(file: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temp, file);
-}
-
 async function appendJsonl(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await appendFile(file, `${JSON.stringify(value)}\n`, "utf8");
@@ -154,7 +138,7 @@ async function readBindingIndex(paths: RuntimePaths): Promise<WorkBindingIndex> 
 }
 
 async function writeBindingIndex(paths: RuntimePaths, index: WorkBindingIndex): Promise<void> {
-  await writeAtomic(workBindingsPath(paths), index);
+  await writeJsonFileAtomic(workBindingsPath(paths), index);
 }
 
 async function withBindingLock<T>(paths: RuntimePaths, action: () => Promise<T>): Promise<T> {
@@ -225,7 +209,7 @@ export async function createWorkUnit(
     created_at: timestamp,
     updated_at: timestamp
   });
-  await writeAtomic(file, unit);
+  await writeJsonFileAtomic(file, unit);
   const authored = workAuthoringPaths(paths, slug);
   await mkdir(authored.checkpoints, { recursive: true });
   await Promise.all([
@@ -260,7 +244,7 @@ export async function listWorkUnits(paths: RuntimePaths): Promise<WorkUnit[]> {
 
 async function writeUnit(paths: RuntimePaths, unit: WorkUnit): Promise<WorkUnit> {
   const next = workUnitSchema.parse({ ...unit, updated_at: now() });
-  await writeAtomic(manifestPath(paths, unit.slug), next);
+  await writeJsonFileAtomic(manifestPath(paths, unit.slug), next);
   return next;
 }
 
@@ -499,7 +483,7 @@ export async function validateWorkUnit(
   const revision = orientationChanged
     ? status.unit.orientation.revision + 1
     : status.unit.orientation.revision;
-  await writeAtomic(checkpointIndexPath(paths, slug), {
+  await writeJsonFileAtomic(checkpointIndexPath(paths, slug), {
     schema_version: 1,
     checkpoints: authoredCheckpoints.checkpoints
   });
