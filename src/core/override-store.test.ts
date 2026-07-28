@@ -39,6 +39,25 @@ function profile(codexDefault: boolean): ResolvedProfile {
   } as unknown as ResolvedProfile;
 }
 
+// Defaults chosen so every override in the payload tests below flips a value:
+// `jira`/`pr-writer` default on and get turned off, `dataviz` defaults off and
+// gets turned on. That pins both directions of each boolean encoding.
+function harnessProfile(target: string): ResolvedProfile {
+  return {
+    mcpServers: [
+      {
+        name: "jira",
+        agents: { [target]: true },
+        server: { type: "remote", url: "https://jira.invalid", description: "" }
+      }
+    ],
+    enabledSkills: [
+      { name: "pr-writer", agents: { [target]: true } },
+      { name: "dataviz", agents: { [target]: false } }
+    ]
+  } as unknown as ResolvedProfile;
+}
+
 describe("override store", () => {
   it("aborts corrupt reads without truncating the file", async () => {
     const paths = await tmpPaths();
@@ -80,5 +99,76 @@ describe("override store", () => {
 
     await renderAllPayloads(paths, profile(true));
     expect((await readOverrideStore(paths.home)).projects).toEqual({});
+  });
+
+  // The opencode wrapper rendered by src/renderers/dotfiles.ts feeds this object
+  // straight into OPENCODE_CONFIG_CONTENT, so the key names are a wire contract
+  // with opencode's own config schema rather than an internal detail.
+  it("encodes opencode project overrides as an opencode config payload", async () => {
+    const paths = await tmpPaths();
+    const projectRoot = path.join(paths.root, "repo");
+    const opencode = harnessProfile("opencode");
+
+    await writeProjectOverrideDelta(paths, opencode, projectRoot, "opencode", "mcp", {
+      jira: false
+    });
+    await writeProjectOverrideDelta(paths, opencode, projectRoot, "opencode", "skills", {
+      "pr-writer": false,
+      dataviz: true
+    });
+
+    const section = (await readOverrideStore(paths.home)).projects[projectRoot]?.opencode;
+    expect(section?.payload?.config).toEqual({
+      mcp: { jira: { enabled: false } },
+      permission: { skill: { "pr-writer": "deny", dataviz: "allow" } }
+    });
+    expect(section?.payload?.argv).toBeUndefined();
+    expect(section?.payload?.settings).toBeUndefined();
+  });
+
+  // The claude wrapper passes this object to `claude --settings`, so it must stay
+  // shaped like a Claude Code settings file and must not leak MCP overrides,
+  // which Claude Code does not read from that flag.
+  it("encodes claude-code project overrides as a settings payload without mcp", async () => {
+    const paths = await tmpPaths();
+    const projectRoot = path.join(paths.root, "repo");
+    const claude = harnessProfile("claude-code");
+
+    await writeProjectOverrideDelta(paths, claude, projectRoot, "claude-code", "mcp", {
+      jira: false
+    });
+    await writeProjectOverrideDelta(paths, claude, projectRoot, "claude-code", "skills", {
+      "pr-writer": false,
+      dataviz: true
+    });
+
+    const section = (await readOverrideStore(paths.home)).projects[projectRoot]?.["claude-code"];
+    expect(section?.mcp).toEqual({ jira: false });
+    expect(section?.payload).toEqual({
+      settings: { skillOverrides: { "pr-writer": "off", dataviz: "on" } }
+    });
+  });
+
+  it("rejects overrides for names the profile does not offer the target", async () => {
+    const paths = await tmpPaths();
+    const projectRoot = path.join(paths.root, "repo");
+
+    await expect(
+      writeProjectOverrideDelta(
+        paths,
+        harnessProfile("opencode"),
+        projectRoot,
+        "opencode",
+        "skills",
+        {
+          "not-a-skill": true
+        }
+      )
+    ).rejects.toThrow("Skill not-a-skill is not available for opencode");
+    await expect(
+      writeProjectOverrideDelta(paths, harnessProfile("opencode"), projectRoot, "opencode", "mcp", {
+        "not-a-server": true
+      })
+    ).rejects.toThrow("MCP server not-a-server is not available for opencode");
   });
 });
