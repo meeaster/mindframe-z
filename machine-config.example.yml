@@ -22,7 +22,9 @@ references_dir: ~/.mindframe-z/references
 #     - name: personal
 #       root: ~/workspace/knowledge/personal-knowledge
 #       path: threads
-#       read_only: true # fail closed until an isolated writer checkout is configured
+#       read_only: true # canonical checkout files are never mutated by thread writes
+#       pull_request:
+#         base: main # publish from a disposable worktree and stop after opening a PR
 
 # Durable work-unit content can live in a versioned Personal knowledge repository.
 # Runtime bindings and delivery state remain under ~/.mindframe-z/work/v1.

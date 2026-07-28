@@ -8,14 +8,17 @@ import { dispatch } from "./dispatch.js";
 import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import {
   appendThreadRun,
-  assertThreadDestinationWritable,
-  commitThreadChanges,
   findThread,
   readSessionFiles,
   readThreadManifest,
   resolveSynthesisDefaults,
   type ParsedModelId
 } from "./storage.js";
+import {
+  assertThreadDestinationWritable,
+  commitThreadChanges,
+  type ThreadPublication
+} from "./publication.js";
 import { writeRunStatus, type ThreadRunStatus } from "./observability.js";
 import type { ThreadDispatchRun } from "./schema.js";
 
@@ -114,6 +117,7 @@ export interface RegenerateResult {
   slug: string;
   runId: string;
   totalCostUsd: number | null;
+  publication: ThreadPublication;
 }
 
 // Regenerate a thread's views from its existing session files — no re-gather, no
@@ -167,19 +171,24 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
   });
   await writeRunStatus(paths, {
     ...status,
-    current_step: "complete",
-    finished_at: finishedAt,
+    current_step: "publish",
     cost_usd: total
   });
-  await commitThreadChanges(
+  const publication = await commitThreadChanges(
     thread.destination,
     manifest.slug,
     thread.dir,
     `chore(thread): regenerate ${manifest.slug}`,
     !req.noPush && !thread.destination.no_push
   );
+  await writeRunStatus(paths, {
+    ...status,
+    current_step: "complete",
+    finished_at: new Date().toISOString(),
+    cost_usd: total
+  });
 
-  return { slug: manifest.slug, runId, totalCostUsd: total };
+  return { slug: manifest.slug, runId, totalCostUsd: total, publication };
 }
 
 // The prior digest anchors the next render's form. Absent on a thread's first digest,

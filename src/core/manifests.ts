@@ -352,31 +352,45 @@ export const threadIdentifierSchema = z
     "must be lowercase alphanumeric with . _ - and no path separators"
   );
 
-export const threadDestinationSchema = z
+const threadPullRequestSchema = z.object({
+  base: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(
+      /^(?!.*\.\.)(?!.*(?:^|\/)\.)(?!.*(?:^|\/)[^/]*\.lock(?:\/|$))(?!.*\/\/)(?!.*[/.]$)[A-Za-z0-9][A-Za-z0-9._/-]*$/,
+      "must be a safe Git branch name"
+    )
+});
+
+const threadDestinationRootSchema = z
+  .string()
+  .min(1)
+  .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
+    message: "must be absolute or start with ~/"
+  });
+
+const threadDestinationPathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      !path.isAbsolute(value) &&
+      !value
+        .split(/[\\/]+/)
+        .some((segment) => segment === "" || segment === "." || segment === ".."),
+    "must be a relative path without empty, . or .. segments"
+  );
+
+const directThreadDestinationSchema = z
   .object({
     name: threadIdentifierSchema,
     remote: z.string().optional(),
-    root: z
-      .string()
-      .min(1)
-      .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
-        message: "must be absolute or start with ~/"
-      })
-      .optional(),
-    path: z
-      .string()
-      .min(1)
-      .refine(
-        (value) =>
-          !path.isAbsolute(value) &&
-          !value
-            .split(/[\\/]+/)
-            .some((segment) => segment === "" || segment === "." || segment === ".."),
-        "must be a relative path without empty, . or .. segments"
-      )
-      .optional(),
+    root: threadDestinationRootSchema.optional(),
+    path: threadDestinationPathSchema.optional(),
     no_push: z.boolean().default(false),
     read_only: z.boolean().optional(),
+    pull_request: z.never().optional(),
     default: z.boolean().default(false)
   })
   .superRefine((destination, context) => {
@@ -388,6 +402,22 @@ export const threadDestinationSchema = z
       });
     }
   });
+
+const pullRequestThreadDestinationSchema = z.object({
+  name: threadIdentifierSchema,
+  remote: z.never().optional(),
+  root: threadDestinationRootSchema,
+  path: threadDestinationPathSchema,
+  no_push: z.literal(false).default(false),
+  read_only: z.literal(true),
+  pull_request: threadPullRequestSchema,
+  default: z.boolean().default(false)
+});
+
+export const threadDestinationSchema = z.union([
+  pullRequestThreadDestinationSchema,
+  directThreadDestinationSchema
+]);
 
 // A session archive: an S3 destination for raw, full-fidelity session backups,
 // sibling to thread `destinations` (which back up the *synthesized* store). Exactly

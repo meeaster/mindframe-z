@@ -793,7 +793,7 @@ thread
 
 thread
   .command("sync")
-  .description("Pull latest from thread destination remotes")
+  .description("Update writable remotes and import current thread destination checkouts")
   .argument("[slug...]", "thread slugs to sync")
   .option("--all", "sync all thread destinations")
   .action(async (slugs, options) =>

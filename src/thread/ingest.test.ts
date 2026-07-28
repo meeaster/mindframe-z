@@ -1,8 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import type { RuntimePaths } from "../core/paths.js";
-import { archiveCacheRoot, opencodeDbPath, threadPath } from "../core/paths.js";
+import { archiveCacheRoot, opencodeDbPath, threadPath, threadRunsRoot } from "../core/paths.js";
 import type { Archive, MachineManifest } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { makeTempDir } from "../../tests/integration/support.js";
@@ -404,7 +405,40 @@ async function refreshedSessions(runtime: RuntimePaths, slug: string): Promise<s
   return runs.runs.at(-1)!.sessions;
 }
 
+async function latestRunStatus(
+  runtime: RuntimePaths
+): Promise<{ current_step: string; finished_at?: string }> {
+  const runIds = await readdir(threadRunsRoot(runtime));
+  const runId = runIds.sort().at(-1)!;
+  return JSON.parse(
+    await readFile(path.join(threadRunsRoot(runtime), runId, "status.json"), "utf8")
+  ) as { current_step: string; finished_at?: string };
+}
+
 describe("ingestThread auto-refresh", () => {
+  it("leaves a failed destination publication in the publish run phase", async () => {
+    const home = await makeTempDir();
+    const { runtime, slug } = await ingestFixture(home, []);
+    const [destination] = resolveThreadDestinations(runtime, profile());
+    await writeFile(path.join(destination!.path, "staged.txt"), "staged\n");
+    await execa("git", ["add", "staged.txt"], { cwd: destination!.path });
+
+    await expect(
+      ingestThread({
+        paths: runtime,
+        profile: profile(),
+        threadSlug: slug,
+        sessionIds: ["claude-code:named-session"],
+        noPush: true,
+        runner: new RecordingRunner()
+      })
+    ).rejects.toThrow(/staged changes/);
+
+    const status = await latestRunStatus(runtime);
+    expect(status.current_step).toBe("publish");
+    expect(status.finished_at).toBeUndefined();
+  });
+
   it("skips an unchanged existing session and refreshes only the named id", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "unchanged-session", 3);
@@ -425,6 +459,9 @@ describe("ingestThread auto-refresh", () => {
     expect(await refreshedSessions(runtime, slug)).toEqual(["claude-code:named-session"]);
     expect(runner.rolesNamed("gather")).toBe(1);
     expect(runner.rolesNamed("digest")).toBe(1);
+    const status = await latestRunStatus(runtime);
+    expect(status.current_step).toBe("complete");
+    expect(status.finished_at).toBeDefined();
   });
 
   it("refreshes a grown existing session alongside a named id, digesting once", async () => {

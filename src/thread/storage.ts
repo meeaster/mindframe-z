@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
@@ -44,10 +44,10 @@ export interface ResolvedSynthesisDefaults {
 
 export type ResolvedThreadDestination = ThreadDestination & { path: string };
 
-export function assertThreadDestinationWritable(destination: ResolvedThreadDestination): void {
-  if (destination.read_only) {
-    throw new Error(`Thread destination is read-only: ${destination.name}`);
-  }
+function resolvedDestinationRoot(paths: RuntimePaths, destination: ThreadDestination): string {
+  const root = expandHome(destination.root!, paths.home);
+  if (!path.isAbsolute(root)) throw new Error(`Thread destination root must be absolute: ${root}`);
+  return path.resolve(root);
 }
 
 function rootedDestinationPath(paths: RuntimePaths, destination: ThreadDestination): string {
@@ -57,9 +57,7 @@ function rootedDestinationPath(paths: RuntimePaths, destination: ThreadDestinati
       : threadDestinationRoot(paths, destination.name);
   }
 
-  const root = expandHome(destination.root, paths.home);
-  if (!path.isAbsolute(root)) throw new Error(`Thread destination root must be absolute: ${root}`);
-  const resolvedRoot = path.resolve(root);
+  const resolvedRoot = resolvedDestinationRoot(paths, destination);
   const resolved = path.resolve(resolvedRoot, destination.path!);
   const relative = path.relative(resolvedRoot, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -86,6 +84,7 @@ export function resolveThreadDestinations(
   const defaultName = destinations.findLast((destination) => destination.default)?.name ?? "home";
   return destinations.map((destination) => ({
     ...destination,
+    ...(destination.root ? { root: resolvedDestinationRoot(paths, destination) } : {}),
     default: destination.name === defaultName,
     path: rootedDestinationPath(paths, destination)
   }));
@@ -111,6 +110,12 @@ export async function prepareThreadDestination(
   destination: ResolvedThreadDestination
 ): Promise<void> {
   if (await pathExists(destination.path)) return;
+
+  if (destination.pull_request) {
+    throw new Error(
+      `Pull-request thread destination does not exist: ${destination.name} (${destination.path})`
+    );
+  }
 
   await mkdir(path.dirname(destination.path), { recursive: true });
 
@@ -234,69 +239,30 @@ export async function hasRemote(dir: string): Promise<boolean> {
   return stdout.trim().length > 0;
 }
 
-async function pushIfRemote(destination: ResolvedThreadDestination): Promise<void> {
-  if (!(await hasRemote(destination.path))) {
-    console.warn(`No git remote for ${destination.name} — skipping push`);
-    return;
-  }
-  await execa("git", ["push"], { cwd: destination.path });
-}
-
-export async function commitThreadChanges(
-  destination: ResolvedThreadDestination,
-  slug: string,
-  threadDir: string,
-  message: string,
-  push: boolean
-): Promise<void> {
-  assertThreadDestinationWritable(destination);
-  const destDir = path.join(destination.path, slug);
-  await cp(threadDir, destDir, { recursive: true, force: true });
-  await execa("git", ["add", "."], { cwd: destination.path });
-  await execa("git", ["commit", "-m", message], { cwd: destination.path });
-  if (!push) return;
-  await pushIfRemote(destination);
-}
-
-export async function deleteThreadFromDestination(
-  destination: ResolvedThreadDestination,
-  slug: string,
-  push: boolean
-): Promise<void> {
-  assertThreadDestinationWritable(destination);
-  const destDir = path.join(destination.path, slug);
-  const existed = await pathExists(destDir);
-  if (!existed) return;
-
-  await rm(destDir, { recursive: true, force: true });
-  await execa("git", ["add", "."], { cwd: destination.path });
-  await execa("git", ["commit", "-m", `chore(thread): delete ${slug}`], { cwd: destination.path });
-  if (!push) return;
-  await pushIfRemote(destination);
-}
-
 export async function syncThreadDestination(
   destination: ResolvedThreadDestination,
   storeRoot: string
 ): Promise<string[]> {
-  if (!(await hasRemote(destination.path))) return [];
+  if (!destination.read_only) {
+    if (!(await hasRemote(destination.path))) return [];
 
-  await execa("git", ["fetch", "origin"], { cwd: destination.path });
+    await execa("git", ["fetch", "origin"], { cwd: destination.path });
 
-  // If the remote has no branches yet (empty repo) there's nothing to pull.
-  const { stdout: remoteBranches } = await execa("git", ["branch", "-r"], {
-    cwd: destination.path
-  });
-  if (!remoteBranches.trim()) return [];
+    // If the remote has no branches yet (empty repo) there's nothing to pull.
+    const { stdout: remoteBranches } = await execa("git", ["branch", "-r"], {
+      cwd: destination.path
+    });
+    if (!remoteBranches.trim()) return [];
 
-  try {
-    await execa("git", ["pull", "--rebase", "--autostash"], { cwd: destination.path });
-  } catch (original) {
-    throw new Error(
-      `Failed to sync destination "${destination.name}". ` +
-        "Resolve any conflicts manually, or run `git rebase --abort` to cancel.",
-      { cause: original }
-    );
+    try {
+      await execa("git", ["pull", "--rebase", "--autostash"], { cwd: destination.path });
+    } catch (original) {
+      throw new Error(
+        `Failed to sync destination "${destination.name}". ` +
+          "Resolve any conflicts manually, or run `git rebase --abort` to cancel.",
+        { cause: original }
+      );
+    }
   }
 
   const updated: string[] = [];

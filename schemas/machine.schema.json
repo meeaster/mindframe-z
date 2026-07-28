@@ -88,39 +88,102 @@
           "default": [],
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64,
-                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "remote": {
+                    "not": {}
+                  },
+                  "root": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "no_push": {
+                    "default": false,
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "read_only": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "properties": {
+                      "base": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255,
+                        "pattern": "^(?!.*\\.\\.)(?!.*(?:^|\\/)\\.)(?!.*(?:^|\\/)[^/]*\\.lock(?:\\/|$))(?!.*\\/\\/)(?!.*[/.]$)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+                      }
+                    },
+                    "required": [
+                      "base"
+                    ]
+                  },
+                  "default": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "root",
+                  "path",
+                  "read_only",
+                  "pull_request"
+                ]
               },
-              "remote": {
-                "type": "string"
-              },
-              "root": {
-                "type": "string",
-                "minLength": 1
-              },
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "no_push": {
-                "default": false,
-                "type": "boolean"
-              },
-              "read_only": {
-                "type": "boolean"
-              },
-              "default": {
-                "default": false,
-                "type": "boolean"
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "remote": {
+                    "type": "string"
+                  },
+                  "root": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "no_push": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "read_only": {
+                    "type": "boolean"
+                  },
+                  "pull_request": {
+                    "not": {}
+                  },
+                  "default": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
               }
-            },
-            "required": [
-              "name"
             ]
           }
         }

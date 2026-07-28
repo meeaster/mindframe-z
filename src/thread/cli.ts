@@ -23,9 +23,7 @@ import {
   waitForLapdog
 } from "./lapdog.js";
 import {
-  assertThreadDestinationWritable,
   defaultThreadDestination,
-  deleteThreadFromDestination,
   findThread,
   findThreadDestination,
   prepareThreadDestination,
@@ -39,6 +37,11 @@ import {
   writeThreadRuns,
   type ThreadManifest
 } from "./storage.js";
+import {
+  assertThreadDestinationWritable,
+  deleteThreadFromDestination,
+  type ThreadPublication
+} from "./publication.js";
 import {
   appendThreadCliLog,
   listRunStatuses,
@@ -215,6 +218,7 @@ export async function runThreadIngest(
       console.log(`refresh (changed):\t${result.refreshed.join("\t")}`);
     if (result.vanished.length > 0)
       console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
+    printThreadPublication(result.publication);
     console.log(`ingested\t${result.slug}\t${result.sessionCount} sessions`);
   });
 }
@@ -248,6 +252,7 @@ export async function runThreadRefresh(
       console.log(`up to date\t${result.slug}\tnothing drifted`);
       return;
     }
+    printThreadPublication(result.publication);
     console.log(`refreshed\t${result.slug}\t${result.sessionCount} sessions`);
   });
 }
@@ -335,6 +340,7 @@ export async function runThreadRegenerate(
       synthesize: options.synthesize,
       runner: options.runner
     });
+    printThreadPublication(result.publication);
     console.log(`regenerated\t${result.slug}\t$${result.totalCostUsd ?? "?"}`);
   });
 }
@@ -380,9 +386,14 @@ export async function runThreadDelete(
     const manifest = await readThreadManifest(thread.dir);
     assertThreadDestinationWritable(thread.destination);
 
+    const publication = await deleteThreadFromDestination(
+      thread.destination,
+      manifest.slug,
+      !options.noPush
+    );
     await rm(thread.dir, { recursive: true, force: true });
-    await deleteThreadFromDestination(thread.destination, manifest.slug, !options.noPush);
 
+    printThreadPublication(publication);
     console.log(`deleted\t${slug}`);
   });
 }
@@ -417,6 +428,14 @@ export async function runThreadSync(
       const destination = findThreadDestination(destinations, destName);
       await prepareThreadDestination(paths, destination);
       const updated = await syncThreadDestination(destination, threadStoreRoot(paths));
+      if (destination.read_only) {
+        console.log(
+          updated.length === 0
+            ? `imported\t${destName}\tno threads in current checkout`
+            : `imported\t${destName}\t${updated.join(", ")}`
+        );
+        continue;
+      }
       if (updated.length === 0) {
         console.log(`sync\t${destName}\tup to date`);
       } else {
@@ -513,6 +532,12 @@ function emptyManifest(): ThreadManifest {
     sessions: [],
     synthesis: {}
   };
+}
+
+function printThreadPublication(publication: ThreadPublication): void {
+  if (publication.kind === "pull-request") console.log(`pull-request\t${publication.url}`);
+  if (publication.kind === "local-branch")
+    console.log(`local-branch\t${publication.branch}\t${publication.commit}`);
 }
 
 function groupByThread(

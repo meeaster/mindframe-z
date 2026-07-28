@@ -12,8 +12,6 @@ import { dispatch } from "./dispatch.js";
 import { readPreviousDigest, regenerateViews, repoLocators } from "./regenerate.js";
 import {
   appendThreadRun,
-  assertThreadDestinationWritable,
-  commitThreadChanges,
   findThread,
   readSessionFile,
   readThreadManifest,
@@ -22,6 +20,11 @@ import {
   writeSessionFile,
   type ThreadDispatchRun
 } from "./storage.js";
+import {
+  assertThreadDestinationWritable,
+  commitThreadChanges,
+  type ThreadPublication
+} from "./publication.js";
 import { writeRunDossiers, writeRunStatus, type ThreadRunStatus } from "./observability.js";
 import {
   classifyWatermark,
@@ -63,6 +66,7 @@ export interface IngestResult {
   vanished: string[];
   runId: string;
   totalCostUsd: number | null;
+  publication: ThreadPublication;
 }
 
 export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
@@ -97,7 +101,8 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         refreshed,
         vanished,
         runId: "",
-        totalCostUsd: null
+        totalCostUsd: null,
+        publication: { kind: "unchanged" }
       };
     throw new Error("Provide at least one session id to ingest.");
   }
@@ -265,17 +270,22 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   });
   await writeRunStatus(paths, {
     ...status,
-    current_step: "complete",
-    finished_at: finishedAt,
+    current_step: "publish",
     cost_usd: total
   });
-  await commitThreadChanges(
+  const publication = await commitThreadChanges(
     thread.destination,
     manifest.slug,
     thread.dir,
     `chore(thread): ${mode} ${manifest.slug}`,
     !req.noPush && !thread.destination.no_push
   );
+  await writeRunStatus(paths, {
+    ...status,
+    current_step: "complete",
+    finished_at: new Date().toISOString(),
+    cost_usd: total
+  });
 
   return {
     slug: manifest.slug,
@@ -283,7 +293,8 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     refreshed,
     vanished,
     runId,
-    totalCostUsd: total
+    totalCostUsd: total,
+    publication
   };
 }
 

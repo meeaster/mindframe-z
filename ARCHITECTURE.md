@@ -153,7 +153,7 @@ Scaffolded YAML files use first-line YAML language server modelines pointing at 
 
 ## Threads And Sandbox
 
-Threads are machine-local orchestration state under `~/.mindframe-z/threads/` with per-destination git working copies. They resolve profile and machine config at runtime but are separate from rendering.
+Threads are machine-local orchestration state under `~/.mindframe-z/threads/` with Git-backed destinations. Direct destinations commit in their configured working copy. A read-only destination with `pull_request.base` publishes through a unique disposable worktree and review branch, opens a pull request, and never changes the canonical checkout's files, index, or branch. Thread publication stops at PR creation; merge remains a separate acceptance action. They resolve profile and machine config at runtime but are separate from rendering.
 
 Work units keep durable content under the machine-configured `work.units_root`, defaulting to
 `~/.mindframe-z/work/v1/units/`. Machine-local bindings and delivery state remain under

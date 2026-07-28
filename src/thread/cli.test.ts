@@ -1,8 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../../tests/integration/support.js";
-import { createRuntimePaths } from "../core/paths.js";
+import { createRuntimePaths, threadRunsRoot } from "../core/paths.js";
 import { writeRunStatus } from "./observability.js";
 import type { AgentRunner } from "./runner.js";
 import {
@@ -373,6 +373,19 @@ describe("thread cli", () => {
     );
     await expect(readFile(path.join(threadDir, "log.md"), "utf8")).resolves.toContain(
       "decision (sess-a · turn 1)"
+    );
+    const runsRoot = threadRunsRoot(createRuntimePaths({ root, home }));
+    const statuses = await Promise.all(
+      (await readdir(runsRoot)).map(async (runId) =>
+        JSON.parse(await readFile(path.join(runsRoot, runId, "status.json"), "utf8"))
+      )
+    );
+    expect(statuses).toContainEqual(
+      expect.objectContaining({
+        mode: "regenerate",
+        current_step: "complete",
+        finished_at: expect.any(String)
+      })
     );
     expect(logs).toContain("regenerated\tt\t$0.02");
   });

@@ -1,14 +1,12 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { execa } from "execa";
 import type { RuntimePaths } from "../core/paths.js";
-import type { MachineManifest, ThreadDefaults } from "../core/manifests.js";
+import { machineSchema, type MachineManifest, type ThreadDefaults } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
-  commitThreadChanges,
-  deleteThreadFromDestination,
   prepareThreadDestination,
   readThreadManifest,
   readThreadRuns,
@@ -22,6 +20,7 @@ import {
   type ResolvedThreadDestination,
   type ThreadManifest
 } from "./storage.js";
+import { commitThreadChanges, deleteThreadFromDestination } from "./publication.js";
 
 function paths(home: string, root = home): RuntimePaths {
   return {
@@ -254,6 +253,86 @@ describe("thread storage", () => {
     await expect(commitThreadChanges(destination, "thread-a", root, "test", false)).rejects.toThrow(
       /read-only/
     );
+  });
+
+  it("requires pull-request destinations to be rooted and read-only", () => {
+    expect(() =>
+      machineSchema.parse({
+        thread: {
+          destinations: [
+            {
+              name: "personal-knowledge",
+              path: "threads",
+              pull_request: { base: "main" }
+            }
+          ]
+        }
+      })
+    ).toThrow();
+
+    expect(() =>
+      machineSchema.parse({
+        thread: {
+          destinations: [
+            {
+              name: "personal-knowledge",
+              root: "/tmp/personal-knowledge",
+              path: "threads",
+              read_only: true,
+              pull_request: { base: "main" }
+            }
+          ]
+        }
+      })
+    ).not.toThrow();
+
+    for (const base of ["foo/.bar", "foo.lock/bar"]) {
+      expect(() =>
+        machineSchema.parse({
+          thread: {
+            destinations: [
+              {
+                name: "personal-knowledge",
+                root: "/tmp/personal-knowledge",
+                path: "threads",
+                read_only: true,
+                pull_request: { base }
+              }
+            ]
+          }
+        })
+      ).toThrow();
+    }
+  });
+
+  it("emits the pull-request destination contract in the machine JSON schema", async () => {
+    type DestinationVariant = {
+      properties: Record<
+        string,
+        { not?: object; properties?: Record<string, { pattern?: string }> }
+      >;
+      required?: string[];
+    };
+    type GeneratedMachineSchema = {
+      properties: {
+        thread: {
+          properties: {
+            destinations: { items: { anyOf: DestinationVariant[] } };
+          };
+        };
+      };
+    };
+    const generated = JSON.parse(
+      await readFile(path.join(import.meta.dirname, "../../schemas/machine.schema.json"), "utf8")
+    ) as GeneratedMachineSchema;
+    const variants = generated.properties.thread.properties.destinations.items.anyOf;
+    const pullRequest = variants.find((variant) => variant.required?.includes("pull_request"));
+
+    expect(pullRequest?.required).toEqual(
+      expect.arrayContaining(["name", "root", "path", "read_only", "pull_request"])
+    );
+    expect(pullRequest?.properties.remote).toEqual({ not: {} });
+    expect(pullRequest?.properties.pull_request?.properties?.base?.pattern).toContain("(?!");
   });
 
   it("preserves legacy thread provenance when rewriting a migrated manifest", async () => {
@@ -540,4 +619,52 @@ describe("thread storage", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("sync reads a read-only checkout without pulling it", async () => {
+    const home = await makeTempDir();
+    const remoteDir = path.join(home, "remote.git");
+    const destinationDir = path.join(home, "destination");
+    await execa("git", ["init", "--bare", "--initial-branch=main", remoteDir]);
+    await mkdir(path.join(destinationDir, "thread-read"), { recursive: true });
+    await execa("git", ["init", "--initial-branch=main"], { cwd: destinationDir });
+    await writeFile(path.join(destinationDir, "thread-read", "manifest.json"), "{}\n");
+    await execa("git", ["add", "."], { cwd: destinationDir });
+    await execa("git", ["config", "user.email", "test@test"], { cwd: destinationDir });
+    await execa("git", ["config", "user.name", "Test"], { cwd: destinationDir });
+    await execa("git", ["commit", "-m", "seed"], { cwd: destinationDir });
+    await execa("git", ["remote", "add", "origin", remoteDir], { cwd: destinationDir });
+    await execa("git", ["push", "--set-upstream", "origin", "main"], { cwd: destinationDir });
+    const before = await gitHeadForTest(destinationDir);
+    const otherDir = path.join(home, "other");
+    await execa("git", ["clone", remoteDir, otherDir]);
+    await execa("git", ["config", "user.email", "test@test"], { cwd: otherDir });
+    await execa("git", ["config", "user.name", "Test"], { cwd: otherDir });
+    await writeFile(path.join(otherDir, "thread-read", "manifest.json"), '{"remote":true}\n');
+    await execa("git", ["add", "."], { cwd: otherDir });
+    await execa("git", ["commit", "-m", "remote update"], { cwd: otherDir });
+    await execa("git", ["push"], { cwd: otherDir });
+    const storeRoot = path.join(home, "store");
+
+    const result = await syncThreadDestination(
+      {
+        name: "personal-knowledge",
+        path: destinationDir,
+        default: true,
+        no_push: false,
+        read_only: true
+      },
+      storeRoot
+    );
+
+    expect(result).toEqual(["thread-read"]);
+    expect(await gitHeadForTest(destinationDir)).toBe(before);
+    expect(await readFile(path.join(storeRoot, "thread-read", "manifest.json"), "utf8")).toBe(
+      "{}\n"
+    );
+  });
 });
+
+async function gitHeadForTest(cwd: string): Promise<string> {
+  const { stdout } = await execa("git", ["rev-parse", "HEAD"], { cwd });
+  return stdout.trim();
+}
