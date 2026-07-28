@@ -12,15 +12,34 @@ export const threadSessionSchema = z.object({
   // are optional so manifests written before watermarks were introduced still parse.
   message_count: z.number().optional(),
   last_message_id: z.string().optional(),
-  last_activity_at: z.string().optional()
+  last_activity_at: z.string().optional(),
+  // Preserved when reading pre-CLI thread manifests. They remain historical
+  // provenance and are not treated as current watermarks.
+  project: z.string().optional(),
+  high_water: z.string().optional()
+});
+
+const legacyThreadRunSchema = z.object({
+  at: z.string().min(1),
+  mode: z.string().min(1),
+  sessions: z.array(z.string()).default([]),
+  model: z.string().optional(),
+  duration_ms: z.number().optional(),
+  num_turns: z.number().optional(),
+  usage: z.record(z.string(), z.number()).optional(),
+  cost_usd: z.number().optional()
 });
 
 export const threadManifestSchema = z.object({
   slug: z.string().min(1),
+  title: z.string().min(1).optional(),
   charter: z.string().min(1),
   destination: z.string().min(1),
   created_at: z.string().min(1),
   sessions: z.array(threadSessionSchema).default([]),
+  read_subagents: z.boolean().optional(),
+  excluded: z.array(z.string()).optional(),
+  runs: z.array(legacyThreadRunSchema).optional(),
   synthesis: z
     .object({
       discover: z.string().optional(),

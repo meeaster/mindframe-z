@@ -52,6 +52,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/references/
 ~/.mindframe-z/homes/<alias>/
 ~/.mindframe-z/overrides.json
+~/.mindframe-z/work/v1/
 ~/.mindframe-z/threads/
 ~/.mindframe-z/cache/skills/
 ~/.mindframe-z/skill-candidates/
@@ -153,6 +154,29 @@ Scaffolded YAML files use first-line YAML language server modelines pointing at 
 ## Threads And Sandbox
 
 Threads are machine-local orchestration state under `~/.mindframe-z/threads/` with per-destination git working copies. They resolve profile and machine config at runtime but are separate from rendering.
+
+Work units keep durable content under the machine-configured `work.units_root`, defaulting to
+`~/.mindframe-z/work/v1/units/`. Machine-local bindings and delivery state remain under
+`~/.mindframe-z/work/v1/`. Each unit records Personal project or global scope and keeps
+agent-authored orientation, context routing, and checkpoints in Markdown. Validation parses and
+hashes those files into a structured manifest used by adapters; a changed orientation hash advances
+its revision and makes attached delivery state stale. Validated checkpoint hashes reject changes or
+removal while new files remain appendable. A derived checkpoint index supports structured reads and
+is the manifest's filename-to-hash map; reads parse only matching Markdown. Checkpoint identity is
+explicit frontmatter and is used as the filename by convention. Legacy JSONL records migrate to immutable Markdown
+and are removed only after successful validation. A source-qualified session can be
+bound to at most one unit. Mutable manifests and bindings use atomic replacement; context-delivery
+historical receipts remain append-only durable telemetry.
+
+`mfz work create` scaffolds stable authored paths. `instructions`, `status`, and `validate` support
+direct file authoring, while the CLI retains bindings, phases, revision calculation, validation, and
+structured adapter reads.
+OpenCode server and TUI adapters remain home-owned plugin content: they call this CLI, fail open when
+runtime state is unavailable, and share no private in-process state. The server contributes a bounded
+reminder on each request, delivers orientation at lifecycle boundaries, and writes persisted
+compaction summaries as exclusive checkpoint files before validation. The TUI shows compact status
+and exact receipt details on demand. Optional MFZ
+thread links remain passive historical pointers and are never refreshed by work-unit operations.
 
 Sandbox code remains engine-owned. Home-specific sandbox overlays belong in homes; engine sandbox files provide the shared image, broker, and runtime scaffolding.
 

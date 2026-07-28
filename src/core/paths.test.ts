@@ -1,4 +1,5 @@
 import path from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   agentList,
@@ -23,13 +24,19 @@ import {
   threadRunPath,
   threadRunsRoot,
   threadStoreRoot,
-  threadSweepRoot
+  threadSweepRoot,
+  workBindingsPath,
+  workStoreRoot,
+  workUnitPath
 } from "./paths.js";
+import { makeTempDir } from "../../tests/integration/support.js";
 
 function paths(home: string): RuntimePaths {
   return {
     root: home,
     home,
+    workRoot: path.join(home, ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
@@ -95,6 +102,10 @@ describe("createRuntimePaths", () => {
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.root).toBe("/tmp/repo");
     expect(runtime.home).toBe("/tmp/home");
+    expect(runtime.workRoot).toBe(path.join("/tmp/home", ".mindframe-z", "work", "v1"));
+    expect(runtime.workUnitsRoot).toBe(
+      path.join("/tmp/home", ".mindframe-z", "work", "v1", "units")
+    );
     expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", ".config", "opencode"));
     expect(runtime.claudeDir).toBe(path.join("/tmp/home", ".claude"));
@@ -146,6 +157,21 @@ describe("createRuntimePaths", () => {
     expect(runtime.root).toBe("/env/repo");
     expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
   });
+
+  it("reads a durable work-unit root from machine config", async () => {
+    const home = await makeTempDir();
+    await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      "work:\n  units_root: ~/knowledge/work-units\n",
+      "utf8"
+    );
+
+    const runtime = createRuntimePaths({ root: "/tmp/repo", home });
+
+    expect(runtime.workUnitsRoot).toBe(path.join(home, "knowledge", "work-units"));
+    expect(runtime.workRoot).toBe(path.join(home, ".mindframe-z", "work", "v1"));
+  });
 });
 
 describe(".mindframe-z store path contract", () => {
@@ -175,6 +201,12 @@ describe(".mindframe-z store path contract", () => {
   it("pins the thread store root and per-slug path", () => {
     expect(threadStoreRoot(runtime)).toBe(path.join(mfz, "threads"));
     expect(threadPath(runtime, "my-slug")).toBe(path.join(mfz, "threads", "my-slug"));
+  });
+
+  it("pins the versioned work store paths", () => {
+    expect(workStoreRoot(runtime)).toBe(path.join(mfz, "work", "v1"));
+    expect(workUnitPath(runtime, "my-work")).toBe(path.join(mfz, "work", "v1", "units", "my-work"));
+    expect(workBindingsPath(runtime)).toBe(path.join(mfz, "work", "v1", "bindings.json"));
   });
 
   it("pins the archive cache root", () => {

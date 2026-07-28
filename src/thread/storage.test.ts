@@ -27,6 +27,8 @@ function paths(home: string, root = home): RuntimePaths {
   return {
     root,
     home,
+    workRoot: path.join(home, ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
@@ -123,6 +125,7 @@ function machine(destinations: MachineManifest["thread"]["destinations"]): Machi
     git: {},
     sandbox: {},
     thread: { destinations },
+    work: {},
     archives: [],
     opencode: {},
     claude: {}
@@ -195,6 +198,28 @@ describe("thread storage", () => {
     expect(destination?.path).toBe(path.join(root, "threads"));
   });
 
+  it("resolves a destination path inside an explicit external root", async () => {
+    const home = await makeTempDir();
+    const knowledge = path.join(home, "personal-knowledge");
+    const [destination] = resolveThreadDestinations(
+      paths(home),
+      profileWithDestinations(
+        [],
+        machine([
+          {
+            name: "personal",
+            root: knowledge,
+            path: "threads",
+            default: true,
+            no_push: false
+          }
+        ])
+      )
+    );
+
+    expect(destination?.path).toBe(path.join(knowledge, "threads"));
+  });
+
   it("round-trips manifest and runs files", async () => {
     const dir = path.join(await makeTempDir(), "thread-a");
     const manifest: ThreadManifest = {
@@ -213,6 +238,62 @@ describe("thread storage", () => {
     expect(await readThreadRuns(dir)).toEqual({ runs: [] });
     expect(JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"))).toMatchObject({
       slug: "thread-a"
+    });
+  });
+
+  it("refuses writes to a read-only destination", async () => {
+    const root = await makeTempDir();
+    const destination: ResolvedThreadDestination = {
+      name: "personal-knowledge",
+      path: root,
+      default: true,
+      no_push: false,
+      read_only: true
+    };
+
+    await expect(commitThreadChanges(destination, "thread-a", root, "test", false)).rejects.toThrow(
+      /read-only/
+    );
+  });
+
+  it("preserves legacy thread provenance when rewriting a migrated manifest", async () => {
+    const dir = path.join(await makeTempDir(), "legacy-thread");
+    const manifest: ThreadManifest = {
+      slug: "legacy-thread",
+      title: "Legacy thread",
+      charter: "Preserve historical context.",
+      destination: "personal-knowledge",
+      created_at: "2026-06-27T00:00:00.000Z",
+      read_subagents: true,
+      excluded: [],
+      sessions: [
+        {
+          id: "session-1",
+          source: "claude-code",
+          project: "/code/project",
+          high_water: "2026-06-27T00:00:00.000Z"
+        }
+      ],
+      synthesis: {},
+      runs: [
+        {
+          at: "2026-06-27T00:00:00.000Z",
+          mode: "capture-self",
+          sessions: ["session-1"],
+          model: "legacy-model",
+          cost_usd: 1.25
+        }
+      ]
+    };
+
+    await writeThreadManifest(dir, manifest);
+    await writeThreadManifest(dir, await readThreadManifest(dir));
+
+    expect(JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"))).toMatchObject({
+      title: "Legacy thread",
+      read_subagents: true,
+      sessions: [{ project: "/code/project", high_water: "2026-06-27T00:00:00.000Z" }],
+      runs: [{ mode: "capture-self", cost_usd: 1.25 }]
     });
   });
 

@@ -11,8 +11,8 @@ USER sandbox
 WORKDIR /home/sandbox
 ENV PATH="/home/sandbox/.local/bin:/home/sandbox/.claude/local:/home/sandbox/.opencode/bin:${PATH}"
 
-RUN curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.195 \
-  && curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path --version 1.17.11
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.215 \
+  && curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path --version 1.18.3
 
 COPY --chown=sandbox:sandbox src/thread/opencode.thread.json /home/sandbox/.config/opencode/opencode.json
 COPY --chown=sandbox:sandbox .generated/thread-tools/claude-settings.json /home/sandbox/.claude/settings.json

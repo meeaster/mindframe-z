@@ -3,6 +3,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import { threadDestinationRoot, threadPath, type RuntimePaths } from "../core/paths.js";
+import { expandHome } from "../core/path-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
   threadHarnessSchema,
@@ -43,6 +44,30 @@ export interface ResolvedSynthesisDefaults {
 
 export type ResolvedThreadDestination = ThreadDestination & { path: string };
 
+export function assertThreadDestinationWritable(destination: ResolvedThreadDestination): void {
+  if (destination.read_only) {
+    throw new Error(`Thread destination is read-only: ${destination.name}`);
+  }
+}
+
+function rootedDestinationPath(paths: RuntimePaths, destination: ThreadDestination): string {
+  if (!destination.root) {
+    return destination.path
+      ? path.join(paths.root, destination.path)
+      : threadDestinationRoot(paths, destination.name);
+  }
+
+  const root = expandHome(destination.root, paths.home);
+  if (!path.isAbsolute(root)) throw new Error(`Thread destination root must be absolute: ${root}`);
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, destination.path!);
+  const relative = path.relative(resolvedRoot, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Thread destination escapes configured root: ${destination.name}`);
+  }
+  return resolved;
+}
+
 export function resolveThreadDestinations(
   paths: RuntimePaths,
   profile: ResolvedProfile
@@ -62,9 +87,7 @@ export function resolveThreadDestinations(
   return destinations.map((destination) => ({
     ...destination,
     default: destination.name === defaultName,
-    path: destination.path
-      ? path.join(paths.root, destination.path)
-      : threadDestinationRoot(paths, destination.name)
+    path: rootedDestinationPath(paths, destination)
   }));
 }
 
@@ -226,6 +249,7 @@ export async function commitThreadChanges(
   message: string,
   push: boolean
 ): Promise<void> {
+  assertThreadDestinationWritable(destination);
   const destDir = path.join(destination.path, slug);
   await cp(threadDir, destDir, { recursive: true, force: true });
   await execa("git", ["add", "."], { cwd: destination.path });
@@ -239,6 +263,7 @@ export async function deleteThreadFromDestination(
   slug: string,
   push: boolean
 ): Promise<void> {
+  assertThreadDestinationWritable(destination);
   const destDir = path.join(destination.path, slug);
   const existed = await pathExists(destDir);
   if (!existed) return;

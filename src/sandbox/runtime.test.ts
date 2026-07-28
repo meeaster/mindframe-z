@@ -10,6 +10,8 @@ function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
   return {
     root,
     home,
+    workRoot: path.join(home, ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
@@ -38,6 +40,7 @@ function profile(
     git: {},
     sandbox: { credentials },
     thread: { destinations: [] },
+    work: {},
     archives: [],
     opencode: {},
     claude: {}

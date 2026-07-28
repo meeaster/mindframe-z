@@ -99,12 +99,19 @@
               "remote": {
                 "type": "string"
               },
+              "root": {
+                "type": "string",
+                "minLength": 1
+              },
               "path": {
                 "type": "string",
                 "minLength": 1
               },
               "no_push": {
                 "default": false,
+                "type": "boolean"
+              },
+              "read_only": {
                 "type": "boolean"
               },
               "default": {
@@ -116,6 +123,16 @@
               "name"
             ]
           }
+        }
+      }
+    },
+    "work": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "units_root": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

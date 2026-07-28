@@ -53,7 +53,7 @@ executor:
 
 Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`discoveryUrl\` and \`registrationScopes\`; those scopes are used only while registering the public client. Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly. Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
 
-Topic guides: \`mfz guide skills\` — add or change skills.
+Topic guides: \`mfz guide skills\` — add or change skills; \`mfz guide references\` — add or change reference repositories.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
@@ -111,7 +111,41 @@ Variants:
 Verify with \`mfz skills list\` and \`mfz doctor\`.
 `;
 
-const guideTopics: Record<string, string> = { skills: skillsGuideMarkdown };
+const referencesGuideMarkdown = `# References Guide
+
+A reference is a read-only local clone that gives agents source-grounded context when a repository becomes relevant. The catalog declares available repositories, a profile enables them, and \`mfz apply\` renders an agent-visible index with each description and local path.
+
+Add a reference:
+
+1. Declare it in \`catalog/references.yml\`:
+
+   \`\`\`yaml
+   references:
+     - name: example
+       url: https://github.com/example/example.git
+       description: TypeScript library for example workflows. Inspect it when working on example configuration, adapters, or runtime behavior. Main entrypoint: src/index.ts.
+   \`\`\`
+
+2. Enable it in \`profiles/<profile>/profile.yml\`:
+
+   \`\`\`yaml
+   references:
+     - example
+   \`\`\`
+
+3. Run \`mfz refs sync example\` to clone or update it, then \`mfz apply --target all --agent all\` to regenerate the reference index and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate only the index.
+
+Write descriptions as routing metadata, not miniature repository summaries. Lead with the stack or repository type and its purpose, name the concepts or situations that should cause an agent to inspect it, and include at most one or two durable entrypoints, packages, or config models. Keep descriptions concise; avoid promotional language, exhaustive feature lists, volatile counts, and details agents can discover after opening the repository.
+
+References inherited from an upstream home use qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
+
+Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify the result with \`mfz refs list\` and \`mfz doctor\`.
+`;
+
+const guideTopics: Record<string, string> = {
+  skills: skillsGuideMarkdown,
+  references: referencesGuideMarkdown
+};
 
 export async function guide(topic?: string): Promise<void> {
   if (topic !== undefined) {

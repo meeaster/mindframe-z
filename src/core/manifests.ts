@@ -352,24 +352,42 @@ export const threadIdentifierSchema = z
     "must be lowercase alphanumeric with . _ - and no path separators"
   );
 
-export const threadDestinationSchema = z.object({
-  name: threadIdentifierSchema,
-  remote: z.string().optional(),
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (value) =>
-        !path.isAbsolute(value) &&
-        !value
-          .split(/[\\/]+/)
-          .some((segment) => segment === "" || segment === "." || segment === ".."),
-      "must be a relative path without empty, . or .. segments"
-    )
-    .optional(),
-  no_push: z.boolean().default(false),
-  default: z.boolean().default(false)
-});
+export const threadDestinationSchema = z
+  .object({
+    name: threadIdentifierSchema,
+    remote: z.string().optional(),
+    root: z
+      .string()
+      .min(1)
+      .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
+        message: "must be absolute or start with ~/"
+      })
+      .optional(),
+    path: z
+      .string()
+      .min(1)
+      .refine(
+        (value) =>
+          !path.isAbsolute(value) &&
+          !value
+            .split(/[\\/]+/)
+            .some((segment) => segment === "" || segment === "." || segment === ".."),
+        "must be a relative path without empty, . or .. segments"
+      )
+      .optional(),
+    no_push: z.boolean().default(false),
+    read_only: z.boolean().optional(),
+    default: z.boolean().default(false)
+  })
+  .superRefine((destination, context) => {
+    if (destination.root && !destination.path) {
+      context.addIssue({
+        code: "custom",
+        path: ["path"],
+        message: "is required when root is configured"
+      });
+    }
+  });
 
 // A session archive: an S3 destination for raw, full-fidelity session backups,
 // sibling to thread `destinations` (which back up the *synthesized* store). Exactly
@@ -532,6 +550,17 @@ export const machineSchema = z.object({
     })
     .default({}),
   thread: machineThreadSchema,
+  work: z
+    .object({
+      units_root: z
+        .string()
+        .min(1)
+        .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
+          message: "must be absolute or start with ~/"
+        })
+        .optional()
+    })
+    .default({}),
   archives: z.array(archiveSchema).default([]),
   opencode: z.record(z.string(), z.unknown()).default({}),
   claude: z.record(z.string(), z.unknown()).default({})

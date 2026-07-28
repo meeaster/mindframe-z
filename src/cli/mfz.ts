@@ -76,6 +76,24 @@ import {
   formatContextReport
 } from "../context/report.js";
 import type { ContextHarness } from "../context/model.js";
+import {
+  runWorkAttach,
+  runWorkCheckpointInstructions,
+  runWorkCheckpoints,
+  runWorkContext,
+  runWorkCreate,
+  runWorkDetach,
+  runWorkList,
+  runWorkInstructions,
+  runWorkPhase,
+  runWorkReceipt,
+  runWorkReceipts,
+  runWorkReload,
+  runWorkShow,
+  runWorkStatus,
+  runWorkSwitch,
+  runWorkValidate
+} from "../work/cli.js";
 
 async function doctor(options: {
   root?: string | undefined;
@@ -460,6 +478,140 @@ sessions
 const thread = program
   .command("thread")
   .description("Create, ingest, read, and inspect thread logs");
+
+const work = program.command("work").description("Manage durable work-unit context");
+
+work
+  .command("create")
+  .description("Scaffold a filesystem-authored work unit")
+  .argument("<slug>", "stable work-unit slug")
+  .option("--title <title>", "human-readable title; defaults from the slug")
+  .option("--phase <phase>", "explore, design, prototype, implement, or validate")
+  .option("--scope <scope>", "project or global", "global")
+  .option("--project <id>", "project ID; required for project scope")
+  .option("--thread <slug>", "optional passive MFZ thread pointer")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkCreate(slug, { ...program.opts(), ...options }));
+
+const workInstructions = work
+  .command("instructions")
+  .description("Show filesystem authoring instructions for a work unit");
+
+workInstructions
+  .command("update")
+  .description("Show files and validation steps for updating authored context")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkInstructions(slug, { ...program.opts(), ...options }));
+
+workInstructions
+  .command("checkpoint")
+  .description("Show files and validation steps for authoring a checkpoint")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) =>
+    runWorkCheckpointInstructions(slug, { ...program.opts(), ...options })
+  );
+
+work
+  .command("status")
+  .description("Inspect authored-file validity and hash state")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkStatus(slug, { ...program.opts(), ...options }));
+
+work
+  .command("validate")
+  .description("Validate authored files and synchronize deterministic runtime state")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkValidate(slug, { ...program.opts(), ...options }));
+
+work
+  .command("list")
+  .description("List work units")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runWorkList({ ...program.opts(), ...options }));
+
+work
+  .command("show")
+  .description("Show a work unit and its local history counts")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkShow(slug, { ...program.opts(), ...options }));
+
+work
+  .command("context")
+  .description("Resolve effective work context for a source-qualified session")
+  .requiredOption("--session <source:id>", "source-qualified session")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runWorkContext(options.session, { ...program.opts(), ...options }));
+
+work
+  .command("checkpoints")
+  .description("Inspect append-only checkpoints")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkCheckpoints(slug, { ...program.opts(), ...options }));
+
+work
+  .command("receipts")
+  .description("Inspect append-only context delivery receipts")
+  .argument("<slug>", "work-unit slug")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkReceipts(slug, { ...program.opts(), ...options }));
+
+work
+  .command("attach")
+  .description("Explicitly attach an unbound session to a work unit")
+  .argument("<slug>", "work-unit slug")
+  .requiredOption("--session <source:id>", "source-qualified session")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkAttach(slug, { ...program.opts(), ...options }));
+
+work
+  .command("switch")
+  .description("Explicitly replace a session binding and checkpoint the prior unit")
+  .argument("<slug>", "new work-unit slug")
+  .requiredOption("--session <source:id>", "source-qualified session")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkSwitch(slug, { ...program.opts(), ...options }));
+
+work
+  .command("detach")
+  .description("Explicitly detach a session from its work unit")
+  .requiredOption("--session <source:id>", "source-qualified session")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runWorkDetach({ ...program.opts(), ...options }));
+
+work
+  .command("phase")
+  .description("Record a descriptive phase transition")
+  .argument("<slug>", "work-unit slug")
+  .requiredOption("--phase <phase>", "explore, design, prototype, implement, or validate")
+  .option("--json", "emit structured JSON")
+  .action(async (slug, options) => runWorkPhase(slug, { ...program.opts(), ...options }));
+
+work
+  .command("reload")
+  .description("Mark current orientation pending for explicit redelivery")
+  .requiredOption("--session <source:id>", "source-qualified session")
+  .option("--boundary <boundary>", "delivery boundary reason", "reload")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runWorkReload({ ...program.opts(), ...options }));
+
+work
+  .command("receipt")
+  .description("Append an exact context-delivery receipt and update delivery state")
+  .requiredOption("--session <source:id>", "source-qualified attached session")
+  .requiredOption("--boundary <boundary>", "request or lifecycle boundary")
+  .requiredOption("--orientation-revision <revision>", "orientation revision delivered")
+  .requiredOption("--reminder <text>", "exact persistent reminder contributed")
+  .option("--orientation <text>", "exact orientation text contributed, when any")
+  .requiredOption("--outcome <outcome>", "delivered or failed")
+  .option("--error <text>", "delivery error when outcome is failed")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runWorkReceipt({ ...program.opts(), ...options }));
 
 thread
   .command("destinations")

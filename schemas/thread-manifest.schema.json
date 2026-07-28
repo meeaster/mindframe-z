@@ -6,6 +6,10 @@
       "type": "string",
       "minLength": 1
     },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
     "charter": {
       "type": "string",
       "minLength": 1
@@ -49,11 +53,74 @@
           },
           "last_activity_at": {
             "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "high_water": {
+            "type": "string"
           }
         },
         "required": [
           "id",
           "source"
+        ]
+      }
+    },
+    "read_subagents": {
+      "type": "boolean"
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sessions": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "num_turns": {
+            "type": "number"
+          },
+          "usage": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "cost_usd": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at",
+          "mode"
         ]
       }
     },

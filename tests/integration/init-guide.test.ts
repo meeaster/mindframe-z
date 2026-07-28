@@ -22,6 +22,7 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("# mindframe-z Home Guide");
     expect(result.stdout).toContain("catalog/references.yml");
     expect(result.stdout).toContain("mfz guide skills");
+    expect(result.stdout).toContain("mfz guide references");
   });
 
   it("prints the skills topic guide", async () => {
@@ -31,6 +32,17 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("catalog/skills.yml");
     expect(result.stdout).toContain("mfz skills check");
     expect(result.stdout).toContain("mfz skills stage");
+  });
+
+  it("prints the references topic guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "references"]);
+    expect(result.stdout).toContain("# References Guide");
+    expect(result.stdout).toContain("catalog/references.yml");
+    expect(result.stdout).toContain("profiles/<profile>/profile.yml");
+    expect(result.stdout).toContain("mfz refs sync");
+    expect(result.stdout).toContain("mfz refs index");
+    expect(result.stdout).toContain("routing metadata");
   });
 
   it("scaffolds a valid home and records home_path", async () => {

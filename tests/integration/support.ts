@@ -15,6 +15,8 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
   return {
     root,
     home,
+    workRoot: path.join(home, ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),

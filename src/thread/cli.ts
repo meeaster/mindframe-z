@@ -23,6 +23,7 @@ import {
   waitForLapdog
 } from "./lapdog.js";
 import {
+  assertThreadDestinationWritable,
   defaultThreadDestination,
   deleteThreadFromDestination,
   findThread,
@@ -97,6 +98,7 @@ export async function runThreadCreate(
       ? findThreadDestination(destinations, options.dest)
       : defaultThreadDestination(destinations);
     if (!destination) throw new Error("No thread destinations configured");
+    assertThreadDestinationWritable(destination);
     await prepareThreadDestination(paths, destination);
     const dir = threadPath(paths, slug);
     if (await pathExists(path.join(dir, "manifest.json")))
@@ -376,6 +378,7 @@ export async function runThreadDelete(
     assertThreadSlug(slug);
     const thread = await findThread(paths, profile, slug);
     const manifest = await readThreadManifest(thread.dir);
+    assertThreadDestinationWritable(thread.destination);
 
     await rm(thread.dir, { recursive: true, force: true });
     await deleteThreadFromDestination(thread.destination, manifest.slug, !options.noPush);

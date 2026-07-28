@@ -18,6 +18,7 @@ pnpm test:doctor       # doctor/status manifest integration seams
 pnpm test:dotfiles     # dotfile/zsh/git identity integration seams
 pnpm test:mise         # mise integration seams
 pnpm test:refs         # reference integration seams
+pnpm test -- src/work tests/integration/work.test.ts # work runtime and CLI
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
 pnpm check             # lint -> fmt:check -> build -> fast test
@@ -50,6 +51,7 @@ Key entrypoints:
 - `src/core/manifests.ts` defines Zod schemas; run `pnpm schemas` after changing manifest shapes and commit `schemas/*.schema.json`.
 - `src/core/profile.ts` resolves profile inheritance and merge semantics.
 - `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
+- `src/work/` owns configurable durable work units plus machine-local bindings, checkpoints, receipts, and CLI behavior.
 - `src/sync/` promotes unmanaged edits from rendered configs back into profile YAML/TOML.
 
 ## File Path Discovery

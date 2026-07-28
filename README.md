@@ -45,6 +45,53 @@ Common commands:
 - `mfz sync` promotes unmanaged rendered config edits back into home profiles.
 - `mfz doctor` validates manifests, symlinks, stale project toggles, legacy references, and upstream clone state.
 - `mfz schemas` regenerates committed JSON Schemas from Zod schemas.
+- `mfz work` manages durable work units, machine-local session bindings, orientation, checkpoints, and context receipts.
+
+## Work Context
+
+Work units preserve operational continuity across OpenCode sessions and compaction without replacing
+repository documentation, Git, specifications, threads, or transcripts as authorities. Durable unit
+records use `work.units_root` when configured and otherwise default to
+`~/.mindframe-z/work/v1/units/`. Runtime bindings and delivery state remain under
+`~/.mindframe-z/work/v1/`; linked artifacts remain pointers and are loaded only when needed.
+
+Authored context is filesystem-first. Creation scaffolds stable paths, agents edit Markdown directly,
+and validation synchronizes deterministic runtime state:
+
+```sh
+mfz work create context-continuity --title "Context continuity"
+mfz work instructions update context-continuity
+# Edit the returned orientation.md and context-map.md files.
+mfz work instructions checkpoint context-continuity
+# Create a new checkpoint Markdown file with the required frontmatter.
+mfz work validate context-continuity
+mfz work status context-continuity
+mfz work attach context-continuity --session opencode:ses_123
+mfz work phase context-continuity --phase implement
+mfz work detach --session opencode:ses_123
+```
+
+The orientation hash advances its revision only after validated file changes. Attached sessions then
+become stale until the adapter delivers that revision. Validated checkpoint hashes make prior
+checkpoint files immutable while allowing new files to be appended. Each checkpoint carries a stable
+frontmatter `id` alongside `session`, `boundary`, and `created_at`; using the ID as the filename keeps
+files easy to identify. Structured reads include only files whose hashes are recorded in the manifest;
+legacy checkpoint JSONL is removed after successful migration and validation. Bindings, phases, receipts, and
+safe lifecycle operations remain CLI-owned; compaction writes a checkpoint file exclusively and then
+uses the same validation path.
+
+Adapters use explicit structured output:
+
+```sh
+mfz work context --session opencode:ses_123 --json
+mfz work checkpoints context-continuity --json
+mfz work receipts context-continuity --json
+```
+
+The optional OpenCode server and TUI adapters are enabled from a home profile as separate plugin
+entries. They depend on experimental OpenCode context and compaction hooks, so failures are recorded
+when possible and never block an ordinary request. Linked MFZ threads are passive historical context;
+work operations do not create, ingest, refresh, or inject them.
 
 ## Machine Config
 

@@ -15,6 +15,8 @@ async function tmpPaths(): Promise<RuntimePaths> {
   return {
     root,
     home: path.join(root, "home"),
+    workRoot: path.join(root, "home", ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(root, "home", ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(root, "home", ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(root, "opencode"),
     claudeDir: path.join(root, "claude"),

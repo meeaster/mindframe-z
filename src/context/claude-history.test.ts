@@ -9,6 +9,8 @@ function paths(home: string): RuntimePaths {
   return {
     root: home,
     home,
+    workRoot: path.join(home, ".mindframe-z", "work", "v1"),
+    workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, "configs"),
     opencodeConfigDir: path.join(home, "opencode"),
     claudeDir: path.join(home, ".claude"),

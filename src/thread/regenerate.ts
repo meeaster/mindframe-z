@@ -8,6 +8,7 @@ import { dispatch } from "./dispatch.js";
 import { DockerAgentRunner, type AgentRunner } from "./runner.js";
 import {
   appendThreadRun,
+  assertThreadDestinationWritable,
   commitThreadChanges,
   findThread,
   readSessionFiles,
@@ -121,6 +122,7 @@ export interface RegenerateResult {
 export async function regenerateThread(req: RegenerateRequest): Promise<RegenerateResult> {
   const { paths, profile } = req;
   const thread = await findThread(paths, profile, req.threadSlug);
+  assertThreadDestinationWritable(thread.destination);
   const manifest = await readThreadManifest(thread.dir);
   const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
     synthesize: req.synthesize,

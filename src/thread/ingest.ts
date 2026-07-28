@@ -12,6 +12,7 @@ import { dispatch } from "./dispatch.js";
 import { readPreviousDigest, regenerateViews, repoLocators } from "./regenerate.js";
 import {
   appendThreadRun,
+  assertThreadDestinationWritable,
   commitThreadChanges,
   findThread,
   readSessionFile,
@@ -68,6 +69,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   const { paths, profile, sessionIds } = req;
 
   const thread = await findThread(paths, profile, req.threadSlug);
+  assertThreadDestinationWritable(thread.destination);
   const manifest = await readThreadManifest(thread.dir);
 
   const detected = await resolveRefreshSet(

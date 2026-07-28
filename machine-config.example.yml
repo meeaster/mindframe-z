@@ -19,6 +19,15 @@ references_dir: ~/.mindframe-z/references
 #       remote: git@github.com:you/private-work-threads.git
 #       no_push: false
 #       default: true
+#     - name: personal
+#       root: ~/workspace/knowledge/personal-knowledge
+#       path: threads
+#       read_only: true # fail closed until an isolated writer checkout is configured
+
+# Durable work-unit content can live in a versioned Personal knowledge repository.
+# Runtime bindings and delivery state remain under ~/.mindframe-z/work/v1.
+# work:
+#   units_root: ~/workspace/knowledge/personal-knowledge/work-units
 
 # extra_folders:
 #   - path: ~/code/work/my-work-repo

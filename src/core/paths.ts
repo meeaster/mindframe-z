@@ -17,6 +17,8 @@ export type ApplyAgent = AgentName | "all";
 export interface RuntimePaths {
   root: string;
   home: string;
+  workRoot: string;
+  workUnitsRoot: string;
   configsDir: string;
   opencodeConfigDir: string;
   claudeDir: string;
@@ -28,6 +30,7 @@ export interface RuntimePaths {
 export interface PathOptions {
   root?: string | undefined;
   home?: string | undefined;
+  workUnitsRoot?: string | undefined;
   opencodeConfigDir?: string | undefined;
   claudeDir?: string | undefined;
   codexDir?: string | undefined;
@@ -54,13 +57,17 @@ export function packageRootFromImport(importMetaUrl: string): string {
   return path.resolve(start, "../..");
 }
 
-function machineHomePath(home: string): string | undefined {
+function machineConfig(home: string) {
   try {
     const parsed = YAML.parse(readFileSync(path.join(mindframeZDir(home), "config.yml"), "utf8"));
-    return machineSchema.parse(parsed).home_path;
+    return machineSchema.parse(parsed);
   } catch {
     return undefined;
   }
+}
+
+function machineHomePath(home: string): string | undefined {
+  return machineConfig(home)?.home_path;
 }
 
 export function resolveRoot(input?: string, home = process.env.HOME ?? ""): string {
@@ -74,9 +81,15 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
     expandHome(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd())
   );
   const root = resolveRoot(options.root, home);
+  const workRoot = path.join(mindframeZDir(home), "work", "v1");
+  const configuredWorkUnitsRoot = options.workUnitsRoot ?? machineConfig(home)?.work.units_root;
   return {
     root,
     home,
+    workRoot,
+    workUnitsRoot: path.resolve(
+      expandHome(configuredWorkUnitsRoot ?? path.join(workRoot, "units"), home)
+    ),
     configsDir: path.join(mindframeZDir(home), "configs"),
     opencodeConfigDir: path.resolve(
       expandHome(
@@ -172,6 +185,18 @@ export function extraFoldersIndexPath(paths: RuntimePaths): string {
 
 export function threadStoreRoot(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "threads");
+}
+
+export function workStoreRoot(paths: RuntimePaths): string {
+  return paths.workRoot;
+}
+
+export function workUnitPath(paths: RuntimePaths, slug: string): string {
+  return path.join(paths.workUnitsRoot, slug);
+}
+
+export function workBindingsPath(paths: RuntimePaths): string {
+  return path.join(workStoreRoot(paths), "bindings.json");
 }
 
 // Read-only, write-once cache of sessions hydrated from an S3 archive because they
