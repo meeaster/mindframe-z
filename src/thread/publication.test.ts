@@ -92,7 +92,7 @@ async function publicationFixture(): Promise<PublicationFixture> {
       root: canonicalDir,
       path: path.join(canonicalDir, "threads"),
       default: true,
-      publication: { mode: "pull-request", base: "main" }
+      publication: { mode: "pull-request", base: "main", auto_merge: false }
     },
     gh,
     headBefore: headBefore.trim(),
@@ -156,6 +156,38 @@ describe("thread publication", () => {
       "[`thread-pr`](thread-pr/digest.md)"
     );
     expect(await readFile(path.join(reviewDir, "unrelated.txt"), "utf8")).toBe("untouched\n");
+  });
+
+  it("requests auto-merge after opening an opted-in pull request", async () => {
+    const fixture = await publicationFixture();
+    const calls = path.join(path.dirname(fixture.bareDir), "gh-calls");
+    fixture.destination.publication = {
+      mode: "pull-request",
+      base: "main",
+      auto_merge: true
+    };
+    await writeFile(
+      fixture.gh,
+      `#!/bin/sh
+printf '%s\n' "$*" >> ${JSON.stringify(calls)}
+if [ "$2" = "create" ]; then printf '%s\n' 'https://example.test/pull/1'; fi
+`
+    );
+    await chmod(fixture.gh, 0o755);
+
+    const result = await commitThreadChanges(
+      fixture.destination,
+      "thread-pr",
+      fixture.threadDir,
+      "chore(thread): refresh thread-pr",
+      true
+    );
+
+    expect(result).toMatchObject({ kind: "pull-request", url: "https://example.test/pull/1" });
+    const recorded = await readFile(calls, "utf8");
+    expect(recorded).toContain("pr create");
+    expect(recorded).toContain("pr merge https://example.test/pull/1 --auto --squash");
+    await expectCanonicalUnchanged(fixture);
   });
 
   it("retains a local recovery branch when push is disabled", async () => {

@@ -26,6 +26,7 @@ type PublicationTarget =
       repositoryRoot: string;
       destinationPath: string;
       base: string;
+      autoMerge: boolean;
     };
 
 export class ThreadPublicationError extends Error {
@@ -54,7 +55,8 @@ function publicationTarget(store: ResolvedThreadStore): PublicationTarget {
       name: store.name,
       repositoryRoot: store.root,
       destinationPath: store.path,
-      base: store.publication.base
+      base: store.publication.base,
+      autoMerge: store.publication.auto_merge
     };
   }
   return { kind: "direct", store };
@@ -191,6 +193,10 @@ async function createPullRequest(
   }
 }
 
+async function requestAutoMerge(cwd: string, url: string): Promise<void> {
+  await execa("gh", ["pr", "merge", url, "--auto", "--squash"], { cwd });
+}
+
 async function retainRecoveryBranch(
   repositoryRoot: string,
   branch: string,
@@ -251,6 +257,7 @@ async function publishPullRequest(
   let checkoutAdded = false;
   let commit: string | undefined;
   let pushed = false;
+  let pullRequestUrl: string | undefined;
   let result: ThreadPublication | undefined;
   let workflowError: unknown;
   const recoveryFailures: unknown[] = [];
@@ -276,8 +283,9 @@ async function publishPullRequest(
       } else {
         await execa("git", ["push", "origin", `HEAD:refs/heads/${branch}`], { cwd: checkout });
         pushed = true;
-        const url = await createPullRequest(checkout, target.base, branch, change);
-        result = { kind: "pull-request", branch, commit, url };
+        pullRequestUrl = await createPullRequest(checkout, target.base, branch, change);
+        if (target.autoMerge) await requestAutoMerge(checkout, pullRequestUrl);
+        result = { kind: "pull-request", branch, commit, url: pullRequestUrl };
       }
     }
   } catch (error) {
@@ -299,7 +307,7 @@ async function publishPullRequest(
       [workflowError, ...secondaryFailures],
       `Thread publication failed for ${change.slug}`
     );
-    if (commit) throw new ThreadPublicationError(branch, commit, pushed, cause);
+    if (commit) throw new ThreadPublicationError(branch, commit, pushed, cause, pullRequestUrl);
     throw cause;
   }
   if (secondaryFailures.length > 0) {

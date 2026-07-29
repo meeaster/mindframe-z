@@ -249,7 +249,7 @@ describe("thread storage", () => {
               name: "personal",
               root: "/tmp/personal",
               path: "threads",
-              publication: { mode: "pull-request", base: "main" }
+              publication: { mode: "pull-request", base: "main", auto_merge: false }
             }
           ]
         }

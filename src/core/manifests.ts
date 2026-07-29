@@ -397,7 +397,11 @@ const pullRequestThreadStoreSchema = z.object({
   root: threadStoreRootSchema,
   path: threadStorePathSchema,
   publication: z
-    .object({ mode: z.literal("pull-request"), base: threadPullRequestSchema.shape.base })
+    .object({
+      mode: z.literal("pull-request"),
+      base: threadPullRequestSchema.shape.base,
+      auto_merge: z.boolean().default(false)
+    })
     .strict(),
   default: z.boolean().default(false)
 });
