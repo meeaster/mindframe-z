@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import YAML from "yaml";
+import { parseFrontmatter } from "../core/fs-util.js";
 import { extraFoldersIndexContent, referenceIndexContent } from "../ref-store/references.js";
 import {
   executorBridgeName,
@@ -78,17 +78,7 @@ async function readSkillFile(
   for (const candidate of new Set(candidates)) {
     try {
       const content = await readFile(candidate, "utf8");
-      const end = content.startsWith("---") ? content.indexOf("\n---", 3) : -1;
-      const metadata =
-        end < 0
-          ? {}
-          : (() => {
-              const parsed = YAML.parse(content.slice(3, end));
-              return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-                ? (parsed as Record<string, unknown>)
-                : {};
-            })();
-      return { path: candidate, content, metadata };
+      return { path: candidate, content, metadata: parseFrontmatter(content) };
     } catch {
       // Try the next source-of-truth or installed location.
     }

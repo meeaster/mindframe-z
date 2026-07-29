@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import YAML from "yaml";
+import { parseFrontmatter } from "../core/fs-util.js";
 import { findProjectRoot } from "../core/override-store.js";
 import type { ContextContributor, ContextHarness, ConditionalPathSummary } from "./model.js";
 import { measuredContributor } from "./measurement.js";
@@ -29,16 +29,6 @@ async function trackedFiles(root: string): Promise<string[]> {
   } catch {
     return [];
   }
-}
-
-function frontmatter(content: string): Record<string, unknown> {
-  if (!content.startsWith("---")) return {};
-  const end = content.indexOf("\n---", 3);
-  if (end < 0) return {};
-  const parsed = YAML.parse(content.slice(3, end));
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
 }
 
 function isAncestorOrSame(ancestor: string, candidate: string): boolean {
@@ -169,7 +159,7 @@ export async function analyzeRepository(
       continue;
     }
 
-    const metadata = frontmatter(content);
+    const metadata = parseFrontmatter(content);
     const rulePaths =
       kind.category === "Claude rule" && Array.isArray(metadata.paths)
         ? metadata.paths.filter((entry): entry is string => typeof entry === "string")

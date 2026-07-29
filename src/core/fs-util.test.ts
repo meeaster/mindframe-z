@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPlainObject,
   jsonFileContent,
+  parseFrontmatter,
   parseTomlObject,
   pathExists,
   readJsoncObject,
@@ -59,6 +60,45 @@ describe("isPlainObject", () => {
     expect(isPlainObject("personal")).toBe(false);
     expect(isPlainObject(3)).toBe(false);
     expect(isPlainObject(undefined)).toBe(false);
+  });
+});
+
+describe("parseFrontmatter", () => {
+  it("reads the mapping between the opening and closing fences", () => {
+    expect(parseFrontmatter("---\nname: demo\ndescription: A demo\n---\n# Demo\n")).toEqual({
+      name: "demo",
+      description: "A demo"
+    });
+  });
+
+  it("keeps non-scalar fields so rule globs survive the read", () => {
+    expect(parseFrontmatter("---\npaths:\n  - src/**\n  - docs/*.md\n---\nbody\n")).toEqual({
+      paths: ["src/**", "docs/*.md"]
+    });
+  });
+
+  it("treats a document without frontmatter as carrying no metadata", () => {
+    expect(parseFrontmatter("# Demo\n\nNo frontmatter here.\n")).toEqual({});
+  });
+
+  it("ignores a fence that opens partway down the document", () => {
+    expect(parseFrontmatter("Note: read this\n\n---\nname: demo\n---\nbody\n")).toEqual({});
+  });
+
+  it("treats an unterminated block as carrying no metadata", () => {
+    expect(parseFrontmatter("---\nname: demo\n")).toEqual({});
+  });
+
+  it.each([
+    ["a sequence", "---\n- one\n- two\n---\nbody\n"],
+    ["a scalar", "---\ndemo\n---\nbody\n"],
+    ["empty", "---\n---\nbody\n"]
+  ])("treats frontmatter that is %s rather than a mapping as no metadata", (_label, content) => {
+    expect(parseFrontmatter(content)).toEqual({});
+  });
+
+  it("throws on malformed YAML so callers decide whether the file is readable", () => {
+    expect(() => parseFrontmatter("---\nname: [unclosed\n---\nbody\n")).toThrow();
   });
 });
 
