@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { expandHome, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -133,7 +134,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
     digest: req.digest
   });
   const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
-  const runId = `run-${Date.now()}`;
+  const runId = `run-${Date.now()}-${randomUUID()}`;
   const startedAt = new Date().toISOString();
   const status: ThreadRunStatus = {
     id: runId,

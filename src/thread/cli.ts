@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../core/fs-util.js";
@@ -50,6 +51,7 @@ import {
 } from "./observability.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
 import { listOutdatedThreads } from "./outdated.js";
+import { withThreadLock } from "./lock.js";
 
 interface ThreadOptions extends PathOptions {
   profile?: string | undefined;
@@ -180,7 +182,7 @@ export async function runThreadDiscover(
     const sessionSources = resolveSessionSources(profile.profile.thread.defaults, options.sources);
     const runner =
       options.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
-    const runId = `run-${Date.now()}`;
+    const runId = `run-${Date.now()}-${randomUUID()}`;
     const startedAt = new Date().toISOString();
     await writeRunStatus(paths, {
       id: runId,
@@ -225,16 +227,19 @@ export async function runThreadIngest(
   }
 ): Promise<void> {
   await withThreadLog(options, `thread ingest ${options.thread}`, async ({ paths, profile }) => {
-    const result = await ingestThread({
-      paths,
-      profile,
-      threadSlug: assertThreadSlug(options.thread),
-      sessionIds: ids,
-      noPush: Boolean(options.noPush),
-      gather: options.gather,
-      synthesize: options.synthesize,
-      runner: options.runner
-    });
+    const slug = assertThreadSlug(options.thread);
+    const result = await withThreadLock(paths, slug, `thread ingest ${slug}`, () =>
+      ingestThread({
+        paths,
+        profile,
+        threadSlug: slug,
+        sessionIds: ids,
+        noPush: Boolean(options.noPush),
+        gather: options.gather,
+        synthesize: options.synthesize,
+        runner: options.runner
+      })
+    );
     if (result.refreshed.length > 0)
       console.log(`refresh (changed):\t${result.refreshed.join("\t")}`);
     if (result.vanished.length > 0)
@@ -255,18 +260,21 @@ export async function runThreadRefresh(
   }
 ): Promise<void> {
   await withThreadLog(options, `thread refresh ${options.thread}`, async ({ paths, profile }) => {
-    const result = await ingestThread({
-      paths,
-      profile,
-      threadSlug: assertThreadSlug(options.thread),
-      sessionIds: [],
-      refresh: true,
-      all: Boolean(options.all),
-      noPush: Boolean(options.noPush),
-      gather: options.gather,
-      synthesize: options.synthesize,
-      runner: options.runner
-    });
+    const slug = assertThreadSlug(options.thread);
+    const result = await withThreadLock(paths, slug, `thread refresh ${slug}`, () =>
+      ingestThread({
+        paths,
+        profile,
+        threadSlug: slug,
+        sessionIds: [],
+        refresh: true,
+        all: Boolean(options.all),
+        noPush: Boolean(options.noPush),
+        gather: options.gather,
+        synthesize: options.synthesize,
+        runner: options.runner
+      })
+    );
     if (result.vanished.length > 0)
       console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
     if (result.sessionCount === 0) {
@@ -353,14 +361,17 @@ export async function runThreadRegenerate(
   }
 ): Promise<void> {
   await withThreadLog(options, `thread regenerate ${slug}`, async ({ paths, profile }) => {
-    const result = await regenerateThread({
-      paths,
-      profile,
-      threadSlug: assertThreadSlug(slug),
-      noPush: Boolean(options.noPush),
-      synthesize: options.synthesize,
-      runner: options.runner
-    });
+    const threadSlug = assertThreadSlug(slug);
+    const result = await withThreadLock(paths, threadSlug, `thread regenerate ${threadSlug}`, () =>
+      regenerateThread({
+        paths,
+        profile,
+        threadSlug,
+        noPush: Boolean(options.noPush),
+        synthesize: options.synthesize,
+        runner: options.runner
+      })
+    );
     printThreadPublication(result.publication);
     console.log(`regenerated\t${result.slug}\t$${result.totalCostUsd ?? "?"}`);
   });

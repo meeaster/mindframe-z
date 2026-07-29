@@ -231,6 +231,10 @@ export function threadRunsRoot(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "thread-runs", "runs");
 }
 
+export function threadLocksRoot(paths: RuntimePaths): string {
+  return path.join(mindframeZDir(paths.home), "thread-runs", "locks");
+}
+
 export function threadSweepRoot(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "thread-sweep");
 }

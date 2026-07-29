@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { Archive, ThreadHarness } from "../core/manifests.js";
@@ -124,7 +125,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   const priorBySession = new Map(manifest.sessions.map((s) => [`${s.source}:${s.id}`, s]));
   const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
   const mode = req.all ? "refresh --all" : req.refresh ? "refresh" : "ingest";
-  const runId = `run-${Date.now()}`;
+  const runId = `run-${Date.now()}-${randomUUID()}`;
   const startedAt = new Date().toISOString();
   const status: ThreadRunStatus = {
     id: runId,

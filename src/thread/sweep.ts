@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { listClaudeItems } from "../sessions/claude-source.js";
@@ -198,7 +199,7 @@ export async function runSweep(args: {
       return !existing || !isVerdictStanding(existing, watermark, thread.charterHash);
     });
     if (standingThreads.length === 0) continue;
-    const runId = `run-${Date.now()}-${report.triage_dispatches}`;
+    const runId = `run-${Date.now()}-${randomUUID()}`;
     await writeRunStatus(args.paths, {
       id: runId,
       mode: "triage",

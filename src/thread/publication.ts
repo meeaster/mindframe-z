@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +6,7 @@ import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import { writeThreadIndex } from "./index.js";
 import { hasRemote, type ResolvedThreadDestination } from "./storage.js";
+import { withAdvisoryLock } from "./lock.js";
 
 export type ThreadPublication =
   | { kind: "unchanged" }
@@ -320,6 +321,14 @@ async function publishThreadChange(
   return publishPullRequest(target, change, push);
 }
 
+function publicationLockPath(destination: ResolvedThreadDestination): string {
+  const repositoryRoot = path.resolve(
+    destination.pull_request && destination.root ? destination.root : destination.path
+  );
+  const key = createHash("sha256").update(repositoryRoot).digest("hex");
+  return path.join(tmpdir(), "mfz-thread-publication-locks", `${key}.lock`);
+}
+
 export async function commitThreadChanges(
   destination: ResolvedThreadDestination,
   slug: string,
@@ -327,10 +336,8 @@ export async function commitThreadChanges(
   message: string,
   push: boolean
 ): Promise<ThreadPublication> {
-  return publishThreadChange(
-    destination,
-    { kind: "write", slug, sourceDir: threadDir, message },
-    push
+  return withAdvisoryLock(publicationLockPath(destination), `publish thread ${slug}`, () =>
+    publishThreadChange(destination, { kind: "write", slug, sourceDir: threadDir, message }, push)
   );
 }
 
@@ -339,9 +346,11 @@ export async function deleteThreadFromDestination(
   slug: string,
   push: boolean
 ): Promise<ThreadPublication> {
-  return publishThreadChange(
-    destination,
-    { kind: "delete", slug, message: `chore(thread): delete ${slug}` },
-    push
+  return withAdvisoryLock(publicationLockPath(destination), `delete thread ${slug}`, () =>
+    publishThreadChange(
+      destination,
+      { kind: "delete", slug, message: `chore(thread): delete ${slug}` },
+      push
+    )
   );
 }
