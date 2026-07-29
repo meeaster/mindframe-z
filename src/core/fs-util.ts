@@ -2,6 +2,7 @@ import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
 
 /**
  * Report whether a path is reachable on disk. This is the canonical async
@@ -66,6 +67,23 @@ export async function readJsoncObject(filePath: string): Promise<Record<string, 
  * parse step. */
 export function parseTomlObject(content: string): Record<string, unknown> {
   const parsed = parseToml(content) as unknown;
+  return isPlainObject(parsed) ? parsed : {};
+}
+
+/**
+ * Parse the leading YAML frontmatter block of a Markdown document into a plain
+ * object, defaulting to an empty object when the document has no `---` opener,
+ * no closing `---`, or frontmatter that is not a mapping. This is the canonical
+ * lenient frontmatter reader behind the context scanners, so a SKILL.md and a
+ * Claude rule describe themselves the same way wherever they are read.
+ * Malformed YAML inside a well-delimited block still throws; callers that treat
+ * an unreadable file as absent catch that themselves.
+ */
+export function parseFrontmatter(content: string): Record<string, unknown> {
+  if (!content.startsWith("---")) return {};
+  const end = content.indexOf("\n---", 3);
+  if (end < 0) return {};
+  const parsed = parseYaml(content.slice(3, end)) as unknown;
   return isPlainObject(parsed) ? parsed : {};
 }
 
