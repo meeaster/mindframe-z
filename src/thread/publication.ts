@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
+import { writeThreadIndex } from "./index.js";
 import { hasRemote, type ResolvedThreadDestination } from "./storage.js";
 
 export type ThreadPublication =
@@ -99,7 +100,12 @@ async function materializeThreadChange(
   if (change.kind === "write") {
     await cp(change.sourceDir, target, { recursive: true, force: true });
   }
-  await execa("git", ["add", "-A", "--", relativeTarget], { cwd: destinationRoot });
+  const threadRoot = path.dirname(target);
+  await writeThreadIndex(threadRoot);
+  const relativeIndex = path.relative(destinationRoot, path.join(threadRoot, "index.md"));
+  await execa("git", ["add", "-A", "--", relativeTarget, relativeIndex], {
+    cwd: destinationRoot
+  });
   return true;
 }
 

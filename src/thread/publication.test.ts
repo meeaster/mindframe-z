@@ -32,7 +32,17 @@ async function publicationFixture(): Promise<PublicationFixture> {
   await execa("git", ["config", "user.email", "test@test"], { cwd: seedDir });
   await execa("git", ["config", "user.name", "Test"], { cwd: seedDir });
   await mkdir(path.join(seedDir, "threads", "thread-pr"), { recursive: true });
-  await writeFile(path.join(seedDir, "threads", "thread-pr", "manifest.json"), "old\n");
+  await writeFile(
+    path.join(seedDir, "threads", "thread-pr", "manifest.json"),
+    JSON.stringify({
+      slug: "thread-pr",
+      charter: "Old charter.",
+      destination: "personal-knowledge",
+      created_at: "2026-07-01T00:00:00.000Z",
+      sessions: [],
+      synthesis: {}
+    }) + "\n"
+  );
   await writeFile(path.join(seedDir, "unrelated.txt"), "untouched\n");
   await execa("git", ["add", "."], { cwd: seedDir });
   await execa("git", ["commit", "-m", "seed"], { cwd: seedDir });
@@ -55,7 +65,18 @@ async function publicationFixture(): Promise<PublicationFixture> {
 
   const threadDir = path.join(home, "thread-source");
   await mkdir(threadDir);
-  await writeFile(path.join(threadDir, "manifest.json"), "new\n");
+  await writeFile(
+    path.join(threadDir, "manifest.json"),
+    JSON.stringify({
+      slug: "thread-pr",
+      title: "Publication thread",
+      charter: "New charter.",
+      destination: "personal-knowledge",
+      created_at: "2026-07-01T00:00:00.000Z",
+      sessions: [],
+      synthesis: {}
+    }) + "\n"
+  );
   const { stdout: statusBefore } = await execa("git", ["status", "--porcelain"], {
     cwd: canonicalDir
   });
@@ -100,8 +121,13 @@ async function expectCanonicalUnchanged(fixture: PublicationFixture): Promise<vo
   expect(status).toBe(fixture.statusBefore);
   expect(worktrees.match(/^worktree /gm)).toHaveLength(1);
   expect(
-    await readFile(path.join(fixture.canonicalDir, "threads", "thread-pr", "manifest.json"), "utf8")
-  ).toBe("old\n");
+    JSON.parse(
+      await readFile(
+        path.join(fixture.canonicalDir, "threads", "thread-pr", "manifest.json"),
+        "utf8"
+      )
+    ).charter
+  ).toBe("Old charter.");
 }
 
 describe("thread publication", () => {
@@ -124,8 +150,13 @@ describe("thread publication", () => {
     const reviewDir = path.join(path.dirname(fixture.bareDir), "review");
     await execa("git", ["clone", "--branch", result.branch, fixture.bareDir, reviewDir]);
     expect(
-      await readFile(path.join(reviewDir, "threads", "thread-pr", "manifest.json"), "utf8")
-    ).toBe("new\n");
+      JSON.parse(
+        await readFile(path.join(reviewDir, "threads", "thread-pr", "manifest.json"), "utf8")
+      ).charter
+    ).toBe("New charter.");
+    expect(await readFile(path.join(reviewDir, "threads", "index.md"), "utf8")).toContain(
+      "[`thread-pr`](thread-pr/digest.md)"
+    );
     expect(await readFile(path.join(reviewDir, "unrelated.txt"), "utf8")).toBe("untouched\n");
   });
 

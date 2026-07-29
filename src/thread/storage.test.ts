@@ -545,10 +545,16 @@ describe("thread storage", () => {
     await writeThreadManifest(threadDir, manifest);
 
     await commitThreadChanges(destination, "thread-del", threadDir, "add thread-del", false);
+    expect(await readFile(path.join(destination.path, "index.md"), "utf8")).toContain(
+      "[`thread-del`](thread-del/digest.md)"
+    );
 
     await deleteThreadFromDestination(destination, "thread-del", false);
 
     await expect(access(path.join(destination.path, "thread-del"))).rejects.toThrow();
+    expect(await readFile(path.join(destination.path, "index.md"), "utf8")).toContain(
+      "_No threads are currently available._"
+    );
   });
 
   it("syncs a destination with a remote pulls changes back to the store", async () => {
