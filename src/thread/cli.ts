@@ -49,6 +49,7 @@ import {
   writeRunStatus
 } from "./observability.js";
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
+import { listOutdatedThreads } from "./outdated.js";
 
 interface ThreadOptions extends PathOptions {
   profile?: string | undefined;
@@ -132,6 +133,26 @@ export async function runThreadList(options: ThreadOptions & { json?: boolean })
       for (const thread of threads)
         console.log(`${thread.slug}\t${thread.destination}\t${thread.session_count} sessions`);
   });
+}
+
+export async function runThreadOutdated(
+  options: ThreadOptions & { json?: boolean | undefined }
+): Promise<void> {
+  const paths = createRuntimePaths(options);
+  const report = { threads: await listOutdatedThreads(paths) };
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  for (const thread of report.threads)
+    for (const session of thread.sessions) {
+      const change = session.change === "grew" ? "grew" : "tail changed";
+      const detail =
+        session.change === "grew"
+          ? `${session.behind_messages} message${session.behind_messages === 1 ? "" : "s"} behind`
+          : "not quantifiable";
+      console.log(`${thread.slug}\t${session.source}:${session.id}\t${change}\t${detail}`);
+    }
 }
 
 export async function runThreadShow(slug: string, options: ThreadOptions): Promise<void> {

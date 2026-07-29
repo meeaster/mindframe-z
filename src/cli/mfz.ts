@@ -56,6 +56,7 @@ import {
   runThreadObserveDown,
   runThreadObserveStatus,
   runThreadObserveUp,
+  runThreadOutdated,
   runThreadRegenerate,
   runThreadRuns,
   runThreadShow,
@@ -718,6 +719,12 @@ thread
       json: Boolean(options.json)
     })
   );
+
+thread
+  .command("outdated")
+  .description("List thread sessions changed since their last synthesis")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runThreadOutdated({ ...program.opts(), json: Boolean(options.json) }));
 
 thread
   .command("pending")
