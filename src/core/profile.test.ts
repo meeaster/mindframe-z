@@ -4,7 +4,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { profileSchema } from "./manifests.js";
-import { mergeProfiles, resolveProfile } from "./profile.js";
+import { deepMerge, mergeProfiles, resolveProfile } from "./profile.js";
 import { createRuntimePaths } from "./paths.js";
 
 async function writeHome(root: string, options: { extends?: { name: string; repo: string } } = {}) {
@@ -33,6 +33,52 @@ async function commitAll(root: string) {
   await execa("git", ["add", "."], { cwd: root });
   await execa("git", ["commit", "-m", "initial"], { cwd: root });
 }
+
+describe("deepMerge", () => {
+  it("merges nested containers instead of replacing them", () => {
+    expect(
+      deepMerge(
+        { permission: { edit: "ask", bash: { "git *": "allow" } } },
+        { permission: { bash: { "rm *": "deny" } } }
+      )
+    ).toEqual({ permission: { edit: "ask", bash: { "git *": "allow", "rm *": "deny" } } });
+  });
+
+  it("keeps base keys the child does not mention", () => {
+    expect(deepMerge({ model: "sonnet", theme: "dark" }, { model: "opus" })).toEqual({
+      model: "opus",
+      theme: "dark"
+    });
+  });
+
+  it("replaces arrays rather than merging them element-wise", () => {
+    expect(deepMerge({ tools: ["read", "write"] }, { tools: ["bash"] })).toEqual({
+      tools: ["bash"]
+    });
+  });
+
+  it("lets an array on either side replace a container instead of merging into it", () => {
+    expect(deepMerge({ hooks: { pre: "a" } }, { hooks: ["b"] })).toEqual({ hooks: ["b"] });
+    expect(deepMerge({ hooks: ["a"] }, { hooks: { pre: "b" } })).toEqual({ hooks: { pre: "b" } });
+  });
+
+  it("lets a child scalar or null override a base container", () => {
+    expect(deepMerge({ permission: { edit: "ask" } }, { permission: "allow" })).toEqual({
+      permission: "allow"
+    });
+    expect(deepMerge({ permission: { edit: "ask" } }, { permission: null })).toEqual({
+      permission: null
+    });
+  });
+
+  it("leaves the base document unmodified", () => {
+    const base = { permission: { edit: "ask" } };
+    const merged = deepMerge(base, { permission: { bash: "deny" } });
+
+    expect(base).toEqual({ permission: { edit: "ask" } });
+    expect(merged).toEqual({ permission: { edit: "ask", bash: "deny" } });
+  });
+});
 
 describe("mergeProfiles thread defaults", () => {
   // Regression for the default-before-inheritance trap: `session_sources` used to

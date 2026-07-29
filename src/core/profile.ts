@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isPlainObject } from "./fs-util.js";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
 import {
   eachUpstream,
@@ -337,21 +338,9 @@ export function deepMerge(
 ): Record<string, unknown> {
   const result = { ...base };
   for (const [key, value] of Object.entries(child)) {
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      typeof result[key] === "object" &&
-      result[key] !== null &&
-      !Array.isArray(result[key])
-    ) {
-      result[key] = deepMerge(
-        result[key] as Record<string, unknown>,
-        value as Record<string, unknown>
-      );
-    } else {
-      result[key] = value;
-    }
+    const existing = result[key];
+    result[key] =
+      isPlainObject(value) && isPlainObject(existing) ? deepMerge(existing, value) : value;
   }
   return result;
 }
