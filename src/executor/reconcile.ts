@@ -337,7 +337,10 @@ async function reconcileServer(
       changed = true;
       current = (await adapter.getIntegration(desired.slug)) ?? current;
     }
-    if (classification.authenticationChanged) {
+    const hasCredentialedConnection = Object.values(desired.connections).some(
+      (method) => method !== "none"
+    );
+    if (classification.authenticationChanged && !hasCredentialedConnection) {
       const methods = desired.config.authenticationTemplate ?? [{ slug: "none", kind: "none" }];
       await adapter.configureAuth(desired.slug, methods, "replace");
       await checkpoint(desired.slug);

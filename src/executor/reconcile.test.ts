@@ -327,6 +327,32 @@ describe("Executor reconciliation", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("does not replace a credentialed auth template while its named connection is missing", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-auth-missing-"));
+    const paths = createRuntimePaths({ root, home: root });
+    const { adapter, integrations, mutations } = fakeAdapter();
+    const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
+      { slug: "oauth", kind: "oauth2" }
+    ]);
+    integrations.set("example", {
+      slug: "example",
+      description: "Example",
+      kind: "mcp",
+      canRemove: true,
+      canRefresh: true,
+      config: {
+        transport: "remote",
+        endpoint: "https://example.test/mcp",
+        remoteTransport: "auto",
+        authenticationTemplate: [{ slug: "none", kind: "none" }]
+      }
+    });
+
+    await expect(reconcileExecutor(paths, profile, { adapter })).rejects.toThrow(/Executor app/);
+    expect(mutations).toEqual([]);
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("does not treat assisted OAuth metadata as an Executor auth-template change", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-assisted-oauth-"));
     const paths = createRuntimePaths({ root, home: root });
