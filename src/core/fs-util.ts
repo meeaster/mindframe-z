@@ -71,6 +71,21 @@ export function parseTomlObject(content: string): Record<string, unknown> {
 }
 
 /**
+ * Read a TOML object from disk, defaulting to an empty object when the file is
+ * missing, unreadable, or does not parse to a table. The TOML counterpart to
+ * {@link readJsonObject}; the codex renderer and sync path use it to merge
+ * managed config into a pre-existing local config.toml without failing on a
+ * missing or hand-broken file.
+ */
+export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
+  try {
+    return parseTomlObject(await readFile(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Parse the leading YAML frontmatter block of a Markdown document into a plain
  * object, defaulting to an empty object when the document has no `---` opener,
  * no closing `---`, or frontmatter that is not a mapping. This is the canonical
@@ -85,21 +100,6 @@ export function parseFrontmatter(content: string): Record<string, unknown> {
   if (end < 0) return {};
   const parsed = parseYaml(content.slice(3, end)) as unknown;
   return isPlainObject(parsed) ? parsed : {};
-}
-
-/**
- * Read a TOML object from disk, defaulting to an empty object when the file is
- * missing, unreadable, or does not parse to a table. The TOML counterpart to
- * {@link readJsonObject}; the codex renderer and sync path use it to merge
- * managed config into a pre-existing local config.toml without failing on a
- * missing or hand-broken file.
- */
-export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
-  try {
-    return parseTomlObject(await readFile(file, "utf8"));
-  } catch {
-    return {};
-  }
 }
 
 /**

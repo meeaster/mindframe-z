@@ -81,6 +81,10 @@ describe("parseFrontmatter", () => {
     expect(parseFrontmatter("# Demo\n\nNo frontmatter here.\n")).toEqual({});
   });
 
+  it("ignores a fence that opens partway down the document", () => {
+    expect(parseFrontmatter("Note: read this\n\n---\nname: demo\n---\nbody\n")).toEqual({});
+  });
+
   it("treats an unterminated block as carrying no metadata", () => {
     expect(parseFrontmatter("---\nname: demo\n")).toEqual({});
   });
