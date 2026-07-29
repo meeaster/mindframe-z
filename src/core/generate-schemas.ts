@@ -114,6 +114,21 @@ function strengthenMcpSchema(schema: Record<string, unknown>): void {
   }
 }
 
+function strengthenThreadManifestSchema(schema: Record<string, unknown>): void {
+  const sessions = (schema.properties as Record<string, Record<string, unknown>>).sessions
+    ?.items as Record<string, unknown>;
+  if (!sessions) throw new Error("thread-manifest.schema.json is missing sessions");
+  const fields = ["message_count", "last_message_id", "last_activity_at"];
+  sessions.allOf = [
+    {
+      anyOf: [
+        { required: fields },
+        { not: { anyOf: fields.map((field) => ({ required: [field] })) } }
+      ]
+    }
+  ];
+}
+
 export async function generateSchemas(root = process.cwd()): Promise<string[]> {
   const schemasDir = path.join(root, "schemas");
   await mkdir(schemasDir, { recursive: true });
@@ -126,6 +141,7 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
     >;
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
     if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
+    if (entry.filename === "thread-manifest.schema.json") strengthenThreadManifestSchema(schema);
     const outputPath = path.join(schemasDir, entry.filename);
     await writeFile(outputPath, `${JSON.stringify(schema, null, 2)}\n`, "utf8");
     written.push(outputPath);

@@ -14,16 +14,17 @@ references_dir: ~/.mindframe-z/references
 #   credentials: subscription # or bedrock
 
 # thread:
-#   destinations:
+#   stores:
 #     - name: work
-#       remote: git@github.com:you/private-work-threads.git
-#       no_push: false
+#       root: ~/workspace/knowledge/work-knowledge
+#       path: threads
+#       publication: direct
 #       default: true
 #     - name: personal
 #       root: ~/workspace/knowledge/personal-knowledge
 #       path: threads
-#       read_only: true # canonical checkout files are never mutated by thread writes
-#       pull_request:
+#       publication:
+#         mode: pull-request
 #         base: main # publish from a disposable worktree and stop after opening a PR
 
 # Durable work-unit content can live in a versioned Personal knowledge repository.

@@ -3,7 +3,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "../../tests/integration/support.js";
-import type { ResolvedThreadDestination } from "./storage.js";
+import type { ResolvedThreadStore } from "./storage.js";
 import { commitThreadChanges, ThreadPublicationError } from "./publication.js";
 
 const originalPath = process.env.PATH;
@@ -15,7 +15,7 @@ afterEach(() => {
 interface PublicationFixture {
   bareDir: string;
   canonicalDir: string;
-  destination: ResolvedThreadDestination;
+  destination: ResolvedThreadStore;
   gh: string;
   headBefore: string;
   statusBefore: string;
@@ -37,7 +37,7 @@ async function publicationFixture(): Promise<PublicationFixture> {
     JSON.stringify({
       slug: "thread-pr",
       charter: "Old charter.",
-      destination: "personal-knowledge",
+      store: "personal-knowledge",
       created_at: "2026-07-01T00:00:00.000Z",
       sessions: [],
       synthesis: {}
@@ -71,7 +71,7 @@ async function publicationFixture(): Promise<PublicationFixture> {
       slug: "thread-pr",
       title: "Publication thread",
       charter: "New charter.",
-      destination: "personal-knowledge",
+      store: "personal-knowledge",
       created_at: "2026-07-01T00:00:00.000Z",
       sessions: [],
       synthesis: {}
@@ -92,9 +92,7 @@ async function publicationFixture(): Promise<PublicationFixture> {
       root: canonicalDir,
       path: path.join(canonicalDir, "threads"),
       default: true,
-      no_push: false,
-      read_only: true,
-      pull_request: { base: "main" }
+      publication: { mode: "pull-request", base: "main" }
     },
     gh,
     headBefore: headBefore.trim(),

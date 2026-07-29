@@ -1,6 +1,6 @@
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { threadLocksRoot, threadPath, type RuntimePaths } from "../core/paths.js";
+import { threadLocksRoot, type RuntimePaths } from "../core/paths.js";
 
 interface LockRecord {
   pid: number;
@@ -105,7 +105,7 @@ export async function withAdvisoryLock<T>(
 }
 
 export function threadLockPath(paths: RuntimePaths, slug: string): string {
-  return lockPath(paths, `thread:${path.resolve(threadPath(paths, slug))}`);
+  return lockPath(paths, `thread:${slug}`);
 }
 
 export function withThreadLock<T>(

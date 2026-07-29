@@ -5,7 +5,7 @@ import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
 
 // The writable archive: the last one flagged default (later entries — i.e. machine
 // config — override earlier ones), else the first configured. Mirrors
-// defaultThreadDestination in src/thread/storage.ts.
+// defaultThreadStore in src/thread/storage.ts.
 export function defaultArchive(archives: readonly Archive[]): Archive | undefined {
   return archives.findLast((a) => a.default) ?? archives[0];
 }

@@ -3,16 +3,16 @@ import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import type { RuntimePaths } from "../core/paths.js";
-import { archiveCacheRoot, opencodeDbPath, threadPath, threadRunsRoot } from "../core/paths.js";
+import { archiveCacheRoot, opencodeDbPath, threadRunsRoot } from "../core/paths.js";
 import type { Archive, MachineManifest } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
-  prepareThreadDestination,
+  prepareThreadStore,
   readSessionFile,
   readThreadManifest,
   readThreadRuns,
-  resolveThreadDestinations,
+  resolveThreadStores,
   writeSessionFile,
   writeThreadManifest
 } from "./storage.js";
@@ -37,13 +37,17 @@ function paths(home: string): RuntimePaths {
   };
 }
 
+function threadDir(paths: RuntimePaths, slug: string): string {
+  return path.join(paths.root, "threads", slug);
+}
+
 function machine(): MachineManifest {
   return {
     references_dir: "~/references",
     extra_folders: [],
     git: {},
     sandbox: {},
-    thread: { destinations: [] },
+    thread: { stores: [] },
     work: {},
     archives: [],
     opencode: {},
@@ -51,7 +55,7 @@ function machine(): MachineManifest {
   };
 }
 
-function profile(): ResolvedProfile {
+function profile(root = "/tmp/home"): ResolvedProfile {
   return {
     name: "personal",
     agents: ["claude-code"],
@@ -77,7 +81,7 @@ function profile(): ResolvedProfile {
       pi: { settings: {}, subagent_config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
-        destinations: [{ name: "personal", default: true, no_push: false }],
+        stores: [{ name: "personal", root, path: "threads", publication: "direct", default: true }],
         defaults: {
           synthesize: "claude-code:sonnet@high",
           gather: "claude-code:haiku@low",
@@ -238,9 +242,10 @@ function manifestFixture(sessions: ThreadManifest["sessions"]): ThreadManifest {
   return {
     slug: "hydrate-test",
     charter: "test",
-    destination: "personal",
+    store: "personal",
     created_at: "2026-06-27T00:00:00.000Z",
     sessions,
+    excluded: [],
     synthesis: {}
   };
 }
@@ -346,21 +351,29 @@ async function ingestFixture(
 ): Promise<{ runtime: RuntimePaths; slug: string }> {
   const runtime = paths(home);
   const slug = "thread-refresh";
-  const [destination] = resolveThreadDestinations(runtime, profile());
-  await prepareThreadDestination(runtime, destination!);
-  await writeThreadManifest(threadPath(runtime, slug), {
+  await mkdir(path.join(home, "threads"), { recursive: true });
+  await execa("git", ["init", "--initial-branch=main"], { cwd: home });
+  await execa("git", ["config", "user.email", "test@test"], { cwd: home });
+  await execa("git", ["config", "user.name", "Test"], { cwd: home });
+  const [store] = resolveThreadStores(runtime, profile(home));
+  await prepareThreadStore(runtime, store!);
+  await writeThreadManifest(threadDir(runtime, slug), {
     slug,
     charter: "Keep sessions fresh.",
-    destination: "personal",
+    store: "personal",
     created_at: "2026-06-27T00:00:00.000Z",
     sessions: sessions.map((s) => ({
       id: s.id,
       source: s.source,
       ...(s.message_count !== undefined ? { message_count: s.message_count } : {}),
       ...(s.last_message_id !== undefined ? { last_message_id: s.last_message_id } : {}),
+      ...(s.message_count !== undefined || s.last_message_id !== undefined
+        ? { last_activity_at: "2026-06-27T00:00:00.000Z" }
+        : {}),
       ...(s.title !== undefined ? { title: s.title } : {}),
-      ...(s.extracted_by !== undefined ? { extracted_by: s.extracted_by } : {})
+      ...(s.extracted_by !== undefined ? { synthesizer: s.extracted_by } : {})
     })),
+    excluded: [],
     synthesis: {}
   });
   return { runtime, slug };
@@ -392,7 +405,7 @@ async function deltaSession(
   prior: string
 ): Promise<void> {
   await writeSessionFile(
-    threadPath(runtime, slug),
+    threadDir(runtime, slug),
     "claude-code",
     id,
     `${prior}\n\n## Phases\n\n- [2026-06-27 00:00 → 00:01] Prior work — earlier activity. (turns 1–3)`
@@ -401,7 +414,7 @@ async function deltaSession(
 
 // Session ids recorded on the run's ledger — i.e. the resolved refresh work set.
 async function refreshedSessions(runtime: RuntimePaths, slug: string): Promise<string[]> {
-  const runs = await readThreadRuns(threadPath(runtime, slug));
+  const runs = await readThreadRuns(threadDir(runtime, slug));
   return runs.runs.at(-1)!.sessions;
 }
 
@@ -416,17 +429,21 @@ async function latestRunStatus(
 }
 
 describe("ingestThread auto-refresh", () => {
-  it("leaves a failed destination publication in the publish run phase", async () => {
+  it("leaves a failed store publication in the publish run phase", async () => {
     const home = await makeTempDir();
     const { runtime, slug } = await ingestFixture(home, []);
-    const [destination] = resolveThreadDestinations(runtime, profile());
-    await writeFile(path.join(destination!.path, "staged.txt"), "staged\n");
-    await execa("git", ["add", "staged.txt"], { cwd: destination!.path });
+    const [store] = resolveThreadStores(runtime, profile(home));
+    await writeFile(path.join(store!.path, "staged.txt"), "staged\n");
+    await execa(
+      "git",
+      ["add", "--", path.relative(store!.root, path.join(store!.path, "staged.txt"))],
+      { cwd: store!.root }
+    );
 
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: ["claude-code:named-session"],
         noPush: true,
@@ -449,7 +466,7 @@ describe("ingestThread auto-refresh", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:named-session"],
       noPush: true,
@@ -475,7 +492,7 @@ describe("ingestThread auto-refresh", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:named-session"],
       noPush: true,
@@ -499,7 +516,7 @@ describe("ingestThread auto-refresh", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -523,7 +540,7 @@ describe("ingestThread auto-refresh", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:named-session"],
       noPush: true,
@@ -545,7 +562,7 @@ describe("ingestThread auto-refresh", () => {
 
     const result = await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -565,7 +582,7 @@ describe("ingestThread auto-refresh", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: [],
         noPush: true,
@@ -583,12 +600,12 @@ describe("ingestThread auto-refresh", () => {
       { id: "steady-session", source: "claude-code", ...wm },
       { id: "gone-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
-    await writeSessionFile(threadPath(runtime, slug), "claude-code", "steady-session", "# prior");
+    await writeSessionFile(threadDir(runtime, slug), "claude-code", "steady-session", "# prior");
     const runner = new RecordingRunner();
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -624,12 +641,12 @@ describe("ingestThread update strategy", () => {
     const { runtime, slug } = await ingestFixture(home, [
       { id: "grown-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
-    await writeSessionFile(threadPath(runtime, slug), "claude-code", "grown-session", "# prior");
+    await writeSessionFile(threadDir(runtime, slug), "claude-code", "grown-session", "# prior");
     const runner = new RecordingRunner();
 
     await ingestThread({
       paths: runtime,
-      profile: profile(), // default update_strategy: "full"
+      profile: profile(home), // default update_strategy: "full"
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -662,7 +679,7 @@ describe("ingestThread update strategy", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -692,7 +709,7 @@ describe("ingestThread update strategy", () => {
       }
     ]);
     await writeSessionFile(
-      threadPath(runtime, slug),
+      threadDir(runtime, slug),
       "claude-code",
       "pre-phases-session",
       "# Session pre-phases-session — Prior"
@@ -701,7 +718,7 @@ describe("ingestThread update strategy", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -723,7 +740,7 @@ describe("ingestThread update strategy", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: ["claude-code:fresh-session"],
       noPush: true,
@@ -743,12 +760,12 @@ describe("ingestThread update strategy", () => {
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
-    await writeSessionFile(threadPath(runtime, slug), "claude-code", "steady-session", "# prior");
+    await writeSessionFile(threadDir(runtime, slug), "claude-code", "steady-session", "# prior");
     const runner = new RecordingRunner();
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: ["claude-code:steady-session"],
       noPush: true,
@@ -772,7 +789,7 @@ describe("ingestThread digest anchoring", () => {
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
     await writeFile(
-      path.join(threadPath(runtime, slug), "digest.md"),
+      path.join(threadDir(runtime, slug), "digest.md"),
       "# Digest — prior rendering\n",
       "utf8"
     );
@@ -780,7 +797,7 @@ describe("ingestThread digest anchoring", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:steady-session"],
       noPush: true,
@@ -799,7 +816,7 @@ describe("ingestThread digest anchoring", () => {
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
     const withRepos: ResolvedProfile = {
-      ...profile(),
+      ...profile(home),
       referencesDir: "/home/mark/references",
       enabledReferences: [
         { name: "opencode", url: "https://github.com/sst/opencode", description: "" }
@@ -848,7 +865,7 @@ describe("ingestThread digest anchoring", () => {
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
     await writeFile(
-      path.join(threadPath(runtime, slug), "digest.md"),
+      path.join(threadDir(runtime, slug), "digest.md"),
       "# Digest — prior rendering\n",
       "utf8"
     );
@@ -856,7 +873,7 @@ describe("ingestThread digest anchoring", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -875,19 +892,20 @@ describe("ingestThread", () => {
     const home = await makeTempDir();
     const runtime = paths(home);
     const slug = "thread-empty";
-    await writeThreadManifest(threadPath(runtime, slug), {
+    await writeThreadManifest(threadDir(runtime, slug), {
       slug,
       charter: "Design of per-session watermarks — deterministic TS-computed watermark.",
-      destination: "personal",
+      store: "personal",
       created_at: "2026-06-27T00:00:00.000Z",
       sessions: [],
+      excluded: [],
       synthesis: {}
     });
 
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: ["claude-code:a712ce9c-589a-46fc-b10f-e72c193e165c"],
         noPush: true,
@@ -904,7 +922,7 @@ describe("ingestThread", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:here-session"],
       noPush: true,
@@ -926,7 +944,7 @@ describe("ingestThread", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: ["claude-code:real-session"],
         noPush: true,
@@ -944,7 +962,7 @@ describe("ingestThread", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: ["a712ce9c-589a-46fc-b10f-e72c193e165c"],
         noPush: true,
@@ -967,7 +985,7 @@ describe("ingestThread refusal guard", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: ["opencode:oc-present"],
         noPush: true,
@@ -1000,7 +1018,7 @@ describe("ingestThread refusal guard", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:quoting-session"],
       noPush: true,
@@ -1019,7 +1037,7 @@ describe("ingestThread refusal guard", () => {
     // ingest proceeds to synthesis instead of aborting with a wrong-store error.
     await ingestThread({
       paths: runtime,
-      profile: profile(),
+      profile: profile(home),
       threadSlug: slug,
       sessionIds: ["claude-code:ghost-session"],
       noPush: true,
@@ -1046,7 +1064,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     ]);
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior\n\nkept");
     const priorContent = await readSessionFile(
-      threadPath(runtime, slug),
+      threadDir(runtime, slug),
       "claude-code",
       "noisy-session"
     );
@@ -1054,7 +1072,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -1067,16 +1085,16 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     expect(runner.rolesNamed("synthesize")).toBe(0);
     expect(runner.rolesNamed("digest")).toBe(0);
     // The session file is untouched.
-    expect(await readSessionFile(threadPath(runtime, slug), "claude-code", "noisy-session")).toBe(
+    expect(await readSessionFile(threadDir(runtime, slug), "claude-code", "noisy-session")).toBe(
       priorContent
     );
-    // The ledger watermark advanced to the store tail; title/extracted_by preserved.
-    const manifest = await readThreadManifest(threadPath(runtime, slug));
+    // The ledger watermark advanced to the store tail; title/synthesizer preserved.
+    const manifest = await readThreadManifest(threadDir(runtime, slug));
     const entry = manifest.sessions.find((s) => s.id === "noisy-session")!;
     expect(entry.message_count).toBe(wm.message_count);
     expect(entry.last_message_id).toBe(wm.last_message_id);
     expect(entry.title).toBe("Prior Title");
-    expect(entry.extracted_by).toBe("claude-code:old@low");
+    expect(entry.synthesizer).toBe("claude-code:old@low");
     // The gather dispatch is still on the run ledger.
     expect(await refreshedSessions(runtime, slug)).toEqual(["claude-code:noisy-session"]);
   });
@@ -1094,7 +1112,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -1121,7 +1139,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: profile(),
+        profile: profile(home),
         threadSlug: slug,
         sessionIds: [],
         refresh: true,
@@ -1143,7 +1161,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     await expect(
       ingestThread({
         paths: runtime,
-        profile: withStrategy(profile(), "delta"),
+        profile: withStrategy(profile(home), "delta"),
         threadSlug: slug,
         sessionIds: [],
         refresh: true,
@@ -1167,7 +1185,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
 
     const result = await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,
@@ -1196,7 +1214,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
 
     await ingestThread({
       paths: runtime,
-      profile: withStrategy(profile(), "delta"),
+      profile: withStrategy(profile(home), "delta"),
       threadSlug: slug,
       sessionIds: [],
       refresh: true,

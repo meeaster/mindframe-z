@@ -19,11 +19,8 @@ import {
   referenceIndexPath,
   type RuntimePaths,
   threadCliLogPath,
-  threadDestinationRoot,
-  threadPath,
   threadRunPath,
   threadRunsRoot,
-  threadStoreRoot,
   threadSweepRoot,
   workBindingsPath,
   workStoreRoot,
@@ -198,11 +195,6 @@ describe(".mindframe-z store path contract", () => {
     expect(extraFoldersIndexPath(runtime)).toBe(path.join(mfz, "extra_folders.md"));
   });
 
-  it("pins the thread store root and per-slug path", () => {
-    expect(threadStoreRoot(runtime)).toBe(path.join(mfz, "threads"));
-    expect(threadPath(runtime, "my-slug")).toBe(path.join(mfz, "threads", "my-slug"));
-  });
-
   it("pins the versioned work store paths", () => {
     expect(workStoreRoot(runtime)).toBe(path.join(mfz, "work", "v1"));
     expect(workUnitPath(runtime, "my-work")).toBe(path.join(mfz, "work", "v1", "units", "my-work"));
@@ -213,20 +205,14 @@ describe(".mindframe-z store path contract", () => {
     expect(archiveCacheRoot(runtime)).toBe(path.join(mfz, "archive-cache"));
   });
 
-  it("pins the thread destination root", () => {
-    expect(threadDestinationRoot(runtime, "dest")).toBe(
-      path.join(mfz, "thread-destinations", "dest")
-    );
-  });
-
   it("pins the thread run roots, per-run path, and cli log", () => {
-    expect(threadRunsRoot(runtime)).toBe(path.join(mfz, "thread-runs", "runs"));
-    expect(threadRunPath(runtime, "run-1")).toBe(path.join(mfz, "thread-runs", "runs", "run-1"));
-    expect(threadCliLogPath(runtime)).toBe(path.join(mfz, "thread-runs", "cli.log"));
+    expect(threadRunsRoot(runtime)).toBe(path.join(mfz, "threads", "runs"));
+    expect(threadRunPath(runtime, "run-1")).toBe(path.join(mfz, "threads", "runs", "run-1"));
+    expect(threadCliLogPath(runtime)).toBe(path.join(mfz, "threads", "cli.log"));
   });
 
   it("pins the thread sweep root", () => {
-    expect(threadSweepRoot(runtime)).toBe(path.join(mfz, "thread-sweep"));
+    expect(threadSweepRoot(runtime)).toBe(path.join(mfz, "threads", "sweep"));
   });
 
   it("pins the native Executor data path and profile snapshot paths", () => {

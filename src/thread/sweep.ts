@@ -1,17 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { listClaudeItems } from "../sessions/claude-source.js";
 import { listOpencodeItems } from "../sessions/opencode-source.js";
 import type { ThreadHarness } from "../core/manifests.js";
-import { threadStoreRoot, type RuntimePaths } from "../core/paths.js";
+import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { dispatch } from "./dispatch.js";
 import { THREAD_PERSONAS } from "./personas.js";
 import type { AgentRunner } from "./runner.js";
 import { DockerAgentRunner } from "./runner.js";
 import { writeRunStatus } from "./observability.js";
-import { readThreadManifest, resolveTriageModel } from "./storage.js";
+import { listThreads, readThreadManifest, resolveTriageModel } from "./storage.js";
 import { classifyWatermark, readWatermark, type Watermark } from "./watermark.js";
 import {
   hashCharter,
@@ -109,7 +108,7 @@ export async function runSweep(args: {
   if (baselineStaked) await writeSweepState(args.paths, { ...state, baseline_at: baselineAt });
 
   const [threads, signals, initialLedger] = await Promise.all([
-    loadThreads(args.paths),
+    loadThreads(args.paths, args.profile),
     enumerateSweepSessions(args.paths),
     readVerdictLedger(args.paths)
   ]);
@@ -268,9 +267,12 @@ export async function runSweep(args: {
   return report;
 }
 
-export async function listPending(paths: RuntimePaths): Promise<PendingProposal[]> {
+export async function listPending(
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<PendingProposal[]> {
   const [threads, signals, ledger] = await Promise.all([
-    loadThreads(paths),
+    loadThreads(paths, profile),
     enumerateSweepSessions(paths),
     readVerdictLedger(paths)
   ]);
@@ -294,11 +296,12 @@ export async function listPending(paths: RuntimePaths): Promise<PendingProposal[
 
 export async function rejectPending(
   paths: RuntimePaths,
+  profile: ResolvedProfile,
   id: string,
   thread: string
 ): Promise<void> {
   const { source, bareId } = parseSourceQualifiedId(id);
-  if (!(await loadThreads(paths)).some((entry) => entry.slug === thread)) {
+  if (!(await loadThreads(paths, profile)).some((entry) => entry.slug === thread)) {
     throw new Error(`Unknown thread: ${thread}`);
   }
   const ledger = await readVerdictLedger(paths);
@@ -325,10 +328,13 @@ export async function rejectPending(
   );
 }
 
-export async function concludePending(paths: RuntimePaths): Promise<number> {
+export async function concludePending(
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<number> {
   const [threads, pending, ledger, state] = await Promise.all([
-    loadThreads(paths),
-    listPending(paths),
+    loadThreads(paths, profile),
+    listPending(paths, profile),
     readVerdictLedger(paths),
     readSweepState(paths)
   ]);
@@ -355,33 +361,24 @@ export async function concludePending(paths: RuntimePaths): Promise<number> {
   return rows.length;
 }
 
-async function loadThreads(paths: RuntimePaths): Promise<SweepThread[]> {
+async function loadThreads(paths: RuntimePaths, profile: ResolvedProfile): Promise<SweepThread[]> {
   const threads: SweepThread[] = [];
-  try {
-    for (const entry of await readdir(threadStoreRoot(paths), { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name === "runs") continue;
-      try {
-        const manifest = await readThreadManifest(path.join(threadStoreRoot(paths), entry.name));
-        threads.push({
-          slug: manifest.slug,
-          charter: manifest.charter,
-          charterHash: hashCharter(manifest.charter),
-          members: new Set(
-            manifest.sessions.map((session) => sourceQualifiedId(session.source, session.id))
-          ),
-          memberWatermarks: new Map(
-            manifest.sessions.map((session) => [
-              sourceQualifiedId(session.source, session.id),
-              watermarkFromManifestSession(session)
-            ])
-          )
-        });
-      } catch {
-        continue;
-      }
-    }
-  } catch {
-    return [];
+  for (const thread of await listThreads(paths, profile)) {
+    const manifest = await readThreadManifest(thread.dir);
+    threads.push({
+      slug: manifest.slug,
+      charter: manifest.charter,
+      charterHash: hashCharter(manifest.charter),
+      members: new Set(
+        manifest.sessions.map((session) => sourceQualifiedId(session.source, session.id))
+      ),
+      memberWatermarks: new Map(
+        manifest.sessions.map((session) => [
+          sourceQualifiedId(session.source, session.id),
+          watermarkFromManifestSession(session)
+        ])
+      )
+    });
   }
   return threads.sort((a, b) => a.slug.localeCompare(b.slug));
 }

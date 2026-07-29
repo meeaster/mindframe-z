@@ -120,6 +120,126 @@ export function tailSignatureFromExport(content: string): Watermark | undefined 
   };
 }
 
+/** Resolve a predecessor cursor without advancing it to the current source tail. */
+export async function resolveLegacyWatermark(
+  paths: RuntimePaths,
+  session: { source: ThreadHarness; id: string },
+  cursor: string | number
+): Promise<Watermark | undefined> {
+  if (session.source === "claude-code") {
+    const content = await readTranscriptContent(paths, session.source, session.id);
+    return content === undefined ? undefined : claudeBoundary(content, cursor);
+  }
+  return openCodeBoundary(paths, session.id, cursor);
+}
+
+async function readTranscriptContent(
+  paths: RuntimePaths,
+  source: ThreadHarness,
+  id: string
+): Promise<string | undefined> {
+  if (source === "claude-code") {
+    const live = await locateClaudeTranscript(paths, id);
+    if (live !== undefined) return readFile(path.join(paths.claudeDir, live), "utf8");
+  }
+  const cached = cachedSessionPath(paths, source, id);
+  return (await pathExists(cached)) ? readFile(cached, "utf8") : undefined;
+}
+
+function claudeBoundary(content: string, cursor: string | number): Watermark | undefined {
+  const records: Array<{ type?: string; uuid?: string; timestamp?: string }> = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        records.push(parsed as { type?: string; uuid?: string; timestamp?: string });
+      }
+    } catch {
+      // Legacy record-count cursors count valid JSONL records only.
+    }
+  }
+
+  const boundary =
+    typeof cursor === "number"
+      ? records.slice(0, cursor)
+      : records.filter((record) => {
+          const timestamp = record.timestamp === undefined ? NaN : Date.parse(record.timestamp);
+          const cutoff = Date.parse(cursor);
+          return Number.isFinite(timestamp) && Number.isFinite(cutoff) && timestamp <= cutoff;
+        });
+  const messages = boundary.filter(
+    (record) =>
+      (record.type === "user" || record.type === "assistant") &&
+      record.uuid !== undefined &&
+      record.timestamp !== undefined
+  );
+  const last = messages.at(-1);
+  if (last?.uuid === undefined || last.timestamp === undefined) return undefined;
+  return {
+    message_count: messages.length,
+    last_message_id: last.uuid,
+    last_activity_at: last.timestamp
+  };
+}
+
+async function openCodeBoundary(
+  paths: RuntimePaths,
+  id: string,
+  cursor: string | number
+): Promise<Watermark | undefined> {
+  const cutoff = typeof cursor === "number" ? cursor : Date.parse(cursor);
+  if (!Number.isFinite(cutoff)) return undefined;
+  const dbPath = opencodeDbPath(paths);
+  if (await pathExists(dbPath)) {
+    let db: SqliteDatabase;
+    try {
+      db = openSqlite(dbPath, { readOnly: true });
+      const rows = db
+        .prepare(
+          "SELECT id, time_created FROM message WHERE session_id = $id AND time_created <= $cutoff ORDER BY time_created ASC, id ASC"
+        )
+        .all({ id, cutoff }) as Array<{ id?: string; time_created?: number }>;
+      const last = rows.at(-1);
+      if (last?.id !== undefined && last.time_created !== undefined) {
+        return {
+          message_count: rows.length,
+          last_message_id: last.id,
+          last_activity_at: new Date(last.time_created).toISOString()
+        };
+      }
+    } catch {
+      // Try the archive export below when the live database is unavailable or changed shape.
+    } finally {
+      try {
+        db!.close();
+      } catch {
+        // The database may not have opened.
+      }
+    }
+  }
+
+  const cached = cachedSessionPath(paths, "opencode", id);
+  if (!(await pathExists(cached))) return undefined;
+  let parsed: { messages?: Array<{ info?: { id?: string; time?: { created?: number } } }> };
+  try {
+    parsed = JSON.parse(await readFile(cached, "utf8")) as typeof parsed;
+  } catch {
+    return undefined;
+  }
+  const messages = (parsed.messages ?? []).filter((message) => {
+    const created = message.info?.time?.created;
+    return created !== undefined && created <= cutoff;
+  });
+  const last = messages.at(-1)?.info;
+  if (last?.id === undefined || last.time?.created === undefined) return undefined;
+  return {
+    message_count: messages.length,
+    last_message_id: last.id,
+    last_activity_at: new Date(last.time.created).toISOString()
+  };
+}
+
 // OpenCode stores messages in a SQLite `message` table keyed by `session_id`, with
 // `time_created` in epoch milliseconds. Read-only so a running opencode is untouched.
 async function readOpencodeWatermark(

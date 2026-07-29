@@ -46,7 +46,8 @@ import {
   runThreadCreate,
   runThreadConclude,
   runThreadDelete,
-  runThreadDestinations,
+  runThreadStores,
+  runThreadMigration,
   runThreadDiscover,
   runThreadIngest,
   runThreadPending,
@@ -615,11 +616,26 @@ work
   .action(async (options) => runWorkReceipt({ ...program.opts(), ...options }));
 
 thread
-  .command("destinations")
-  .description("List resolved thread destinations")
+  .command("stores")
+  .description("List resolved authoritative thread stores")
+  .option("--json", "emit structured JSON")
+  .action(async (options) => runThreadStores({ ...program.opts(), json: Boolean(options.json) }));
+
+thread
+  .command("migrate")
+  .description("Dry-run strict migration of configured legacy thread stores")
+  .option("--store <store>", "validate one configured store")
+  .option("--dry-run", "validate without writing store content")
+  .option("--publish", "publish one reviewed migration PR per selected pull-request store")
   .option("--json", "emit structured JSON")
   .action(async (options) =>
-    runThreadDestinations({ ...program.opts(), json: Boolean(options.json) })
+    runThreadMigration({
+      ...program.opts(),
+      store: options.store,
+      dryRun: Boolean(options.dryRun),
+      publish: Boolean(options.publish),
+      json: Boolean(options.json)
+    })
   );
 
 thread
@@ -637,14 +653,14 @@ thread
   .description("Create a deterministic thread manifest")
   .argument("<slug>", "thread slug")
   .requiredOption("--charter <charter>", "synthesis lens for the thread")
-  .option("--dest <destination>", "thread destination")
+  .option("--store <store>", "authoritative thread store")
   .option("--discover-model <id>", "discover model (harness:model@effort)")
   .option("--gather-model <id>", "gather model (harness:model@effort)")
   .option("--synthesize-model <id>", "synthesize model (harness:model@effort)")
   .action(async (slug, options) =>
     runThreadCreate(slug, {
       ...program.opts(),
-      dest: options.dest,
+      store: options.store,
       charter: options.charter,
       discover: options.discoverModel,
       gather: options.gatherModel,
@@ -791,7 +807,7 @@ thread
 
 thread
   .command("delete")
-  .description("Delete a thread locally and from its destination")
+  .description("Delete a thread from its authoritative store")
   .argument("<slug>", "thread slug")
   .option("--no-push", "commit deletion locally without pushing")
   .action(async (slug, options) =>
@@ -800,9 +816,9 @@ thread
 
 thread
   .command("sync")
-  .description("Update writable remotes and import current thread destination checkouts")
+  .description("Synchronize configured thread store checkouts without copying thread content")
   .argument("[slug...]", "thread slugs to sync")
-  .option("--all", "sync all thread destinations")
+  .option("--all", "sync all configured thread stores")
   .action(async (slugs, options) =>
     runThreadSync({ ...program.opts(), slugs, all: Boolean(options.all) })
   );

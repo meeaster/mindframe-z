@@ -18,11 +18,12 @@ import {
   readThreadManifest,
   recordSessions,
   resolveSynthesisDefaults,
+  withThreadMutation,
   writeSessionFile,
   type ThreadDispatchRun
 } from "./storage.js";
 import {
-  assertThreadDestinationWritable,
+  assertThreadStoreWritable,
   commitThreadChanges,
   type ThreadPublication
 } from "./publication.js";
@@ -73,230 +74,232 @@ export interface IngestResult {
 export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
   const { paths, profile, sessionIds } = req;
 
-  const thread = await findThread(paths, profile, req.threadSlug);
-  assertThreadDestinationWritable(thread.destination);
-  const manifest = await readThreadManifest(thread.dir);
+  const locatedThread = await findThread(paths, profile, req.threadSlug);
+  assertThreadStoreWritable(locatedThread.store);
+  return withThreadMutation(locatedThread, async (thread) => {
+    const manifest = await readThreadManifest(thread.dir);
 
-  const detected = await resolveRefreshSet(
-    paths,
-    manifest,
-    sessionIds,
-    profile.manifests.machine.archives
-  );
-  const { refreshed, vanished } = detected;
-  // `--all` forces every present session (skipping only those vanished from the store);
-  // otherwise the work set is the named ids plus the sessions that drifted.
-  const workSet = req.all
-    ? manifest.sessions
-        .map((session) => `${session.source}:${session.id}`)
-        .filter((key) => !vanished.includes(key))
-    : detected.workSet;
-  const changedSet = new Set(refreshed);
-  if (workSet.length === 0) {
-    // A refresh (or --all) with nothing to do is a successful no-op; a plain ingest that
-    // named no session is a misuse.
-    if (req.refresh || req.all)
-      return {
-        slug: manifest.slug,
-        sessionCount: 0,
-        refreshed,
-        vanished,
-        runId: "",
-        totalCostUsd: null,
-        publication: { kind: "unchanged" }
-      };
-    throw new Error("Provide at least one session id to ingest.");
-  }
+    const detected = await resolveRefreshSet(
+      paths,
+      manifest,
+      sessionIds,
+      profile.manifests.machine.archives
+    );
+    const { refreshed, vanished } = detected;
+    // `--all` forces every present session (skipping only those vanished from the store);
+    // otherwise the work set is the named ids plus the sessions that drifted.
+    const workSet = req.all
+      ? manifest.sessions
+          .map((session) => `${session.source}:${session.id}`)
+          .filter((key) => !vanished.includes(key))
+      : detected.workSet;
+    const changedSet = new Set(refreshed);
+    if (workSet.length === 0) {
+      // A refresh (or --all) with nothing to do is a successful no-op; a plain ingest that
+      // named no session is a misuse.
+      if (req.refresh || req.all)
+        return {
+          slug: manifest.slug,
+          sessionCount: 0,
+          refreshed,
+          vanished,
+          runId: "",
+          totalCostUsd: null,
+          publication: { kind: "unchanged" }
+        };
+      throw new Error("Provide at least one session id to ingest.");
+    }
 
-  const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
-    gather: req.gather,
-    synthesize: req.synthesize
-  });
-  const gatherModel = settings.gather;
-  const synthModel = settings.synthesize;
-  const synthId = `${synthModel.harness}:${synthModel.model}@${synthModel.effort}`;
-  // `--all` rebuilds from scratch, so it is always a full re-synthesis. Otherwise `full`
-  // (default) re-reads and re-synthesizes the whole session, while `delta` reads only
-  // messages past the stored cursor and revises the prior file. Resolved once here (the
-  // field is optional so inheritance works; "full" is the default), applied per session
-  // below — delta only engages for a changed existing session that has both a stored
-  // `last_message_id` and a prior file to revise, else it falls back to full.
-  const strategy = req.all ? "full" : (profile.profile.thread.update_strategy ?? "full");
-  const priorBySession = new Map(manifest.sessions.map((s) => [`${s.source}:${s.id}`, s]));
-  const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
-  const mode = req.all ? "refresh --all" : req.refresh ? "refresh" : "ingest";
-  const runId = `run-${Date.now()}-${randomUUID()}`;
-  const startedAt = new Date().toISOString();
-  const status: ThreadRunStatus = {
-    id: runId,
-    thread: manifest.slug,
-    mode,
-    pid: process.pid,
-    current_step: "gather-synthesize",
-    started_at: startedAt,
-    cost_usd: null
-  };
-  await writeRunStatus(paths, status);
+    const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
+      gather: req.gather,
+      synthesize: req.synthesize
+    });
+    const gatherModel = settings.gather;
+    const synthModel = settings.synthesize;
+    const synthId = `${synthModel.harness}:${synthModel.model}@${synthModel.effort}`;
+    // `--all` rebuilds from scratch, so it is always a full re-synthesis. Otherwise `full`
+    // (default) re-reads and re-synthesizes the whole session, while `delta` reads only
+    // messages past the stored cursor and revises the prior file. Resolved once here (the
+    // field is optional so inheritance works; "full" is the default), applied per session
+    // below — delta only engages for a changed existing session that has both a stored
+    // `last_message_id` and a prior file to revise, else it falls back to full.
+    const strategy = req.all ? "full" : (profile.profile.thread.update_strategy ?? "full");
+    const priorBySession = new Map(manifest.sessions.map((s) => [`${s.source}:${s.id}`, s]));
+    const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
+    const mode = req.all ? "refresh --all" : req.refresh ? "refresh" : "ingest";
+    const runId = `run-${Date.now()}-${randomUUID()}`;
+    const startedAt = new Date().toISOString();
+    const status: ThreadRunStatus = {
+      id: runId,
+      thread: manifest.slug,
+      mode,
+      pid: process.pid,
+      current_step: "gather-synthesize",
+      started_at: startedAt,
+      cost_usd: null
+    };
+    await writeRunStatus(paths, status);
 
-  // Each session fans out into its own gather → synthesize pair and returns its
-  // own dispatches, so the shared ledger is assembled deterministically after the
-  // parallel work rather than mutated concurrently.
-  const perSession = await Promise.all(
-    workSet.map(async (id) => {
-      const { source, bare } = parseSessionId(id);
-      const key = `${source}:${bare}`;
-      const prior = priorBySession.get(key);
-      // Delta engages only for a session that genuinely grew (is in the changed set),
-      // has a stored cursor, and has a prior file to revise. A named-but-unchanged
-      // session has no messages past the cursor, so a delta gather would return an empty
-      // dossier and trip the abort guard below — those fall back to a full re-synthesis.
-      const revisable =
-        strategy === "delta" && changedSet.has(key) && prior?.last_message_id !== undefined
-          ? await readSessionFile(thread.dir, source, bare)
-          : undefined;
-      // A pre-Phases prior file also falls back to full: a delta gather only sees past
-      // the cursor, so revising it could only backfill a silently partial `## Phases`
-      // section. One full re-synthesis rewrites the file with complete phases; every
-      // later refresh delta-revises as normal.
-      const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
-      const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
-      // Resolve the session's exact mounted path host-side and hand it to gather so it
-      // reads a known file instead of rediscovering it — the discovery step is where a
-      // weak gather model wandered into its own ~/.claude and declared the session
-      // missing. A defined path also proves the session is host-readable (the guard
-      // below). Present OpenCode sessions keep today's sqlite-discovery path (no
-      // explicit path); only a hydrated cache copy gets one, for either harness.
-      const transcriptPath = await resolveTranscriptPath(paths, source, bare);
+    // Each session fans out into its own gather → synthesize pair and returns its
+    // own dispatches, so the shared ledger is assembled deterministically after the
+    // parallel work rather than mutated concurrently.
+    const perSession = await Promise.all(
+      workSet.map(async (id) => {
+        const { source, bare } = parseSessionId(id);
+        const key = `${source}:${bare}`;
+        const prior = priorBySession.get(key);
+        // Delta engages only for a session that genuinely grew (is in the changed set),
+        // has a stored cursor, and has a prior file to revise. A named-but-unchanged
+        // session has no messages past the cursor, so a delta gather would return an empty
+        // dossier and trip the abort guard below — those fall back to a full re-synthesis.
+        const revisable =
+          strategy === "delta" && changedSet.has(key) && prior?.last_message_id !== undefined
+            ? await readSessionFile(thread.dir, source, bare)
+            : undefined;
+        // A pre-Phases prior file also falls back to full: a delta gather only sees past
+        // the cursor, so revising it could only backfill a silently partial `## Phases`
+        // section. One full re-synthesis rewrites the file with complete phases; every
+        // later refresh delta-revises as normal.
+        const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
+        const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
+        // Resolve the session's exact mounted path host-side and hand it to gather so it
+        // reads a known file instead of rediscovering it — the discovery step is where a
+        // weak gather model wandered into its own ~/.claude and declared the session
+        // missing. A defined path also proves the session is host-readable (the guard
+        // below). Present OpenCode sessions keep today's sqlite-discovery path (no
+        // explicit path); only a hydrated cache copy gets one, for either harness.
+        const transcriptPath = await resolveTranscriptPath(paths, source, bare);
 
-      const gather = await dispatch(runner, paths, runId, `${id}-gather`, {
-        role: "gather",
-        harness: gatherModel.harness,
-        model: gatherModel.model,
-        effort: gatherModel.effort,
-        persona: THREAD_PERSONAS.gather,
-        skills: ["thread-sessions"],
-        sessionSources: [source],
-        prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
-      });
-      // Capture the store's current tail once, host-side. It serves three readers below:
-      // it confirms the session is present (refusal guard), lets an irrelevant-delta
-      // short-circuit advance the ledger, and becomes this entry's watermark so a later
-      // ingest can tell whether it has grown. Read before synthesize — which never
-      // touches the store — so the guards see it; a store we can't read leaves it absent.
-      const watermark = await readWatermark(paths, { source, id: bare });
-      // Irrelevant-delta short-circuit (classifyGather threw on any fabricated dossier):
-      // skip synthesize and the file write, advance the watermark to the current tail so
-      // the same noise never re-triggers, and preserve the prior title/extracted_by
-      // (recordSessions keeps the fields this entry omits). The gather spend was real,
-      // so its dispatch and dossier are still recorded.
-      if (
-        classifyGather(gather.result.text, { cursor, watermark, transcriptPath, id, runId }) ===
-        "short-circuit"
-      ) {
+        const gather = await dispatch(runner, paths, runId, `${id}-gather`, {
+          role: "gather",
+          harness: gatherModel.harness,
+          model: gatherModel.model,
+          effort: gatherModel.effort,
+          persona: THREAD_PERSONAS.gather,
+          skills: ["thread-sessions"],
+          sessionSources: [source],
+          prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
+        });
+        // Capture the store's current tail once, host-side. It serves three readers below:
+        // it confirms the session is present (refusal guard), lets an irrelevant-delta
+        // short-circuit advance the ledger, and becomes this entry's watermark so a later
+        // ingest can tell whether it has grown. Read before synthesize — which never
+        // touches the store — so the guards see it; a store we can't read leaves it absent.
+        const watermark = await readWatermark(paths, { source, id: bare });
+        // Irrelevant-delta short-circuit (classifyGather threw on any fabricated dossier):
+        // skip synthesize and the file write, advance the watermark to the current tail so
+        // the same noise never re-triggers, and preserve the prior title/synthesizer
+        // (recordSessions keeps the fields this entry omits). The gather spend was real,
+        // so its dispatch and dossier are still recorded.
+        if (
+          classifyGather(gather.result.text, { cursor, watermark, transcriptPath, id, runId }) ===
+          "short-circuit"
+        ) {
+          return {
+            dossier: { source, id: bare, text: gather.result.text },
+            entry: { id: bare, source, ...watermark },
+            dispatches: [gather.dispatch],
+            wrote: false
+          };
+        }
+        const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
+          role: "synthesize",
+          harness: synthModel.harness,
+          model: synthModel.model,
+          effort: synthModel.effort,
+          persona: THREAD_PERSONAS.synthesize,
+          skills: ["thread-contract"],
+          prompt: synthesizePrompt(bare, manifest.charter, gather.result.text, priorFile)
+        });
+        await writeSessionFile(thread.dir, source, bare, synth.result.text);
         return {
           dossier: { source, id: bare, text: gather.result.text },
-          entry: { id: bare, source, ...watermark },
-          dispatches: [gather.dispatch],
-          wrote: false
+          entry: {
+            id: bare,
+            source,
+            title: parseSessionTitle(synth.result.text),
+            synthesizer: synthId,
+            ...watermark
+          },
+          dispatches: [gather.dispatch, synth.dispatch],
+          wrote: true
         };
-      }
-      const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
-        role: "synthesize",
-        harness: synthModel.harness,
-        model: synthModel.model,
-        effort: synthModel.effort,
-        persona: THREAD_PERSONAS.synthesize,
-        skills: ["thread-contract"],
-        prompt: synthesizePrompt(bare, manifest.charter, gather.result.text, priorFile)
+      })
+    );
+
+    const dispatches: ThreadDispatchRun[] = perSession.flatMap((item) => item.dispatches);
+    await recordSessions(
+      thread.dir,
+      perSession.map((item) => item.entry)
+    );
+
+    // The digest reads only the session files, so if every session short-circuited on the
+    // sentinel — nothing actually drifted onto disk — regenerating it would be pure spend.
+    // Run it exactly once when at least one file was written this run, as today.
+    if (perSession.some((item) => item.wrote)) {
+      await writeRunStatus(paths, { ...status, current_step: "digest" });
+      const digestDispatch = await regenerateViews({
+        runner,
+        paths,
+        runId,
+        threadDir: thread.dir,
+        slug: manifest.slug,
+        charter: manifest.charter,
+        digestModel: settings.digest,
+        // `--all` is a clean rebuild — withhold the prior digest so accumulated form drift
+        // flushes; every other run anchors to it to keep an unchanged thread's digest stable.
+        previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
+        repos: repoLocators(profile)
       });
-      await writeSessionFile(thread.dir, source, bare, synth.result.text);
-      return {
-        dossier: { source, id: bare, text: gather.result.text },
-        entry: {
-          id: bare,
-          source,
-          title: parseSessionTitle(synth.result.text),
-          extracted_by: synthId,
-          ...watermark
-        },
-        dispatches: [gather.dispatch, synth.dispatch],
-        wrote: true
-      };
-    })
-  );
+      dispatches.push(digestDispatch);
+    }
 
-  const dispatches: ThreadDispatchRun[] = perSession.flatMap((item) => item.dispatches);
-  await recordSessions(
-    thread.dir,
-    perSession.map((item) => item.entry)
-  );
-
-  // The digest reads only the session files, so if every session short-circuited on the
-  // sentinel — nothing actually drifted onto disk — regenerating it would be pure spend.
-  // Run it exactly once when at least one file was written this run, as today.
-  if (perSession.some((item) => item.wrote)) {
-    await writeRunStatus(paths, { ...status, current_step: "digest" });
-    const digestDispatch = await regenerateViews({
-      runner,
+    await writeRunDossiers(
       paths,
       runId,
-      threadDir: thread.dir,
-      slug: manifest.slug,
-      charter: manifest.charter,
-      digestModel: settings.digest,
-      // `--all` is a clean rebuild — withhold the prior digest so accumulated form drift
-      // flushes; every other run anchors to it to keep an unchanged thread's digest stable.
-      previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
-      repos: repoLocators(profile)
+      perSession.map((item) => item.dossier)
+    );
+
+    const finishedAt = new Date().toISOString();
+    const total = totalCost(dispatches);
+    await appendThreadRun(thread.dir, {
+      id: runId,
+      thread: manifest.slug,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      sessions: workSet,
+      dispatches,
+      total_cost_usd: total
     });
-    dispatches.push(digestDispatch);
-  }
+    await writeRunStatus(paths, {
+      ...status,
+      current_step: "publish",
+      cost_usd: total
+    });
+    const publication = await commitThreadChanges(
+      thread.store,
+      manifest.slug,
+      thread.dir,
+      `chore(thread): ${mode} ${manifest.slug}`,
+      !req.noPush
+    );
+    await writeRunStatus(paths, {
+      ...status,
+      current_step: "complete",
+      finished_at: new Date().toISOString(),
+      cost_usd: total
+    });
 
-  await writeRunDossiers(
-    paths,
-    runId,
-    perSession.map((item) => item.dossier)
-  );
-
-  const finishedAt = new Date().toISOString();
-  const total = totalCost(dispatches);
-  await appendThreadRun(thread.dir, {
-    id: runId,
-    thread: manifest.slug,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    sessions: workSet,
-    dispatches,
-    total_cost_usd: total
+    return {
+      slug: manifest.slug,
+      sessionCount: workSet.length,
+      refreshed,
+      vanished,
+      runId,
+      totalCostUsd: total,
+      publication
+    };
   });
-  await writeRunStatus(paths, {
-    ...status,
-    current_step: "publish",
-    cost_usd: total
-  });
-  const publication = await commitThreadChanges(
-    thread.destination,
-    manifest.slug,
-    thread.dir,
-    `chore(thread): ${mode} ${manifest.slug}`,
-    !req.noPush && !thread.destination.no_push
-  );
-  await writeRunStatus(paths, {
-    ...status,
-    current_step: "complete",
-    finished_at: new Date().toISOString(),
-    cost_usd: total
-  });
-
-  return {
-    slug: manifest.slug,
-    sessionCount: workSet.length,
-    refreshed,
-    vanished,
-    runId,
-    totalCostUsd: total,
-    publication
-  };
 }
 
 export interface RefreshSet {

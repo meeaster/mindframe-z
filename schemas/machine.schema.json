@@ -80,11 +80,11 @@
     },
     "thread": {
       "default": {
-        "destinations": []
+        "stores": []
       },
       "type": "object",
       "properties": {
-        "destinations": {
+        "stores": {
           "default": [],
           "type": "array",
           "items": {
@@ -98,9 +98,6 @@
                     "maxLength": 64,
                     "pattern": "^[a-z0-9][a-z0-9._-]*$"
                   },
-                  "remote": {
-                    "not": {}
-                  },
                   "root": {
                     "type": "string",
                     "minLength": 1
@@ -109,18 +106,13 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "no_push": {
-                    "default": false,
-                    "type": "boolean",
-                    "const": false
-                  },
-                  "read_only": {
-                    "type": "boolean",
-                    "const": true
-                  },
-                  "pull_request": {
+                  "publication": {
                     "type": "object",
                     "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "pull-request"
+                      },
                       "base": {
                         "type": "string",
                         "minLength": 1,
@@ -129,8 +121,10 @@
                       }
                     },
                     "required": [
+                      "mode",
                       "base"
-                    ]
+                    ],
+                    "additionalProperties": false
                   },
                   "default": {
                     "default": false,
@@ -141,8 +135,7 @@
                   "name",
                   "root",
                   "path",
-                  "read_only",
-                  "pull_request"
+                  "publication"
                 ]
               },
               {
@@ -154,9 +147,6 @@
                     "maxLength": 64,
                     "pattern": "^[a-z0-9][a-z0-9._-]*$"
                   },
-                  "remote": {
-                    "type": "string"
-                  },
                   "root": {
                     "type": "string",
                     "minLength": 1
@@ -165,15 +155,10 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "no_push": {
-                    "default": false,
-                    "type": "boolean"
-                  },
-                  "read_only": {
-                    "type": "boolean"
-                  },
-                  "pull_request": {
-                    "not": {}
+                  "publication": {
+                    "default": "direct",
+                    "type": "string",
+                    "const": "direct"
                   },
                   "default": {
                     "default": false,
@@ -181,13 +166,17 @@
                   }
                 },
                 "required": [
-                  "name"
-                ]
+                  "name",
+                  "root",
+                  "path"
+                ],
+                "additionalProperties": false
               }
             ]
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "work": {
       "default": {},

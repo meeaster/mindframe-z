@@ -4,11 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   archiveCacheRoot,
   threadCliLogPath,
-  threadDestinationRoot,
   threadRunsRoot,
-  threadStoreRoot,
   threadSweepRoot
 } from "../core/paths.js";
+import type { ResolvedProfile } from "../core/profile.js";
 import {
   cli,
   makeTempDir,
@@ -26,8 +25,8 @@ type StoredSession = {
   last_activity_at?: string;
 };
 
-async function writeThread(home: string, slug: string, sessions: StoredSession[]): Promise<void> {
-  const dir = path.join(home, ".mindframe-z", "threads", slug);
+async function writeThread(root: string, slug: string, sessions: StoredSession[]): Promise<void> {
+  const dir = path.join(root, "threads", slug);
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, "manifest.json"),
@@ -35,7 +34,7 @@ async function writeThread(home: string, slug: string, sessions: StoredSession[]
       {
         slug,
         charter: "Track current thread work.",
-        destination: "personal",
+        store: "personal",
         created_at: "2026-07-06T00:00:00.000Z",
         sessions,
         synthesis: {}
@@ -81,6 +80,18 @@ function stored(id: string, messageCount: number, lastMessageId: string): Stored
 
 const logs: string[] = [];
 
+function testProfile(home: string): ResolvedProfile {
+  return {
+    profile: {
+      thread: {
+        stores: [
+          { name: "personal", root: home, path: "threads", publication: "direct", default: true }
+        ]
+      }
+    }
+  } as ResolvedProfile;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   logs.length = 0;
@@ -104,7 +115,7 @@ describe("listOutdatedThreads", () => {
       { id: "legacy", source: "claude-code" }
     ]);
 
-    await expect(listOutdatedThreads(paths)).resolves.toEqual([
+    await expect(listOutdatedThreads(paths, testProfile(home))).resolves.toEqual([
       {
         slug: "mixed",
         sessions: [
@@ -128,7 +139,7 @@ describe("listOutdatedThreads", () => {
     await writeThread(home, "a-thread", [stored("a-session", 1, "u1")]);
     await writeThread(home, "healthy", [stored("healthy-session", 2, "a1")]);
 
-    await expect(listOutdatedThreads(paths)).resolves.toEqual([
+    await expect(listOutdatedThreads(paths, testProfile(home))).resolves.toEqual([
       {
         slug: "a-thread",
         sessions: [{ source: "claude-code", id: "a-session", change: "grew", behind_messages: 2 }]
@@ -146,33 +157,33 @@ describe("listOutdatedThreads", () => {
   it("fails on a malformed individual thread manifest", async () => {
     const home = await makeTempDir();
     const paths = testRuntimePaths(home);
-    const invalidDir = path.join(threadStoreRoot(paths), "invalid");
+    const invalidDir = path.join(home, "threads", "invalid");
     await mkdir(invalidDir, { recursive: true });
     await writeFile(path.join(invalidDir, "manifest.json"), "not json\n", "utf8");
 
-    await expect(listOutdatedThreads(paths)).rejects.toThrow();
+    await expect(listOutdatedThreads(paths, testProfile(home))).rejects.toThrow();
   });
 
-  it("does not create or change thread manifests, sweep state, or destinations", async () => {
+  it("does not create or change thread manifests, sweep state, or stores", async () => {
     const home = await makeTempDir();
     const paths = testRuntimePaths(home);
     await writeClaudeTranscript(home, "session", ["u1", "a1", "u2"]);
     await writeThread(home, "thread", [stored("session", 1, "u1")]);
 
     const sweepDir = threadSweepRoot(paths);
-    const destinationDir = threadDestinationRoot(paths, "personal");
+    const destinationDir = path.join(home, "destination");
     await mkdir(sweepDir, { recursive: true });
     await mkdir(destinationDir, { recursive: true });
     await writeFile(path.join(sweepDir, "ledger.json"), "ledger\n", "utf8");
     await writeFile(path.join(destinationDir, "marker"), "destination\n", "utf8");
-    const manifestPath = path.join(home, ".mindframe-z", "threads", "thread", "manifest.json");
+    const manifestPath = path.join(home, "threads", "thread", "manifest.json");
     const before = await Promise.all([
       readFile(manifestPath, "utf8"),
       readFile(path.join(sweepDir, "ledger.json"), "utf8"),
       readFile(path.join(destinationDir, "marker"), "utf8")
     ]);
 
-    await listOutdatedThreads(paths);
+    await listOutdatedThreads(paths, testProfile(home));
 
     await expect(readFile(manifestPath, "utf8")).resolves.toBe(before[0]);
     await expect(readFile(path.join(sweepDir, "ledger.json"), "utf8")).resolves.toBe(before[1]);
@@ -189,16 +200,17 @@ describe("thread outdated cli", () => {
   it("prints deterministic four-column TSV and no human output for healthy threads", async () => {
     captureConsole();
     const { root, home } = await setupIntegrationFixture();
+    await mkdir(path.join(root, "threads"), { recursive: true });
     await writeClaudeTranscript(home, "grew", ["u1", "a1", "u2"]);
     await writeClaudeTranscript(home, "one", ["u1", "a1"]);
     await writeClaudeTranscript(home, "tail", ["u1", "replacement"]);
     await writeClaudeTranscript(home, "healthy", ["u1", "a1"]);
-    await writeThread(home, "thread-a", [
+    await writeThread(root, "thread-a", [
       stored("tail", 2, "a1"),
       stored("grew", 1, "u1"),
       stored("one", 1, "u1")
     ]);
-    await writeThread(home, "thread-healthy", [stored("healthy", 2, "a1")]);
+    await writeThread(root, "thread-healthy", [stored("healthy", 2, "a1")]);
 
     await runThreadOutdated({ root, home, profile: "personal" });
 
@@ -211,7 +223,7 @@ describe("thread outdated cli", () => {
     logs.length = 0;
     const healthyFixture = await setupIntegrationFixture();
     await writeClaudeTranscript(healthyFixture.home, "only-healthy", ["u1", "a1"]);
-    await writeThread(healthyFixture.home, "healthy", [stored("only-healthy", 2, "a1")]);
+    await writeThread(healthyFixture.root, "healthy", [stored("only-healthy", 2, "a1")]);
     await runThreadOutdated({
       root: healthyFixture.root,
       home: healthyFixture.home,
@@ -223,6 +235,7 @@ describe("thread outdated cli", () => {
   it("emits the stable JSON collection, including an empty collection", async () => {
     captureConsole();
     const { root, home } = await setupIntegrationFixture();
+    await mkdir(path.join(root, "threads"), { recursive: true });
 
     await runThreadOutdated({ root, home, profile: "personal", json: true });
 
@@ -234,9 +247,9 @@ describe("thread outdated cli", () => {
     const { root, home } = await setupIntegrationFixture();
     await writeClaudeTranscript(home, "grew", ["u1", "a1", "u2"]);
     await writeClaudeTranscript(home, "tail", ["u1", "replacement"]);
-    await writeThread(home, "thread-a", [stored("grew", 1, "u1"), stored("tail", 2, "a1")]);
+    await writeThread(root, "thread-a", [stored("grew", 1, "u1"), stored("tail", 2, "a1")]);
     const paths = testRuntimePaths(home, root);
-    const manifestPath = path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json");
+    const manifestPath = path.join(root, "threads", "thread-a", "manifest.json");
     const manifestBefore = await readFile(manifestPath, "utf8");
 
     await runThreadOutdated({ root, home, profile: "personal", json: true });
@@ -259,12 +272,11 @@ describe("thread outdated cli", () => {
   });
 
   it("runs through the CLI without creating operational or domain state", async () => {
-    const root = await makeTempDir();
-    const home = await makeTempDir();
+    const { root, home } = await setupIntegrationFixture();
     await writeClaudeTranscript(home, "session", ["u1", "a1", "u2"]);
-    await writeThread(home, "thread", [stored("session", 1, "u1")]);
+    await writeThread(root, "thread", [stored("session", 1, "u1")]);
     const paths = testRuntimePaths(home, root);
-    const manifestPath = path.join(home, ".mindframe-z", "threads", "thread", "manifest.json");
+    const manifestPath = path.join(root, "threads", "thread", "manifest.json");
     const manifestBefore = await readFile(manifestPath, "utf8");
 
     const result = await cli("mfz", root, home, ["thread", "outdated", "--json"]);
@@ -281,31 +293,15 @@ describe("thread outdated cli", () => {
     for (const statePath of [
       threadCliLogPath(paths),
       threadRunsRoot(paths),
-      threadSweepRoot(paths),
-      threadDestinationRoot(paths, "personal")
+      threadSweepRoot(paths)
     ]) {
       await expect(access(statePath)).rejects.toMatchObject({ code: "ENOENT" });
     }
   });
 
-  it("fails through the CLI when the thread store cannot be enumerated", async () => {
-    const root = await makeTempDir();
-    const home = await makeTempDir();
-    const paths = testRuntimePaths(home, root);
-    await mkdir(path.dirname(threadStoreRoot(paths)), { recursive: true });
-    await writeFile(threadStoreRoot(paths), "not a directory\n", "utf8");
-
-    await expect(cli("mfz", root, home, ["thread", "outdated", "--json"])).rejects.toMatchObject({
-      exitCode: 1,
-      stderr: expect.stringContaining("Error")
-    });
-  });
-
   it("fails through the CLI when an individual thread manifest is malformed", async () => {
-    const root = await makeTempDir();
-    const home = await makeTempDir();
-    const paths = testRuntimePaths(home, root);
-    const invalidDir = path.join(threadStoreRoot(paths), "invalid");
+    const { root, home } = await setupIntegrationFixture();
+    const invalidDir = path.join(root, "threads", "invalid");
     await mkdir(invalidDir, { recursive: true });
     await writeFile(path.join(invalidDir, "manifest.json"), "not json\n", "utf8");
 

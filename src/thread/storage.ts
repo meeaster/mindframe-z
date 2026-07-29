@@ -1,14 +1,15 @@
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
-import { threadDestinationRoot, threadPath, type RuntimePaths } from "../core/paths.js";
+import type { RuntimePaths } from "../core/paths.js";
 import { expandHome } from "../core/path-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
   threadHarnessSchema,
   type ThreadDefaults,
-  type ThreadDestination,
+  type ThreadStore,
   type ThreadHarness
 } from "../core/manifests.js";
 import {
@@ -42,90 +43,71 @@ export interface ResolvedSynthesisDefaults {
   triage: ParsedModelId;
 }
 
-export type ResolvedThreadDestination = ThreadDestination & { path: string };
+export type ResolvedThreadStore = ThreadStore & { root: string; path: string };
 
-function resolvedDestinationRoot(paths: RuntimePaths, destination: ThreadDestination): string {
-  const root = expandHome(destination.root!, paths.home);
-  if (!path.isAbsolute(root)) throw new Error(`Thread destination root must be absolute: ${root}`);
+function resolvedStoreRoot(paths: RuntimePaths, store: ThreadStore): string {
+  const root = expandHome(store.root, paths.home);
+  if (!path.isAbsolute(root)) throw new Error(`Thread store root must be absolute: ${root}`);
   return path.resolve(root);
 }
 
-function rootedDestinationPath(paths: RuntimePaths, destination: ThreadDestination): string {
-  if (!destination.root) {
-    return destination.path
-      ? path.join(paths.root, destination.path)
-      : threadDestinationRoot(paths, destination.name);
-  }
-
-  const resolvedRoot = resolvedDestinationRoot(paths, destination);
-  const resolved = path.resolve(resolvedRoot, destination.path!);
+function rootedStorePath(paths: RuntimePaths, store: ThreadStore): string {
+  const resolvedRoot = resolvedStoreRoot(paths, store);
+  const resolved = path.resolve(resolvedRoot, store.path);
   const relative = path.relative(resolvedRoot, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Thread destination escapes configured root: ${destination.name}`);
+    throw new Error(`Thread store path escapes configured root: ${store.name}`);
   }
   return resolved;
 }
 
-export function resolveThreadDestinations(
+export function resolveThreadStores(
   paths: RuntimePaths,
   profile: ResolvedProfile
-): ResolvedThreadDestination[] {
-  const map = new Map<string, ThreadDestination>();
-  for (const destination of profile.profile.thread.destinations)
-    map.set(destination.name, destination);
-  for (const destination of profile.manifests.machine.thread.destinations) {
-    map.set(destination.name, destination);
+): ResolvedThreadStore[] {
+  const map = new Map<string, ThreadStore>();
+  for (const store of profile.profile.thread.stores) map.set(store.name, store);
+  for (const store of profile.manifests?.machine.thread.stores ?? []) {
+    map.set(store.name, store);
   }
 
-  if (!map.has("home")) {
-    map.set("home", { name: "home", path: "threads", no_push: false, default: false });
-  }
-  const destinations = [...map.values()];
-  const defaultName = destinations.findLast((destination) => destination.default)?.name ?? "home";
-  return destinations.map((destination) => ({
-    ...destination,
-    ...(destination.root ? { root: resolvedDestinationRoot(paths, destination) } : {}),
-    default: destination.name === defaultName,
-    path: rootedDestinationPath(paths, destination)
+  const stores = [...map.values()];
+  const machineStores = profile.manifests?.machine.thread.stores ?? [];
+  const defaultName =
+    machineStores.findLast((store) => store.default)?.name ??
+    profile.profile.thread.stores.findLast((store) => store.default)?.name;
+  return stores.map((store) => ({
+    ...store,
+    root: resolvedStoreRoot(paths, store),
+    path: rootedStorePath(paths, store),
+    default: store.name === defaultName
   }));
 }
 
-export function defaultThreadDestination(
-  destinations: readonly ResolvedThreadDestination[]
-): ResolvedThreadDestination | undefined {
-  return destinations.find((destination) => destination.default) ?? destinations[0];
+export function defaultThreadStore(
+  stores: readonly ResolvedThreadStore[]
+): ResolvedThreadStore | undefined {
+  return stores.find((store) => store.default) ?? stores[0];
 }
 
-export function findThreadDestination(
-  destinations: readonly ResolvedThreadDestination[],
+export function findThreadStore(
+  stores: readonly ResolvedThreadStore[],
   name: string
-): ResolvedThreadDestination {
-  const destination = destinations.find((entry) => entry.name === name);
-  if (!destination) throw new Error(`Unknown thread destination: ${name}`);
-  return destination;
+): ResolvedThreadStore {
+  const store = stores.find((entry) => entry.name === name);
+  if (!store) throw new Error(`Unknown thread store: ${name}`);
+  return store;
 }
 
-export async function prepareThreadDestination(
+export async function prepareThreadStore(
   paths: RuntimePaths,
-  destination: ResolvedThreadDestination
+  store: ResolvedThreadStore
 ): Promise<void> {
-  if (await pathExists(destination.path)) return;
-
-  if (destination.pull_request) {
-    throw new Error(
-      `Pull-request thread destination does not exist: ${destination.name} (${destination.path})`
-    );
-  }
-
-  await mkdir(path.dirname(destination.path), { recursive: true });
-
-  if (destination.remote) {
-    await execa("git", ["clone", destination.remote, destination.path]);
-    return;
-  }
-
-  await mkdir(destination.path, { recursive: true });
-  await execa("git", ["init"], { cwd: destination.path });
+  void paths;
+  if (!(await pathExists(store.root)))
+    throw new Error(`Thread store repository does not exist: ${store.name} (${store.root})`);
+  if (!(await pathExists(store.path)))
+    throw new Error(`Thread store thread path does not exist: ${store.name} (${store.path})`);
 }
 
 export async function readThreadManifest(dir: string): Promise<ThreadManifest> {
@@ -239,64 +221,117 @@ export async function hasRemote(dir: string): Promise<boolean> {
   return stdout.trim().length > 0;
 }
 
-export async function syncThreadDestination(
-  destination: ResolvedThreadDestination,
-  storeRoot: string
-): Promise<string[]> {
-  if (!destination.read_only) {
-    if (!(await hasRemote(destination.path))) return [];
-
-    await execa("git", ["fetch", "origin"], { cwd: destination.path });
-
-    // If the remote has no branches yet (empty repo) there's nothing to pull.
-    const { stdout: remoteBranches } = await execa("git", ["branch", "-r"], {
-      cwd: destination.path
-    });
-    if (!remoteBranches.trim()) return [];
-
-    try {
-      await execa("git", ["pull", "--rebase", "--autostash"], { cwd: destination.path });
-    } catch (original) {
-      throw new Error(
-        `Failed to sync destination "${destination.name}". ` +
-          "Resolve any conflicts manually, or run `git rebase --abort` to cancel.",
-        { cause: original }
-      );
-    }
+export async function syncThreadStore(store: ResolvedThreadStore): Promise<string[]> {
+  const { stdout: dirty } = await execa("git", ["status", "--porcelain"], { cwd: store.root });
+  if (dirty.trim()) throw new Error(`Cannot sync dirty thread store "${store.name}"`);
+  if (!(await hasRemote(store.root))) return [];
+  await execa("git", ["fetch", "origin"], { cwd: store.root });
+  const { stdout: upstream } = await execa(
+    "git",
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    { cwd: store.root }
+  ).catch(() => ({ stdout: "" }));
+  if (!upstream.trim()) return [];
+  try {
+    await execa("git", ["pull", "--ff-only"], { cwd: store.root });
+  } catch (original) {
+    throw new Error(
+      `Failed to fast-forward thread store "${store.name}". Resolve divergence manually.`,
+      { cause: original }
+    );
   }
 
-  const updated: string[] = [];
-  for (const entry of await readdir(destination.path, { withFileTypes: true })) {
+  const threads: string[] = [];
+  for (const entry of await readdir(store.path, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-    const destDir = path.join(destination.path, entry.name);
-    const hasManifest = await pathExists(path.join(destDir, "manifest.json"));
+    const hasManifest = await pathExists(path.join(store.path, entry.name, "manifest.json"));
     if (!hasManifest) continue;
-    const storeDir = path.join(storeRoot, entry.name);
-    await cp(destDir, storeDir, { recursive: true, force: true });
-    updated.push(entry.name);
+    threads.push(entry.name);
   }
 
-  return updated;
+  return threads;
 }
 
 export interface ResolvedThread {
   dir: string;
-  destination: ResolvedThreadDestination;
+  store: ResolvedThreadStore;
 }
 
-// Locate a thread's store directory and its resolved destination from the slug.
+// Enumerate authoritative store checkouts. A slug may belong to exactly one.
+export async function listThreads(
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<ResolvedThread[]> {
+  const threads = new Map<string, ResolvedThread>();
+  for (const store of resolveThreadStores(paths, profile)) {
+    let entries;
+    try {
+      entries = await readdir(store.path, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Thread store path does not exist: ${store.name} (${store.path})`, {
+          cause: error
+        });
+      }
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const dir = path.join(store.path, entry.name);
+      if (!(await pathExists(path.join(dir, "manifest.json")))) continue;
+      const manifest = await readThreadManifest(dir);
+      if (manifest.slug !== entry.name) {
+        throw new Error(
+          `Thread manifest slug does not match its store directory: ${store.name}/${entry.name}`
+        );
+      }
+      if (manifest.store !== store.name) {
+        throw new Error(
+          `Thread manifest store mismatch at ${store.name}/${entry.name}: recorded ${manifest.store}`
+        );
+      }
+      const existing = threads.get(manifest.slug);
+      if (existing) {
+        throw new Error(
+          `Thread slug "${manifest.slug}" exists in multiple stores: ${existing.store.name}, ${store.name}`
+        );
+      }
+      threads.set(manifest.slug, { dir, store });
+    }
+  }
+  return [...threads.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, thread]) => thread);
+}
+
+// Locate a thread in its authoritative store checkout.
 export async function findThread(
   paths: RuntimePaths,
   profile: ResolvedProfile,
   slug: string
 ): Promise<ResolvedThread> {
-  const dir = threadPath(paths, slug);
-  const manifest = await readThreadManifest(dir);
-  const destination = findThreadDestination(
-    resolveThreadDestinations(paths, profile),
-    manifest.destination
+  const thread = (await listThreads(paths, profile)).find(
+    (entry) => path.basename(entry.dir) === slug
   );
-  return { dir, destination };
+  if (!thread) throw new Error(`Unknown thread: ${slug}`);
+  return thread;
+}
+
+// Direct stores are mutated in place. Pull-request stores receive a disposable
+// copy, so their canonical checkout stays an untouched read source.
+export async function withThreadMutation<T>(
+  thread: ResolvedThread,
+  fn: (thread: ResolvedThread) => Promise<T>
+): Promise<T> {
+  if (thread.store.publication === "direct") return fn(thread);
+  const workspace = await mkdtemp(path.join(tmpdir(), "mfz-thread-run-"));
+  const dir = path.join(workspace, path.basename(thread.dir));
+  try {
+    await cp(thread.dir, dir, { recursive: true });
+    return await fn({ ...thread, dir });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
 }
 
 // One synthesized session file per id, written under the thread's `sessions/`.
@@ -345,9 +380,11 @@ export interface SessionLedgerEntry {
   id: string;
   source: ThreadHarness;
   title?: string | undefined;
+  project?: string | undefined;
+  time_range?: string | undefined;
   // Required on a real synthesis; omitted by an irrelevant-delta short-circuit, which
   // writes no file and preserves the prior provenance via the merge below.
-  extracted_by?: string | undefined;
+  synthesizer?: string | undefined;
   // Tail signature of the host store, captured at gather time on this session's last
   // ingest run. Absent on entries written before watermarks existed, and on any run
   // where the store could not be read; the read-modify-write below leaves prior
@@ -374,8 +411,11 @@ export async function recordSessions(
   await writeThreadManifest(dir, { ...manifest, sessions: [...updated, ...added] });
 }
 
-export async function appendThreadRun(dir: string, record: ThreadRunRecord): Promise<void> {
+export async function appendThreadRun(
+  dir: string,
+  record: Omit<Extract<ThreadRunRecord, { kind: "native" }>, "kind"> | ThreadRunRecord
+): Promise<void> {
   const runs = await readThreadRuns(dir);
-  runs.runs.push(record);
+  runs.runs.push("kind" in record ? record : { kind: "native", ...record });
   await writeThreadRuns(dir, runs);
 }

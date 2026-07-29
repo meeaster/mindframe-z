@@ -5,7 +5,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import { writeThreadIndex } from "./index.js";
-import { hasRemote, type ResolvedThreadDestination } from "./storage.js";
+import { hasRemote, type ResolvedThreadStore } from "./storage.js";
 import { withAdvisoryLock } from "./lock.js";
 
 export type ThreadPublication =
@@ -19,8 +19,7 @@ type ThreadChange =
   | { kind: "delete"; slug: string; message: string };
 
 type PublicationTarget =
-  | { kind: "disabled"; name: string }
-  | { kind: "direct"; destination: ResolvedThreadDestination }
+  | { kind: "direct"; store: ResolvedThreadStore }
   | {
       kind: "pull-request";
       name: string;
@@ -48,29 +47,21 @@ export class ThreadPublicationError extends Error {
   }
 }
 
-function publicationTarget(destination: ResolvedThreadDestination): PublicationTarget {
-  if (destination.pull_request) {
-    if (!destination.root) {
-      throw new Error(
-        `Pull-request thread destination has no repository root: ${destination.name}`
-      );
-    }
+function publicationTarget(store: ResolvedThreadStore): PublicationTarget {
+  if (store.publication !== "direct") {
     return {
       kind: "pull-request",
-      name: destination.name,
-      repositoryRoot: destination.root,
-      destinationPath: destination.path,
-      base: destination.pull_request.base
+      name: store.name,
+      repositoryRoot: store.root,
+      destinationPath: store.path,
+      base: store.publication.base
     };
   }
-  if (destination.read_only) return { kind: "disabled", name: destination.name };
-  return { kind: "direct", destination };
+  return { kind: "direct", store };
 }
 
-export function assertThreadDestinationWritable(destination: ResolvedThreadDestination): void {
-  const target = publicationTarget(destination);
-  if (target.kind === "disabled")
-    throw new Error(`Thread destination is read-only: ${target.name}`);
+export function assertThreadStoreWritable(store: ResolvedThreadStore): void {
+  publicationTarget(store);
 }
 
 async function gitHead(cwd: string): Promise<string> {
@@ -111,23 +102,44 @@ async function materializeThreadChange(
 }
 
 async function publishDirect(
-  destination: ResolvedThreadDestination,
+  store: ResolvedThreadStore,
   change: ThreadChange,
   push: boolean
 ): Promise<ThreadPublication> {
-  if (await stagedChanges(destination.path)) {
-    throw new Error(`Thread destination has staged changes: ${destination.name}`);
+  if (await stagedChanges(store.root)) {
+    throw new Error(`Thread store has staged changes: ${store.name}`);
   }
-  if (!(await materializeThreadChange(destination.path, change.slug, change))) {
+  const threadDir = path.join(store.path, change.slug);
+  if (change.kind === "write") {
+    if (path.resolve(change.sourceDir) !== path.resolve(threadDir)) {
+      throw new Error(`Direct thread writes must occur in the authoritative store: ${store.name}`);
+    }
+    if (!(await pathExists(threadDir))) {
+      throw new Error(`Thread does not exist in store ${store.name}: ${change.slug}`);
+    }
+  } else if (!(await pathExists(threadDir))) {
     return { kind: "unchanged" };
+  } else {
+    await rm(threadDir, { recursive: true, force: true });
   }
-  if (!(await stagedChanges(destination.path))) return { kind: "unchanged" };
+  await writeThreadIndex(store.path);
+  const relativeThread = path.relative(store.root, threadDir);
+  const relativeIndex = path.relative(store.root, path.join(store.path, "index.md"));
+  if (change.kind === "delete") {
+    await execa("git", ["add", "-u", "--", relativeThread], { cwd: store.root });
+    await execa("git", ["add", "--", relativeIndex], { cwd: store.root });
+  } else {
+    await execa("git", ["add", "-A", "--", relativeThread, relativeIndex], {
+      cwd: store.root
+    });
+  }
+  if (!(await stagedChanges(store.root))) return { kind: "unchanged" };
 
-  await execa("git", ["commit", "-m", change.message], { cwd: destination.path });
-  const commit = await gitHead(destination.path);
-  const pushed = push && (await hasRemote(destination.path));
-  if (pushed) await execa("git", ["push"], { cwd: destination.path });
-  else if (push) console.warn(`No git remote for ${destination.name} — skipping push`);
+  await execa("git", ["commit", "-m", change.message], { cwd: store.root });
+  const commit = await gitHead(store.root);
+  const pushed = push && (await hasRemote(store.root));
+  if (pushed) await execa("git", ["push"], { cwd: store.root });
+  else if (push) console.warn(`No git remote for ${store.name} — skipping push`);
   return { kind: "direct", commit, pushed };
 }
 
@@ -224,9 +236,7 @@ async function publishPullRequest(
     cwd: target.repositoryRoot
   });
   if (path.resolve(topLevel.trim()) !== target.repositoryRoot) {
-    throw new Error(
-      `Thread destination root is not a Git repository root: ${target.repositoryRoot}`
-    );
+    throw new Error(`Thread store root is not a Git repository root: ${target.repositoryRoot}`);
   }
   await execa("git", ["remote", "get-url", "origin"], { cwd: target.repositoryRoot });
   await execa("git", ["fetch", "origin", target.base], { cwd: target.repositoryRoot });
@@ -310,45 +320,41 @@ async function publishPullRequest(
 }
 
 async function publishThreadChange(
-  destination: ResolvedThreadDestination,
+  store: ResolvedThreadStore,
   change: ThreadChange,
   push: boolean
 ): Promise<ThreadPublication> {
-  const target = publicationTarget(destination);
-  if (target.kind === "disabled")
-    throw new Error(`Thread destination is read-only: ${target.name}`);
-  if (target.kind === "direct") return publishDirect(target.destination, change, push);
+  const target = publicationTarget(store);
+  if (target.kind === "direct") return publishDirect(target.store, change, push);
   return publishPullRequest(target, change, push);
 }
 
-function publicationLockPath(destination: ResolvedThreadDestination): string {
-  const repositoryRoot = path.resolve(
-    destination.pull_request && destination.root ? destination.root : destination.path
-  );
+function publicationLockPath(store: ResolvedThreadStore): string {
+  const repositoryRoot = path.resolve(store.root);
   const key = createHash("sha256").update(repositoryRoot).digest("hex");
   return path.join(tmpdir(), "mfz-thread-publication-locks", `${key}.lock`);
 }
 
 export async function commitThreadChanges(
-  destination: ResolvedThreadDestination,
+  store: ResolvedThreadStore,
   slug: string,
   threadDir: string,
   message: string,
   push: boolean
 ): Promise<ThreadPublication> {
-  return withAdvisoryLock(publicationLockPath(destination), `publish thread ${slug}`, () =>
-    publishThreadChange(destination, { kind: "write", slug, sourceDir: threadDir, message }, push)
+  return withAdvisoryLock(publicationLockPath(store), `publish thread ${slug}`, () =>
+    publishThreadChange(store, { kind: "write", slug, sourceDir: threadDir, message }, push)
   );
 }
 
-export async function deleteThreadFromDestination(
-  destination: ResolvedThreadDestination,
+export async function deleteThreadFromStore(
+  store: ResolvedThreadStore,
   slug: string,
   push: boolean
 ): Promise<ThreadPublication> {
-  return withAdvisoryLock(publicationLockPath(destination), `delete thread ${slug}`, () =>
+  return withAdvisoryLock(publicationLockPath(store), `delete thread ${slug}`, () =>
     publishThreadChange(
-      destination,
+      store,
       { kind: "delete", slug, message: `chore(thread): delete ${slug}` },
       push
     )

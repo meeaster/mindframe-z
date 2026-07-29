@@ -53,7 +53,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/homes/<alias>/
 ~/.mindframe-z/overrides.json
 ~/.mindframe-z/work/v1/
-~/.mindframe-z/threads/
 ~/.mindframe-z/cache/skills/
 ~/.mindframe-z/skill-candidates/
 ~/.mindframe-z/bin/
@@ -153,7 +152,7 @@ Scaffolded YAML files use first-line YAML language server modelines pointing at 
 
 ## Threads And Sandbox
 
-Threads are machine-local orchestration state under `~/.mindframe-z/threads/` with Git-backed destinations. Each destination carries a deterministic `index.md` generated from its accepted thread manifests; publication updates that catalog in the same commit as a thread write or deletion. Direct destinations commit in their configured working copy. A read-only destination with `pull_request.base` publishes through a unique disposable worktree and review branch, opens a pull request, and never changes the canonical checkout's files, index, or branch. Thread publication stops at PR creation; merge remains a separate acceptance action. They resolve profile and machine config at runtime but are separate from rendering.
+Threads live only in configured store checkouts. Each store's configured `path` is its authoritative thread root and carries a deterministic `index.md` generated from its accepted thread manifests; direct mutations update that checkout and publication commits those same files. Thread slugs are globally unique across all active stores, and commands fail clearly when duplicate slugs are found. `thread sync` fast-forwards clean configured Git checkouts only and never copies thread content into machine-local state. A pull-request store uses its canonical checkout as a read source and publishes mutations from a disposable machine-local worktree and review branch; it never changes the canonical checkout's files, index, or branch. Thread publication stops at PR creation; merge remains a separate acceptance action. Run, lock, sweep, and CLI-log state remain machine-local under `~/.mindframe-z/threads/`, while shared session archives remain under their session subsystem path. Threads resolve profile and machine config at runtime but are separate from rendering.
 
 Work units keep durable content under the machine-configured `work.units_root`, defaulting to
 `~/.mindframe-z/work/v1/units/`. Machine-local bindings and delivery state remain under

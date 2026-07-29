@@ -43,7 +43,7 @@ describe("loadManifests", () => {
     expect(manifests.skills).toEqual([]);
     expect(manifests.mcpServers).toEqual({});
     expect(manifests.machine.references_dir).toBe("~/.mindframe-z/references");
-    expect(manifests.machine.thread).toEqual({ destinations: [] });
+    expect(manifests.machine.thread).toEqual({ stores: [] });
     expect(manifests.machine.archives).toEqual([]);
   });
 

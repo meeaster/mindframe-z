@@ -340,7 +340,7 @@ export type DelegateGeneralConfig = z.infer<typeof delegateGeneralSchema>;
 
 export const threadHarnessSchema = z.enum(["claude-code", "opencode"]);
 
-// Bounded identifier for thread slugs and destination names: lowercase alnum
+// Bounded identifier for thread slugs and store names: lowercase alnum
 // start, then alnum plus . _ - — no path separators, no leading dot. The
 // leading-alnum rule already excludes bare "." / ".." and any "/" or "\".
 export const threadIdentifierSchema = z
@@ -363,14 +363,14 @@ const threadPullRequestSchema = z.object({
     )
 });
 
-const threadDestinationRootSchema = z
+const threadStoreRootSchema = z
   .string()
   .min(1)
   .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
     message: "must be absolute or start with ~/"
   });
 
-const threadDestinationPathSchema = z
+const threadStorePathSchema = z
   .string()
   .min(1)
   .refine(
@@ -382,45 +382,30 @@ const threadDestinationPathSchema = z
     "must be a relative path without empty, . or .. segments"
   );
 
-const directThreadDestinationSchema = z
+const directThreadStoreSchema = z
   .object({
     name: threadIdentifierSchema,
-    remote: z.string().optional(),
-    root: threadDestinationRootSchema.optional(),
-    path: threadDestinationPathSchema.optional(),
-    no_push: z.boolean().default(false),
-    read_only: z.boolean().optional(),
-    pull_request: z.never().optional(),
+    root: threadStoreRootSchema,
+    path: threadStorePathSchema,
+    publication: z.literal("direct").default("direct"),
     default: z.boolean().default(false)
   })
-  .superRefine((destination, context) => {
-    if (destination.root && !destination.path) {
-      context.addIssue({
-        code: "custom",
-        path: ["path"],
-        message: "is required when root is configured"
-      });
-    }
-  });
+  .strict();
 
-const pullRequestThreadDestinationSchema = z.object({
+const pullRequestThreadStoreSchema = z.object({
   name: threadIdentifierSchema,
-  remote: z.never().optional(),
-  root: threadDestinationRootSchema,
-  path: threadDestinationPathSchema,
-  no_push: z.literal(false).default(false),
-  read_only: z.literal(true),
-  pull_request: threadPullRequestSchema,
+  root: threadStoreRootSchema,
+  path: threadStorePathSchema,
+  publication: z
+    .object({ mode: z.literal("pull-request"), base: threadPullRequestSchema.shape.base })
+    .strict(),
   default: z.boolean().default(false)
 });
 
-export const threadDestinationSchema = z.union([
-  pullRequestThreadDestinationSchema,
-  directThreadDestinationSchema
-]);
+export const threadStoreSchema = z.union([pullRequestThreadStoreSchema, directThreadStoreSchema]);
 
 // A session archive: an S3 destination for raw, full-fidelity session backups,
-// sibling to thread `destinations` (which back up the *synthesized* store). Exactly
+// independent from thread `stores` (which contain the *synthesized* store). Exactly
 // one archive is `default: true` and writable; the rest are read-only sources a
 // consumer may hydrate from. Creds resolve via the SDK default provider chain,
 // optionally pinned to a named `profile`. mfz never stores a secret here.
@@ -452,7 +437,7 @@ export const threadDefaultsSchema = z.object({
 
 const profileThreadSchema = z
   .object({
-    destinations: z.array(threadDestinationSchema).default([]),
+    stores: z.array(threadStoreSchema).default([]),
     defaults: threadDefaultsSchema.default({}),
     // How a changed session is refreshed during ingest. "full" re-reads and
     // re-synthesizes the whole session (best fidelity, cheap even worst-case);
@@ -470,17 +455,19 @@ const profileThreadSchema = z
     // changes based on ambient host state.
     credentials: sandboxCredentialModeSchema.default("subscription")
   })
+  .strict()
   .default({
-    destinations: [],
+    stores: [],
     defaults: {},
     credentials: "subscription"
   });
 
 const machineThreadSchema = z
   .object({
-    destinations: z.array(threadDestinationSchema).default([])
+    stores: z.array(threadStoreSchema).default([])
   })
-  .default({ destinations: [] });
+  .strict()
+  .default({ stores: [] });
 
 const exactVersionSchema = z
   .string()
@@ -614,7 +601,7 @@ export type MachineManifest = z.infer<typeof machineSchema>;
 export type HomeManifest = z.infer<typeof homeManifestSchema>;
 export type Archive = z.infer<typeof archiveSchema>;
 export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
-export type ThreadDestination = z.infer<typeof threadDestinationSchema>;
+export type ThreadStore = z.infer<typeof threadStoreSchema>;
 export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
 export type ThreadHarness = z.infer<typeof threadHarnessSchema>;
 

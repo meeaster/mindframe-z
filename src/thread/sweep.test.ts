@@ -15,10 +15,13 @@ import {
 } from "./sweep.js";
 import { readSweepState, readVerdictLedger, writeSweepState } from "./verdicts.js";
 
-function profile(quiescenceMinutes = 0): ResolvedProfile {
+function profile(home: string, quiescenceMinutes = 0): ResolvedProfile {
   return {
     profile: {
       thread: {
+        stores: [
+          { name: "personal", root: home, path: "threads", publication: "direct", default: true }
+        ],
         defaults: { quiescence_minutes: quiescenceMinutes },
         credentials: "subscription"
       }
@@ -57,7 +60,7 @@ async function writeThread(
     last_activity_at?: string;
   }> = []
 ): Promise<void> {
-  const dir = path.join(home, ".mindframe-z", "threads", slug);
+  const dir = path.join(home, "threads", slug);
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, "manifest.json"),
@@ -65,7 +68,7 @@ async function writeThread(
       {
         slug,
         charter,
-        destination: "personal",
+        store: "personal",
         created_at: "2026-07-06T00:00:00.000Z",
         sessions,
         synthesis: {}
@@ -167,7 +170,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits matched", calls)
     });
 
@@ -194,7 +197,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("")
     });
 
@@ -227,7 +230,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("")
     });
 
@@ -243,7 +246,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits session matches", calls)
     });
 
@@ -251,22 +254,22 @@ describe("thread sweep", () => {
       { id: "claude-code:new-session", thread: "thread-a", reason: "session matches" }
     ]);
     expect(calls).toHaveLength(1);
-    await expect(listPending(testRuntimePaths(home))).resolves.toMatchObject([
+    await expect(listPending(testRuntimePaths(home), profile(home))).resolves.toMatchObject([
       { id: "claude-code:new-session", thread: "thread-a", stale: false }
     ]);
 
     const threadManifestBefore = await readFile(
-      path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json"),
+      path.join(home, "threads", "thread-a", "manifest.json"),
       "utf8"
     );
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits should not run", calls)
     });
     expect(calls).toHaveLength(1);
     await expect(
-      readFile(path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json"), "utf8")
+      readFile(path.join(home, "threads", "thread-a", "manifest.json"), "utf8")
     ).resolves.toBe(threadManifestBefore);
   });
 
@@ -279,7 +282,7 @@ describe("thread sweep", () => {
 
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a no_fit not relevant", calls)
     });
     expect(calls).toHaveLength(1);
@@ -288,12 +291,12 @@ describe("thread sweep", () => {
     await writeThread(home, "thread-b", "Brand new charter.");
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a no_fit still not relevant\nthread-b fits new thread match", calls)
     });
 
     expect(calls).toHaveLength(2);
-    expect(await listPending(testRuntimePaths(home))).toEqual([
+    expect(await listPending(testRuntimePaths(home), profile(home))).toEqual([
       {
         id: "claude-code:new-session",
         thread: "thread-b",
@@ -312,7 +315,7 @@ describe("thread sweep", () => {
 
     const deferred = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(30),
+      profile: profile(home, 30),
       runner: runner("thread-a fits should wait", calls)
     });
 
@@ -323,7 +326,7 @@ describe("thread sweep", () => {
 
     const included = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(30),
+      profile: profile(home, 30),
       includeHot: true,
       runner: runner("thread-a fits now judged", calls)
     });
@@ -340,7 +343,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("not parseable\nthread-a no_fit weak signal")
     });
 
@@ -349,17 +352,17 @@ describe("thread sweep", () => {
     ]);
     const ledger = await readVerdictLedger(testRuntimePaths(home));
     expect(ledger.verdicts).toMatchObject([{ verdict: "no_fit", reason: "weak signal" }]);
-    const runDirs = await readdir(path.join(home, ".mindframe-z", "thread-runs", "runs"));
+    const runDirs = await readdir(path.join(home, ".mindframe-z", "threads", "runs"));
     expect(runDirs).toHaveLength(1);
     await expect(
       readFile(
-        path.join(home, ".mindframe-z", "thread-runs", "runs", runDirs[0]!, "triage.jsonl"),
+        path.join(home, ".mindframe-z", "threads", "runs", runDirs[0]!, "triage.jsonl"),
         "utf8"
       )
     ).resolves.toContain("weak signal");
     await expect(
       readFile(
-        path.join(home, ".mindframe-z", "thread-runs", "runs", runDirs[0]!, "status.json"),
+        path.join(home, ".mindframe-z", "threads", "runs", runDirs[0]!, "status.json"),
         "utf8"
       )
     ).resolves.toContain('"current_step": "complete"');
@@ -374,7 +377,7 @@ describe("thread sweep", () => {
 
     const report = await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits first\nthread-a no_fit duplicate")
     });
 
@@ -400,13 +403,13 @@ describe("thread sweep", () => {
     await writeClaudeSession(home, "new-session");
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits original match")
     });
 
     await writeThread(home, "thread-a", "Changed charter.");
 
-    await expect(listPending(testRuntimePaths(home))).resolves.toMatchObject([
+    await expect(listPending(testRuntimePaths(home), profile(home))).resolves.toMatchObject([
       { id: "claude-code:new-session", thread: "thread-a", stale: true }
     ]);
   });
@@ -416,29 +419,40 @@ describe("thread sweep", () => {
     await writeThread(home, "thread-a");
     await writeSweepState(testRuntimePaths(home), { baseline_at: "2020-01-01T00:00:00.000Z" });
     await writeClaudeSession(home, "noisy-session");
-    await rejectPending(testRuntimePaths(home), "claude-code:noisy-session", "thread-a");
+    await rejectPending(
+      testRuntimePaths(home),
+      profile(home),
+      "claude-code:noisy-session",
+      "thread-a"
+    );
     const calls: string[] = [];
 
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits should not run", calls)
     });
 
     expect(calls).toHaveLength(0);
-    expect(await listPending(testRuntimePaths(home))).toEqual([]);
+    expect(await listPending(testRuntimePaths(home), profile(home))).toEqual([]);
 
     await writeThread(home, "thread-a", "Track sweep work.", [
       { id: "noisy-session", source: "claude-code" }
     ]);
-    expect(await listPending(testRuntimePaths(home))).toEqual([]);
+    expect(await listPending(testRuntimePaths(home), profile(home))).toEqual([]);
   });
 
   it("reject fails for unknown threads", async () => {
     const home = await makeTempDir();
+    await mkdir(path.join(home, "threads"), { recursive: true });
 
     await expect(
-      rejectPending(testRuntimePaths(home), "claude-code:noisy-session", "missing-thread")
+      rejectPending(
+        testRuntimePaths(home),
+        profile(home),
+        "claude-code:noisy-session",
+        "missing-thread"
+      )
     ).rejects.toThrow("Unknown thread: missing-thread");
   });
 
@@ -451,15 +465,15 @@ describe("thread sweep", () => {
 
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits maybe relevant", calls)
     });
-    expect(await concludePending(testRuntimePaths(home))).toBe(1);
-    expect(await listPending(testRuntimePaths(home))).toEqual([]);
+    expect(await concludePending(testRuntimePaths(home), profile(home))).toBe(1);
+    expect(await listPending(testRuntimePaths(home), profile(home))).toEqual([]);
 
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits unchanged should not dispatch", calls)
     });
     expect(calls).toHaveLength(1);
@@ -467,7 +481,7 @@ describe("thread sweep", () => {
     await writeClaudeSession(home, "maybe-session", ["u1", "a1", "u2"], new Date());
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits grew", calls)
     });
     expect(calls).toHaveLength(2);
@@ -480,19 +494,19 @@ describe("thread sweep", () => {
     await writeClaudeSession(home, "new-session");
     await runSweep({
       paths: testRuntimePaths(home),
-      profile: profile(),
+      profile: profile(home),
       runner: runner("thread-a fits session matches")
     });
     const ledgerBefore = await readFile(
-      path.join(home, ".mindframe-z", "thread-sweep", "ledger.json"),
+      path.join(home, ".mindframe-z", "threads", "sweep", "ledger.json"),
       "utf8"
     );
 
-    expect(await listPending(testRuntimePaths(home))).toEqual(
-      await listPending(testRuntimePaths(home))
+    expect(await listPending(testRuntimePaths(home), profile(home))).toEqual(
+      await listPending(testRuntimePaths(home), profile(home))
     );
     expect(
-      await readFile(path.join(home, ".mindframe-z", "thread-sweep", "ledger.json"), "utf8")
+      await readFile(path.join(home, ".mindframe-z", "threads", "sweep", "ledger.json"), "utf8")
     ).toBe(ledgerBefore);
   });
 });

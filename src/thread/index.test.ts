@@ -9,9 +9,10 @@ function manifest(overrides: Partial<ThreadManifest>): ThreadManifest {
   return {
     slug: "thread-a",
     charter: "Preserve prior reasoning.",
-    destination: "personal-knowledge",
+    store: "personal-knowledge",
     created_at: "2026-07-01T00:00:00.000Z",
     sessions: [],
+    excluded: [],
     synthesis: {},
     ...overrides
   };
@@ -45,7 +46,7 @@ describe("thread index", () => {
     expect(threadIndexContent([])).toContain("_No threads are currently available._");
   });
 
-  it("writes byte-stable output from destination manifests", async () => {
+  it("writes byte-stable output from store manifests", async () => {
     const root = await makeTempDir();
     await mkdir(path.join(root, "thread-a"));
     await writeThreadManifest(path.join(root, "thread-a"), manifest({}));

@@ -17,7 +17,7 @@ function machine(git: MachineManifest["git"]): MachineManifest {
     extra_folders: [],
     git,
     sandbox: {},
-    thread: { destinations: [] },
+    thread: { stores: [] },
     work: {},
     archives: [],
     opencode: {},

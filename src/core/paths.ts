@@ -183,10 +183,6 @@ export function extraFoldersIndexPath(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "extra_folders.md");
 }
 
-export function threadStoreRoot(paths: RuntimePaths): string {
-  return path.join(mindframeZDir(paths.home), "threads");
-}
-
 export function workStoreRoot(paths: RuntimePaths): string {
   return paths.workRoot;
 }
@@ -219,24 +215,16 @@ export function opencodeDbPath(paths: RuntimePaths): string {
   return path.join(opencodeDataHome(paths), "opencode", "opencode.db");
 }
 
-export function threadDestinationRoot(paths: RuntimePaths, destination: string): string {
-  return path.join(mindframeZDir(paths.home), "thread-destinations", destination);
-}
-
-export function threadPath(paths: RuntimePaths, slug: string): string {
-  return path.join(threadStoreRoot(paths), slug);
-}
-
 export function threadRunsRoot(paths: RuntimePaths): string {
-  return path.join(mindframeZDir(paths.home), "thread-runs", "runs");
+  return path.join(threadRuntimeRoot(paths), "runs");
 }
 
 export function threadLocksRoot(paths: RuntimePaths): string {
-  return path.join(mindframeZDir(paths.home), "thread-runs", "locks");
+  return path.join(threadRuntimeRoot(paths), "locks");
 }
 
 export function threadSweepRoot(paths: RuntimePaths): string {
-  return path.join(mindframeZDir(paths.home), "thread-sweep");
+  return path.join(threadRuntimeRoot(paths), "sweep");
 }
 
 export function threadRunPath(paths: RuntimePaths, runId: string): string {
@@ -244,7 +232,11 @@ export function threadRunPath(paths: RuntimePaths, runId: string): string {
 }
 
 export function threadCliLogPath(paths: RuntimePaths): string {
-  return path.join(mindframeZDir(paths.home), "thread-runs", "cli.log");
+  return path.join(threadRuntimeRoot(paths), "cli.log");
+}
+
+export function threadRuntimeRoot(paths: RuntimePaths): string {
+  return path.join(mindframeZDir(paths.home), "threads");
 }
 
 export function dedupe<T>(items: readonly T[]): T[] {

@@ -1,13 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathExists } from "../core/fs-util.js";
-import {
-  createRuntimePaths,
-  threadPath,
-  threadStoreRoot,
-  type PathOptions
-} from "../core/paths.js";
+import { createRuntimePaths, type PathOptions } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import { threadIdentifierSchema } from "../core/manifests.js";
 import { THREAD_PERSONAS } from "./personas.js";
@@ -24,23 +20,25 @@ import {
   waitForLapdog
 } from "./lapdog.js";
 import {
-  defaultThreadDestination,
+  defaultThreadStore,
   findThread,
-  findThreadDestination,
-  prepareThreadDestination,
+  findThreadStore,
+  listThreads,
+  prepareThreadStore,
   readThreadManifest,
   readThreadRuns,
   resolveSynthesisDefaults,
   resolveSessionSources,
-  resolveThreadDestinations,
-  syncThreadDestination,
+  resolveThreadStores,
+  syncThreadStore,
   writeThreadManifest,
   writeThreadRuns,
   type ThreadManifest
 } from "./storage.js";
 import {
-  assertThreadDestinationWritable,
-  deleteThreadFromDestination,
+  assertThreadStoreWritable,
+  commitThreadChanges,
+  deleteThreadFromStore,
   type ThreadPublication
 } from "./publication.js";
 import {
@@ -52,28 +50,84 @@ import {
 import { ensureThreadToolsImage, threadToolsImageBuildPlan } from "./build.js";
 import { listOutdatedThreads } from "./outdated.js";
 import { withThreadLock } from "./lock.js";
+import { migrateThreadRuntimeState } from "./runtime.js";
+import { migrateStore, publishStoreMigration } from "./migration.js";
 
 interface ThreadOptions extends PathOptions {
   profile?: string | undefined;
 }
 
-// Slugs come from argv and flow into `path.join` → `cp`/`rm`/`git`, so bound them
-// to a safe identifier before they can escape the thread store root.
+// Slugs come from argv and flow into store paths and Git commands, so bound
+// them to a safe identifier before they can escape an authoritative checkout.
 function assertThreadSlug(slug: string): string {
   return threadIdentifierSchema.parse(slug);
 }
 
-export async function runThreadDestinations(
-  options: ThreadOptions & { json?: boolean }
-): Promise<void> {
-  await withThreadLog(options, "thread destinations", async ({ paths, profile }) => {
-    const destinations = resolveThreadDestinations(paths, profile);
-    if (options.json) console.log(JSON.stringify({ destinations }, null, 2));
+export async function runThreadStores(options: ThreadOptions & { json?: boolean }): Promise<void> {
+  await withThreadLog(options, "thread stores", async ({ paths, profile }) => {
+    const stores = resolveThreadStores(paths, profile);
+    if (options.json) console.log(JSON.stringify({ stores }, null, 2));
     else
-      for (const destination of destinations)
+      for (const store of stores)
         console.log(
-          `${destination.default ? "*" : " "} ${destination.name}\t${destination.remote ?? "-"}${destination.no_push ? "\tno_push" : ""}`
+          `${store.default ? "*" : " "} ${store.name}\t${store.root}\t${store.path}\t${store.publication === "direct" ? "direct" : `pull-request:${store.publication.base}`}`
         );
+  });
+}
+
+export async function runThreadMigration(
+  options: ThreadOptions & {
+    store?: string | undefined;
+    dryRun?: boolean;
+    publish?: boolean;
+    json?: boolean;
+  }
+): Promise<void> {
+  await withThreadLog(options, "thread migrate", async ({ paths, profile }) => {
+    if (!options.dryRun && !options.publish) {
+      throw new Error(
+        "Thread migration is dry-run only until a reviewed store worktree is selected"
+      );
+    }
+    const stores = resolveThreadStores(paths, profile);
+    const selected = options.store ? [findThreadStore(stores, options.store)] : stores;
+    if (options.publish) {
+      const publications = await Promise.all(
+        selected.map((store) => {
+          if (store.publication === "direct") {
+            throw new Error(
+              `Store ${store.name} uses direct publication; select a reviewed workflow explicitly`
+            );
+          }
+          return publishStoreMigration({
+            paths,
+            storeName: store.name,
+            storeRoot: store.root,
+            storePath: store.path,
+            base: store.publication.base
+          });
+        })
+      );
+      if (options.json) console.log(JSON.stringify({ publications }, null, 2));
+      else for (const publication of publications) console.log(`pull-request\t${publication.url}`);
+      return;
+    }
+    const results = await Promise.all(
+      selected.map((store) =>
+        migrateStore({
+          paths,
+          storeName: store.name,
+          storePath: store.path,
+          dryRun: true
+        })
+      )
+    );
+    if (options.json) {
+      console.log(JSON.stringify({ stores: results }, null, 2));
+    } else {
+      for (const result of results)
+        console.log(`validated\t${result.storeName}\t${result.threads.length} threads`);
+    }
   });
 }
 
@@ -90,7 +144,7 @@ export async function runThreadToolsBuild(
 export async function runThreadCreate(
   slug: string,
   options: ThreadOptions & {
-    dest?: string | undefined;
+    store?: string | undefined;
     charter: string;
     discover?: string | undefined;
     gather?: string | undefined;
@@ -99,41 +153,71 @@ export async function runThreadCreate(
 ): Promise<void> {
   await withThreadLog(options, `thread create ${slug}`, async ({ paths, profile }) => {
     assertThreadSlug(slug);
-    const destinations = resolveThreadDestinations(paths, profile);
-    const destination = options.dest
-      ? findThreadDestination(destinations, options.dest)
-      : defaultThreadDestination(destinations);
-    if (!destination) throw new Error("No thread destinations configured");
-    assertThreadDestinationWritable(destination);
-    await prepareThreadDestination(paths, destination);
-    const dir = threadPath(paths, slug);
+    const stores = resolveThreadStores(paths, profile);
+    const store = options.store
+      ? findThreadStore(stores, options.store)
+      : defaultThreadStore(stores);
+    if (!store) throw new Error("No thread stores configured");
+    assertThreadStoreWritable(store);
+    await prepareThreadStore(paths, store);
+    if ((await listThreads(paths, profile)).some((thread) => path.basename(thread.dir) === slug))
+      throw new Error(`Thread already exists: ${slug}`);
+    const dir = path.join(store.path, slug);
     if (await pathExists(path.join(dir, "manifest.json")))
       throw new Error(`Thread already exists: ${slug}`);
     const manifest: ThreadManifest = {
       slug,
       charter: options.charter,
-      destination: destination.name,
+      store: store.name,
       created_at: new Date().toISOString(),
       sessions: [],
+      excluded: [],
       synthesis: {
         ...(options.discover ? { discover: options.discover } : {}),
         ...(options.gather ? { gather: options.gather } : {}),
         ...(options.synthesize ? { synthesize: options.synthesize } : {})
       }
     };
-    await writeThreadManifest(dir, manifest);
-    await writeThreadRuns(dir, { runs: [] });
-    console.log(`created\t${slug}\t${destination.name}`);
+    if (store.publication !== "direct") {
+      const workspace = await mkdtemp(path.join(tmpdir(), "mfz-thread-run-"));
+      const stagedDir = path.join(workspace, slug);
+      try {
+        await writeThreadManifest(stagedDir, manifest);
+        await writeThreadRuns(stagedDir, { runs: [] });
+        printThreadPublication(
+          await commitThreadChanges(store, slug, stagedDir, `chore(thread): create ${slug}`, true)
+        );
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    } else {
+      await writeThreadManifest(dir, manifest);
+      await writeThreadRuns(dir, { runs: [] });
+      printThreadPublication(
+        await commitThreadChanges(store, slug, dir, `chore(thread): create ${slug}`, true)
+      );
+    }
+    console.log(`created\t${slug}\t${store.name}`);
   });
 }
 
 export async function runThreadList(options: ThreadOptions & { json?: boolean }): Promise<void> {
-  await withThreadLog(options, "thread list", async ({ paths }) => {
-    const threads = await listThreads(paths);
-    if (options.json) console.log(JSON.stringify({ threads }, null, 2));
+  await withThreadLog(options, "thread list", async ({ paths, profile }) => {
+    const threads = await listThreads(paths, profile);
+    const entries = await Promise.all(
+      threads.map(async (thread) => {
+        const manifest = await readThreadManifest(thread.dir);
+        return {
+          slug: manifest.slug,
+          store: thread.store.name,
+          session_count: manifest.sessions.length
+        };
+      })
+    );
+    if (options.json) console.log(JSON.stringify({ threads: entries }, null, 2));
     else
-      for (const thread of threads)
-        console.log(`${thread.slug}\t${thread.destination}\t${thread.session_count} sessions`);
+      for (const thread of entries)
+        console.log(`${thread.slug}\t${thread.store}\t${thread.session_count} sessions`);
   });
 }
 
@@ -141,7 +225,12 @@ export async function runThreadOutdated(
   options: ThreadOptions & { json?: boolean | undefined }
 ): Promise<void> {
   const paths = createRuntimePaths(options);
-  const report = { threads: await listOutdatedThreads(paths) };
+  const runtimeMigration = await migrateThreadRuntimeState(paths);
+  for (const conflict of runtimeMigration.conflicts) {
+    console.warn(`thread runtime state conflict: ${conflict.source} -> ${conflict.target}`);
+  }
+  const profile = await resolveProfile(paths, options.profile);
+  const report = { threads: await listOutdatedThreads(paths, profile) };
   if (options.json) {
     console.log(JSON.stringify(report, null, 2));
     return;
@@ -322,8 +411,8 @@ export async function runThreadSweep(
 export async function runThreadPending(
   options: ThreadOptions & { json?: boolean | undefined }
 ): Promise<void> {
-  await withThreadLog(options, "thread pending", async ({ paths }) => {
-    const proposals = await listPending(paths);
+  await withThreadLog(options, "thread pending", async ({ paths, profile }) => {
+    const proposals = await listPending(paths, profile);
     if (options.json) {
       console.log(JSON.stringify({ proposals }, null, 2));
       return;
@@ -339,15 +428,15 @@ export async function runThreadReject(
   id: string,
   options: ThreadOptions & { thread: string }
 ): Promise<void> {
-  await withThreadLog(options, `thread reject ${id}`, async ({ paths }) => {
-    await rejectPending(paths, id, assertThreadSlug(options.thread));
+  await withThreadLog(options, `thread reject ${id}`, async ({ paths, profile }) => {
+    await rejectPending(paths, profile, id, assertThreadSlug(options.thread));
     console.log(`rejected\t${id}\t${options.thread}`);
   });
 }
 
 export async function runThreadConclude(options: ThreadOptions): Promise<void> {
-  await withThreadLog(options, "thread conclude", async ({ paths }) => {
-    const count = await concludePending(paths);
+  await withThreadLog(options, "thread conclude", async ({ paths, profile }) => {
+    const count = await concludePending(paths, profile);
     console.log(`concluded\t${count} passed`);
   });
 }
@@ -392,7 +481,12 @@ export async function runThreadRuns(
       console.log(
         options.json
           ? JSON.stringify(runs, null, 2)
-          : runs.runs.map((run) => `${run.id}\t${run.total_cost_usd ?? "?"}`).join("\n")
+          : runs.runs
+              .map(
+                (run) =>
+                  `${run.id}\t${run.kind === "native" ? (run.total_cost_usd ?? "?") : (run.cost_usd ?? "?")}`
+              )
+              .join("\n")
       );
       return;
     }
@@ -416,15 +510,9 @@ export async function runThreadDelete(
     assertThreadSlug(slug);
     const thread = await findThread(paths, profile, slug);
     const manifest = await readThreadManifest(thread.dir);
-    assertThreadDestinationWritable(thread.destination);
+    assertThreadStoreWritable(thread.store);
 
-    const publication = await deleteThreadFromDestination(
-      thread.destination,
-      manifest.slug,
-      !options.noPush
-    );
-    await rm(thread.dir, { recursive: true, force: true });
-
+    const publication = await deleteThreadFromStore(thread.store, manifest.slug, !options.noPush);
     printThreadPublication(publication);
     console.log(`deleted\t${slug}`);
   });
@@ -437,37 +525,29 @@ export async function runThreadSync(
   }
 ): Promise<void> {
   await withThreadLog(options, "thread sync", async ({ paths, profile }) => {
-    const destinations = resolveThreadDestinations(paths, profile);
+    const stores = resolveThreadStores(paths, profile);
 
     const targetDests = new Set<string>();
 
     if (options.all || !options.slugs || options.slugs.length === 0) {
-      for (const dest of destinations) targetDests.add(dest.name);
+      for (const store of stores) targetDests.add(store.name);
     } else {
-      const threads = await listThreads(paths);
-      const threadMap = new Map(threads.map((t) => [t.slug, t]));
+      const threads = await listThreads(paths, profile);
+      const threadMap = new Map(threads.map((thread) => [path.basename(thread.dir), thread]));
       for (const slug of options.slugs) {
         const thread = threadMap.get(assertThreadSlug(slug));
         if (!thread) {
           console.warn(`thread not found: ${slug}`);
           continue;
         }
-        targetDests.add(thread.destination);
+        targetDests.add(thread.store.name);
       }
     }
 
     for (const destName of targetDests) {
-      const destination = findThreadDestination(destinations, destName);
-      await prepareThreadDestination(paths, destination);
-      const updated = await syncThreadDestination(destination, threadStoreRoot(paths));
-      if (destination.read_only) {
-        console.log(
-          updated.length === 0
-            ? `imported\t${destName}\tno threads in current checkout`
-            : `imported\t${destName}\t${updated.join(", ")}`
-        );
-        continue;
-      }
+      const store = findThreadStore(stores, destName);
+      await prepareThreadStore(paths, store);
+      const updated = await syncThreadStore(store);
       if (updated.length === 0) {
         console.log(`sync\t${destName}\tup to date`);
       } else {
@@ -522,6 +602,10 @@ async function withThreadLog(
 ): Promise<void> {
   const paths = createRuntimePaths(options);
   const profile = await resolveProfile(paths, options.profile);
+  const runtimeMigration = await migrateThreadRuntimeState(paths);
+  for (const conflict of runtimeMigration.conflicts) {
+    console.warn(`thread runtime state conflict: ${conflict.source} -> ${conflict.target}`);
+  }
   try {
     await action({ paths, profile });
     await appendThreadCliLog(paths, command, "ok");
@@ -531,37 +615,14 @@ async function withThreadLog(
   }
 }
 
-async function listThreads(paths: ReturnType<typeof createRuntimePaths>) {
-  const threads = [];
-  try {
-    for (const entry of await readdir(threadStoreRoot(paths), { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name === "runs") continue;
-      const dir = path.join(threadStoreRoot(paths), entry.name);
-      try {
-        const manifest = await readThreadManifest(dir);
-        threads.push({
-          slug: manifest.slug,
-          destination: manifest.destination,
-          session_count: manifest.sessions.length
-        });
-      } catch {
-        continue;
-      }
-    }
-  } catch {
-    /* no threads yet */
-  }
-  return threads.sort((a, b) => a.slug.localeCompare(b.slug));
-}
-
 function emptyManifest(): ThreadManifest {
   return {
     slug: "discover",
     charter: "discover",
-    destination: "",
+    store: "",
     created_at: "",
     sessions: [],
+    excluded: [],
     synthesis: {}
   };
 }

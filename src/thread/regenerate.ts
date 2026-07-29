@@ -13,10 +13,11 @@ import {
   readSessionFiles,
   readThreadManifest,
   resolveSynthesisDefaults,
+  withThreadMutation,
   type ParsedModelId
 } from "./storage.js";
 import {
-  assertThreadDestinationWritable,
+  assertThreadStoreWritable,
   commitThreadChanges,
   type ThreadPublication
 } from "./publication.js";
@@ -126,70 +127,72 @@ export interface RegenerateResult {
 // re-paying extraction: only the single digest dispatch is billed.
 export async function regenerateThread(req: RegenerateRequest): Promise<RegenerateResult> {
   const { paths, profile } = req;
-  const thread = await findThread(paths, profile, req.threadSlug);
-  assertThreadDestinationWritable(thread.destination);
-  const manifest = await readThreadManifest(thread.dir);
-  const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
-    synthesize: req.synthesize,
-    digest: req.digest
-  });
-  const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
-  const runId = `run-${Date.now()}-${randomUUID()}`;
-  const startedAt = new Date().toISOString();
-  const status: ThreadRunStatus = {
-    id: runId,
-    thread: manifest.slug,
-    mode: "regenerate",
-    pid: process.pid,
-    current_step: "digest",
-    started_at: startedAt,
-    cost_usd: null
-  };
-  await writeRunStatus(paths, status);
+  const locatedThread = await findThread(paths, profile, req.threadSlug);
+  assertThreadStoreWritable(locatedThread.store);
+  return withThreadMutation(locatedThread, async (thread) => {
+    const manifest = await readThreadManifest(thread.dir);
+    const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
+      synthesize: req.synthesize,
+      digest: req.digest
+    });
+    const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
+    const runId = `run-${Date.now()}-${randomUUID()}`;
+    const startedAt = new Date().toISOString();
+    const status: ThreadRunStatus = {
+      id: runId,
+      thread: manifest.slug,
+      mode: "regenerate",
+      pid: process.pid,
+      current_step: "digest",
+      started_at: startedAt,
+      cost_usd: null
+    };
+    await writeRunStatus(paths, status);
 
-  const digestDispatch = await regenerateViews({
-    runner,
-    paths,
-    runId,
-    threadDir: thread.dir,
-    slug: manifest.slug,
-    charter: manifest.charter,
-    digestModel: settings.digest,
-    previousDigest: await readPreviousDigest(thread.dir),
-    repos: repoLocators(profile)
-  });
+    const digestDispatch = await regenerateViews({
+      runner,
+      paths,
+      runId,
+      threadDir: thread.dir,
+      slug: manifest.slug,
+      charter: manifest.charter,
+      digestModel: settings.digest,
+      previousDigest: await readPreviousDigest(thread.dir),
+      repos: repoLocators(profile)
+    });
 
-  const finishedAt = new Date().toISOString();
-  const total = digestDispatch.cost_usd;
-  await appendThreadRun(thread.dir, {
-    id: runId,
-    thread: manifest.slug,
-    started_at: startedAt,
-    finished_at: finishedAt,
-    sessions: [],
-    dispatches: [digestDispatch],
-    total_cost_usd: total
-  });
-  await writeRunStatus(paths, {
-    ...status,
-    current_step: "publish",
-    cost_usd: total
-  });
-  const publication = await commitThreadChanges(
-    thread.destination,
-    manifest.slug,
-    thread.dir,
-    `chore(thread): regenerate ${manifest.slug}`,
-    !req.noPush && !thread.destination.no_push
-  );
-  await writeRunStatus(paths, {
-    ...status,
-    current_step: "complete",
-    finished_at: new Date().toISOString(),
-    cost_usd: total
-  });
+    const finishedAt = new Date().toISOString();
+    const total = digestDispatch.cost_usd;
+    await appendThreadRun(thread.dir, {
+      id: runId,
+      thread: manifest.slug,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      sessions: [],
+      dispatches: [digestDispatch],
+      total_cost_usd: total
+    });
+    await writeRunStatus(paths, {
+      ...status,
+      current_step: "publish",
+      cost_usd: total
+    });
+    const publication = await commitThreadChanges(
+      thread.store,
+      manifest.slug,
+      thread.dir,
+      `chore(thread): regenerate ${manifest.slug}`,
+      !req.noPush
+    );
+    await writeRunStatus(paths, {
+      ...status,
+      current_step: "complete",
+      finished_at: new Date().toISOString(),
+      cost_usd: total
+    });
 
-  return { slug: manifest.slug, runId, totalCostUsd: total, publication };
+    return { slug: manifest.slug, runId, totalCostUsd: total, publication };
+  });
 }
 
 // The prior digest anchors the next render's form. Absent on a thread's first digest,

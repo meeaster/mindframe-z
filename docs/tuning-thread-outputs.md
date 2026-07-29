@@ -65,19 +65,19 @@ Treat the pipeline as a funnel and check the intermediate artifacts directly:
 
 ```bash
 # What the gather actually captured (the synthesizer can't exceed this):
-grep -niE "<the nuance you want>" ~/.mindframe-z/thread-runs/runs/<run-id>/dossiers/*.md
+grep -niE "<the nuance you want>" ~/.mindframe-z/threads/runs/<run-id>/dossiers/*.md
 
 # What the synthesizer kept (the digest can't exceed this):
-awk '/^## Decisions/{f=1;next} /^## /{f=0} f' ~/.mindframe-z/threads/<slug>/sessions/<id>.md
+awk '/^## Decisions/{f=1;next} /^## /{f=0} f' <store-thread-path>/<slug>/sessions/<id>.md
 ```
 
 If the nuance is absent in the dossier, the **gather** is the gate — fix its prompt or
 model. If it is in the dossier but absent in `session.md`, the **synthesize** is the gate.
 If it is in `session.md` but absent in `digest.md`, the **digest** is the gate.
 
-Prior outputs are not lost when a re-ingest overwrites them: every ingest commits to the
-thread's destination repo, so recover any past version for comparison with
-`git -C <destination> show <commit>:<slug>/digest.md`.
+Prior outputs are not lost when a re-ingest overwrites them: every ingest commits directly in
+the configured thread store checkout, so recover any past version for comparison with
+`git -C <store-root> show <commit>:<thread-path>/<slug>/digest.md`.
 
 ## Running a cheap, isolated experiment
 
@@ -89,7 +89,7 @@ shapes). Patterns that keep an experiment honest and cheap:
 - **Stage-only dispatch.** Run just the gather, or just the digest, over a held-constant
   input. A gather-only run is judged by reading its dossier — no synthesize/digest needed.
 - **Hold the input constant.** Feed every variant the *same* saved dossier
-  (`thread-runs/runs/<id>/dossiers/`) so you measure the lever, not gather variance.
+  (`threads/runs/<id>/dossiers/`) so you measure the lever, not gather variance.
 - **Recover baselines from git** rather than re-running them.
 - **Same prompt across models** (or same model across prompts) — never change both at once.
 

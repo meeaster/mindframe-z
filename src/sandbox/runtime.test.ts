@@ -39,7 +39,7 @@ function profile(
       : [],
     git: {},
     sandbox: { credentials },
-    thread: { destinations: [] },
+    thread: { stores: [] },
     work: {},
     archives: [],
     opencode: {},
@@ -71,7 +71,7 @@ function profile(
       pi: { settings: {}, subagent_config: {} },
       mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
       thread: {
-        destinations: [],
+        stores: [],
         defaults: { session_sources: ["claude-code", "opencode"] },
         credentials: "subscription"
       },

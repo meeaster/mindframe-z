@@ -399,10 +399,10 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       settings: { ...base.mise.settings, ...child.mise.settings }
     },
     thread: {
-      destinations: (() => {
-        const map = new Map<string, ProfileManifest["thread"]["destinations"][number]>();
-        for (const destination of base.thread.destinations) map.set(destination.name, destination);
-        for (const destination of child.thread.destinations) map.set(destination.name, destination);
+      stores: (() => {
+        const map = new Map<string, ProfileManifest["thread"]["stores"][number]>();
+        for (const store of base.thread.stores) map.set(store.name, store);
+        for (const store of child.thread.stores) map.set(store.name, store);
         return [...map.values()];
       })(),
       defaults: { ...base.thread.defaults, ...child.thread.defaults },

@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { execa } from "execa";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../../tests/integration/support.js";
 import { createRuntimePaths, threadRunsRoot } from "../core/paths.js";
@@ -8,7 +9,7 @@ import type { AgentRunner } from "./runner.js";
 import {
   runThreadCreate,
   runThreadDelete,
-  runThreadDestinations,
+  runThreadStores,
   runThreadDiscover,
   runThreadIngest,
   runThreadList,
@@ -81,9 +82,9 @@ async function writeFakeDocker(home: string): Promise<string> {
   return stateDir;
 }
 
-// A self-contained fixture root so these tests own their profile/destinations
+// A self-contained fixture root so these tests own their profile/stores
 // instead of reading the live repo `profiles/`, where legitimate config edits
-// (adding/removing destinations) would otherwise break unrelated thread tests.
+// (adding/removing stores) would otherwise break unrelated thread tests.
 async function makeFixtureRoot(): Promise<string> {
   const root = await makeTempDir();
   await mkdir(path.join(root, "catalog"), { recursive: true });
@@ -98,13 +99,22 @@ async function makeFixtureRoot(): Promise<string> {
     [
       "name: base",
       "thread:",
-      "  destinations:",
+      "  stores:",
       "    - name: personal",
+      `      root: ${root}`,
+      "      path: threads",
+      "      publication: direct",
       "      default: true",
       ""
     ].join("\n"),
     "utf8"
   );
+  await mkdir(path.join(root, "threads"), { recursive: true });
+  await execa("git", ["init", "--initial-branch=main"], { cwd: root });
+  await execa("git", ["config", "user.email", "test@test"], { cwd: root });
+  await execa("git", ["config", "user.name", "Test"], { cwd: root });
+  await execa("git", ["add", "."], { cwd: root });
+  await execa("git", ["commit", "-m", "seed"], { cwd: root });
   return root;
 }
 
@@ -126,34 +136,39 @@ describe("thread cli", () => {
       root,
       home,
       profile: "base",
-      dest: "personal",
+      store: "personal",
       charter: "Track thread work."
     });
     await runThreadList({ root, home, profile: "base" });
 
     const manifest = JSON.parse(
-      await readFile(
-        path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json"),
-        "utf8"
-      )
+      await readFile(path.join(root, "threads", "thread-a", "manifest.json"), "utf8")
     );
-    expect(manifest).toMatchObject({ slug: "thread-a", destination: "personal" });
+    await expect(
+      readFile(path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(manifest).toMatchObject({ slug: "thread-a", store: "personal" });
+    await expect(
+      execa("git", ["log", "-1", "--format=%s"], { cwd: path.join(root, "threads") }).then(
+        (result) => result.stdout
+      )
+    ).resolves.toBe("chore(thread): create thread-a");
     expect(logs).toContain("created\tthread-a\tpersonal");
     expect(logs).toContain("thread-a\tpersonal\t0 sessions");
   });
 
-  it("prints configured destinations as JSON", async () => {
+  it("prints configured stores as JSON", async () => {
     captureConsole();
     const home = await makeTempDir();
-    await runThreadDestinations({
+    await runThreadStores({
       root: await makeFixtureRoot(),
       home,
       profile: "base",
       json: true
     });
 
-    const parsed = JSON.parse(logs[0]!) as { destinations: Array<{ name: string }> };
-    expect(parsed.destinations).toEqual(
+    const parsed = JSON.parse(logs[0]!) as { stores: Array<{ name: string }> };
+    expect(parsed.stores).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "personal" })])
     );
   });
@@ -186,7 +201,7 @@ describe("thread cli", () => {
     });
 
     expect(logs).toContain("session-1\tclaude-code\tmatched prompt");
-    const runsRoot = path.join(home, ".mindframe-z", "thread-runs", "runs");
+    const runsRoot = path.join(home, ".mindframe-z", "threads", "runs");
     const runDirs = await import("node:fs/promises").then((fs) => fs.readdir(runsRoot));
     expect(runDirs).toHaveLength(1);
     const status = JSON.parse(
@@ -210,7 +225,7 @@ describe("thread cli", () => {
       "sess-b": "2026-01-01 08:00"
     };
     // Each session file is H1 + sections (no frontmatter). TS lifts the title from
-    // the H1 and stamps extracted_by from the resolved synthesize ID.
+    // the H1 and stamps synthesizer from the resolved synthesize ID.
     const synthFile = (id: string) =>
       `# Session ${id} — Title ${id}\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [${timestamps[id]}] **Choice for ${id}** that wins. (${id} · turn 1)\n`;
 
@@ -240,7 +255,7 @@ describe("thread cli", () => {
       }
     };
 
-    await runThreadCreate("t", { root, home, profile: "base", dest: "personal", charter: "C" });
+    await runThreadCreate("t", { root, home, profile: "base", store: "personal", charter: "C" });
     await runThreadIngest(["claude-code:sess-a", "claude-code:sess-b"], {
       root,
       home,
@@ -251,7 +266,7 @@ describe("thread cli", () => {
       runner
     });
 
-    const threadDir = path.join(home, ".mindframe-z", "threads", "t");
+    const threadDir = path.join(root, "threads", "t");
 
     // Two-stage split: gather loads the reader skill and sees no contract; the
     // synthesizer loads only the contract, reads the gather dossier, and never
@@ -278,16 +293,16 @@ describe("thread cli", () => {
       readFile(path.join(threadDir, "sessions", "claude-code-sess-b.md"), "utf8")
     ).resolves.toContain("Choice for sess-b");
 
-    // The ledger carries TS-owned provenance: title lifted from the H1, extracted_by
+    // The ledger carries TS-owned provenance: title lifted from the H1, synthesizer
     // from the dispatch settings (not the agent).
     const manifest = JSON.parse(await readFile(path.join(threadDir, "manifest.json"), "utf8")) as {
-      sessions: Array<{ id: string; title?: string; extracted_by?: string; source: string }>;
+      sessions: Array<{ id: string; title?: string; synthesizer?: string; source: string }>;
     };
     const ledgerA = manifest.sessions.find((s) => s.id === "sess-a");
     expect(ledgerA).toMatchObject({
       source: "claude-code",
       title: "Title sess-a",
-      extracted_by: "claude-code:sonnet@high"
+      synthesizer: "claude-code:sonnet@high"
     });
 
     // Deterministic log: flat, strictly timestamp-ordered, bold stripped — sess-b
@@ -340,7 +355,7 @@ describe("thread cli", () => {
       }
     };
 
-    await runThreadCreate("t", { root, home, profile: "base", dest: "personal", charter: "C" });
+    await runThreadCreate("t", { root, home, profile: "base", store: "personal", charter: "C" });
     await runThreadIngest(["claude-code:sess-a"], {
       root,
       home,
@@ -367,7 +382,7 @@ describe("thread cli", () => {
     expect(calls.map((c) => c.role)).toEqual(["digest"]);
     expect(calls[0]!.prompt).toContain("# Session sess-a");
 
-    const threadDir = path.join(home, ".mindframe-z", "threads", "t");
+    const threadDir = path.join(root, "threads", "t");
     await expect(readFile(path.join(threadDir, "digest.md"), "utf8")).resolves.toContain(
       "regenerated body."
     );
@@ -397,14 +412,14 @@ describe("thread cli", () => {
       root: await makeFixtureRoot(),
       home,
       profile: "base",
-      dest: "personal",
+      store: "personal",
       charter: "C",
       synthesize: "opencode:opus@high"
     } as const;
 
     await runThreadCreate("pinned", opts);
     const manifest = JSON.parse(
-      await readFile(path.join(home, ".mindframe-z", "threads", "pinned", "manifest.json"), "utf8")
+      await readFile(path.join(opts.root, "threads", "pinned", "manifest.json"), "utf8")
     );
     expect(manifest.synthesis).toMatchObject({
       synthesize: "opencode:opus@high"
@@ -457,7 +472,7 @@ describe("thread cli", () => {
       root,
       home,
       profile: "base",
-      dest: "personal",
+      store: "personal",
       charter: "C"
     });
     logs.length = 0;
@@ -471,7 +486,7 @@ describe("thread cli", () => {
     captureConsole();
     const home = await makeTempDir();
     const root = await makeFixtureRoot();
-    const base = { root, home, profile: "base", dest: "personal", charter: "C" } as const;
+    const base = { root, home, profile: "base", store: "personal", charter: "C" } as const;
 
     for (const bad of ["../escape", "a/b", ".hidden", "Upper", "x".repeat(65)]) {
       await expect(runThreadCreate(bad, base)).rejects.toThrow();
@@ -503,7 +518,7 @@ describe("thread cli", () => {
       root,
       home,
       profile: "base",
-      dest: "personal",
+      store: "personal",
       charter: "C"
     });
     logs.length = 0;
