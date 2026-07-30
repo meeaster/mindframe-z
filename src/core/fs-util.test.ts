@@ -8,6 +8,7 @@ import {
   parseFrontmatter,
   parseTomlObject,
   pathExists,
+  readDirEntries,
   readJsoncObject,
   readJsonObject,
   readTomlObject,
@@ -45,6 +46,59 @@ describe("pathExists", () => {
 
     expect(await pathExists(live)).toBe(true);
     expect(await pathExists(dangling)).toBe(false);
+  });
+});
+
+describe("readDirEntries", () => {
+  it("lists entries with the file-or-directory distinction intact", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    await writeFile(path.join(dir, "AGENTS.md"), "# agents\n", "utf8");
+    await mkdir(path.join(dir, "skills"));
+
+    const entries = (await readDirEntries(dir)).sort((a, b) => a.name.localeCompare(b.name));
+
+    expect(entries.map((entry) => entry.name)).toEqual(["AGENTS.md", "skills"]);
+    expect(entries.map((entry) => entry.isDirectory())).toEqual([false, true]);
+  });
+
+  it("reads a missing directory as empty instead of throwing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+
+    expect(await readDirEntries(path.join(dir, "absent"))).toEqual([]);
+    expect(await readDirEntries(path.join(dir, "no", "such", "parent"))).toEqual([]);
+  });
+
+  it("reads an existing but empty directory as empty", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+
+    expect(await readDirEntries(dir)).toEqual([]);
+  });
+
+  it("propagates a failure other than a missing directory", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "opencode.json");
+    await writeFile(file, "{}\n", "utf8");
+
+    await expect(readDirEntries(file)).rejects.toMatchObject({ code: "ENOTDIR" });
+  });
+
+  it("follows a symlink to a directory rather than reading the link itself", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const target = path.join(dir, "target");
+    await mkdir(target);
+    await writeFile(path.join(target, "SKILL.md"), "# skill\n", "utf8");
+    await symlink(target, path.join(dir, "link"));
+
+    const entries = await readDirEntries(path.join(dir, "link"));
+
+    expect(entries.map((entry) => entry.name)).toEqual(["SKILL.md"]);
+  });
+
+  it("reads a dangling symlink as a missing directory", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    await symlink(path.join(dir, "gone"), path.join(dir, "dangling"));
+
+    expect(await readDirEntries(path.join(dir, "dangling"))).toEqual([]);
   });
 });
 

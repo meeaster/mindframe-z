@@ -1,4 +1,5 @@
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { access, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
@@ -18,6 +19,23 @@ export async function pathExists(target: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * List a directory's entries, reading a directory that does not exist as empty.
+ * This is the canonical scan behind the "walk this directory if it is there"
+ * branches in skill link reconciliation, work-unit checkpoints, and command
+ * sync, so an absent directory means "nothing to do" wherever the scan happens.
+ * Every other failure — a path that is a file, an unreadable directory — still
+ * propagates, so a broken tree surfaces instead of reading as empty.
+ */
+export async function readDirEntries(directory: string): Promise<Dirent[]> {
+  try {
+    return await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 }
 

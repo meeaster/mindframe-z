@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { pathExists, writeJsonFileAtomic } from "../core/fs-util.js";
+import { pathExists, readDirEntries, writeJsonFileAtomic } from "../core/fs-util.js";
 import { workBindingsPath, workUnitPath, type RuntimePaths } from "../core/paths.js";
 import {
   sourceQualifiedSessionSchema,
@@ -299,13 +299,7 @@ async function readAuthoredCheckpoints(
   directory: string,
   slug: string
 ): Promise<{ checkpoints: AuthoredCheckpoint[]; issues: string[] }> {
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { checkpoints: [], issues: [] };
-    throw error;
-  }
+  const entries = await readDirEntries(directory);
   const checkpoints: AuthoredCheckpoint[] = [];
   const issues: string[] = [];
   const identities = new Map<string, string>();
