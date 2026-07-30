@@ -1,10 +1,11 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import * as readline from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
 import { execa } from "execa";
 import { parse, stringify } from "smol-toml";
 import YAML from "yaml";
+import { readDirEntries } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
 import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -148,13 +149,7 @@ async function syncCommands(
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<UnknownCommand[]> {
-  let entries;
-  try {
-    entries = await readdir(path.join(paths.root, "opencode", "commands"), { withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
+  const entries = await readDirEntries(path.join(paths.root, "opencode", "commands"));
 
   const enabled = new Set(profile.enabledCommands);
   return entries

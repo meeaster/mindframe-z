@@ -17,6 +17,7 @@ import {
   engineSkillName,
   skillUpdateReviewName
 } from "../core/engine-skill.js";
+import { readDirEntries } from "../core/fs-util.js";
 import { skillSnapshotDir, skillSnapshotManifestPath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile, ResolvedSkill } from "../core/profile.js";
 import { digestSkillFiles, readSkillFiles, validateSkillRecords } from "./vendor.js";
@@ -137,14 +138,7 @@ async function preflightLinks(
   for (const directory of directories) await assertLinkDirectory(directory);
   const desired = new Set(plans.map((plan) => plan.linkPath));
   for (const directory of directories) {
-    let entries;
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
-    for (const entry of entries) {
+    for (const entry of await readDirEntries(directory)) {
       const linkPath = path.join(directory, entry.name);
       const status = await linkStatus(linkPath);
       if (status.state === "symlink" && isManagedTarget(paths.configsDir, status.resolved)) {
@@ -201,14 +195,7 @@ async function captureManagedLinks(
   const managed = new Map<string, string>();
   for (const directory of directories) {
     await assertLinkDirectory(directory);
-    let entries;
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
-    for (const entry of entries) {
+    for (const entry of await readDirEntries(directory)) {
       const linkPath = path.join(directory, entry.name);
       const status = await linkStatus(linkPath);
       if (status.state === "symlink" && isManagedTarget(paths.configsDir, status.resolved)) {
@@ -222,14 +209,7 @@ async function captureManagedLinks(
 async function restoreManagedLinks(paths: RuntimePaths, snapshot: LinkSnapshot): Promise<void> {
   for (const directory of snapshot.directories) {
     await assertLinkDirectory(directory);
-    let entries;
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
-    for (const entry of entries) {
+    for (const entry of await readDirEntries(directory)) {
       const linkPath = path.join(directory, entry.name);
       const status = await linkStatus(linkPath);
       if (status.state === "symlink" && isManagedTarget(paths.configsDir, status.resolved)) {
