@@ -26,6 +26,11 @@ describe("orientation authoring", () => {
     const authored = renderOrientation(empty)
       .replace("<!-- Add Markdown bullets, or leave this section empty. -->", "None.")
       .replace("<!-- Add Markdown bullets, or leave this section empty. -->", "none");
+    // Assert the substitutions landed. An untouched placeholder is a stripped
+    // HTML comment, which also reads as an empty list — so without this the test
+    // would still pass while exercising the wrong branch.
+    expect(authored).toContain("## Constraints\n\nNone.\n");
+    expect(authored).toContain("## Open Questions\n\nnone\n");
     expect(parseOrientation(authored)).toEqual(empty);
   });
 
@@ -94,6 +99,16 @@ describe("context map authoring", () => {
     expect(() =>
       parseContextMap(base.replace("| mindframe-z | implementation | active |", "| only-target |"))
     ).toThrow(/rows require target, role, and status values/);
+    expect(() =>
+      parseContextMap(
+        base.replace("| mindframe-z | implementation | active |", "| a | b | c | d |")
+      )
+    ).toThrow(/rows require target, role, and status values/);
+    expect(() =>
+      parseContextMap(
+        base.replace("| mindframe-z | implementation | active |", "mindframe-z, implementation")
+      )
+    ).toThrow(/contains an invalid Markdown table row/);
   });
 });
 
@@ -120,6 +135,16 @@ describe("checkpoint authoring", () => {
     expect(parseCheckpoint(renderCheckpoint(colonised), "work-runtime").session).toEqual(
       colonised.session
     );
+
+    // An unqualified value has to be rejected here rather than sliced: without the
+    // separator guard `nocolon` splits into source `nocolo` / id `nocolon`, which
+    // satisfies the schema and mislabels the checkpoint's harness silently.
+    expect(() =>
+      parseCheckpoint(
+        renderCheckpoint(checkpoint).replace("opencode:ses-abc", "nocolon"),
+        "work-runtime"
+      )
+    ).toThrow(/Invalid source-qualified session: nocolon/);
   });
 
   it("rejects missing, duplicated, unknown, and unparseable frontmatter", () => {
