@@ -4,9 +4,13 @@ import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { makeTempDir, projectRoot } from "./support.js";
 
-// `mfz init --create` commits the scaffolded home, so pin an identity here rather
-// than depending on whatever git config the running machine happens to have.
-const gitIdentity = {
+// `mfz init --create` commits the scaffolded home and swallows a failed commit, so
+// pin an identity and ignore global git config rather than depending on whatever the
+// running machine happens to have set. Without this, something as ordinary as
+// `commit.gpgsign=true` produces an empty home and a misleading downstream failure.
+const gitEnv = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "Test User",
   GIT_AUTHOR_EMAIL: "test@example.com",
   GIT_COMMITTER_NAME: "Test User",
@@ -19,7 +23,7 @@ function mfz(home: string, args: string[]) {
     ["--import", "tsx", path.join(projectRoot, "src", "cli", "mfz.ts"), "--home", home, ...args],
     {
       cwd: projectRoot,
-      env: { ...process.env, ...gitIdentity, MFZ_HOME: home, MFZ_ROOT: undefined }
+      env: { ...process.env, ...gitEnv, MFZ_HOME: home, MFZ_ROOT: undefined }
     }
   );
 }

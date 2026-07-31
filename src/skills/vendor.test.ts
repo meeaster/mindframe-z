@@ -158,6 +158,32 @@ describe("vendored skill contracts", () => {
     expect(legacy[0]).toMatchObject({ name: "old", sourceRoot: upstream });
   });
 
+  it("reads a remote-declared upstream home from the managed clone root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-child-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-machine-"));
+    // A non-local repo spec is never resolved relative to the child home; the clone
+    // already sits at the managed root that apply and `mfz init --clone` write to.
+    await writeFile(
+      path.join(root, "mfz_home.yml"),
+      YAML.stringify({ extends: { name: "shared", repo: "https://example.invalid/shared.git" } }),
+      "utf8"
+    );
+    const clone = path.join(home, ".mindframe-z", "homes", "shared");
+    await mkdir(path.join(clone, "catalog"), { recursive: true });
+    await writeFile(path.join(clone, "mfz_home.yml"), "description: shared\n", "utf8");
+    await writeFile(
+      path.join(clone, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [{ name: "shared-skill", source: "git", repo: "https://example.invalid/shared" }]
+      }),
+      "utf8"
+    );
+
+    const legacy = await readLegacyGitSkills(root, home);
+
+    expect(legacy[0]).toMatchObject({ name: "shared-skill", sourceRoot: clone });
+  });
+
   it("rejects non-HTTPS sources before creating a Git cache", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-vendor-unsafe-"));
     const entry = {
