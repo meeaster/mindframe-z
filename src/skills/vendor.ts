@@ -14,6 +14,7 @@ import {
 import {
   expandHome,
   skillCandidatesRoot,
+  upstreamHomeRoot,
   vendorLockPath,
   type RuntimePaths
 } from "../core/paths.js";
@@ -118,7 +119,7 @@ async function activeHomeRoots(
       extension.repo.startsWith("~/");
     const upstream = local
       ? path.resolve(expandHome(extension.repo, machineHome))
-      : path.join(machineHome, ".mindframe-z", "homes", extension.name);
+      : upstreamHomeRoot(machineHome, extension.name);
     if (await pathExists(path.join(upstream, "mfz_home.yml"))) {
       roots.push(...(await activeHomeRoots(upstream, machineHome, seen)));
     }

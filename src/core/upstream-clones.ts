@@ -2,7 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "./fs-util.js";
-import { expandHome } from "./path-util.js";
+import { expandHome, upstreamHomeRoot } from "./path-util.js";
 
 function isLocalRepoSpec(repo: string): boolean {
   return (
@@ -47,7 +47,7 @@ export async function resolveUpstreamHomeRoot(options: {
 }): Promise<string> {
   if (isLocalRepoSpec(options.repo)) return path.resolve(expandHome(options.repo, options.home));
 
-  const cloneRoot = path.join(options.home, ".mindframe-z", "homes", options.alias);
+  const cloneRoot = upstreamHomeRoot(options.home, options.alias);
   await mkdir(path.dirname(cloneRoot), { recursive: true });
   const releaseLock = await acquireLock(`${cloneRoot}.lock`);
   try {

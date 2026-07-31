@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
+import { mindframeZDir, upstreamHomeRoot } from "../core/paths.js";
 
 const guideMarkdown = `# mindframe-z Home Guide
 
@@ -225,7 +226,7 @@ export async function initHome(options: {
   const machineHome = path.resolve(
     options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd()
   );
-  const configDir = path.join(machineHome, ".mindframe-z");
+  const configDir = mindframeZDir(machineHome);
   await mkdir(configDir, { recursive: true });
   let homeRoot: string;
   if (options.create) {
@@ -244,7 +245,7 @@ export async function initHome(options: {
     );
   } else if (options.clone) {
     const name = options.name ?? path.basename(options.clone, ".git");
-    homeRoot = path.join(machineHome, ".mindframe-z", "homes", name);
+    homeRoot = upstreamHomeRoot(machineHome, name);
     await mkdir(path.dirname(homeRoot), { recursive: true });
     await execa("git", ["clone", options.clone, homeRoot]);
   } else if (options.point) {

@@ -22,6 +22,7 @@ import {
   threadRunPath,
   threadRunsRoot,
   threadSweepRoot,
+  upstreamHomeRoot,
   workBindingsPath,
   workStoreRoot,
   workUnitPath
@@ -199,6 +200,10 @@ describe(".mindframe-z store path contract", () => {
     expect(workStoreRoot(runtime)).toBe(path.join(mfz, "work", "v1"));
     expect(workUnitPath(runtime, "my-work")).toBe(path.join(mfz, "work", "v1", "units", "my-work"));
     expect(workBindingsPath(runtime)).toBe(path.join(mfz, "work", "v1", "bindings.json"));
+  });
+
+  it("pins the upstream home clone root that init, apply, and vendoring share", () => {
+    expect(upstreamHomeRoot(home, "personal")).toBe(path.join(mfz, "homes", "personal"));
   });
 
   it("pins the archive cache root", () => {

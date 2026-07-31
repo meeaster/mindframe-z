@@ -4,13 +4,26 @@ import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { makeTempDir, projectRoot } from "./support.js";
 
+// `mfz init --create` commits the scaffolded home and swallows a failed commit, so
+// pin an identity and ignore global git config rather than depending on whatever the
+// running machine happens to have set. Without this, something as ordinary as
+// `commit.gpgsign=true` produces an empty home and a misleading downstream failure.
+const gitEnv = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "Test User",
+  GIT_AUTHOR_EMAIL: "test@example.com",
+  GIT_COMMITTER_NAME: "Test User",
+  GIT_COMMITTER_EMAIL: "test@example.com"
+};
+
 function mfz(home: string, args: string[]) {
   return execa(
     process.execPath,
     ["--import", "tsx", path.join(projectRoot, "src", "cli", "mfz.ts"), "--home", home, ...args],
     {
       cwd: projectRoot,
-      env: { ...process.env, MFZ_HOME: home, MFZ_ROOT: undefined }
+      env: { ...process.env, ...gitEnv, MFZ_HOME: home, MFZ_ROOT: undefined }
     }
   );
 }
@@ -64,6 +77,28 @@ describe("init and guide integration", () => {
     expect(await readFile(path.join(homeRoot, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
     expect(await readFile(path.join(machineHome, ".mindframe-z", "config.yml"), "utf8")).toContain(
       `home_path: ${homeRoot}`
+    );
+
+    const apply = await mfz(machineHome, ["apply", "--no-link"]);
+    expect(apply.stdout).toContain("rendered");
+  });
+
+  it("clones a home into the managed upstream clone root and points machine config at it", async () => {
+    const sourceMachineHome = await makeTempDir();
+    const source = path.join(await makeTempDir(), "shared-home");
+    await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode"]);
+
+    const machineHome = await makeTempDir();
+    const result = await mfz(machineHome, ["init", "--clone", source, "--name", "shared"]);
+
+    // The same directory apply-time cloning and skill vendoring resolve for this alias.
+    const cloneRoot = path.join(machineHome, ".mindframe-z", "homes", "shared");
+    expect(result.stdout).toContain(`home_path\t${cloneRoot}`);
+    expect(await readFile(path.join(cloneRoot, "mfz_home.yml"), "utf8")).toContain(
+      "mfz_home.schema.json"
+    );
+    expect(await readFile(path.join(machineHome, ".mindframe-z", "config.yml"), "utf8")).toContain(
+      `home_path: ${cloneRoot}`
     );
 
     const apply = await mfz(machineHome, ["apply", "--no-link"]);
