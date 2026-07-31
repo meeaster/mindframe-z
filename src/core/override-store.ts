@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { execa } from "execa";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "./fs-util.js";
 import { overrideStorePath, type AgentName, type RuntimePaths } from "./paths.js";
@@ -38,16 +37,6 @@ export interface ProjectHarnessOverrides {
 
 export interface OverrideStore {
   projects: Record<string, Partial<Record<AgentName, ProjectHarnessOverrides>>>;
-}
-
-export async function findProjectRoot(cwd = process.cwd()): Promise<string | undefined> {
-  try {
-    const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"], { cwd });
-    const root = stdout.trim();
-    return root.length > 0 ? root : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export async function readOverrideStore(home: string): Promise<OverrideStore> {

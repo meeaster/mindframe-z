@@ -2,11 +2,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { parseFrontmatter } from "../core/fs-util.js";
-import { findProjectRoot } from "../core/override-store.js";
 import type { ContextContributor, ContextHarness, ConditionalPathSummary } from "./model.js";
 import { measuredContributor } from "./measurement.js";
-
-export { findProjectRoot };
 
 export function isPathWithin(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));

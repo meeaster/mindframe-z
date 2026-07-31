@@ -1,5 +1,4 @@
 export {
-  findGitRoot,
   resolveSkillConfigPaths,
   type SkillConfigPaths,
   type SkillToggleTarget

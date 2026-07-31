@@ -7,7 +7,6 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
-  findGitRoot,
   readLocalSkillOverrides,
   resolveSkillConfigPaths,
   resolveSkillToggleState,
@@ -133,10 +132,6 @@ describe("skill config path resolution", () => {
         codex: path.join(runtimePaths.codexDir, "config.toml")
       }
     });
-  });
-
-  it("returns undefined for findGitRoot outside a repo", async () => {
-    await expect(findGitRoot(root)).resolves.toBeUndefined();
   });
 });
 

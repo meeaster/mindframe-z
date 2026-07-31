@@ -16,9 +16,9 @@ import {
 } from "../core/paths.js";
 import { assertMcpToggleSupported, resolveProfile } from "../core/profile.js";
 import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
+import { findProjectRoot } from "../core/git-root.js";
 import {
   effectiveProjectState,
-  findProjectRoot,
   projectOverrides,
   readOverrideStore,
   writeProjectOverrideDelta
