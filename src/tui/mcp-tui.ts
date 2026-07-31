@@ -4,9 +4,9 @@ import { limitOptions } from "@clack/prompts";
 import type { Key } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import type { AgentName, RuntimePaths } from "../core/paths.js";
+import { findProjectRoot } from "../core/git-root.js";
 import {
   effectiveProjectState,
-  findProjectRoot,
   readOverrideStore,
   writeProjectOverrideDelta
 } from "../core/override-store.js";

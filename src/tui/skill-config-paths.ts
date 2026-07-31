@@ -1,5 +1,5 @@
 import path from "node:path";
-import { execa } from "execa";
+import { findProjectRoot } from "../core/git-root.js";
 import { globalSkillStatePath, type AgentName, type RuntimePaths } from "../core/paths.js";
 
 export type SkillToggleTarget = Exclude<AgentName, "pi">;
@@ -20,21 +20,11 @@ export type SkillConfigPaths =
       readonly state: Record<SkillToggleTarget, string>;
     };
 
-export async function findGitRoot(cwd: string): Promise<string | undefined> {
-  try {
-    const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"], { cwd });
-    const gitRoot = stdout.trim();
-    return gitRoot.length > 0 ? gitRoot : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function resolveSkillConfigPaths(
   paths: RuntimePaths,
   cwd = process.cwd()
 ): Promise<SkillConfigPaths> {
-  const repoRoot = await findGitRoot(cwd);
+  const repoRoot = await findProjectRoot(cwd);
   const global = {
     opencode: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
     "claude-code": path.join(paths.claudeDir, "settings.json"),

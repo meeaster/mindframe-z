@@ -14,8 +14,8 @@ import {
   type HarnessReport,
   type TextMeasurement
 } from "./model.js";
+import { findProjectRoot } from "../core/git-root.js";
 import { readOpenCodeHistory } from "./opencode-history.js";
-import { findProjectRoot } from "./repository.js";
 import { analyzeHarnessStatic } from "./static.js";
 
 export interface ContextOptions {
