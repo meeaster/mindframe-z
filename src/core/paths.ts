@@ -5,9 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
-import { expandHome } from "./path-util.js";
+import { expandHome, mindframeZDir } from "./path-util.js";
 
-export { expandHome } from "./path-util.js";
+export { expandHome, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
 
 export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
 export type ToolTarget = "opencode" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
@@ -35,13 +35,6 @@ export interface PathOptions {
   claudeDir?: string | undefined;
   codexDir?: string | undefined;
   piDir?: string | undefined;
-}
-
-// Canonical location of the per-home `.mindframe-z` state directory. Every
-// on-disk path mfz owns hangs off this, so the directory name lives in exactly
-// one place (the store-path contract in paths.test.ts pins the layout below).
-export function mindframeZDir(home: string): string {
-  return path.join(home, ".mindframe-z");
 }
 
 export function packageRootFromImport(importMetaUrl: string): string {
