@@ -220,6 +220,55 @@ describe("opencode commands integration", () => {
     ]);
   });
 
+  it("discovers server plugins when the profile declares none and never discovers TUI plugins", async () => {
+    await writeFile(
+      path.join(root, "opencode", "plugins", "discovered.mjs"),
+      "export default {}\n",
+      "utf8"
+    );
+    await mkdir(path.join(root, "opencode", "plugins", "bundled"), { recursive: true });
+    await writeFile(
+      path.join(root, "opencode", "plugins", "bundled", "index.ts"),
+      "export default {}\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  tui:",
+        "    leader_timeout: 2000",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+
+    const managedPlugins = path.join(home, ".config", "opencode", "plugins", "mindframe-z");
+    const config = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { plugin: string[] };
+    expect([...config.plugin].sort()).toEqual(
+      [
+        `file://${path.join(managedPlugins, "bundled", "index.ts")}`,
+        `file://${path.join(managedPlugins, "config-marker.ts")}`,
+        `file://${path.join(managedPlugins, "discovered.mjs")}`
+      ].sort()
+    );
+    await expect(readFile(path.join(managedPlugins, "bundled", "index.ts"), "utf8")).resolves.toBe(
+      "export default {}\n"
+    );
+
+    const tui = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+    ) as { plugin: string[] };
+    expect(tui.plugin).toEqual([]);
+  });
+
   it("does not render tui.json without TUI configuration", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
