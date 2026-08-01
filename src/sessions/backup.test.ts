@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdir } from "node:fs/promises";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   GetPublicAccessBlockCommand,
@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import { defaultArchive, harnessPrefix, objectKey, resolveDefaultArchive } from "./archive.js";
+import { listClaudeItems } from "./claude-source.js";
 import { listOpencodeItems } from "./opencode-source.js";
 import { assertBucketHardened } from "./preflight.js";
 import { backupHarness, needsUpload } from "./backup.js";
@@ -241,6 +242,110 @@ describe("backupHarness", () => {
     );
 
     expect(summary).toEqual({ uploaded: 1, skipped: 0, failed: 1 });
+  });
+});
+
+describe("listClaudeItems", () => {
+  // Writes a file under ~/.claude/projects/<project>/<...segments> with a fixed
+  // mtime, so the enumerated freshness signal is assertable rather than "now".
+  async function writeTranscript(
+    home: string,
+    project: string,
+    segments: string[],
+    body: string,
+    mtimeMs = 1_700_000_000_000
+  ): Promise<void> {
+    const file = path.join(home, ".claude", "projects", project, ...segments);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, body, "utf8");
+    await utimes(file, new Date(mtimeMs), new Date(mtimeMs));
+  }
+
+  function byRelPath(items: Array<{ relPath: string }>): string[] {
+    return items.map((item) => item.relPath).sort();
+  }
+
+  it("keys each transcript by session id, dropping the project encoding", async () => {
+    const home = await makeTempDir();
+    await writeTranscript(home, "-home-mark-code-app", ["ses-a.jsonl"], '{"type":"user"}\n');
+
+    const items = await listClaudeItems(testRuntimePaths(home));
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.relPath).toBe("ses-a.jsonl");
+    expect(items[0]?.contentType).toBe("application/x-ndjson");
+    expect(items[0]?.sourceMs).toBe(1_700_000_000_000);
+    expect((await items[0]!.load()).toString("utf8")).toBe('{"type":"user"}\n');
+  });
+
+  it("flattens sessions from every project directory into one list", async () => {
+    const home = await makeTempDir();
+    await writeTranscript(home, "-home-mark-code-app", ["ses-a.jsonl"], "a\n");
+    await writeTranscript(home, "-home-mark-code-other", ["ses-b.jsonl"], "b\n");
+
+    expect(byRelPath(await listClaudeItems(testRuntimePaths(home)))).toEqual([
+      "ses-a.jsonl",
+      "ses-b.jsonl"
+    ]);
+  });
+
+  it("keys subagent transcripts under their parent session's prefix", async () => {
+    // The `<id>/subagents/` segment is a cross-module contract: objectKey nests the
+    // transcripts beneath the session they belong to, and enumerateSweepSessions
+    // filters on that same segment to keep them out of the session ledger.
+    const home = await makeTempDir();
+    await writeTranscript(home, "-home-mark-code-app", ["ses-a.jsonl"], "a\n");
+    await writeTranscript(
+      home,
+      "-home-mark-code-app",
+      ["ses-a", "subagents", "agent-1.jsonl"],
+      "sub\n"
+    );
+
+    const items = await listClaudeItems(testRuntimePaths(home));
+
+    expect(byRelPath(items)).toEqual(["ses-a.jsonl", "ses-a/subagents/agent-1.jsonl"]);
+    expect(
+      byRelPath(items).map((relPath) => objectKey(bucketArchive, "claude-code", relPath))
+    ).toEqual(["claude-code/ses-a.jsonl", "claude-code/ses-a/subagents/agent-1.jsonl"]);
+  });
+
+  it("ignores non-transcript files beside sessions and beside subagents", async () => {
+    const home = await makeTempDir();
+    await writeTranscript(home, "-home-mark-code-app", ["ses-a.jsonl"], "a\n");
+    await writeTranscript(home, "-home-mark-code-app", ["notes.md"], "notes\n");
+    await writeTranscript(
+      home,
+      "-home-mark-code-app",
+      ["ses-a", "subagents", "agent-1.jsonl"],
+      "sub\n"
+    );
+    await writeTranscript(
+      home,
+      "-home-mark-code-app",
+      ["ses-a", "subagents", "scratch.txt"],
+      "x\n"
+    );
+
+    expect(byRelPath(await listClaudeItems(testRuntimePaths(home)))).toEqual([
+      "ses-a.jsonl",
+      "ses-a/subagents/agent-1.jsonl"
+    ]);
+  });
+
+  it("skips a session directory that never spawned subagents", async () => {
+    const home = await makeTempDir();
+    await writeTranscript(home, "-home-mark-code-app", ["ses-a.jsonl"], "a\n");
+    await mkdir(path.join(home, ".claude", "projects", "-home-mark-code-app", "ses-a"), {
+      recursive: true
+    });
+
+    expect(byRelPath(await listClaudeItems(testRuntimePaths(home)))).toEqual(["ses-a.jsonl"]);
+  });
+
+  it("returns no items when the projects directory does not exist", async () => {
+    const home = await makeTempDir();
+    expect(await listClaudeItems(testRuntimePaths(home))).toEqual([]);
   });
 });
 
