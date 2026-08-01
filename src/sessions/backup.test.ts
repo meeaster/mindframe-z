@@ -305,9 +305,9 @@ describe("listClaudeItems", () => {
     const items = await listClaudeItems(testRuntimePaths(home));
 
     expect(byRelPath(items)).toEqual(["ses-a.jsonl", "ses-a/subagents/agent-1.jsonl"]);
-    expect(objectKey(bucketArchive, "claude-code", "ses-a/subagents/agent-1.jsonl")).toBe(
-      "claude-code/ses-a/subagents/agent-1.jsonl"
-    );
+    expect(
+      byRelPath(items).map((relPath) => objectKey(bucketArchive, "claude-code", relPath))
+    ).toEqual(["claude-code/ses-a.jsonl", "claude-code/ses-a/subagents/agent-1.jsonl"]);
   });
 
   it("ignores non-transcript files beside sessions and beside subagents", async () => {
