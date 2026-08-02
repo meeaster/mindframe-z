@@ -7,25 +7,32 @@ import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.j
 import {
   classifyWatermark,
   readWatermark,
+  resolveLegacyWatermark,
   tailSignatureFromExport,
   type Watermark
 } from "./watermark.js";
 
+// Place a transcript body verbatim in the claude store so a test can include lines
+// the reader has to skip, such as harness progress output or a truncated tail.
+async function writeRawClaudeTranscript(home: string, id: string, body: string): Promise<void> {
+  const projectDir = path.join(home, ".claude", "projects", "-tmp-project");
+  await mkdir(projectDir, { recursive: true });
+  await writeFile(path.join(projectDir, `${id}.jsonl`), body, "utf8");
+}
+
 // A claude transcript with two message turns wrapped in non-message lines, so the
 // reader must count only user/assistant turns and read the last turn's uuid/timestamp.
 async function writeClaudeTranscript(home: string, id: string): Promise<void> {
-  const projectDir = path.join(home, ".claude", "projects", "-tmp-project");
-  await mkdir(projectDir, { recursive: true });
   const lines = [
     { type: "queue-operation", uuid: "q1", timestamp: "2026-06-04T17:00:00.000Z" },
     { type: "user", uuid: "u1", timestamp: "2026-06-04T17:06:36.796Z", sessionId: id },
     { type: "assistant", uuid: "a1", timestamp: "2026-06-04T17:06:48.203Z", sessionId: id },
     { type: "ai-title", uuid: "t1", timestamp: "2026-06-04T17:07:00.000Z" }
   ];
-  await writeFile(
-    path.join(projectDir, `${id}.jsonl`),
-    lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
-    "utf8"
+  await writeRawClaudeTranscript(
+    home,
+    id,
+    lines.map((line) => JSON.stringify(line)).join("\n") + "\n"
   );
 }
 
@@ -241,6 +248,66 @@ describe("tailSignatureFromExport", () => {
 
   it("returns undefined for malformed JSON", () => {
     expect(tailSignatureFromExport("not json")).toBeUndefined();
+  });
+});
+
+describe("resolveLegacyWatermark", () => {
+  it("cuts a claude-code transcript at a timestamp cursor", async () => {
+    const home = await makeTempDir();
+    const id = "d134c87c-3233-4b80-94a5-9f96a1571cdd";
+    await writeClaudeTranscript(home, id);
+
+    const wm = await resolveLegacyWatermark(
+      testRuntimePaths(home),
+      { source: "claude-code", id },
+      "2026-06-04T17:06:40.000Z"
+    );
+
+    expect(wm).toEqual({
+      message_count: 1,
+      last_message_id: "u1",
+      last_activity_at: "2026-06-04T17:06:36.796Z"
+    });
+  });
+
+  it("counts only parsed records when a record-count cursor meets harness noise", async () => {
+    const home = await makeTempDir();
+    const id = "6d9a7f1e-2b44-4c10-9b3a-1f5c8e0d7a22";
+    await writeRawClaudeTranscript(
+      home,
+      id,
+      [
+        '{"type":"queue-operation","uuid":"q1","timestamp":"2026-06-04T17:00:00.000Z"}',
+        "opencode: loading session...",
+        '{"type":"user","uuid":"u1","timestamp":"2026-06-04T17:06:36.796Z"}',
+        '{"type":"assistant","uuid":"a1","timestamp":"2026-06-04T17:06:48.203Z"}',
+        '{"type":"user","uuid":"u2","tim'
+      ].join("\n")
+    );
+
+    const wm = await resolveLegacyWatermark(
+      testRuntimePaths(home),
+      { source: "claude-code", id },
+      3
+    );
+
+    expect(wm).toEqual({
+      message_count: 2,
+      last_message_id: "a1",
+      last_activity_at: "2026-06-04T17:06:48.203Z"
+    });
+  });
+
+  it("returns undefined when the claude-code transcript is absent", async () => {
+    const home = await makeTempDir();
+
+    const wm = await resolveLegacyWatermark(
+      testRuntimePaths(home),
+      { source: "claude-code", id: "missing-id" },
+      3
+    );
+
+    expect(wm).toBeUndefined();
   });
 });
 

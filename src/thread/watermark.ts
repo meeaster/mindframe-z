@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { RuntimePaths } from "../core/paths.js";
-import { pathExists } from "../core/fs-util.js";
+import { parseJsonlObjects, pathExists } from "../core/fs-util.js";
 import { opencodeDbPath } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import { cachedSessionPath } from "../sessions/archive.js";
@@ -147,18 +147,12 @@ async function readTranscriptContent(
 }
 
 function claudeBoundary(content: string, cursor: string | number): Watermark | undefined {
-  const records: Array<{ type?: string; uuid?: string; timestamp?: string }> = [];
-  for (const line of content.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const parsed: unknown = JSON.parse(line);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        records.push(parsed as { type?: string; uuid?: string; timestamp?: string });
-      }
-    } catch {
-      // Legacy record-count cursors count valid JSONL records only.
-    }
-  }
+  // Legacy record-count cursors count valid JSONL records only.
+  const records = parseJsonlObjects(content) as Array<{
+    type?: string;
+    uuid?: string;
+    timestamp?: string;
+  }>;
 
   const boundary =
     typeof cursor === "number"
