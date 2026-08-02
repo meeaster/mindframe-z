@@ -15,6 +15,14 @@ export function mindframeZDir(home: string): string {
   return path.join(home, ".mindframe-z");
 }
 
+// The machine config every entry point reads: the path-resolution bootstrap in
+// paths.ts, the manifest loader and validator in manifests.ts, and the doctor's
+// legacy-references hint. They must agree on one location, or `mfz apply` would
+// resolve its root from a different file than the one it validates.
+export function machineConfigPath(home: string): string {
+  return path.join(mindframeZDir(home), "config.yml");
+}
+
 // Where an upstream home clone lives on this machine, keyed by the alias declared
 // in `mfz_home.yml#extends`. `mfz init --clone`, the apply-time clone/fast-forward,
 // and skill vendoring must all agree on this directory or a home gets cloned to one

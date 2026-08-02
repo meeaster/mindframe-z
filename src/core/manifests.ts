@@ -4,6 +4,7 @@ import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
 import { pathExists } from "./fs-util.js";
+import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
 export const agentSchema = z.enum(["opencode", "claude-code", "codex", "pi"]);
@@ -642,10 +643,6 @@ async function parseYaml<T>(file: string, schema: z.ZodType<T>): Promise<T> {
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
   if (!(await pathExists(file))) return fallback;
   return parseYaml(file, schema);
-}
-
-function machineConfigPath(home: string): string {
-  return path.join(home, ".mindframe-z", "config.yml");
 }
 
 function machineDefaults(): MachineManifest {

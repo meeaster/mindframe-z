@@ -5,9 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { machineSchema } from "./manifests.js";
-import { expandHome, mindframeZDir } from "./path-util.js";
+import { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
-export { expandHome, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
+export { expandHome, machineConfigPath, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
 
 export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
 export type ToolTarget = "opencode" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
@@ -52,7 +52,7 @@ export function packageRootFromImport(importMetaUrl: string): string {
 
 function machineConfig(home: string) {
   try {
-    const parsed = YAML.parse(readFileSync(path.join(mindframeZDir(home), "config.yml"), "utf8"));
+    const parsed = YAML.parse(readFileSync(machineConfigPath(home), "utf8"));
     return machineSchema.parse(parsed);
   } catch {
     return undefined;
