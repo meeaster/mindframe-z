@@ -10,6 +10,7 @@ import type { LoadedManifests } from "../core/manifests.js";
 import {
   createRuntimePaths,
   infraTargetList,
+  machineConfigPath,
   type AgentName,
   type ApplyAgent,
   type InfraTarget
@@ -211,9 +212,7 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   if (process.env.MFZ_REFERENCES_DIR) return false;
   try {
-    const parsed = YAML.parse(
-      await readFile(path.join(home, ".mindframe-z", "config.yml"), "utf8")
-    ) as unknown;
+    const parsed = YAML.parse(await readFile(machineConfigPath(home), "utf8")) as unknown;
     if (parsed && typeof parsed === "object" && "references_dir" in parsed) return false;
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.

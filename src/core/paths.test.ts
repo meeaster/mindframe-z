@@ -12,6 +12,7 @@ import {
   extraFoldersIndexPath,
   globalSkillStatePath,
   infraTargetList,
+  machineConfigPath,
   mindframeZDir,
   opencodeDataHome,
   opencodeDbPath,
@@ -27,6 +28,7 @@ import {
   workStoreRoot,
   workUnitPath
 } from "./paths.js";
+import { loadManifests } from "./manifests.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 
 function paths(home: string): RuntimePaths {
@@ -170,6 +172,27 @@ describe("createRuntimePaths", () => {
     expect(runtime.workUnitsRoot).toBe(path.join(home, "knowledge", "work-units"));
     expect(runtime.workRoot).toBe(path.join(home, ".mindframe-z", "work", "v1"));
   });
+
+  // Written at the literal path rather than through machineConfigPath, so this
+  // fails if the helper moves as well as if either reader stops using it.
+  it("resolves the root and loads the machine manifest from one machine config file", async () => {
+    const home = await makeTempDir();
+    const root = await makeTempDir();
+    await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      `home_path: ${JSON.stringify(root)}\nprofile: personal\n`,
+      "utf8"
+    );
+    await writeFile(path.join(root, "mfz_home.yml"), "description: fixture\n", "utf8");
+
+    const runtime = createRuntimePaths({ home });
+    const manifests = await loadManifests(root, home);
+
+    expect(runtime.root).toBe(root);
+    expect(manifests.machine.home_path).toBe(root);
+    expect(manifests.machine.profile).toBe("personal");
+  });
 });
 
 describe(".mindframe-z store path contract", () => {
@@ -179,6 +202,10 @@ describe(".mindframe-z store path contract", () => {
 
   it("pins the canonical .mindframe-z directory the rest of the layout hangs off", () => {
     expect(mindframeZDir(home)).toBe(mfz);
+  });
+
+  it("pins the machine config path shared by root resolution and manifest loading", () => {
+    expect(machineConfigPath(home)).toBe(path.join(mfz, "config.yml"));
   });
 
   it("pins the per-agent skill override state path", () => {
