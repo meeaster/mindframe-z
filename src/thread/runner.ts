@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { SandboxCredentialMode, ThreadHarness } from "../core/manifests.js";
-import { pathExists } from "../core/fs-util.js";
+import { parseJsonlObjects, pathExists } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
 import {
@@ -203,7 +203,8 @@ export function parseHarnessResult(
   rawTrace: string,
   durationMs: number
 ): ParsedHarnessResult {
-  const events = parseEvents(rawTrace);
+  // Harnesses can emit non-JSON progress; it stays in rawTrace and is ignored for summaries.
+  const events = parseJsonlObjects(rawTrace);
   return harness === "claude-code"
     ? parseClaudeResult(events, rawTrace, durationMs)
     : parseOpenCodeResult(events, rawTrace, durationMs);
@@ -292,22 +293,6 @@ function parseOpenCodeResult(
       output
     }
   };
-}
-
-function parseEvents(trace: string): Record<string, unknown>[] {
-  const events: Record<string, unknown>[] = [];
-  for (const line of trace.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const parsed: unknown = JSON.parse(line);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        events.push(parsed as Record<string, unknown>);
-      }
-    } catch {
-      // Harnesses can emit non-JSON progress; keep it in rawTrace and ignore it for summaries.
-    }
-  }
-  return events;
 }
 
 function skillPrompt(

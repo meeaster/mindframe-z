@@ -6,6 +6,7 @@ import {
   isPlainObject,
   jsonFileContent,
   parseFrontmatter,
+  parseJsonlObjects,
   parseTomlObject,
   pathExists,
   readDirEntries,
@@ -114,6 +115,36 @@ describe("isPlainObject", () => {
     expect(isPlainObject("personal")).toBe(false);
     expect(isPlainObject(3)).toBe(false);
     expect(isPlainObject(undefined)).toBe(false);
+  });
+});
+
+describe("parseJsonlObjects", () => {
+  it("keeps the object records in file order", () => {
+    const content = '{"type":"user","uuid":"u1"}\n{"type":"assistant","uuid":"a1"}\n';
+
+    expect(parseJsonlObjects(content)).toEqual([
+      { type: "user", uuid: "u1" },
+      { type: "assistant", uuid: "a1" }
+    ]);
+  });
+
+  it("skips blank lines, a truncated tail, and non-object JSON", () => {
+    const content = [
+      '{"type":"user"}',
+      "",
+      "   ",
+      "[1,2]",
+      '"progress"',
+      "17",
+      "null",
+      '{"typ'
+    ].join("\n");
+
+    expect(parseJsonlObjects(content)).toEqual([{ type: "user" }]);
+  });
+
+  it("reads empty text as no records", () => {
+    expect(parseJsonlObjects("")).toEqual([]);
   });
 });
 

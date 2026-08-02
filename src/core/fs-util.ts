@@ -50,6 +50,28 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /**
+ * Scan JSONL text for its plain-object records, skipping blank lines and any
+ * line that does not parse to one. This is the canonical scan behind the "read
+ * a line-delimited harness stream" seams (thread run traces and Claude
+ * transcripts), so a truncated final line, an interleaved non-JSON progress
+ * line, and a bare array all read as "not a record" wherever the scan happens
+ * instead of failing the whole read. Records keep their file order.
+ */
+export function parseJsonlObjects(content: string): Record<string, unknown>[] {
+  const records: Record<string, unknown>[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (isPlainObject(parsed)) records.push(parsed);
+    } catch {
+      // A truncated or non-JSON line is not a record; keep scanning the rest.
+    }
+  }
+  return records;
+}
+
+/**
  * Read a JSON object from disk, defaulting to an empty object when the file is
  * missing, unreadable, or does not parse to a plain object. Renderers use this
  * to merge managed settings into pre-existing local config without failing on a
