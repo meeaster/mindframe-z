@@ -173,12 +173,14 @@ describe("createRuntimePaths", () => {
     expect(runtime.workRoot).toBe(path.join(home, ".mindframe-z", "work", "v1"));
   });
 
+  // Written at the literal path rather than through machineConfigPath, so this
+  // fails if the helper moves as well as if either reader stops using it.
   it("resolves the root and loads the machine manifest from one machine config file", async () => {
     const home = await makeTempDir();
     const root = await makeTempDir();
-    await mkdir(path.dirname(machineConfigPath(home)), { recursive: true });
+    await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
     await writeFile(
-      machineConfigPath(home),
+      path.join(home, ".mindframe-z", "config.yml"),
       `home_path: ${JSON.stringify(root)}\nprofile: personal\n`,
       "utf8"
     );

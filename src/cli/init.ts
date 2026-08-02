@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
-import { mindframeZDir, upstreamHomeRoot } from "../core/paths.js";
+import { machineConfigPath, mindframeZDir, upstreamHomeRoot } from "../core/paths.js";
 
 const guideMarkdown = `# mindframe-z Home Guide
 
@@ -254,7 +254,7 @@ export async function initHome(options: {
     throw new Error("mfz init requires --create <path>, --clone <repo>, or --point <path>");
   }
   await writeFile(
-    path.join(configDir, "config.yml"),
+    machineConfigPath(machineHome),
     `home_path: ${homeRoot}\nprofile: base\n`,
     "utf8"
   );
