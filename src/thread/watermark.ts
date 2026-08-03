@@ -212,10 +212,13 @@ async function openCodeBoundary(
   }
 
   const cached = cachedSessionPath(paths, "opencode", id);
-  const content = await readTextFile(cached);
-  if (content === undefined) return undefined;
   let parsed: { messages?: Array<{ info?: { id?: string; time?: { created?: number } } }> };
   try {
+    // Any unusable export — absent, unreadable, or not JSON — means "no boundary
+    // from the cache" here, so the read stays inside this catch rather than
+    // propagating the way the other cache reads do.
+    const content = await readTextFile(cached);
+    if (content === undefined) return undefined;
     parsed = JSON.parse(content) as typeof parsed;
   } catch {
     return undefined;
