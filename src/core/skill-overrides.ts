@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
-import { isPlainObject } from "./fs-util.js";
+import { isPlainObject, jsonFileContent } from "./fs-util.js";
 
 export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
 
@@ -101,7 +101,7 @@ export async function writeConfigFile(
   data: Record<string, unknown>
 ): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  const content = format === "toml" ? stringifyToml(data) : JSON.stringify(data, null, 2) + "\n";
+  const content = format === "toml" ? stringifyToml(data) : jsonFileContent(data);
   await writeFile(file, content, "utf8");
 }
 

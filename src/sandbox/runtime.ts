@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { jsonFileContent } from "../core/fs-util.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
 import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import {
@@ -219,7 +220,7 @@ async function writeSandboxRuntimeConfig(
   opencodeConfig.mcp = mcp.opencode;
   await writeFile(
     path.join(runtimeDir, "opencode", "opencode.jsonc"),
-    `${JSON.stringify(opencodeConfig, null, 2)}\n`,
+    jsonFileContent(opencodeConfig),
     "utf8"
   );
 
@@ -247,12 +248,12 @@ async function writeSandboxRuntimeConfig(
     : {};
   await writeFile(
     path.join(runtimeDir, "claude", "settings.json"),
-    `${JSON.stringify(claudeSettings, null, 2)}\n`,
+    jsonFileContent(claudeSettings),
     "utf8"
   );
   await writeFile(
     path.join(runtimeDir, "claude", "mcp.json"),
-    `${JSON.stringify({ mcpServers: mcp.claude }, null, 2)}\n`,
+    jsonFileContent({ mcpServers: mcp.claude }),
     "utf8"
   );
 
@@ -376,7 +377,7 @@ export async function ensureSandboxState(
   };
   await writeFile(
     path.join(stateDir, "opencode-data", "auth.json"),
-    `${JSON.stringify(opencodeAuth, null, 2)}\n`,
+    jsonFileContent(opencodeAuth),
     { flag: "wx" }
   ).catch(() => {});
 
@@ -395,7 +396,7 @@ export async function ensureSandboxState(
     };
     await writeFile(
       path.join(stateDir, "claude", ".credentials.json"),
-      `${JSON.stringify(credentials, null, 2)}\n`,
+      jsonFileContent(credentials),
       { flag: "wx" }
     ).catch(() => {});
   }

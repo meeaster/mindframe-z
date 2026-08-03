@@ -1,3 +1,5 @@
+import { jsonFileContent } from "../core/fs-util.js";
+
 export const CLAUDE_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
@@ -52,5 +54,5 @@ export function buildClaudeSettings(): ClaudeSettings {
 }
 
 export function buildClaudeSettingsJson(): string {
-  return JSON.stringify(buildClaudeSettings(), null, 2) + "\n";
+  return jsonFileContent(buildClaudeSettings());
 }

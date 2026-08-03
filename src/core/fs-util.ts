@@ -161,10 +161,15 @@ export function parseFrontmatter(content: string): Record<string, unknown> {
 }
 
 /**
- * Serialize a value as the textual content of a JSON config file: two-space
- * indentation plus a trailing newline. This is the write-side counterpart to
- * {@link readJsonObject}; renderers use it so every managed JSON (and JSONC)
- * file shares one pretty-print and newline convention.
+ * Serialize a value as the textual content of a JSON file: two-space
+ * indentation plus a trailing newline. This is the canonical write-side
+ * counterpart to {@link readJsonObject}, behind the pretty-printed JSON (and
+ * JSONC) files `mfz` writes — rendered agent config, thread manifests, runs,
+ * verdict ledgers, and run status, sandbox runtime seeds, project skill
+ * overrides, and generated schemas — so one pretty-print and newline
+ * convention decides how they all read on disk and diff in Git. Records that
+ * are deliberately compact, such as the single-line thread lock entry, are
+ * serialized at their own call site instead.
  */
 export function jsonFileContent(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;

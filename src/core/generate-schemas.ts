@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z, type ZodType } from "zod";
+import { jsonFileContent } from "./fs-util.js";
 import {
   machineSchema,
   homeManifestSchema,
@@ -143,7 +144,7 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
     if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
     if (entry.filename === "thread-manifest.schema.json") strengthenThreadManifestSchema(schema);
     const outputPath = path.join(schemasDir, entry.filename);
-    await writeFile(outputPath, `${JSON.stringify(schema, null, 2)}\n`, "utf8");
+    await writeFile(outputPath, jsonFileContent(schema), "utf8");
     written.push(outputPath);
   }
   return written;

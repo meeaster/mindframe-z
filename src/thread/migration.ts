@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { z } from "zod";
+import { jsonFileContent } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import {
@@ -154,19 +155,11 @@ export async function migrateThreadDirectory(
 
   const targetDir = request.targetDir ?? request.sourceDir;
   if (targetDir !== request.sourceDir) await cp(request.sourceDir, targetDir, { recursive: true });
-  await writeFile(
-    path.join(targetDir, "manifest.json"),
-    JSON.stringify(manifest, null, 2) + "\n",
-    "utf8"
-  );
+  await writeFile(path.join(targetDir, "manifest.json"), jsonFileContent(manifest), "utf8");
 
   const runs = await migrateRuns(request.sourceDir, manifest.slug, legacy.runs);
   if (runs.runs.length > 0 || (await fileExists(path.join(request.sourceDir, "runs.json")))) {
-    await writeFile(
-      path.join(targetDir, "runs.json"),
-      JSON.stringify(runs, null, 2) + "\n",
-      "utf8"
-    );
+    await writeFile(path.join(targetDir, "runs.json"), jsonFileContent(runs), "utf8");
   }
   return {
     manifest,
