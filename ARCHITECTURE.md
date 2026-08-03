@@ -55,7 +55,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/work/v1/
 ~/.mindframe-z/cache/skills/
 ~/.mindframe-z/skill-candidates/
-~/.mindframe-z/bin/
 ```
 
 Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
@@ -75,7 +74,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
 - `mise`: `config.toml`; injects `node = "24"` when no resolved node tool exists.
-- `dotfiles`: profile dotfiles; managed `.zshrc` guarantees `~/.mindframe-z/bin` on `PATH`.
+- `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
 MCP profile entries are either direct (`agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, with optional `route: direct`) or shared (`route: executor`). Omitting `route` defaults to direct. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are always-configured shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge per selected supported harness and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; existing direct configuration remains installed until Executor connection metadata succeeds.
@@ -134,7 +133,7 @@ Applied agent configs expose upstream clones as editable extra folders so agents
 
 `mfz guide` prints version-local home conventions. Scaffolded homes include a slim `mindframe-z` skill that tells agents to run `mfz guide`.
 
-The installer downloads a self-contained `bun --compile` binary for the host platform to `~/.mindframe-z/bin/mfz`. The per-platform binaries are built by `pnpm release`.
+The installer downloads a self-contained `bun --compile` binary for the host platform to `~/.local/bin/mfz`. MFZ state remains under `~/.mindframe-z/`; the executable uses the conventional per-user binary directory so interactive shells and noninteractive services can resolve it consistently. The per-platform binaries are built by `pnpm release`.
 
 ## Schemas
 

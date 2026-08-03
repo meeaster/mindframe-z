@@ -4,7 +4,7 @@ You are setting up mindframe-z on this machine.
 
 1. Install or update the engine:
    `curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash`
-   Then make `mfz` resolvable in this session: `export PATH="$HOME/.mindframe-z/bin:$HOME/.local/bin:$PATH"` (new interactive shells get this from the rc block the installer writes).
+   Then make `mfz` resolvable in this session: `export PATH="$HOME/.local/bin:$PATH"` (new interactive shells get this from the rc block the installer writes).
 2. Run `mfz init` with the human's chosen home source:
    - `mfz init --clone <home-repo-url>` to activate an existing home.
    - `mfz init --create <path>` to scaffold a new home.

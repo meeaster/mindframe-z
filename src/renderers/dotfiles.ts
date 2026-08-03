@@ -57,11 +57,11 @@ function renderHarnessLaunchers(paths: RuntimePaths): string[] {
 }
 
 function renderZshrc(paths: RuntimePaths, content: string): string {
-  const engineBin = path.join(paths.home, ".mindframe-z", "bin");
+  const userBin = path.join(paths.home, ".local", "bin");
   return [
     "# Managed by mindframe-z. Edit the profile-owned .zshrc source, then run mfz apply.",
-    `if [[ ":$PATH:" != *":${engineBin}:"* ]]; then`,
-    `  export PATH=${JSON.stringify(engineBin)}":$PATH"`,
+    `if [[ ":$PATH:" != *":${userBin}:"* ]]; then`,
+    `  export PATH=${JSON.stringify(`${userBin}:$PATH`)}`,
     "fi",
     "",
     `if [ -r ${JSON.stringify(zshSecretsFile(paths))} ]; then`,
@@ -83,12 +83,12 @@ function renderZshrc(paths: RuntimePaths, content: string): string {
 }
 
 function renderBashrc(paths: RuntimePaths, content: string): string {
-  const engineBin = path.join(paths.home, ".mindframe-z", "bin");
+  const userBin = path.join(paths.home, ".local", "bin");
   return [
     "# Managed by mindframe-z. Edit the profile-owned .bashrc source, then run mfz apply.",
     `case ":$PATH:" in`,
-    `  *":${engineBin}:"*) ;;`,
-    `  *) export PATH=${JSON.stringify(engineBin)}":$PATH" ;;`,
+    `  *":${userBin}:"*) ;;`,
+    `  *) export PATH=${JSON.stringify(`${userBin}:$PATH`)} ;;`,
     "esac",
     "",
     content.trimEnd(),

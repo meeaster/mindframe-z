@@ -10,7 +10,7 @@ A home is a git repo with `mfz_home.yml`, `catalog/`, `instructions/`, `profiles
 curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash
 ```
 
-This installs mise, node (for the `skills` CLI), and the self-contained `mfz` binary to `~/.mindframe-z/bin/mfz`, and adds shell integration to your rc file. Then, in a new shell:
+This installs mise, node (for the `skills` CLI), and the self-contained `mfz` binary to `~/.local/bin/mfz`, and adds shell integration to your rc file. Then, in a new shell:
 
 ```sh
 mfz init --create ~/code/my-home   # or --clone <home-repo-url> / --point <path>

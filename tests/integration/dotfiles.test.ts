@@ -153,7 +153,8 @@ describe("dotfiles integration", () => {
 
     const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
-    expect(zshrc).toContain(path.join(home, ".mindframe-z", "bin"));
+    expect(zshrc).toContain(path.join(home, ".local", "bin"));
+    expect(zshrc).not.toContain(path.join(home, ".mindframe-z", "bin"));
     expect(zshrc).toContain("alias gs='git status'");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", ".zshrc"));
 
@@ -162,7 +163,7 @@ describe("dotfiles integration", () => {
     );
   });
 
-  it("renders and links managed .bashrc with engine bin on PATH", async () => {
+  it("renders and links managed .bashrc with user bin on PATH", async () => {
     await writeFile(
       path.join(root, "profiles", "base", ".bashrc"),
       "alias gs='git status'\n",
@@ -174,7 +175,8 @@ describe("dotfiles integration", () => {
 
     const bashrc = await readFile(configsPath(home, "personal", "dotfiles", ".bashrc"), "utf8");
     expect(bashrc).toContain("# Managed by mindframe-z.");
-    expect(bashrc).toContain(path.join(home, ".mindframe-z", "bin"));
+    expect(bashrc).toContain(path.join(home, ".local", "bin"));
+    expect(bashrc).not.toContain(path.join(home, ".mindframe-z", "bin"));
     expect(bashrc).toContain("alias gs='git status'");
 
     await expect(realpath(path.join(home, ".bashrc"))).resolves.toBe(

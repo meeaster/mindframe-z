@@ -12,5 +12,5 @@ WORKDIR /home/testuser
 RUN curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/latest/scripts/install.sh | bash
 
 # Verify the binary exists and runs
-RUN ~/.mindframe-z/bin/mfz --version
-RUN ~/.mindframe-z/bin/mfz --help
+RUN ~/.local/bin/mfz --version
+RUN ~/.local/bin/mfz --help

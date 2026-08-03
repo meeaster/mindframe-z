@@ -2,8 +2,7 @@
 set -euo pipefail
 
 MFZ_HOME="${MFZ_HOME:-$HOME}"
-MFZ_ROOT="$MFZ_HOME/.mindframe-z"
-MFZ_BIN="$MFZ_ROOT/bin"
+MFZ_BIN="$MFZ_HOME/.local/bin"
 REPO="${MFZ_REPO:-meeaster/mindframe-z}"
 TAG="${MFZ_VERSION:-latest}"
 
@@ -54,7 +53,11 @@ fi
 if ! grep -qs "Added by mindframe-z installer" "$rc"; then
   {
     printf '\n# Added by mindframe-z installer\n'
-    printf 'export PATH="%s:$HOME/.local/bin:$PATH"\n' "$MFZ_BIN"
+    # Expand PATH when the generated rc file is sourced.
+    # shellcheck disable=SC2016
+    printf 'export PATH="%s:$PATH"\n' "$MFZ_BIN"
+    # Run mise activation when the generated rc file is sourced.
+    # shellcheck disable=SC2016
     printf 'if command -v mise >/dev/null 2>&1; then eval "$(mise activate %s)"; fi\n' "$shell_kind"
   } >> "$rc"
 fi
