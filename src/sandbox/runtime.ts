@@ -378,9 +378,7 @@ export async function ensureSandboxState(
   await writeFile(
     path.join(stateDir, "opencode-data", "auth.json"),
     jsonFileContent(opencodeAuth),
-    {
-      flag: "wx"
-    }
+    { flag: "wx" }
   ).catch(() => {});
 
   if (credentialMode === "subscription") {
