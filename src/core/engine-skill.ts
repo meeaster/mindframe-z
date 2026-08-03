@@ -1,7 +1,7 @@
-import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SkillEntry } from "./manifests.js";
-import { pathExists } from "./fs-util.js";
+import { pathExists, readTextFile } from "./fs-util.js";
 import type { RuntimePaths } from "./paths.js";
 import { assertNoSymlinkAncestors } from "../skills/tree.js";
 
@@ -163,7 +163,7 @@ ${guidanceEnd}
 // it too. Deleting the block is harmless: the next apply restores it.
 export async function ensureHomeGuidance(homeRoot: string): Promise<"ok" | "wrote"> {
   const agentsPath = path.join(homeRoot, "AGENTS.md");
-  const existing = (await pathExists(agentsPath)) ? await readFile(agentsPath, "utf8") : "";
+  const existing = (await readTextFile(agentsPath)) ?? "";
   const begin = existing.indexOf(guidanceBegin);
   const end = existing.indexOf(guidanceEnd);
   const next =
@@ -187,6 +187,5 @@ export async function ensureHomeGuidance(homeRoot: string): Promise<"ok" | "wrot
 
 export async function hasHomeGuidance(homeRoot: string): Promise<boolean> {
   const agentsPath = path.join(homeRoot, "AGENTS.md");
-  if (!(await pathExists(agentsPath))) return false;
-  return (await readFile(agentsPath, "utf8")).includes(guidanceBegin);
+  return ((await readTextFile(agentsPath)) ?? "").includes(guidanceBegin);
 }

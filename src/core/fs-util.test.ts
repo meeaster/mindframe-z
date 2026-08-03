@@ -12,6 +12,7 @@ import {
   readDirEntries,
   readJsoncObject,
   readJsonObject,
+  readTextFile,
   readTomlObject,
   writeJsonFileAtomic
 } from "./fs-util.js";
@@ -100,6 +101,47 @@ describe("readDirEntries", () => {
     await symlink(path.join(dir, "gone"), path.join(dir, "dangling"));
 
     expect(await readDirEntries(path.join(dir, "dangling"))).toEqual([]);
+  });
+});
+
+describe("readTextFile", () => {
+  it("reads a file's text verbatim", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "AGENTS.md");
+    await writeFile(file, "# agents\n\nguidance\n", "utf8");
+
+    expect(await readTextFile(file)).toBe("# agents\n\nguidance\n");
+  });
+
+  it("distinguishes an empty file from a missing one", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "empty.jsonl");
+    await writeFile(file, "", "utf8");
+
+    expect(await readTextFile(file)).toBe("");
+    expect(await readTextFile(path.join(dir, "absent.jsonl"))).toBeUndefined();
+  });
+
+  it("reads a missing file, and one under a missing parent, as absent", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+
+    expect(await readTextFile(path.join(dir, "absent.md"))).toBeUndefined();
+    expect(await readTextFile(path.join(dir, "no", "such", "parent.md"))).toBeUndefined();
+  });
+
+  it("reads a dangling symlink as a missing file", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    await symlink(path.join(dir, "gone"), path.join(dir, "dangling"));
+
+    expect(await readTextFile(path.join(dir, "dangling"))).toBeUndefined();
+  });
+
+  it("propagates a failure other than a missing file", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const nested = path.join(dir, "projects");
+    await mkdir(nested);
+
+    await expect(readTextFile(nested)).rejects.toMatchObject({ code: "EISDIR" });
   });
 });
 
