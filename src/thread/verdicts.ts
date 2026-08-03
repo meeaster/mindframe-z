@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { pathExists } from "../core/fs-util.js";
+import { jsonFileContent, pathExists } from "../core/fs-util.js";
 import { threadSweepRoot, type RuntimePaths } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import type { Watermark } from "./watermark.js";
@@ -97,7 +97,7 @@ export async function writeVerdictLedger(
   ledger: VerdictLedger
 ): Promise<void> {
   await mkdir(threadSweepRoot(paths), { recursive: true });
-  await writeFile(ledgerPath(paths), JSON.stringify(ledger, null, 2) + "\n", "utf8");
+  await writeFile(ledgerPath(paths), jsonFileContent(ledger), "utf8");
 }
 
 export async function readSweepState(paths: RuntimePaths): Promise<SweepState> {
@@ -108,7 +108,7 @@ export async function readSweepState(paths: RuntimePaths): Promise<SweepState> {
 
 export async function writeSweepState(paths: RuntimePaths, state: SweepState): Promise<void> {
   await mkdir(threadSweepRoot(paths), { recursive: true });
-  await writeFile(statePath(paths), JSON.stringify(state, null, 2) + "\n", "utf8");
+  await writeFile(statePath(paths), jsonFileContent(state), "utf8");
 }
 
 export function upsertVerdicts(ledger: VerdictLedger, rows: readonly VerdictRow[]): VerdictLedger {

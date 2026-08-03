@@ -13,6 +13,7 @@ import {
   resolveSynthesisDefaults,
   resolveThreadStores,
   writeThreadManifest,
+  writeThreadRuns,
   type ResolvedThreadStore,
   type ThreadManifest
 } from "./storage.js";
@@ -186,6 +187,18 @@ describe("thread storage", () => {
     const dir = path.join(await makeTempDir(), "thread-a");
     await writeThreadManifest(dir, thread("thread-a", "personal"));
     expect(await readThreadManifest(dir)).toEqual(thread("thread-a", "personal"));
+  });
+
+  it("writes manifest and runs records as two-space JSON with one trailing newline", async () => {
+    const dir = path.join(await makeTempDir(), "thread-format");
+    await writeThreadManifest(dir, thread("thread-format", "personal"));
+    await writeThreadRuns(dir, { runs: [] });
+
+    const manifest = await readFile(path.join(dir, "manifest.json"), "utf8");
+    expect(manifest.startsWith('{\n  "slug": "thread-format",\n')).toBe(true);
+    expect(manifest.endsWith("}\n")).toBe(true);
+    expect(manifest.endsWith("\n\n")).toBe(false);
+    expect(await readFile(path.join(dir, "runs.json"), "utf8")).toBe('{\n  "runs": []\n}\n');
   });
 
   it("rejects misplaced manifests and duplicate slugs across active stores", async () => {

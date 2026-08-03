@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execa } from "execa";
-import { pathExists } from "../core/fs-util.js";
+import { jsonFileContent, pathExists } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { expandHome } from "../core/path-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -118,7 +118,7 @@ export async function readThreadManifest(dir: string): Promise<ThreadManifest> {
 
 export async function writeThreadManifest(dir: string, manifest: ThreadManifest): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  await writeFile(path.join(dir, "manifest.json"), jsonFileContent(manifest), "utf8");
 }
 
 export async function readThreadRuns(dir: string): Promise<ThreadRuns> {
@@ -129,7 +129,7 @@ export async function readThreadRuns(dir: string): Promise<ThreadRuns> {
 
 export async function writeThreadRuns(dir: string, runs: ThreadRuns): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "runs.json"), JSON.stringify(runs, null, 2) + "\n");
+  await writeFile(path.join(dir, "runs.json"), jsonFileContent(runs), "utf8");
 }
 
 const FALLBACK_DISCOVER = "claude-code:sonnet@high";

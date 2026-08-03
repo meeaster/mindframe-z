@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { jsonFileContent } from "../core/fs-util.js";
 import {
   threadCliLogPath,
   threadRunPath,
@@ -31,7 +32,7 @@ export async function appendThreadCliLog(
 export async function writeRunStatus(paths: RuntimePaths, status: ThreadRunStatus): Promise<void> {
   const dir = threadRunPath(paths, status.id);
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "status.json"), JSON.stringify(status, null, 2) + "\n", "utf8");
+  await writeFile(path.join(dir, "status.json"), jsonFileContent(status), "utf8");
 }
 
 export async function writeRunTrace(
