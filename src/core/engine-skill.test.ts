@@ -51,6 +51,16 @@ describe("ensureHomeGuidance", () => {
   });
 });
 
+describe("hasHomeGuidance", () => {
+  it("reports a home with no AGENTS.md, and one without the block, as unguided", async () => {
+    const home = await tempDir();
+    expect(await hasHomeGuidance(home)).toBe(false);
+
+    await writeFile(path.join(home, "AGENTS.md"), "# My home notes\n", "utf8");
+    expect(await hasHomeGuidance(home)).toBe(false);
+  });
+});
+
 describe("materializeEngineSkill", () => {
   it("writes the skill in the local-skill layout and returns its entry", async () => {
     const home = await tempDir();

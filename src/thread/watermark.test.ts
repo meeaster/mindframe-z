@@ -309,6 +309,22 @@ describe("resolveLegacyWatermark", () => {
 
     expect(wm).toBeUndefined();
   });
+
+  // An export that cannot be read at all is as unusable as one that does not parse,
+  // so the opencode cursor reads it as "no boundary" rather than failing the cut.
+  it("returns undefined when the opencode export is present but unreadable", async () => {
+    const home = await makeTempDir();
+    const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "opencode");
+    await mkdir(path.join(dir, "ses_unreadable.json"), { recursive: true });
+
+    const wm = await resolveLegacyWatermark(
+      testRuntimePaths(home),
+      { source: "opencode", id: "ses_unreadable" },
+      2000
+    );
+
+    expect(wm).toBeUndefined();
+  });
 });
 
 describe("classifyWatermark", () => {

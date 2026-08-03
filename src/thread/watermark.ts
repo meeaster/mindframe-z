@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { RuntimePaths } from "../core/paths.js";
-import { parseJsonlObjects, pathExists } from "../core/fs-util.js";
+import { parseJsonlObjects, pathExists, readTextFile } from "../core/fs-util.js";
 import { opencodeDbPath } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import { cachedSessionPath } from "../sessions/archive.js";
@@ -70,10 +70,8 @@ async function readClaudeWatermark(
   // Absent from the live store — fall back to a hydrated archive-cache copy, if one
   // exists. The only behavioral change hydration makes to readWatermark.
   const cached = cachedSessionPath(paths, "claude-code", id);
-  if (await pathExists(cached)) {
-    return tailSignatureFromJsonl(await readFile(cached, "utf8"));
-  }
-  return undefined;
+  const content = await readTextFile(cached);
+  return content === undefined ? undefined : tailSignatureFromJsonl(content);
 }
 
 // A transcript line is a message turn when its `type` is user or assistant; other
@@ -143,7 +141,7 @@ async function readTranscriptContent(
     if (live !== undefined) return readFile(path.join(paths.claudeDir, live), "utf8");
   }
   const cached = cachedSessionPath(paths, source, id);
-  return (await pathExists(cached)) ? readFile(cached, "utf8") : undefined;
+  return readTextFile(cached);
 }
 
 function claudeBoundary(content: string, cursor: string | number): Watermark | undefined {
@@ -214,10 +212,14 @@ async function openCodeBoundary(
   }
 
   const cached = cachedSessionPath(paths, "opencode", id);
-  if (!(await pathExists(cached))) return undefined;
   let parsed: { messages?: Array<{ info?: { id?: string; time?: { created?: number } } }> };
   try {
-    parsed = JSON.parse(await readFile(cached, "utf8")) as typeof parsed;
+    // Any unusable export — absent, unreadable, or not JSON — means "no boundary
+    // from the cache" here, so the read stays inside this catch rather than
+    // propagating the way the other cache reads do.
+    const content = await readTextFile(cached);
+    if (content === undefined) return undefined;
+    parsed = JSON.parse(content) as typeof parsed;
   } catch {
     return undefined;
   }
@@ -245,10 +247,8 @@ async function readOpencodeWatermark(
   // Absent from the live db (or no db at all) — fall back to a hydrated archive-cache
   // copy (an `opencode export` artifact), if one exists.
   const cached = cachedSessionPath(paths, "opencode", id);
-  if (await pathExists(cached)) {
-    return tailSignatureFromExport(await readFile(cached, "utf8"));
-  }
-  return undefined;
+  const content = await readTextFile(cached);
+  return content === undefined ? undefined : tailSignatureFromExport(content);
 }
 
 async function readOpencodeWatermarkFromDb(

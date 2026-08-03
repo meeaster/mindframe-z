@@ -40,6 +40,24 @@ export async function readDirEntries(directory: string): Promise<Dirent[]> {
 }
 
 /**
+ * Read a file's text, reading a file that does not exist as absent. This is the
+ * canonical read behind the "use this file if it is there" branches in session
+ * watermarks and home guidance, so an absent file means "nothing to read"
+ * wherever the read happens — and it stays one syscall path, so a file removed
+ * mid-run reads as absent rather than throwing between a separate existence
+ * check and the read. Every other failure — an unreadable file, a directory —
+ * still propagates, so a broken path surfaces instead of reading as absent.
+ */
+export async function readTextFile(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+/**
  * Narrow an unknown value to a plain object: a non-null, non-array object. This
  * is the canonical guard behind the "parse to a plain object or fall back"
  * seams (config merges and history record extraction), so the accepted shape
