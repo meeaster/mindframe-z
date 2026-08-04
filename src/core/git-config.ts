@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { writeTextFile } from "./fs-util.js";
 import type { MachineManifest } from "./manifests.js";
 import type { RuntimePaths } from "./paths.js";
 
@@ -37,8 +38,7 @@ export async function writeGitIdentityFragment(
   machine: MachineManifest
 ): Promise<string> {
   const fragmentPath = gitIdentityFragmentPath(paths);
-  await mkdir(path.dirname(fragmentPath), { recursive: true });
-  await writeFile(fragmentPath, renderGitIdentityFragment(machine), "utf8");
+  await writeTextFile(fragmentPath, renderGitIdentityFragment(machine));
   return fragmentPath;
 }
 
@@ -58,9 +58,6 @@ export async function ensureGitConfigInclude(paths: RuntimePaths): Promise<strin
     .filter((part, index) => part !== "" || index > 0)
     .join("\n");
 
-  if (next !== existing) {
-    await mkdir(path.dirname(configPath), { recursive: true });
-    await writeFile(configPath, next, "utf8");
-  }
+  if (next !== existing) await writeTextFile(configPath, next);
   return configPath;
 }

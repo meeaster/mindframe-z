@@ -1,6 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { writeTextFile } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { readSandboxOperationalSecrets, sandboxSecretsFile } from "./config.js";
@@ -55,8 +55,7 @@ export async function writeSandboxCompose(
   runtime: SandboxRuntimeInputs
 ): Promise<string> {
   const file = sandboxComposeFile(paths, profile);
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, renderCompose(runtime.services), "utf8");
+  await writeTextFile(file, renderCompose(runtime.services));
   return file;
 }
 

@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
-import { isPlainObject, jsonFileContent } from "./fs-util.js";
+import { isPlainObject, jsonFileContent, writeTextFile } from "./fs-util.js";
 
 export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
 
@@ -100,9 +100,8 @@ export async function writeConfigFile(
   format: SkillCodec["format"],
   data: Record<string, unknown>
 ): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
   const content = format === "toml" ? stringifyToml(data) : jsonFileContent(data);
-  await writeFile(file, content, "utf8");
+  await writeTextFile(file, content);
 }
 
 function stringRecord(value: unknown): Record<string, string> {

@@ -1,6 +1,7 @@
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { writeTextFile } from "../core/fs-util.js";
 import type { ReferenceEntry } from "../core/manifests.js";
 import {
   expandHome,
@@ -34,8 +35,7 @@ export async function writeReferenceIndex(
 ): Promise<string> {
   const content = referenceIndexContent(profile);
   const indexPath = referenceIndexPath(paths);
-  await mkdir(path.dirname(indexPath), { recursive: true });
-  await writeFile(indexPath, content, "utf8");
+  await writeTextFile(indexPath, content);
   return indexPath;
 }
 
@@ -95,8 +95,7 @@ export async function writeExtraFoldersIndex(
   }
 
   const content = extraFoldersIndexContent(paths, profile);
-  await mkdir(path.dirname(indexPath), { recursive: true });
-  await writeFile(indexPath, content, "utf8");
+  await writeTextFile(indexPath, content);
   return indexPath;
 }
 
