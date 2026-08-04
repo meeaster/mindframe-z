@@ -177,14 +177,15 @@ export function jsonFileContent(value: unknown): string {
 
 /**
  * Write a file's text, creating its parent directory first. This is the
- * canonical write behind the "render a file into a directory that may not exist
- * yet" seams — rendered agent config, the reference and extra-folder indexes,
- * the Git identity fragment, the sandbox compose file, and project skill
- * overrides — so one `mkdir -p` convention decides where `mfz` is allowed to
- * create a tree, and no call site can write into a missing directory by
- * forgetting the step. It replaces the destination outright; callers that need
- * a crash-safe swap use {@link writeJsonFileAtomic}, and callers that need a
- * non-default mode or an exclusive create pass those options themselves.
+ * canonical write behind the "render one file into a directory that may not
+ * exist yet" seams — rendered agent config, the reference and extra-folder
+ * indexes, the Git identity fragment, the sandbox compose file, project skill
+ * overrides, and session absent-markers — so the file and the tree it needs are
+ * created in one step wherever a single destination path is the unit of work.
+ * Writers that lay down many files under one directory still create that
+ * directory once themselves. It replaces the destination outright; callers that
+ * need a crash-safe swap use {@link writeJsonFileAtomic}, and callers that need
+ * a non-default mode or an exclusive create pass those options themselves.
  */
 export async function writeTextFile(file: string, content: string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
