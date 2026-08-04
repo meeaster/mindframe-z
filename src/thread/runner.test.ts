@@ -13,6 +13,21 @@ import {
   type AgentRunRequest
 } from "./runner.js";
 
+// The mount helpers read the ambient XDG_DATA_HOME, so each case has to state the
+// value it wants and put the real one back — including restoring "unset", which a
+// plain reassignment would turn into the literal string "undefined".
+async function withXdgDataHome(value: string | undefined, run: () => Promise<void>): Promise<void> {
+  const original = process.env.XDG_DATA_HOME;
+  if (value === undefined) delete process.env.XDG_DATA_HOME;
+  else process.env.XDG_DATA_HOME = value;
+  try {
+    await run();
+  } finally {
+    if (original === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = original;
+  }
+}
+
 describe("thread runner", () => {
   it("builds Claude Code args with JSON streaming and write tools denied", () => {
     const command = buildHarnessCommand({
@@ -227,18 +242,58 @@ describe("thread runner", () => {
     await mkdir(path.join(paths.claudeDir, "projects"), { recursive: true });
     await writeFile(path.join(paths.claudeDir, "history.jsonl"), "{}\n", "utf8");
 
-    const oldXdgDataHome = process.env.XDG_DATA_HOME;
-    process.env.XDG_DATA_HOME = xdg;
-    try {
+    await withXdgDataHome(xdg, async () => {
       await expect(sessionStoreMountArgsForTest(paths)).resolves.toEqual([
         "--volume",
         `${path.join(paths.claudeDir, "history.jsonl")}:/mnt/claude-sessions/history.jsonl:ro`,
         "--volume",
         `${path.join(paths.claudeDir, "projects")}:/mnt/claude-sessions/projects:ro`
       ]);
-    } finally {
-      process.env.XDG_DATA_HOME = oldXdgDataHome;
-    }
+    });
+  });
+
+  it("mounts the OpenCode auth token from the run's own data home", async () => {
+    const home = await makeTempDir();
+    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const authFile = path.join(paths.home, ".local", "share", "opencode", "auth.json");
+    await mkdir(path.dirname(authFile), { recursive: true });
+    await writeFile(authFile, "{}\n", "utf8");
+
+    await withXdgDataHome(undefined, async () => {
+      await expect(credentialMountArgsForTest(paths, "opencode")).resolves.toEqual([
+        "--volume",
+        `${authFile}:/home/sandbox/.local/share/opencode/auth.json:ro`
+      ]);
+    });
+  });
+
+  it("mounts the OpenCode data store from the run's own data home", async () => {
+    const home = await makeTempDir();
+    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const dataDir = path.join(paths.home, ".local", "share", "opencode");
+    await mkdir(dataDir, { recursive: true });
+
+    await withXdgDataHome(undefined, async () => {
+      await expect(sessionStoreMountArgsForTest(paths)).resolves.toEqual([
+        "--volume",
+        `${dataDir}:/mnt/opencode-data/opencode:ro`
+      ]);
+    });
+  });
+
+  it("follows XDG_DATA_HOME over the data home's default location", async () => {
+    const home = await makeTempDir();
+    const xdg = await makeTempDir();
+    const paths = createRuntimePaths({ root: process.cwd(), home });
+    await mkdir(path.join(paths.home, ".local", "share", "opencode"), { recursive: true });
+    await mkdir(path.join(xdg, "opencode"), { recursive: true });
+
+    await withXdgDataHome(xdg, async () => {
+      await expect(sessionStoreMountArgsForTest(paths)).resolves.toEqual([
+        "--volume",
+        `${path.join(xdg, "opencode")}:/mnt/opencode-data/opencode:ro`
+      ]);
+    });
   });
 });
 

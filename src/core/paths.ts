@@ -197,9 +197,11 @@ export function archiveCacheRoot(paths: RuntimePaths): string {
 
 // OpenCode resolves its own data directory via `XDG_DATA_HOME` (falling back to
 // `<home>/.local/share`) — the same precedence the `xdg-basedir` package it depends on
-// uses internally. Mirrored here so mfz's direct db reads and its `opencode export`
-// shell-out always agree with the real `opencode` binary on the same on-disk database,
-// even under mfz's own --home/MFZ_HOME override (used by tests and sandboxed runs).
+// uses internally. Mirrored here so mfz's direct db reads, its `opencode export`
+// shell-out, and the thread dispatch mounts that hand OpenCode's auth token and data
+// store to a container always agree with the real `opencode` binary on the same
+// on-disk store, even under mfz's own --home/MFZ_HOME override (used by tests and
+// sandboxed runs).
 export function opencodeDataHome(paths: RuntimePaths): string {
   return process.env.XDG_DATA_HOME ?? path.join(paths.home, ".local", "share");
 }
