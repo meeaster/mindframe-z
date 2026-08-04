@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,8 @@ import {
   readJsonObject,
   readTextFile,
   readTomlObject,
-  writeJsonFileAtomic
+  writeJsonFileAtomic,
+  writeTextFile
 } from "./fs-util.js";
 
 describe("pathExists", () => {
@@ -248,6 +249,50 @@ describe("jsonFileContent", () => {
     const value = { name: "personal", nested: { count: 3 } };
     await writeFile(file, jsonFileContent(value), "utf8");
     expect(await readJsonObject(file)).toEqual(value);
+  });
+});
+
+describe("writeTextFile", () => {
+  it("creates missing parent directories on the way to the file", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "configs", "personal", "AGENTS.md");
+
+    await writeTextFile(file, "# agents\n");
+
+    expect(await readFile(file, "utf8")).toBe("# agents\n");
+  });
+
+  it("writes the text verbatim as UTF-8", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "references.md");
+    const content = "# Enabled References\n\n- `opencode`: — TypeScript…\n";
+
+    await writeTextFile(file, content);
+
+    expect(await readTextFile(file)).toBe(content);
+  });
+
+  it("replaces existing content rather than appending to it", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "gitconfig");
+    await writeFile(file, '[user]\n\tname = "old"\n', "utf8");
+
+    await writeTextFile(file, '[user]\n\tname = "new"\n');
+
+    expect(await readFile(file, "utf8")).toBe('[user]\n\tname = "new"\n');
+  });
+
+  it("replaces a symlink's target rather than the link, matching plain writeFile", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const target = path.join(dir, "target.md");
+    const link = path.join(dir, "link.md");
+    await writeFile(target, "original\n", "utf8");
+    await symlink(target, link);
+
+    await writeTextFile(link, "written through the link\n");
+
+    expect(await readFile(target, "utf8")).toBe("written through the link\n");
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
   });
 });
 

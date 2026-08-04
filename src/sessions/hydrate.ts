@@ -3,7 +3,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Archive } from "../core/manifests.js";
-import { pathExists } from "../core/fs-util.js";
+import { pathExists, writeTextFile } from "../core/fs-util.js";
 import { archiveCacheRoot, type RuntimePaths } from "../core/paths.js";
 import { absentMarkerPath, cachedSessionPath, harnessPrefix, listObjects } from "./archive.js";
 
@@ -117,9 +117,7 @@ export async function hydrateSession(
   }
 
   if (checkedAny && allConfirmedAbsent) {
-    const marker = absentMarkerPath(paths, harness, id);
-    await mkdir(path.dirname(marker), { recursive: true });
-    await writeFile(marker, "", "utf8");
+    await writeTextFile(absentMarkerPath(paths, harness, id), "");
   }
   return false;
 }

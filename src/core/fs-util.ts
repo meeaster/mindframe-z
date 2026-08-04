@@ -176,6 +176,23 @@ export function jsonFileContent(value: unknown): string {
 }
 
 /**
+ * Write a file's text, creating its parent directory first. This is the
+ * canonical write behind the "render one file into a directory that may not
+ * exist yet" seams — rendered agent config, the reference and extra-folder
+ * indexes, the Git identity fragment, the sandbox compose file, project skill
+ * overrides, and session absent-markers — so the file and the tree it needs are
+ * created in one step wherever a single destination path is the unit of work.
+ * Writers that lay down many files under one directory still create that
+ * directory once themselves. It replaces the destination outright; callers that
+ * need a crash-safe swap use {@link writeJsonFileAtomic}, and callers that need
+ * a non-default mode or an exclusive create pass those options themselves.
+ */
+export async function writeTextFile(file: string, content: string): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, content, "utf8");
+}
+
+/**
  * Replace a JSON file atomically: create the parent directory, write the
  * {@link jsonFileContent} form to a uniquely named sibling, then rename it over
  * the destination. This is the canonical mutable-state write behind the
@@ -184,8 +201,7 @@ export function jsonFileContent(value: unknown): string {
  * one, never a half-written record.
  */
 export async function writeJsonFileAtomic(file: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(temp, jsonFileContent(value), "utf8");
+  await writeTextFile(temp, jsonFileContent(value));
   await rename(temp, file);
 }

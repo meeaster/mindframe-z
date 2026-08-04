@@ -1,5 +1,6 @@
-import { lstat, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { lstat, readFile, rm, unlink } from "node:fs/promises";
 import path from "node:path";
+import { writeTextFile } from "./fs-util.js";
 import type { RuntimePaths, ToolTarget } from "./paths.js";
 import { globalSkillStatePath, profileConfigsDir } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
@@ -48,10 +49,7 @@ export async function renderRuntimeInstructions(
 }
 
 export async function writeRenderedFiles(files: RenderedFile[]): Promise<void> {
-  for (const file of files) {
-    await mkdir(path.dirname(file.path), { recursive: true });
-    await writeFile(file.path, file.content, "utf8");
-  }
+  for (const file of files) await writeTextFile(file.path, file.content);
 }
 
 export async function removeRenderedFiles(files: string[]): Promise<void> {
@@ -60,7 +58,6 @@ export async function removeRenderedFiles(files: string[]): Promise<void> {
 
 export async function writeLocalFiles(files: RenderedFile[]): Promise<void> {
   for (const file of files) {
-    await mkdir(path.dirname(file.path), { recursive: true });
     try {
       const stat = await lstat(file.path);
       if (file.ifMissing) continue;
@@ -68,7 +65,7 @@ export async function writeLocalFiles(files: RenderedFile[]): Promise<void> {
     } catch {
       // Missing files are created below.
     }
-    await writeFile(file.path, file.content, "utf8");
+    await writeTextFile(file.path, file.content);
   }
 }
 
