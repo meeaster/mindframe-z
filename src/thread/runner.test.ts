@@ -1,8 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createRuntimePaths } from "../core/paths.js";
-import { makeTempDir } from "../../tests/integration/support.js";
+import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import {
   buildHarnessCommand,
   credentialMountArgsForTest,
@@ -13,9 +12,12 @@ import {
   type AgentRunRequest
 } from "./runner.js";
 
-// The mount helpers read the ambient XDG_DATA_HOME, so each case has to state the
-// value it wants and put the real one back — including restoring "unset", which a
-// plain reassignment would turn into the literal string "undefined".
+// The mount helpers resolve against the ambient XDG_DATA_HOME, so each case has to
+// state the value it wants and put the real one back — including restoring "unset",
+// which a plain reassignment would turn into the literal string "undefined". The
+// other half of that isolation is testRuntimePaths, which derives every directory
+// from the temp home instead of letting CLAUDE_CONFIG_DIR and friends redirect a
+// mount (or a fixture write) at the real user's config.
 async function withXdgDataHome(value: string | undefined, run: () => Promise<void>): Promise<void> {
   const original = process.env.XDG_DATA_HOME;
   if (value === undefined) delete process.env.XDG_DATA_HOME;
@@ -204,7 +206,7 @@ describe("thread runner", () => {
 
   it("mounts Claude credentials into the sandbox user home", async () => {
     const home = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const paths = testRuntimePaths(home, process.cwd());
     await mkdir(paths.claudeDir, { recursive: true });
     await writeFile(path.join(paths.claudeDir, ".credentials.json"), "{}\n", "utf8");
 
@@ -215,7 +217,7 @@ describe("thread runner", () => {
   });
 
   it("mounts the scoped AWS creds directory in bedrock mode instead of the OAuth token", async () => {
-    const paths = createRuntimePaths({ root: "/repo", home: "/home/test" });
+    const paths = testRuntimePaths("/home/test", "/repo");
 
     await expect(
       credentialMountArgsForTest(paths, "claude-code", "/home/test/.mindframe-z/bedrock")
@@ -238,7 +240,7 @@ describe("thread runner", () => {
   it("mounts host session files outside the writable Claude runtime home", async () => {
     const home = await makeTempDir();
     const xdg = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const paths = testRuntimePaths(home, process.cwd());
     await mkdir(path.join(paths.claudeDir, "projects"), { recursive: true });
     await writeFile(path.join(paths.claudeDir, "history.jsonl"), "{}\n", "utf8");
 
@@ -254,7 +256,7 @@ describe("thread runner", () => {
 
   it("mounts the OpenCode auth token from the run's own data home", async () => {
     const home = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const paths = testRuntimePaths(home, process.cwd());
     const authFile = path.join(paths.home, ".local", "share", "opencode", "auth.json");
     await mkdir(path.dirname(authFile), { recursive: true });
     await writeFile(authFile, "{}\n", "utf8");
@@ -269,7 +271,7 @@ describe("thread runner", () => {
 
   it("mounts the OpenCode data store from the run's own data home", async () => {
     const home = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const paths = testRuntimePaths(home, process.cwd());
     const dataDir = path.join(paths.home, ".local", "share", "opencode");
     await mkdir(dataDir, { recursive: true });
 
@@ -284,7 +286,7 @@ describe("thread runner", () => {
   it("follows XDG_DATA_HOME over the data home's default location", async () => {
     const home = await makeTempDir();
     const xdg = await makeTempDir();
-    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const paths = testRuntimePaths(home, process.cwd());
     await mkdir(path.join(paths.home, ".local", "share", "opencode"), { recursive: true });
     await mkdir(path.join(xdg, "opencode"), { recursive: true });
 
