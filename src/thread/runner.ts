@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { SandboxCredentialMode, ThreadHarness } from "../core/manifests.js";
 import { parseJsonlObjects, pathExists } from "../core/fs-util.js";
-import type { RuntimePaths } from "../core/paths.js";
+import { opencodeDataHome, type RuntimePaths } from "../core/paths.js";
 import type { ThreadDispatchRun } from "./schema.js";
 import {
   bedrockContainerEnv,
@@ -341,11 +341,7 @@ async function credentialMountArgs(
     await assertExists(file);
     return ["--volume", `${file}:/home/sandbox/.claude/.credentials.json:ro`];
   }
-  const file = path.join(
-    process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
-    "opencode",
-    "auth.json"
-  );
+  const file = path.join(opencodeDataHome(paths), "opencode", "auth.json");
   await assertExists(file);
   return ["--volume", `${file}:/home/sandbox/.local/share/opencode/auth.json:ro`];
 }
@@ -367,10 +363,7 @@ async function sessionStoreMountArgs(paths: RuntimePaths): Promise<string[]> {
     mounts.push("--volume", `${claudeTranscripts}:/mnt/claude-sessions/transcripts:ro`);
   }
 
-  const opencodeData = path.join(
-    process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
-    "opencode"
-  );
+  const opencodeData = path.join(opencodeDataHome(paths), "opencode");
   if (await pathExists(opencodeData)) {
     mounts.push("--volume", `${opencodeData}:/mnt/opencode-data/opencode:ro`);
   }
