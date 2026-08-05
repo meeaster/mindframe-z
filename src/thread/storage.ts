@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execa } from "execa";
-import { jsonFileContent, pathExists } from "../core/fs-util.js";
+import { jsonFileContent, pathExists, readTextFile, writeTextFile } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { expandHome } from "../core/path-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -117,19 +117,17 @@ export async function readThreadManifest(dir: string): Promise<ThreadManifest> {
 }
 
 export async function writeThreadManifest(dir: string, manifest: ThreadManifest): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "manifest.json"), jsonFileContent(manifest), "utf8");
+  await writeTextFile(path.join(dir, "manifest.json"), jsonFileContent(manifest));
 }
 
 export async function readThreadRuns(dir: string): Promise<ThreadRuns> {
-  const file = path.join(dir, "runs.json");
-  if (!(await pathExists(file))) return { runs: [] };
-  return threadRunsSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  const content = await readTextFile(path.join(dir, "runs.json"));
+  if (content === undefined) return { runs: [] };
+  return threadRunsSchema.parse(JSON.parse(content));
 }
 
 export async function writeThreadRuns(dir: string, runs: ThreadRuns): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "runs.json"), jsonFileContent(runs), "utf8");
+  await writeTextFile(path.join(dir, "runs.json"), jsonFileContent(runs));
 }
 
 const FALLBACK_DISCOVER = "claude-code:sonnet@high";
