@@ -41,12 +41,18 @@ async function createUpstreamRemote(): Promise<{ source: string; remote: string;
   return { source, remote, repo: `file://${remote}` };
 }
 
-async function createChildHome(home: string, upstreamRepo: string): Promise<string> {
+async function createChildHome(
+  home: string,
+  upstreamRepo: string,
+  upstreamPath: string
+): Promise<string> {
   const child = await makeTempDir();
   await writeFixture(child, home);
   await writeFile(
     path.join(child, "mfz_home.yml"),
-    ["extends:", "  name: personal", `  repo: ${upstreamRepo}`, ""].join("\n"),
+    ["extends:", "  name: personal", `  repo: ${upstreamRepo}`, `  path: ${upstreamPath}`, ""].join(
+      "\n"
+    ),
     "utf8"
   );
   await mkdir(path.join(child, "profiles", "work"), { recursive: true });
@@ -63,20 +69,21 @@ async function createChildHome(home: string, upstreamRepo: string): Promise<stri
   return child;
 }
 
-function managedClone(home: string): string {
-  return path.join(home, ".mindframe-z", "homes", "personal");
+function configuredUpstream(home: string): string {
+  return path.join(home, "workspace", "repos", "personal-home");
 }
 
 describe("upstream home integration", () => {
-  it("clones and fast-forwards a clean upstream home during apply", async () => {
+  it("clones and fast-forwards a clean upstream home at its configured path during apply", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
-    await expect(
-      readFile(path.join(managedClone(home), ".git", "config"), "utf8")
-    ).resolves.toContain(upstream.remote);
+    await expect(readFile(path.join(checkout, ".git", "config"), "utf8")).resolves.toContain(
+      upstream.remote
+    );
 
     await writeFile(
       path.join(upstream.source, "instructions", "AGENTS.md"),
@@ -93,10 +100,11 @@ describe("upstream home integration", () => {
     );
   });
 
-  it("serializes concurrent updates to an upstream clone", async () => {
+  it("serializes concurrent updates to an upstream checkout", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
     await writeFile(
@@ -116,17 +124,18 @@ describe("upstream home integration", () => {
       expect(result.stderr).not.toContain("Cannot fast-forward to multiple branches");
     }
     await expect(
-      readFile(path.join(managedClone(home), "instructions", "AGENTS.md"), "utf8")
+      readFile(path.join(checkout, "instructions", "AGENTS.md"), "utf8")
     ).resolves.toContain("# Concurrent Update");
   });
 
-  it("skips pulling a dirty upstream home clone during apply", async () => {
+  it("skips pulling a dirty upstream home checkout during apply", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
-    await writeFile(path.join(managedClone(home), "dirty.txt"), "local edit\n", "utf8");
+    await writeFile(path.join(checkout, "dirty.txt"), "local edit\n", "utf8");
     await writeFile(
       path.join(upstream.source, "instructions", "AGENTS.md"),
       "# Remote Update\n",
@@ -143,20 +152,20 @@ describe("upstream home integration", () => {
     );
   });
 
-  it("skips pulling an upstream home clone with unpushed commits during apply", async () => {
+  it("skips pulling an upstream home checkout with unpushed commits during apply", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
-    const clone = managedClone(home);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    // Commit a local change so the clone is ahead of upstream but has a clean tree,
+    // Commit a local change so the checkout is ahead of upstream but has a clean tree,
     // isolating the ahead branch from the dirty branch checked first.
-    await git(clone, ["config", "user.email", "test@example.com"]);
-    await git(clone, ["config", "user.name", "Test User"]);
-    await writeFile(path.join(clone, "ahead.txt"), "local commit\n", "utf8");
-    await commitAll(clone, "local ahead");
+    await git(checkout, ["config", "user.email", "test@example.com"]);
+    await git(checkout, ["config", "user.name", "Test User"]);
+    await writeFile(path.join(checkout, "ahead.txt"), "local commit\n", "utf8");
+    await commitAll(checkout, "local ahead");
 
     await writeFile(
       path.join(upstream.source, "instructions", "AGENTS.md"),
@@ -176,23 +185,19 @@ describe("upstream home integration", () => {
     );
   });
 
-  it("keeps using an existing upstream clone when pull fails", async () => {
+  it("keeps using an existing upstream checkout when pull fails", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
-    await git(managedClone(home), [
-      "remote",
-      "set-url",
-      "origin",
-      "file:///missing/mfz-upstream-home"
-    ]);
+    await git(checkout, ["remote", "set-url", "origin", "file:///missing/mfz-upstream-home"]);
 
     const result = await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     expect(result.stderr).toContain(
-      "upstream home personal could not update; using existing clone"
+      "upstream home personal could not update; using existing checkout"
     );
     await expect(readFile(configsPath(home, "work", "AGENTS.md"), "utf8")).resolves.toContain(
       "# Test Agents"
@@ -202,7 +207,8 @@ describe("upstream home integration", () => {
   it("sync can assign unmanaged rendered keys to a pushable upstream profile", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
     await rm(path.join(child, "opencode", "commands"), { recursive: true, force: true });
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
@@ -218,22 +224,22 @@ describe("upstream home integration", () => {
     );
     expect(result.stdout).toContain("Written to upstream home personal/base — uncommitted");
     await expect(
-      readFile(path.join(managedClone(home), "profiles", "base", "profile.yml"), "utf8")
+      readFile(path.join(checkout, "profiles", "base", "profile.yml"), "utf8")
     ).resolves.toContain("small_model: test/upstream-small");
   }, 15000);
 
   it("doctor reports dirty, ahead, and stale upstream home clones", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();
-    const child = await createChildHome(home, upstream.repo);
-    const clone = managedClone(home);
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
-    await git(clone, ["config", "user.email", "test@example.com"]);
-    await git(clone, ["config", "user.name", "Test User"]);
-    await writeFile(path.join(clone, "ahead.txt"), "ahead\n", "utf8");
-    await commitAll(clone, "local ahead");
-    await writeFile(path.join(clone, "dirty.txt"), "dirty\n", "utf8");
+    await git(checkout, ["config", "user.email", "test@example.com"]);
+    await git(checkout, ["config", "user.name", "Test User"]);
+    await writeFile(path.join(checkout, "ahead.txt"), "ahead\n", "utf8");
+    await commitAll(checkout, "local ahead");
+    await writeFile(path.join(checkout, "dirty.txt"), "dirty\n", "utf8");
 
     await writeFile(path.join(upstream.source, "remote.txt"), "remote\n", "utf8");
     await commitAll(upstream.source, "remote ahead");
@@ -241,7 +247,7 @@ describe("upstream home integration", () => {
 
     const result = await cli("mfz", child, home, ["doctor"]);
 
-    expect(result.stdout).toContain(`upstream:dirty\tpersonal\t${clone}`);
+    expect(result.stdout).toContain(`upstream:dirty\tpersonal\t${checkout}`);
     expect(result.stdout).toContain("upstream:ahead\tpersonal\t1 commit(s) unpushed");
     expect(result.stdout).toContain("upstream:stale\tpersonal\t1 commit(s) behind");
   });

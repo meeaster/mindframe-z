@@ -34,8 +34,30 @@ describe("init and guide integration", () => {
     const result = await mfz(home, ["guide"]);
     expect(result.stdout).toContain("# mindframe-z Home Guide");
     expect(result.stdout).toContain("catalog/references.yml");
+    expect(result.stdout).toContain("mfz guide mcp");
     expect(result.stdout).toContain("mfz guide skills");
     expect(result.stdout).toContain("mfz guide references");
+    expect(result.stdout).toContain("mfz guide extra-folders");
+    expect(result.stdout).not.toContain("Declare Executor authentication structure");
+  });
+
+  it("prints the MCP topic guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "mcp"]);
+    expect(result.stdout).toContain("# MCP Guide");
+    expect(result.stdout).toContain("route: executor");
+    expect(result.stdout).toContain("all connected supported harnesses");
+    expect(result.stdout).toContain("Done when every declared credentialed connection");
+  });
+
+  it("prints the extra folders topic guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "extra-folders"]);
+    expect(result.stdout).toContain("# Extra Folders Guide");
+    expect(result.stdout).toContain("cross-repository routing metadata");
+    expect(result.stdout).toContain("domain outcome");
+    expect(result.stdout).toContain("automatically added upstream-home fallback");
+    expect(result.stdout).toContain("mfz doctor");
   });
 
   it("prints the skills topic guide", async () => {
@@ -45,6 +67,7 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("catalog/skills.yml");
     expect(result.stdout).toContain("mfz skills check");
     expect(result.stdout).toContain("mfz skills stage");
+    expect(result.stdout).toContain("Done when the skill appears for its selected agents");
   });
 
   it("prints the references topic guide", async () => {

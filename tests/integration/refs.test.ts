@@ -73,6 +73,9 @@ describe("refs integration", () => {
     const index = await readFile(path.join(home, ".mindframe-z", "extra_folders.md"), "utf8");
     expect(index).toContain("# Extra Folders");
     expect(index).toContain(
+      "Use this as the capability map for cross-repository work or when a named repository's role is unclear."
+    );
+    expect(index).toContain(
       `- \`${path.join(home, "code", "work")}\` - Work code (read: allow, edit: allow)`
     );
     expect(index).toContain(

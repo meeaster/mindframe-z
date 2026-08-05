@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  homeManifestSchema,
   loadManifests,
   mcpServerSchema,
   skillSchema,
@@ -28,6 +29,83 @@ async function writeProfile(root: string, dir: string, yaml: string): Promise<st
   await writeFile(path.join(full, "profile.yml"), yaml, "utf8");
   return full;
 }
+
+describe("home manifest schema", () => {
+  it("requires an absolute or home-relative upstream path", () => {
+    expect(
+      homeManifestSchema.parse({
+        extends: {
+          name: "personal",
+          repo: "git@github.com:example/personal.git",
+          path: "/workspace/repos/personal"
+        }
+      }).extends?.path
+    ).toBe("/workspace/repos/personal");
+    expect(
+      homeManifestSchema.parse({
+        extends: {
+          name: "personal",
+          repo: "git@github.com:example/personal.git",
+          path: "~/workspace/repos/personal"
+        }
+      }).extends?.path
+    ).toBe("~/workspace/repos/personal");
+
+    for (const value of ["personal", "./personal", "../personal", "~"]) {
+      expect(() =>
+        homeManifestSchema.parse({
+          extends: {
+            name: "personal",
+            repo: "git@github.com:example/personal.git",
+            path: value
+          }
+        })
+      ).toThrow(/absolute or start with ~\//);
+    }
+
+    expect(() =>
+      homeManifestSchema.parse({
+        extends: { name: "personal", repo: "git@github.com:example/personal.git" }
+      })
+    ).toThrow();
+  });
+
+  it("rejects a relative upstream path before clone resolution side effects", async () => {
+    const { root, home } = await tmpHome();
+    await writeFile(
+      path.join(root, "mfz_home.yml"),
+      [
+        "extends:",
+        "  name: personal",
+        "  repo: file:///tmp/never-cloned",
+        "  path: ./relative-upstream",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await expect(loadManifests(root, home)).rejects.toThrow(/absolute or start with ~\//);
+    await expect(
+      readFile(path.join(home, ".mindframe-z", "homes", "personal", "mfz_home.yml"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("publishes the explicit upstream path contract", async () => {
+    const schema = JSON.parse(
+      await readFile(path.join(process.cwd(), "schemas", "mfz_home.schema.json"), "utf8")
+    ) as {
+      properties: {
+        extends: {
+          required: string[];
+          properties: { path: { pattern?: string } };
+        };
+      };
+    };
+
+    expect(schema.properties.extends.required).toContain("path");
+    expect(schema.properties.extends.properties.path.pattern).toBe("^(?:/|~/)");
+  });
+});
 
 describe("loadManifests", () => {
   it("refuses a root without mfz_home.yml", async () => {

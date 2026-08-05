@@ -2,12 +2,15 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "./fs-util.js";
-import { expandHome, upstreamHomeRoot } from "./path-util.js";
+import { expandHome } from "./path-util.js";
 
-function isLocalRepoSpec(repo: string): boolean {
-  return (
-    repo.startsWith("/") || repo.startsWith("./") || repo.startsWith("../") || repo.startsWith("~/")
-  );
+async function isGitWorktree(root: string): Promise<boolean> {
+  try {
+    const { stdout } = await execa("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root });
+    return stdout.trim() === "true";
+  } catch {
+    return false;
+  }
 }
 
 async function isDirty(root: string): Promise<boolean> {
@@ -33,7 +36,7 @@ async function acquireLock(lockPath: string): Promise<() => Promise<void>> {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for upstream clone lock: ${lockPath}`);
+        throw new Error(`Timed out waiting for upstream checkout lock: ${lockPath}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -44,38 +47,38 @@ export async function resolveUpstreamHomeRoot(options: {
   home: string;
   alias: string;
   repo: string;
+  path: string;
 }): Promise<string> {
-  if (isLocalRepoSpec(options.repo)) return path.resolve(expandHome(options.repo, options.home));
-
-  const cloneRoot = upstreamHomeRoot(options.home, options.alias);
-  await mkdir(path.dirname(cloneRoot), { recursive: true });
-  const releaseLock = await acquireLock(`${cloneRoot}.lock`);
+  const upstreamRoot = path.resolve(expandHome(options.path, options.home));
+  await mkdir(path.dirname(upstreamRoot), { recursive: true });
+  const releaseLock = await acquireLock(`${upstreamRoot}.lock`);
   try {
-    if (!(await pathExists(cloneRoot))) {
-      await execa("git", ["clone", options.repo, cloneRoot]);
-      return cloneRoot;
+    if (!(await pathExists(upstreamRoot))) {
+      await execa("git", ["clone", options.repo, upstreamRoot]);
+      return upstreamRoot;
     }
+    if (!(await isGitWorktree(upstreamRoot))) return upstreamRoot;
 
-    if (await isDirty(cloneRoot)) {
+    if (await isDirty(upstreamRoot)) {
       console.warn(`warning\tupstream home ${options.alias} is dirty; skipping git pull`);
-      return cloneRoot;
+      return upstreamRoot;
     }
-    if (await isAhead(cloneRoot)) {
+    if (await isAhead(upstreamRoot)) {
       console.warn(
         `warning\tupstream home ${options.alias} has unpushed commits; skipping git pull`
       );
-      return cloneRoot;
+      return upstreamRoot;
     }
 
     try {
-      await execa("git", ["pull", "--ff-only"], { cwd: cloneRoot });
+      await execa("git", ["pull", "--ff-only"], { cwd: upstreamRoot });
     } catch (error) {
       const detail = error instanceof Error ? `: ${error.message}` : "";
       console.warn(
-        `warning\tupstream home ${options.alias} could not update; using existing clone${detail}`
+        `warning\tupstream home ${options.alias} could not update; using existing checkout${detail}`
       );
     }
-    return cloneRoot;
+    return upstreamRoot;
   } finally {
     await releaseLock();
   }

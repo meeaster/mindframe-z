@@ -142,6 +142,6 @@ This repo has no external users yet. Prefer one direct implementation over fallb
 
 `shared/refs.yml` entries have a `description` field rendered into agent-visible indexes. Follow the conventions in `ARCHITECTURE.md#Description-Convention` when adding or updating descriptions: lead with language/stack, state purpose, and include LLM-actionable details (entrypoints, package names, config models).
 
-`extra_folders` entries in machine config also have a `description` field rendered into `~/.mindframe-z/extra_folders.md`. Describe what the directory contains and why an agent might need access, following the same convention section.
+`extra_folders` entries in profiles and machine config have a `description` field rendered into `~/.mindframe-z/extra_folders.md`. They form a cross-repository capability map: use concise but discriminative descriptions that state the domain, role, and high-signal stack, integration, or dependency relationship. Avoid generic "needed when" clauses and exhaustive implementation inventories.
 
 `shared/AGENTS.global.md` is rendered into agent runtime configs. Do not put repo-maintainer instructions there unless they should appear in generated OpenCode/Claude guidance.

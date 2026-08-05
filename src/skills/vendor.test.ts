@@ -142,7 +142,7 @@ describe("vendored skill contracts", () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-machine-"));
     await writeFile(
       path.join(root, "mfz_home.yml"),
-      YAML.stringify({ extends: { name: "upstream", repo: upstream } }),
+      YAML.stringify({ extends: { name: "upstream", repo: upstream, path: upstream } }),
       "utf8"
     );
     await writeFile(path.join(upstream, "mfz_home.yml"), "description: upstream\n", "utf8");
@@ -158,30 +158,41 @@ describe("vendored skill contracts", () => {
     expect(legacy[0]).toMatchObject({ name: "old", sourceRoot: upstream });
   });
 
-  it("reads a remote-declared upstream home from the managed clone root", async () => {
+  it("reads a remote-declared upstream home from its configured path", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-child-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-machine-"));
-    // A non-local repo spec is never resolved relative to the child home; the clone
-    // already sits at the managed root that apply and `mfz init --clone` write to.
+    const configured = path.join(home, "workspace", "repos", "shared-home");
     await writeFile(
       path.join(root, "mfz_home.yml"),
-      YAML.stringify({ extends: { name: "shared", repo: "https://example.invalid/shared.git" } }),
+      YAML.stringify({
+        extends: { name: "shared", repo: "https://example.invalid/shared.git", path: configured }
+      }),
       "utf8"
     );
-    const clone = path.join(home, ".mindframe-z", "homes", "shared");
-    await mkdir(path.join(clone, "catalog"), { recursive: true });
-    await writeFile(path.join(clone, "mfz_home.yml"), "description: shared\n", "utf8");
+    const managedFallback = path.join(home, ".mindframe-z", "homes", "shared");
+    await mkdir(path.join(configured, "catalog"), { recursive: true });
+    await writeFile(path.join(configured, "mfz_home.yml"), "description: shared\n", "utf8");
     await writeFile(
-      path.join(clone, "catalog", "skills.yml"),
+      path.join(configured, "catalog", "skills.yml"),
       YAML.stringify({
         skills: [{ name: "shared-skill", source: "git", repo: "https://example.invalid/shared" }]
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(managedFallback, "catalog"), { recursive: true });
+    await writeFile(path.join(managedFallback, "mfz_home.yml"), "description: managed\n", "utf8");
+    await writeFile(
+      path.join(managedFallback, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [{ name: "managed-skill", source: "git", repo: "https://example.invalid/managed" }]
       }),
       "utf8"
     );
 
     const legacy = await readLegacyGitSkills(root, home);
 
-    expect(legacy[0]).toMatchObject({ name: "shared-skill", sourceRoot: clone });
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0]).toMatchObject({ name: "shared-skill", sourceRoot: configured });
   });
 
   it("rejects non-HTTPS sources before creating a Git cache", async () => {

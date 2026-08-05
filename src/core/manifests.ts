@@ -120,7 +120,13 @@ export const homeManifestSchema = z
     extends: z
       .object({
         name: z.string().min(1),
-        repo: z.string().min(1)
+        repo: z.string().min(1),
+        path: z
+          .string()
+          .min(1)
+          .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), {
+            message: "must be absolute or start with ~/"
+          })
       })
       .strict()
       .optional()
@@ -746,7 +752,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         await resolveUpstreamHomeRoot({
           home: effectiveHome,
           alias: homeManifest.extends.name,
-          repo: homeManifest.extends.repo
+          repo: homeManifest.extends.repo,
+          path: homeManifest.extends.path
         }),
         home
       )

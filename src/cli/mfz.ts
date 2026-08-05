@@ -390,7 +390,7 @@ program
 program
   .command("guide")
   .description("Print the mindframe-z home conventions guide")
-  .argument("[topic]", "topic guide: skills")
+  .argument("[topic]", "topic guide: mcp, skills, references, extra-folders")
   .action(async (topic) => guide(topic));
 
 program

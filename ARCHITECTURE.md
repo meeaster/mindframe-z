@@ -35,7 +35,7 @@ The layout is not configurable. Missing optional content directories are allowed
 1. Resolve machine paths: `--root` > `MFZ_ROOT` > machine `home_path` > cwd.
 2. Require `mfz_home.yml` in the active home.
 3. Load local catalogs and profiles from `catalog/` and `profiles/`.
-4. If `mfz_home.yml#extends` is present, resolve the upstream clone and recursively load it.
+4. If `mfz_home.yml#extends` is present, resolve its configured upstream checkout and recursively load it.
 5. Resolve the requested profile: `--profile` > `MFZ_PROFILE` > machine profile > `personal`.
 6. Apply existing profile merge semantics across home boundaries.
 
@@ -50,7 +50,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/configs/<profile>/
 ~/.executor/ (Executor-owned native default, unless EXECUTOR_DATA_DIR is set)
 ~/.mindframe-z/references/
-~/.mindframe-z/homes/<alias>/
+~/.mindframe-z/homes/<name>/       # `mfz init --clone` bootstrap only
 ~/.mindframe-z/overrides.json
 ~/.mindframe-z/work/v1/
 ~/.mindframe-z/cache/skills/
@@ -101,7 +101,7 @@ Renderer source files for inherited OpenCode plugins, commands, agents, and loca
 
 ## Sync
 
-`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream clone is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream clones are reported as uncommitted.
+`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.
 
 Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations and named connections are not removed automatically; apply blocks with a metadata-only remediation message naming the exact connection until the user disconnects it explicitly.
 
@@ -111,17 +111,20 @@ Catalog entries use `source: local` or `source: vendored`. A vendored entry reco
 
 `mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
 
-## Upstream Clones
+## Upstream Checkouts
 
-Non-local upstream repos are cloned to `~/.mindframe-z/homes/<alias>/`.
+`mfz_home.yml#extends.path` is required whenever `extends` exists and is the
+authoritative upstream home root. It must be absolute or begin with `~/`; cwd-relative
+paths are rejected during manifest validation. `extends.repo` remains the Git clone
+source and is used only when the configured path is absent.
 
-- First resolve clones the repo.
-- Clean clones are updated with `git pull --ff-only`.
-- Dirty or ahead clones warn and are not clobbered.
-- Existing stale/offline clones are used with a warning.
-- Missing offline clones fail.
+- If the configured path is absent, MFZ creates its parent and clones `repo` there.
+- A clean Git worktree at the configured path is updated with `git pull --ff-only`.
+- Dirty or ahead Git worktrees warn and are not clobbered.
+- Pull failures warn and continue using the existing checkout.
+- Existing non-Git paths are loaded as local homes without Git operations or `repo` validation.
 
-Applied agent configs expose upstream clones as editable extra folders so agents can patch and commit upstream home content.
+Applied agent configs expose configured upstream checkouts as editable extra folders so agents can patch and commit upstream home content. The separate `mfz init --clone` bootstrap command continues to use `~/.mindframe-z/homes/<name>/`.
 
 ## Bootstrap And Distribution
 

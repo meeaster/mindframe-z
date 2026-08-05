@@ -15,11 +15,17 @@
         "repo": {
           "type": "string",
           "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:/|~/)"
         }
       },
       "required": [
         "name",
-        "repo"
+        "repo",
+        "path"
       ],
       "additionalProperties": false
     }

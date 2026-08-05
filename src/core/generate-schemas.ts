@@ -25,6 +25,16 @@ const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
   { schema: threadRunsSchema, filename: "thread-runs.schema.json" }
 ];
 
+function strengthenHomeManifestSchema(schema: Record<string, unknown>): void {
+  const properties = schema.properties as Record<string, Record<string, unknown>>;
+  const extension = properties.extends;
+  if (!extension) throw new Error("mfz_home.schema.json is missing the extends property");
+  const extensionProperties = extension.properties as Record<string, Record<string, unknown>>;
+  const upstreamPath = extensionProperties.path;
+  if (!upstreamPath) throw new Error("mfz_home.schema.json is missing extends.path");
+  upstreamPath.pattern = "^(?:/|~/)";
+}
+
 function strengthenProfileMcpSchema(schema: Record<string, unknown>): void {
   const properties = schema.properties as Record<string, Record<string, unknown>>;
   const mcp = properties.mcp!;
@@ -140,6 +150,7 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
       string,
       unknown
     >;
+    if (entry.filename === "mfz_home.schema.json") strengthenHomeManifestSchema(schema);
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
     if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
     if (entry.filename === "thread-manifest.schema.json") strengthenThreadManifestSchema(schema);

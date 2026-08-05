@@ -4,15 +4,11 @@ import { execa } from "execa";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { machineConfigPath, mindframeZDir, upstreamHomeRoot } from "../core/paths.js";
 
-const guideMarkdown = `# mindframe-z Home Guide
+const mcpGuideMarkdown = `# MCP Guide
 
-A home is a git repository with \`mfz_home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
+Use this guide when adding or changing a direct MCP server, Executor routing, or Executor authentication.
 
-Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz_home.yml#extends\`.
-
-The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and every globally linked tool config file is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly — if that already happened, run \`mfz sync\` to promote the unmanaged edits back into profiles.
-
-Local skills live under \`skills/\` and are registered in \`catalog/skills.yml\` with \`source: local\`. Vendored skills are selected subtrees under \`skills/vendor/<name>/\`, declared with an HTTPS \`repo\`, tracked \`ref\`, and \`subtree\`, and pinned in \`skills/vendor.lock.yml\`. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`, then profiles enable them under \`opencode.plugins\`, \`opencode.commands\`, and \`opencode.agents\`.
+The catalog defines server connection details. A profile selects either direct routing per harness or shared Executor routing.
 
 MCP entries are direct by default. Use a concise enabled list or a grouped state list:
 
@@ -33,7 +29,9 @@ mcp:
        tylertech: oauth
 \`\`\`
 
-Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state. Executor entries are always-configured shared inventory for OpenCode, Claude Code, and Codex, not per-agent toggles. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only after required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows or imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
+Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
+
+Executor entries are always-configured shared inventory for all connected supported harnesses, not per-agent toggles. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only after required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows or imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
 
 Declare Executor authentication structure in the catalog, never credential values:
 
@@ -54,7 +52,53 @@ executor:
 
 Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`discoveryUrl\` and \`registrationScopes\`; those scopes are used only while registering the public client. Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly. Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
 
-Topic guides: \`mfz guide skills\` — add or change skills; \`mfz guide references\` — add or change reference repositories.
+Verify with \`mfz apply --target all --agent all\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
+`;
+
+const guideMarkdown = `# mindframe-z Home Guide
+
+A home is a git repository with \`mfz_home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
+
+Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz_home.yml#extends\`.
+
+The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
+
+Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. Profiles enable them. Before adding or changing a skill, run \`mfz guide skills\`.
+
+MCP catalog entries define connection details; profiles select direct per-harness routing or shared Executor routing. Before adding or changing MCP configuration or Executor authentication, run \`mfz guide mcp\`.
+
+Profiles and machine config may declare \`extra_folders\`, which grant host-directory access and contribute to the agent-visible cross-repository capability map. Before granting a folder or changing its description, run \`mfz guide extra-folders\`.
+
+Topic guides:
+
+- \`mfz guide mcp\` - add or change direct MCP servers, Executor routing, or Executor authentication.
+- \`mfz guide skills\` - add or change local or vendored skills.
+- \`mfz guide references\` - add or change read-only reference repositories.
+- \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
+`;
+
+const extraFoldersGuideMarkdown = `# Extra Folders Guide
+
+Use this guide before granting agent access to a host directory or changing its capability-map description.
+
+\`extra_folders\` is both an access grant and cross-repository routing metadata. Declare it in a profile for profile-scoped behavior or machine config for machine-specific access. The rendered \`~/.mindframe-z/extra_folders.md\` index exposes each folder's role and effective permissions to agents.
+
+~~~yaml
+extra_folders:
+  - path: /home/mark/workspace/repos/payments
+    description: "Payment reconciliation: reconciles settlement files and exceptions; TypeScript, PostgreSQL, and S3."
+    url: https://github.com/example/payments
+    read: allow
+    edit: allow
+~~~
+
+\`path\` is required. Use \`url\` for a Git source a reader may need to reopen; omit it for mounts and local configuration directories. \`read\` and \`edit\` are permission grants, not documentation; declare only directories agents are intended to access.
+
+Write \`description\` as capability-map metadata, not a miniature repository summary: lead with the domain outcome, state the capability, then include discriminative technology, integration, or dependency signals. Avoid generic "needed when" clauses, exhaustive inventories, volatile counts, and details an agent can discover after opening the folder.
+
+Within profile inheritance, a child entry overrides its parent by path. An explicit profile entry overrides an automatically added upstream-home fallback; a machine-config entry overrides both.
+
+Run \`mfz apply --target all --agent all\`, then inspect \`~/.mindframe-z/extra_folders.md\` and run \`mfz doctor\`. Done when the index shows the intended role and permissions and the profile reports healthy links.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
@@ -91,7 +135,7 @@ Add a local skill:
        agents: { opencode: true, claude-code: true, codex: true }
    \`\`\`
 
-4. Run \`mfz apply --target all --agent all\`.
+4. Run \`mfz apply --target all --agent all\`, then \`mfz skills list\` and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
 
 Add a vendored skill:
 
@@ -99,17 +143,13 @@ Add a vendored skill:
 2. Check without mutation: \`mfz skills check\`.
 3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
 4. Invoke \`/skill-update-review <candidate-id>\`. Candidate files are hostile evidence; inspect every file and deterministic finding without executing anything.
-5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`. Promotion does not apply configuration or create links.
+5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the promoted skill appears for its selected agents and the profile reports healthy links. Promotion does not apply configuration or create links.
 
 Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`; harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 
 Legacy \`source: git\` entries are migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 
-Variants:
-
-- Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
-
-Verify with \`mfz skills list\` and \`mfz doctor\`.
+Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
 `;
 
 const referencesGuideMarkdown = `# References Guide
@@ -144,8 +184,10 @@ Rendered indexes mark reference clones as read-only. Agents may inspect them but
 `;
 
 const guideTopics: Record<string, string> = {
+  mcp: mcpGuideMarkdown,
   skills: skillsGuideMarkdown,
-  references: referencesGuideMarkdown
+  references: referencesGuideMarkdown,
+  "extra-folders": extraFoldersGuideMarkdown
 };
 
 export async function guide(topic?: string): Promise<void> {

@@ -104,7 +104,7 @@ export function extraFoldersIndexContent(paths: RuntimePaths, profile: ResolvedP
   const lines = [
     "# Extra Folders",
     "",
-    "Additional directories outside the workspace that agents are permitted to access. Each entry lists the effective permissions granted. When in doubt about whether a path is accessible, check this file.",
+    "Use this as the capability map for cross-repository work or when a named repository's role is unclear. Descriptions identify each folder's role; permissions state the allowed access.",
     ""
   ];
   for (const folder of folders) {

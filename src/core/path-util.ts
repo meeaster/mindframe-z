@@ -23,10 +23,9 @@ export function machineConfigPath(home: string): string {
   return path.join(mindframeZDir(home), "config.yml");
 }
 
-// Where an upstream home clone lives on this machine, keyed by the alias declared
-// in `mfz_home.yml#extends`. `mfz init --clone`, the apply-time clone/fast-forward,
-// and skill vendoring must all agree on this directory or a home gets cloned to one
-// place and read from another.
+// Bootstrap location used by `mfz init --clone`, keyed by the alias declared in
+// `mfz_home.yml#extends`. Extension resolution uses the versioned `extends.path`
+// instead; this helper remains for the separate init bootstrap behavior.
 export function upstreamHomeRoot(machineHome: string, alias: string): string {
   return path.join(mindframeZDir(machineHome), "homes", alias);
 }

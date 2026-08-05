@@ -43,7 +43,7 @@ Common commands:
 - `mfz guide` prints home layout and editing conventions.
 - `mfz apply` renders the active home into `~/.mindframe-z/configs/<profile>/` and links or merges global tool config.
 - `mfz sync` promotes unmanaged rendered config edits back into home profiles.
-- `mfz doctor` validates manifests, symlinks, stale project toggles, legacy references, and upstream clone state.
+- `mfz doctor` validates manifests, symlinks, stale project toggles, legacy references, and upstream checkout state.
 - `mfz schemas` regenerates committed JSON Schemas from Zod schemas.
 - `mfz work` manages durable work units, machine-local session bindings, orientation, checkpoints, and context receipts.
 
@@ -138,6 +138,7 @@ Homes may declare one upstream:
 extends:
   name: personal
   repo: git@github.com:you/personal-home.git
+  path: ~/workspace/repos/personal-home
 ```
 
 Unqualified names resolve only in the active home. Upstream entries use qualified names such as `personal/base`, `personal/aws-knowledge`, or `personal/common/tool`.
@@ -156,10 +157,11 @@ References default to:
 ~/.mindframe-z/references/
 ```
 
-Upstream homes are managed as writable clones under:
+Upstream extension homes use the exact writable checkout configured by
+`extends.path`. The separate `mfz init --clone` bootstrap command uses:
 
 ```text
-~/.mindframe-z/homes/<alias>/
+~/.mindframe-z/homes/<name>/
 ```
 
 ## Development

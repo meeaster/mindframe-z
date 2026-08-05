@@ -4,6 +4,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import {
+  homeManifestSchema,
   skillsManifestSchema,
   skillSchema,
   vendorLockSchema,
@@ -14,7 +15,6 @@ import {
 import {
   expandHome,
   skillCandidatesRoot,
-  upstreamHomeRoot,
   vendorLockPath,
   type RuntimePaths
 } from "../core/paths.js";
@@ -109,17 +109,11 @@ async function activeHomeRoots(
   const roots = [resolvedRoot];
   try {
     const parsed = YAML.parse(await readFile(path.join(resolvedRoot, "mfz_home.yml"), "utf8")) as {
-      extends?: { name?: string; repo?: string };
+      extends?: unknown;
     };
-    const extension = parsed.extends;
-    if (!extension?.name || !extension.repo) return roots;
-    const local =
-      extension.repo.startsWith("/") ||
-      extension.repo.startsWith(".") ||
-      extension.repo.startsWith("~/");
-    const upstream = local
-      ? path.resolve(expandHome(extension.repo, machineHome))
-      : upstreamHomeRoot(machineHome, extension.name);
+    const extension = homeManifestSchema.parse(parsed).extends;
+    if (!extension) return roots;
+    const upstream = path.resolve(expandHome(extension.path, machineHome));
     if (await pathExists(path.join(upstream, "mfz_home.yml"))) {
       roots.push(...(await activeHomeRoots(upstream, machineHome, seen)));
     }

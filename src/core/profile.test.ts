@@ -7,16 +7,23 @@ import { profileSchema } from "./manifests.js";
 import { deepMerge, mergeProfiles, resolveProfile } from "./profile.js";
 import { createRuntimePaths } from "./paths.js";
 
-async function writeHome(root: string, options: { extends?: { name: string; repo: string } } = {}) {
+async function writeHome(
+  root: string,
+  options: { extends?: { name: string; repo: string; path: string } } = {}
+) {
   await mkdir(path.join(root, "catalog"), { recursive: true });
   await mkdir(path.join(root, "instructions"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await writeFile(
     path.join(root, "mfz_home.yml"),
     options.extends
-      ? [`extends:`, `  name: ${options.extends.name}`, `  repo: ${options.extends.repo}`, ""].join(
-          "\n"
-        )
+      ? [
+          "extends:",
+          `  name: ${options.extends.name}`,
+          `  repo: ${options.extends.repo}`,
+          `  path: ${options.extends.path}`,
+          ""
+        ].join("\n")
       : "description: Test home\n",
     "utf8"
   );
@@ -516,7 +523,7 @@ describe("Delegate General model catalog", () => {
 });
 
 describe("home inheritance", () => {
-  it("resolves a qualified upstream profile and catalog entries", async () => {
+  it("resolves a qualified upstream profile from an existing non-Git path", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));
     const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-machine-home-"));
@@ -537,7 +544,9 @@ describe("home inheritance", () => {
       "utf8"
     );
 
-    await writeHome(child, { extends: { name: "personal", repo: parent } });
+    await writeHome(child, {
+      extends: { name: "personal", repo: "not-a-git-clone-source", path: parent }
+    });
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
@@ -571,7 +580,7 @@ describe("home inheritance", () => {
       ].join("\n"),
       "utf8"
     );
-    await writeHome(child, { extends: { name: "personal", repo: parent } });
+    await writeHome(child, { extends: { name: "personal", repo: parent, path: parent } });
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
@@ -599,7 +608,7 @@ describe("home inheritance", () => {
       ].join("\n"),
       "utf8"
     );
-    await writeHome(child, { extends: { name: "personal", repo: parent } });
+    await writeHome(child, { extends: { name: "personal", repo: parent, path: parent } });
     await writeFile(
       path.join(child, "catalog", "references.yml"),
       [
@@ -633,8 +642,8 @@ describe("home inheritance", () => {
       ["skills:", "  - name: common-skill", "    source: local", ""].join("\n"),
       "utf8"
     );
-    await writeHome(parent, { extends: { name: "common", repo: common } });
-    await writeHome(child, { extends: { name: "personal", repo: parent } });
+    await writeHome(parent, { extends: { name: "common", repo: common, path: common } });
+    await writeHome(child, { extends: { name: "personal", repo: parent, path: parent } });
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
@@ -682,10 +691,45 @@ describe("home inheritance", () => {
     expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
   });
 
-  it("clones git upstream homes under the machine-local homes directory", async () => {
+  it("prefers an explicit extra-folder description over an auto-added upstream home", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));
+    const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-machine-home-"));
+    await writeHome(parent);
+    await writeFile(path.join(parent, "profiles", "base", "profile.yml"), "name: base\n", "utf8");
+    await writeHome(child, { extends: { name: "personal", repo: parent, path: parent } });
+    await mkdir(path.join(child, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(child, "profiles", "work", "profile.yml"),
+      [
+        "name: work",
+        "extends: personal/base",
+        "extra_folders:",
+        `  - path: ${parent}`,
+        "    description: Personal AI tooling home",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root: child, home }), "work");
+    const upstreamFolders = resolved.extraFolders.filter((folder) => folder.path === parent);
+
+    expect(upstreamFolders).toEqual([
+      expect.objectContaining({
+        path: parent,
+        description: "Personal AI tooling home",
+        read: "allow",
+        edit: "allow"
+      })
+    ]);
+  });
+
+  it("clones git upstream homes to the configured path", async () => {
     const upstreamSource = await mkdtemp(path.join(os.tmpdir(), "mfz-upstream-source-"));
     const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-machine-home-"));
+    const configuredRoot = path.join(home, "workspace", "repos", "personal-home");
     await writeHome(upstreamSource);
     await writeFile(
       path.join(upstreamSource, "profiles", "base", "profile.yml"),
@@ -693,7 +737,9 @@ describe("home inheritance", () => {
       "utf8"
     );
     await commitAll(upstreamSource);
-    await writeHome(child, { extends: { name: "personal", repo: `file://${upstreamSource}` } });
+    await writeHome(child, {
+      extends: { name: "personal", repo: `file://${upstreamSource}`, path: configuredRoot }
+    });
     await mkdir(path.join(child, "profiles", "work"), { recursive: true });
     await writeFile(
       path.join(child, "profiles", "work", "profile.yml"),
@@ -702,11 +748,9 @@ describe("home inheritance", () => {
     );
 
     const resolved = await resolveProfile(createRuntimePaths({ root: child, home }), "work");
-    const cloneRoot = path.join(home, ".mindframe-z", "homes", "personal");
-
-    expect(resolved.manifests.upstream?.root).toBe(cloneRoot);
+    expect(resolved.manifests.upstream?.root).toBe(configuredRoot);
     expect(resolved.extraFolders).toContainEqual(
-      expect.objectContaining({ path: cloneRoot, read: "allow", edit: "allow" })
+      expect.objectContaining({ path: configuredRoot, read: "allow", edit: "allow" })
     );
   });
 });
