@@ -9,13 +9,15 @@ import {
   defaultThreadStore,
   listThreads,
   readThreadManifest,
+  readThreadRuns,
   recordSessions,
   resolveSynthesisDefaults,
   resolveThreadStores,
   writeThreadManifest,
   writeThreadRuns,
   type ResolvedThreadStore,
-  type ThreadManifest
+  type ThreadManifest,
+  type ThreadRuns
 } from "./storage.js";
 import { execa } from "execa";
 
@@ -187,6 +189,28 @@ describe("thread storage", () => {
     const dir = path.join(await makeTempDir(), "thread-a");
     await writeThreadManifest(dir, thread("thread-a", "personal"));
     expect(await readThreadManifest(dir)).toEqual(thread("thread-a", "personal"));
+  });
+
+  it("reads runs as empty before the thread directory exists and round-trips afterwards", async () => {
+    const dir = path.join(await makeTempDir(), "thread-runs");
+    expect(await readThreadRuns(dir)).toEqual({ runs: [] });
+
+    const runs: ThreadRuns = {
+      runs: [
+        {
+          kind: "native",
+          id: "run-1",
+          thread: "thread-runs",
+          started_at: "2026-07-06T00:00:00.000Z",
+          finished_at: "2026-07-06T00:01:00.000Z",
+          sessions: [],
+          dispatches: [],
+          total_cost_usd: null
+        }
+      ]
+    };
+    await writeThreadRuns(dir, runs);
+    expect(await readThreadRuns(dir)).toEqual(runs);
   });
 
   it("writes manifest and runs records as two-space JSON with one trailing newline", async () => {

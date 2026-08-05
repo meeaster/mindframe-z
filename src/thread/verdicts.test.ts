@@ -6,6 +6,8 @@ import { createRuntimePaths, threadSweepRoot } from "../core/paths.js";
 import {
   hashCharter,
   isVerdictStanding,
+  readSweepState,
+  readVerdictLedger,
   sourceQualifiedId,
   writeSweepState,
   writeVerdictLedger,
@@ -64,6 +66,26 @@ describe("thread verdicts", () => {
     expect(ledger.endsWith("}\n")).toBe(true);
     expect(ledger.endsWith("\n\n")).toBe(false);
     expect(await readFile(path.join(threadSweepRoot(paths), "sweep.json"), "utf8")).toBe("{}\n");
+  });
+
+  it("reads an empty ledger and sweep state before the sweep root exists", async () => {
+    const home = await makeTempDir();
+    const paths = createRuntimePaths({ root: process.cwd(), home });
+
+    expect(await readVerdictLedger(paths)).toEqual({ verdicts: [] });
+    expect(await readSweepState(paths)).toEqual({});
+  });
+
+  it("round-trips the ledger and sweep state through a sweep root it creates", async () => {
+    const home = await makeTempDir();
+    const paths = createRuntimePaths({ root: process.cwd(), home });
+    const state = { baseline_at: "2026-07-06T00:00:00.000Z" };
+
+    await writeVerdictLedger(paths, { verdicts: [row()] });
+    await writeSweepState(paths, state);
+
+    expect(await readVerdictLedger(paths)).toEqual({ verdicts: [row()] });
+    expect(await readSweepState(paths)).toEqual(state);
   });
 
   it("keeps reject verdicts sticky across watermark and charter changes", () => {

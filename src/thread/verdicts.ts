@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { jsonFileContent, pathExists } from "../core/fs-util.js";
+import { jsonFileContent, readTextFile, writeTextFile } from "../core/fs-util.js";
 import { threadSweepRoot, type RuntimePaths } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import type { Watermark } from "./watermark.js";
@@ -87,28 +86,26 @@ function statePath(paths: RuntimePaths): string {
 }
 
 export async function readVerdictLedger(paths: RuntimePaths): Promise<VerdictLedger> {
-  const file = ledgerPath(paths);
-  if (!(await pathExists(file))) return { verdicts: [] };
-  return verdictLedgerSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  const content = await readTextFile(ledgerPath(paths));
+  if (content === undefined) return { verdicts: [] };
+  return verdictLedgerSchema.parse(JSON.parse(content));
 }
 
 export async function writeVerdictLedger(
   paths: RuntimePaths,
   ledger: VerdictLedger
 ): Promise<void> {
-  await mkdir(threadSweepRoot(paths), { recursive: true });
-  await writeFile(ledgerPath(paths), jsonFileContent(ledger), "utf8");
+  await writeTextFile(ledgerPath(paths), jsonFileContent(ledger));
 }
 
 export async function readSweepState(paths: RuntimePaths): Promise<SweepState> {
-  const file = statePath(paths);
-  if (!(await pathExists(file))) return {};
-  return sweepStateSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  const content = await readTextFile(statePath(paths));
+  if (content === undefined) return {};
+  return sweepStateSchema.parse(JSON.parse(content));
 }
 
 export async function writeSweepState(paths: RuntimePaths, state: SweepState): Promise<void> {
-  await mkdir(threadSweepRoot(paths), { recursive: true });
-  await writeFile(statePath(paths), jsonFileContent(state), "utf8");
+  await writeTextFile(statePath(paths), jsonFileContent(state));
 }
 
 export function upsertVerdicts(ledger: VerdictLedger, rows: readonly VerdictRow[]): VerdictLedger {
