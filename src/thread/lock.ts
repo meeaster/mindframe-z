@@ -1,5 +1,6 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { readTextFile } from "../core/fs-util.js";
 import { threadLocksRoot, type RuntimePaths } from "../core/paths.js";
 
 interface LockRecord {
@@ -23,13 +24,8 @@ async function processIsAlive(pid: number): Promise<boolean> {
 }
 
 async function readLock(lockFile: string): Promise<LockRecord | undefined> {
-  let content: string;
-  try {
-    content = await readFile(lockFile, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
+  const content = await readTextFile(lockFile);
+  if (content === undefined) return undefined;
 
   let parsed: unknown;
   try {
@@ -71,7 +67,9 @@ async function acquire(lockFile: string, command: string): Promise<void> {
     );
   }
 
-  // A dead or unreadable lock is stale. Reclaim it once, then retry atomically.
+  // A dead holder, or a lock that vanished between the failed create and the read,
+  // is stale. Reclaim it once, then retry atomically. A lock file that is present
+  // but corrupt is not reclaimed; readLock already surfaced it.
   try {
     await unlink(lockFile);
   } catch (error) {
