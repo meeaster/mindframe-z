@@ -77,6 +77,19 @@ describe("thread locks", () => {
     ).resolves.toBe("reclaimed");
   });
 
+  it("surfaces a corrupt lock file instead of reclaiming it", async () => {
+    const home = await makeTempDir();
+    const paths = testRuntimePaths(home);
+    const lockFile = threadLockPath(paths, "thread-a");
+    await mkdir(path.dirname(lockFile), { recursive: true });
+    await writeFile(lockFile, "{ truncated");
+
+    await expect(
+      withThreadLock(paths, "thread-a", "thread refresh thread-a", async () => "reclaimed")
+    ).rejects.toThrow("lock file is unreadable");
+    await expect(readFile(lockFile, "utf8")).resolves.toBe("{ truncated");
+  });
+
   it("releases the lock when the callback throws", async () => {
     const home = await makeTempDir();
     const paths = testRuntimePaths(home);

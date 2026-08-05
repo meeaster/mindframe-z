@@ -347,19 +347,14 @@ export async function writeSessionFile(
 
 // The prior synthesized file for one session, or undefined if none exists yet. The
 // delta refresh path revises this file instead of regenerating it from scratch.
+// Only a missing file means "no prior summary"; the readTextFile seam still lets a
+// permission or I/O fault reach the operator instead of reading as a full refresh.
 export async function readSessionFile(
   dir: string,
   source: ThreadHarness,
   bareId: string
 ): Promise<string | undefined> {
-  try {
-    return await readFile(path.join(dir, "sessions", `${source}-${bareId}.md`), "utf8");
-  } catch (error) {
-    // Only a missing file means "no prior summary"; a permission or I/O fault is a real
-    // problem the operator should see, not silently a full-refresh fallback.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
+  return await readTextFile(path.join(dir, "sessions", `${source}-${bareId}.md`));
 }
 
 // Raw session-file contents in id order. Feeds the deterministic `log.md` render

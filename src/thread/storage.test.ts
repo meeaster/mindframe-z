@@ -8,6 +8,7 @@ import { makeTempDir } from "../../tests/integration/support.js";
 import {
   defaultThreadStore,
   listThreads,
+  readSessionFile,
   readThreadManifest,
   readThreadRuns,
   recordSessions,
@@ -321,5 +322,18 @@ describe("thread storage", () => {
     const { commitThreadChanges } = await import("./publication.js");
     await commitThreadChanges(store, "direct", path.join(root, "threads", "direct"), "seed", false);
     expect(await readFile(path.join(root, "threads", "index.md"), "utf8")).toContain("direct");
+  });
+
+  it("reads an absent prior session file as absent and surfaces a real read fault", async () => {
+    const dir = await makeTempDir();
+
+    expect(await readSessionFile(dir, "claude-code", "missing")).toBeUndefined();
+
+    // A directory standing where the session file belongs is not "no prior summary";
+    // the delta refresh path must see the fault instead of regenerating from scratch.
+    await mkdir(path.join(dir, "sessions", "claude-code-blocked.md"), { recursive: true });
+    await expect(readSessionFile(dir, "claude-code", "blocked")).rejects.toMatchObject({
+      code: "EISDIR"
+    });
   });
 });
