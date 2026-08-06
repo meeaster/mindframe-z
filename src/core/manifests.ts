@@ -1,9 +1,9 @@
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
-import { pathExists } from "./fs-util.js";
+import { pathExists, readDirEntries } from "./fs-util.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
@@ -655,28 +655,17 @@ function machineDefaults(): MachineManifest {
   return machineSchema.parse({});
 }
 
-// Every direct child of `<root>/profiles` that is a real directory. `lstat` keeps
-// symlinked entries out, and a missing `profiles/` dir means "no profiles" rather
-// than an error. Owning the tolerated-ENOENT here keeps it off the callers, whose
-// own reads should surface their failures.
+// Every direct child of `<root>/profiles` that is a real directory. The entry
+// types come straight from the directory scan, which does not follow symlinks,
+// so a symlinked entry reads as a link rather than a directory and stays out.
+// A missing `profiles/` dir means "no profiles" rather than an error — that
+// tolerance lives in the shared scan, so it stays off the callers, whose own
+// reads should surface their failures.
 async function listProfileDirs(root: string): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(path.join(root, "profiles"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
-  const dirs: string[] = [];
-  for (const entry of entries) {
-    const fullPath = path.join(root, "profiles", entry);
-    try {
-      if ((await lstat(fullPath)).isDirectory()) dirs.push(fullPath);
-    } catch {
-      continue;
-    }
-  }
-  return dirs;
+  const profilesDir = path.join(root, "profiles");
+  return (await readDirEntries(profilesDir))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(profilesDir, entry.name));
 }
 
 async function validateYamlFile<T>(
