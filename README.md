@@ -128,6 +128,10 @@ Resolution order:
 ├── opencode/
 │   ├── plugins/
 │   ├── commands/
+│   │   ├── <name>.md
+│   │   └── <name>/
+│   │       ├── COMMAND.md
+│   │       └── meta/...
 │   └── agents/
 └── sandbox/
 ```

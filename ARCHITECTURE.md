@@ -97,7 +97,7 @@ mcp:
 
 An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead. Executor-routed integrations remain configured in the shared inventory for every connected supported harness, so changing one harness's visibility is a profile route change rather than a project override.
 
-Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution.
+Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
 ## Sync
 

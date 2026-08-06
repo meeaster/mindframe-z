@@ -309,6 +309,37 @@ describe("opencode commands integration", () => {
     expect(result.stdout).toContain("commands\tbase-cmd, test-cmd");
   });
 
+  it("renders a packaged command without its development metadata", async () => {
+    const commandDir = path.join(root, "opencode", "commands", "packaged-cmd");
+    await mkdir(path.join(commandDir, "meta"), { recursive: true });
+    await writeFile(path.join(commandDir, "COMMAND.md"), "Packaged command.\n", "utf8");
+    await writeFile(path.join(commandDir, "meta", "VISION.md"), "Development vision.\n", "utf8");
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "opencode:",
+        "  commands:",
+        "    - packaged-cmd",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    await expect(
+      readFile(configsPath(home, "personal", "opencode", "commands", "packaged-cmd.md"), "utf8")
+    ).resolves.toBe("Packaged command.\n");
+    await expect(
+      readFile(
+        configsPath(home, "personal", "opencode", "commands", "packaged-cmd", "meta", "VISION.md"),
+        "utf8"
+      )
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("sync detects unmanaged commands and promotes them to the chosen profile", async () => {
     await writeFile(
       path.join(root, "opencode", "commands", "new-cmd.md"),

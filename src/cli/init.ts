@@ -63,7 +63,7 @@ Catalog files define what exists. Profiles select entries by name. Unqualified n
 
 The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
 
-Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. Profiles enable them. Before adding or changing a skill, run \`mfz guide skills\`.
+Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Before adding or changing a skill, run \`mfz guide skills\`.
 
 MCP catalog entries define connection details; profiles select direct per-harness routing or shared Executor routing. Before adding or changing MCP configuration or Executor authentication, run \`mfz guide mcp\`.
 

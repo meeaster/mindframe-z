@@ -156,16 +156,20 @@ async function collectMarkdownFiles(
   for (const name of names) {
     const sourceDir = path.join(rootByName(name), "opencode", kind);
     const fileName = `${name}.md`;
-    const filePath = path.join(sourceDir, fileName);
-    let content: string;
-    try {
-      content = await readFile(filePath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`Unknown ${label}: ${name}`);
+    const candidates =
+      kind === "commands"
+        ? [path.join(sourceDir, fileName), path.join(sourceDir, name, "COMMAND.md")]
+        : [path.join(sourceDir, fileName)];
+    let content: string | undefined;
+    for (const filePath of candidates) {
+      try {
+        content = await readFile(filePath, "utf8");
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-      throw error;
     }
+    if (content === undefined) throw new Error(`Unknown ${label}: ${name}`);
     files.push({
       path: path.join(configsOpencode, kind, fileName),
       content
