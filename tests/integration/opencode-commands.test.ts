@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
@@ -267,6 +267,22 @@ describe("opencode commands integration", () => {
       await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
     ) as { plugin: string[] };
     expect(tui.plugin).toEqual([]);
+  });
+
+  it("discovers no server plugins when the plugins directory is absent", async () => {
+    await rm(path.join(root, "opencode", "plugins"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const config = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    ) as { plugin: string[] };
+    expect(config.plugin).toEqual([]);
   });
 
   it("does not render tui.json without TUI configuration", async () => {

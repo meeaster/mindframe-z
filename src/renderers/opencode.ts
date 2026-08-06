@@ -16,7 +16,7 @@ import {
 } from "../core/profile.js";
 import { openCodeExecutorEntry } from "./executor.js";
 import { requiresExecutorBridge } from "../core/profile.js";
-import { jsonFileContent } from "../core/fs-util.js";
+import { jsonFileContent, readDirEntries } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
@@ -56,16 +56,12 @@ async function collectPluginFiles(
   if (pluginNames.length > 0) {
     names = [...pluginNames];
   } else if (discover) {
+    // A home with no `opencode/plugins` discovers nothing, which the shared scan
+    // already reads as an empty directory — so the absent case needs no probe of
+    // its own, and the scan cannot race a directory removed between the two.
     const sourceDir = path.join(localRoot, "opencode", "plugins");
-    try {
-      await stat(sourceDir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { files: [], entries: [] };
-      throw error;
-    }
-    const dirEntries = await readdir(sourceDir, { withFileTypes: true });
     const discovered = new Set<string>();
-    for (const entry of dirEntries) {
+    for (const entry of await readDirEntries(sourceDir)) {
       if (entry.isDirectory()) {
         discovered.add(entry.name);
       } else if (entry.isFile()) {
