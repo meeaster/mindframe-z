@@ -124,7 +124,7 @@ source and is used only when the configured path is absent.
 - Pull failures warn and continue using the existing checkout.
 - Existing non-Git paths are loaded as local homes without Git operations or `repo` validation.
 
-Applied agent configs expose configured upstream checkouts as editable extra folders so agents can patch and commit upstream home content. The separate `mfz init --clone` bootstrap command continues to use `~/.mindframe-z/homes/<name>/`.
+Applied agent configs expose only explicitly declared profile and machine extra folders. A home that wants agents to patch an active or upstream checkout must declare that path itself. The separate `mfz init --clone` bootstrap command continues to use `~/.mindframe-z/homes/<name>/`.
 
 ## Bootstrap And Distribution
 

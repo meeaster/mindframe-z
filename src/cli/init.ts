@@ -96,7 +96,7 @@ extra_folders:
 
 Write \`description\` as capability-map metadata, not a miniature repository summary: lead with the domain outcome, state the capability, then include discriminative technology, integration, or dependency signals. Avoid generic "needed when" clauses, exhaustive inventories, volatile counts, and details an agent can discover after opening the folder.
 
-Within profile inheritance, a child entry overrides its parent by path. An explicit profile entry overrides an automatically added upstream-home fallback; a machine-config entry overrides both.
+Within profile inheritance, a child entry overrides its parent by path, and a machine-config entry overrides both. Active and upstream homes are not granted implicitly; declare any home agents should edit as an extra folder.
 
 Run \`mfz apply --target all --agent all\`, then inspect \`~/.mindframe-z/extra_folders.md\` and run \`mfz doctor\`. Done when the index shows the intended role and permissions and the profile reports healthy links.
 `;

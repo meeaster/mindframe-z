@@ -691,7 +691,7 @@ describe("home inheritance", () => {
     expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
   });
 
-  it("prefers an explicit extra-folder description over an auto-added upstream home", async () => {
+  it("retains an explicitly configured upstream home as an extra folder", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));
     const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-machine-home-"));
@@ -749,8 +749,8 @@ describe("home inheritance", () => {
 
     const resolved = await resolveProfile(createRuntimePaths({ root: child, home }), "work");
     expect(resolved.manifests.upstream?.root).toBe(configuredRoot);
-    expect(resolved.extraFolders).toContainEqual(
-      expect.objectContaining({ path: configuredRoot, read: "allow", edit: "allow" })
+    expect(resolved.extraFolders).not.toContainEqual(
+      expect.objectContaining({ path: configuredRoot })
     );
   });
 });

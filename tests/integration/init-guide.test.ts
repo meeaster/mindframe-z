@@ -56,7 +56,7 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("# Extra Folders Guide");
     expect(result.stdout).toContain("cross-repository routing metadata");
     expect(result.stdout).toContain("domain outcome");
-    expect(result.stdout).toContain("automatically added upstream-home fallback");
+    expect(result.stdout).toContain("Active and upstream homes are not granted implicitly");
     expect(result.stdout).toContain("mfz doctor");
   });
 

@@ -588,16 +588,6 @@ export async function resolveProfile(
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
     for (const f of profile.extra_folders) map.set(f.path, f);
-    for (const upstream of eachUpstream(manifests)) {
-      if (!map.has(upstream.root)) {
-        map.set(upstream.root, {
-          path: upstream.root,
-          description: `Upstream mindframe-z home ${homeDisplayName(upstream)}`,
-          read: "allow",
-          edit: "allow"
-        });
-      }
-    }
     for (const f of manifests.machine.extra_folders) map.set(f.path, f);
     return [...map.values()];
   })();
