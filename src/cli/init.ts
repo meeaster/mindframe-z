@@ -8,7 +8,7 @@ const mcpGuideMarkdown = `# MCP Guide
 
 Use this guide when adding or changing a direct MCP server, Executor routing, or Executor authentication.
 
-The catalog defines server connection details. A profile selects either direct routing per harness or shared Executor routing.
+The catalog defines server connection details. A profile may select native agents, Executor, or both independently.
 
 MCP entries are direct by default. Use a concise enabled list or a grouped state list:
 
@@ -21,17 +21,20 @@ mcp:
       enabled: [claude-code]
       disabled: [opencode, codex]
   context7:
-    route: executor
+    executor:
+      enabled: true
   datadog:
-    route: executor
-    connections:
-       publicsafety: oauth
-       tylertech: oauth
+    agents: [opencode, claude-code, codex]
+    executor:
+      enabled: true
+      connections:
+        publicsafety: oauth
+        tylertech: oauth
 \`\`\`
 
-Omitting \`route\` means direct routing. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
+Omitting \`agents\` leaves a server Executor-only. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
 
-Executor entries are always-configured shared inventory for all connected supported harnesses, not per-agent toggles. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only after required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows or imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects Executor-routed profiles.
+Executor entries are shared inventory for all connected supported harnesses, not per-agent toggles. Set the profile-level \`executor.bridge: false\` to reconcile Executor without adding its MCP bridge to any agent. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only when the bridge is enabled and required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows or imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects profiles with Executor integrations.
 
 Declare Executor authentication structure in the catalog, never credential values:
 

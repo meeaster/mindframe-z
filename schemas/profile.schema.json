@@ -82,173 +82,160 @@
         "type": "string"
       },
       "additionalProperties": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "route": {
-                "type": "string",
-                "const": "direct"
+        "type": "object",
+        "properties": {
+          "agents": {
+            "anyOf": [
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "opencode",
+                    "claude-code",
+                    "codex"
+                  ]
+                },
+                "uniqueItems": true
               },
-              "agents": {
+              {
                 "anyOf": [
                   {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "opencode",
-                        "claude-code",
-                        "codex"
-                      ]
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "opencode",
+                            "claude-code",
+                            "codex"
+                          ]
+                        },
+                        "uniqueItems": true
+                      },
+                      "disabled": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "opencode",
+                            "codex"
+                          ]
+                        },
+                        "uniqueItems": true
+                      }
                     },
-                    "uniqueItems": true
+                    "required": [
+                      "enabled"
+                    ],
+                    "additionalProperties": false
                   },
                   {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "enabled": {
-                            "minItems": 1,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "opencode",
-                                "claude-code",
-                                "codex"
-                              ]
-                            },
-                            "uniqueItems": true
-                          },
-                          "disabled": {
-                            "minItems": 1,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "opencode",
-                                "codex"
-                              ]
-                            },
-                            "uniqueItems": true
-                          }
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "opencode",
+                            "claude-code",
+                            "codex"
+                          ]
                         },
-                        "required": [
-                          "enabled"
-                        ],
-                        "additionalProperties": false
+                        "uniqueItems": true
                       },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "enabled": {
-                            "minItems": 1,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "opencode",
-                                "claude-code",
-                                "codex"
-                              ]
-                            },
-                            "uniqueItems": true
-                          },
-                          "disabled": {
-                            "minItems": 1,
-                            "type": "array",
-                            "items": {
-                              "type": "string",
-                              "enum": [
-                                "opencode",
-                                "codex"
-                              ]
-                            },
-                            "uniqueItems": true
-                          }
+                      "disabled": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "opencode",
+                            "codex"
+                          ]
                         },
-                        "required": [
-                          "disabled"
-                        ],
-                        "additionalProperties": false
+                        "uniqueItems": true
                       }
+                    },
+                    "required": [
+                      "disabled"
                     ],
-                    "not": {
-                      "anyOf": [
-                        {
-                          "required": [
-                            "enabled",
-                            "disabled"
-                          ],
-                          "properties": {
-                            "enabled": {
-                              "contains": {
-                                "const": "opencode"
-                              }
-                            },
-                            "disabled": {
-                              "contains": {
-                                "const": "opencode"
-                              }
-                            }
+                    "additionalProperties": false
+                  }
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "enabled",
+                        "disabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "contains": {
+                            "const": "opencode"
                           }
                         },
-                        {
-                          "required": [
-                            "enabled",
-                            "disabled"
-                          ],
-                          "properties": {
-                            "enabled": {
-                              "contains": {
-                                "const": "claude-code"
-                              }
-                            },
-                            "disabled": {
-                              "contains": {
-                                "const": "claude-code"
-                              }
-                            }
-                          }
-                        },
-                        {
-                          "required": [
-                            "enabled",
-                            "disabled"
-                          ],
-                          "properties": {
-                            "enabled": {
-                              "contains": {
-                                "const": "codex"
-                              }
-                            },
-                            "disabled": {
-                              "contains": {
-                                "const": "codex"
-                              }
-                            }
+                        "disabled": {
+                          "contains": {
+                            "const": "opencode"
                           }
                         }
-                      ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "enabled",
+                        "disabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "contains": {
+                            "const": "claude-code"
+                          }
+                        },
+                        "disabled": {
+                          "contains": {
+                            "const": "claude-code"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "required": [
+                        "enabled",
+                        "disabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "contains": {
+                            "const": "codex"
+                          }
+                        },
+                        "disabled": {
+                          "contains": {
+                            "const": "codex"
+                          }
+                        }
+                      }
                     }
-                  }
-                ]
+                  ]
+                }
               }
-            },
-            "required": [
-              "agents"
-            ],
-            "additionalProperties": false
+            ]
           },
-          {
+          "executor": {
             "type": "object",
             "properties": {
-              "route": {
-                "type": "string",
-                "const": "executor"
+              "enabled": {
+                "type": "boolean"
               },
               "connections": {
                 "type": "object",
@@ -265,16 +252,20 @@
               }
             },
             "required": [
-              "route"
+              "enabled"
             ],
             "additionalProperties": false
           }
-        ]
+        },
+        "additionalProperties": false
       }
     },
     "executor": {
       "type": "object",
       "properties": {
+        "bridge": {
+          "type": "boolean"
+        },
         "elicitation": {
           "type": "string",
           "const": "browser"

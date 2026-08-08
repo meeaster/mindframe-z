@@ -13,7 +13,7 @@ function profile(): ResolvedProfile {
     agents: ["opencode"],
     profile: profileSchema.parse({
       name: "personal",
-      mcp: { example: { route: "executor" } }
+      mcp: { example: { executor: { enabled: true } } }
     }),
     manifests: {} as ResolvedProfile["manifests"],
     sources: {} as ResolvedProfile["sources"],
@@ -26,8 +26,7 @@ function profile(): ResolvedProfile {
     mcpServers: [
       {
         name: "example",
-        route: "executor",
-        connections: {},
+        executor: { connections: {} },
         server: {
           type: "remote",
           description: "Example",

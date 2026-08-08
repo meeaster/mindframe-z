@@ -14,7 +14,7 @@ import {
   type ApplyAgent,
   type InfraTarget
 } from "../core/paths.js";
-import { requiresExecutorBridge, resolveProfile } from "../core/profile.js";
+import { requiresExecutorReconciliation, resolveProfile } from "../core/profile.js";
 import { renderAllPayloads } from "../core/override-store.js";
 import {
   removeRenderedFiles,
@@ -98,7 +98,8 @@ export async function applyConfig(
   try {
     const executorPlan =
       selectedExecutorTarget &&
-      (requiresExecutorBridge(profile) || (await hasManagedExecutorState(paths, profile.name)))
+      (requiresExecutorReconciliation(profile) ||
+        (await hasManagedExecutorState(paths, profile.name)))
         ? await reconcile(paths, profile, {
             dryRun: options.dryRun ?? false,
             interactive: Boolean(processStdin.isTTY)

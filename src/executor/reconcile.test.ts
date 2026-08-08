@@ -31,12 +31,13 @@ function profileWithServer(
     mcpServers: [
       {
         name: "example",
-        route: "executor",
-        connections:
-          connections ??
-          (authentication
-            ? Object.fromEntries(authentication.map((method) => ["main", method.slug]))
-            : {}),
+        executor: {
+          connections:
+            connections ??
+            (authentication
+              ? Object.fromEntries(authentication.map((method) => ["main", method.slug]))
+              : {})
+        },
         server: {
           type: "remote",
           description,
@@ -202,8 +203,7 @@ describe("Executor reconciliation", () => {
       mcpServers: [
         {
           name: "forge",
-          route: "executor",
-          connections: { default: "none" },
+          executor: { connections: { default: "none" } },
           server: {
             type: "local",
             description: "Forge",
@@ -474,8 +474,7 @@ describe("Executor reconciliation", () => {
     );
     profile.mcpServers.push({
       name: "metrics",
-      route: "executor",
-      connections: { service: "api-key" },
+      executor: { connections: { service: "api-key" } },
       server: {
         type: "remote",
         description: "Metrics",

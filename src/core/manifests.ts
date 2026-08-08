@@ -82,21 +82,22 @@ const directMcpAgentsSchema = z
     for (const agent of agents.disabled ?? []) normalized[agent] = false;
     return normalized;
   });
-const profileMcpConfigSchema = z.union([
-  z
-    .object({
-      route: z.literal("direct").optional(),
-      agents: directMcpAgentsSchema
-    })
-    .strict()
-    .transform(({ agents }) => ({ route: "direct" as const, agents })),
-  z
-    .object({
-      route: z.literal("executor"),
-      connections: executorConnectionMapSchema.optional()
-    })
-    .strict()
-]);
+const executorMcpConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    connections: executorConnectionMapSchema.optional()
+  })
+  .strict();
+const profileMcpConfigSchema = z
+  .object({
+    agents: directMcpAgentsSchema.optional(),
+    executor: executorMcpConfigSchema.optional()
+  })
+  .strict()
+  .refine(
+    ({ agents, executor }) => agents !== undefined || executor?.enabled === true,
+    "MCP server must declare direct agents or enable Executor"
+  );
 const profileSkillConfigSchema = z
   .object({
     agents: agentsMapSchema.optional(),
@@ -525,6 +526,7 @@ export const profileSchema = z
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
     executor: z
       .object({
+        bridge: z.boolean().optional(),
         elicitation: z.literal("browser").optional(),
         timeout_ms: z.number().int().positive().optional()
       })

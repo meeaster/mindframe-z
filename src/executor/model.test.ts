@@ -29,8 +29,7 @@ describe("Executor desired state", () => {
   it("resolves omitted authentication to Executor's canonical no-auth main connection", () => {
     const profile = profileWithServer({
       name: "stdio",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "local",
         description: "Local tool",
@@ -61,8 +60,7 @@ describe("Executor desired state", () => {
   it("keeps catalog slugs and excludes secret environment references", () => {
     const profile = profileWithServer({
       name: "context7",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "remote",
         description: "Docs",
@@ -82,8 +80,7 @@ describe("Executor desired state", () => {
   it("carries named connection method bindings into desired state and its digest", () => {
     const profile = profileWithServer({
       name: "datadog",
-      route: "executor",
-      connections: { publicsafety: "oauth", tylertech: "oauth" },
+      executor: { connections: { publicsafety: "oauth", tylertech: "oauth" } },
       server: {
         type: "remote",
         description: "Datadog",
@@ -103,8 +100,7 @@ describe("Executor desired state", () => {
   it("rejects an environment-derived URL before Executor mutation", () => {
     const profile = profileWithServer({
       name: "private",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "remote",
         description: "Private",
@@ -121,8 +117,7 @@ describe("Executor desired state", () => {
   ])("rejects literal Executor credential input", (credentials) => {
     const profile = profileWithServer({
       name: "private",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "remote",
         description: "Private",
@@ -137,8 +132,7 @@ describe("Executor desired state", () => {
   it("expands local command paths using the active home", () => {
     const profile = profileWithServer({
       name: "local",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "local",
         description: "Local",
@@ -155,8 +149,7 @@ describe("Executor desired state", () => {
   it("rejects transport and OAuth settings that do not match the catalog server type", () => {
     const remoteWithStdio = profileWithServer({
       name: "remote",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "remote",
         description: "Remote",
@@ -168,8 +161,7 @@ describe("Executor desired state", () => {
 
     const localWithOAuth = profileWithServer({
       name: "local",
-      route: "executor",
-      connections: {},
+      executor: { connections: {} },
       server: {
         type: "local",
         description: "Local",
@@ -181,8 +173,7 @@ describe("Executor desired state", () => {
 
     const localWithNoAuth = profileWithServer({
       name: "local-none",
-      route: "executor",
-      connections: { default: "none" },
+      executor: { connections: { default: "none" } },
       server: {
         type: "local",
         description: "Local",

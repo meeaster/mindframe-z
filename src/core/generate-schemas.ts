@@ -39,9 +39,8 @@ function strengthenProfileMcpSchema(schema: Record<string, unknown>): void {
   const properties = schema.properties as Record<string, Record<string, unknown>>;
   const mcp = properties.mcp!;
   const entries = mcp.additionalProperties as Record<string, unknown>;
-  const direct = (entries.anyOf as Record<string, unknown>[])[0]!;
-  const directProperties = direct.properties as Record<string, Record<string, unknown>>;
-  const agents = directProperties.agents!;
+  const entryProperties = entries.properties as Record<string, Record<string, unknown>>;
+  const agents = entryProperties.agents!;
   const agentBranches = agents.anyOf as Record<string, unknown>[];
   const concise = agentBranches[0]!;
   concise.uniqueItems = true;
@@ -62,7 +61,7 @@ function strengthenProfileMcpSchema(schema: Record<string, unknown>): void {
     }))
   };
 
-  const executor = (entries.anyOf as Record<string, unknown>[])[1]!;
+  const executor = entryProperties.executor!;
   const executorProperties = executor.properties as Record<string, Record<string, unknown>>;
   executorProperties.connections = {
     type: "object",

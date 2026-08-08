@@ -24,7 +24,8 @@ describe("Executor apply integration", () => {
         "agents: [opencode]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         ""
       ].join("\n"),
       "utf8"
@@ -96,7 +97,8 @@ describe("Executor apply integration", () => {
         "agents: [opencode, claude-code, codex]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         "  local-helper:",
         "    agents: [opencode, claude-code, codex]",
         ""
@@ -129,6 +131,56 @@ describe("Executor apply integration", () => {
     });
   });
 
+  it("applies direct and Executor configuration without rendering the bridge", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode, claude-code, codex]",
+        "executor:",
+        "  bridge: false",
+        "mcp:",
+        "  context7:",
+        "    agents: [opencode, claude-code, codex]",
+        "    executor:",
+        "      enabled: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    let reconciled = false;
+    await applyConfig(
+      { root, home, agent: "all", target: "all", noLink: true },
+      {
+        reconcileExecutor: async () => {
+          reconciled = true;
+          return undefined;
+        }
+      }
+    );
+
+    expect(reconciled).toBe(true);
+    const opencodeConfig = await readFile(
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
+      "utf8"
+    );
+    const claudeConfig = await readFile(
+      configsPath(home, "personal", "claude", "mcp.json"),
+      "utf8"
+    );
+    const codexConfig = await readFile(
+      configsPath(home, "personal", "codex", "config.toml"),
+      "utf8"
+    );
+
+    for (const config of [opencodeConfig, claudeConfig, codexConfig]) {
+      expect(config).toContain("context7");
+      expect(config).not.toContain('"executor"');
+    }
+  });
+
   it("keeps the direct harness configuration when Executor startup fails", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
     const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
@@ -142,7 +194,8 @@ describe("Executor apply integration", () => {
         "agents: [opencode]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         ""
       ].join("\n"),
       "utf8"
@@ -168,7 +221,8 @@ describe("Executor apply integration", () => {
         "agents: [opencode]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         ""
       ].join("\n"),
       "utf8"
@@ -202,7 +256,8 @@ describe("Executor apply integration", () => {
         "agents: [pi]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         ""
       ].join("\n"),
       "utf8"

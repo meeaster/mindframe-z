@@ -15,7 +15,11 @@ import {
   type ApplyAgent,
   type InfraTarget
 } from "../core/paths.js";
-import { assertMcpToggleSupported, resolveProfile } from "../core/profile.js";
+import {
+  assertMcpToggleSupported,
+  resolveProfile,
+  type ResolvedMcpServer
+} from "../core/profile.js";
 import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
 import { findProjectRoot } from "../core/git-root.js";
 import {
@@ -241,25 +245,25 @@ async function statusFn(options: {
   );
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
   console.log(`commands\t${profile.enabledCommands.join(", ") || "none"}`);
-  console.log(
-    `mcp\t${
-      profile.mcpServers
-        .map((server) =>
-          server.route === "executor"
-            ? `${server.name}:shared${
-                Object.keys(server.connections).length > 0
-                  ? `[${Object.entries(server.connections)
-                      .map(([name, method]) => `${name}=${method}`)
-                      .join("|")}]`
-                  : ""
-              }`
-            : `${server.name}:${Object.entries(server.agents)
-                .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
-                .join("|")}`
-        )
-        .join(", ") || "none"
-    }`
-  );
+  console.log(`mcp\t${profile.mcpServers.map(formatMcpStatus).join(", ") || "none"}`);
+}
+
+function formatMcpStatus(server: ResolvedMcpServer): string {
+  const direct = server.agents
+    ? `${server.name}:${Object.entries(server.agents)
+        .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
+        .join("|")}`
+    : undefined;
+  const shared = server.executor
+    ? `${server.name}:shared${
+        Object.keys(server.executor.connections).length > 0
+          ? `[${Object.entries(server.executor.connections)
+              .map(([name, method]) => `${name}=${method}`)
+              .join("|")}]`
+          : ""
+      }`
+    : undefined;
+  return [direct, shared].filter((value): value is string => value !== undefined).join("+");
 }
 
 function parseContextAgent(agent: string): ContextHarness {
@@ -1075,7 +1079,7 @@ async function setMcpEnabled(
   const profile = await resolveProfile(paths, program.opts().profile);
   const server = profile.mcpServers.find((entry) => entry.name === name);
   if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
-  if (server.route === "executor") {
+  if (!server.agents) {
     throw new Error(
       `MCP server ${name} is Executor-routed and shared by every connected agent; change the profile instead of using a per-agent toggle`
     );
@@ -1110,10 +1114,10 @@ async function printMcpStatus(): Promise<void> {
   const projectRoot = await findProjectRoot();
   const store = await readOverrideStore(paths.home);
   for (const server of profile.mcpServers) {
-    if (server.route === "executor") {
+    if (server.executor) {
       console.log(`${server.name}\tshared\texecutor`);
-      continue;
     }
+    if (!server.agents) continue;
     for (const target of Object.keys(server.agents) as AgentName[]) {
       const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
       const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};

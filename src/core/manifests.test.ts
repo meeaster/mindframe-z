@@ -256,9 +256,8 @@ describe("generated profile MCP schema", () => {
     const properties = schema.properties as Record<string, Record<string, unknown>>;
     const mcp = properties.mcp!;
     const entries = mcp.additionalProperties as Record<string, unknown>;
-    const direct = (entries.anyOf as Record<string, unknown>[])[0]!;
-    const directProperties = direct.properties as Record<string, Record<string, unknown>>;
-    const agents = directProperties.agents!;
+    const entryProperties = entries.properties as Record<string, Record<string, unknown>>;
+    const agents = entryProperties.agents!;
     const branches = agents.anyOf as Record<string, unknown>[];
 
     expect(branches[0]!.uniqueItems).toBe(true);
@@ -270,7 +269,7 @@ describe("generated profile MCP schema", () => {
       expect(disabledItems.enum).toEqual(["opencode", "codex"]);
     }
 
-    const executor = (entries.anyOf as Record<string, unknown>[])[1]!;
+    const executor = entryProperties.executor!;
     const connections = (executor.properties as Record<string, Record<string, unknown>>)
       .connections!;
     expect(connections.minProperties).toBe(1);

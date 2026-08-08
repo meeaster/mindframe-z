@@ -7,8 +7,8 @@ import { expandHome, type RuntimePaths } from "../core/paths.js";
 import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import {
   executorBridgeName,
-  executorMcpServers,
   filterMcpForTarget,
+  requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
 import type { ContextHarness, ContextMcpProbe } from "./model.js";
@@ -287,8 +287,7 @@ export async function probeMcpServer(
   projectRoot: string | undefined
 ): Promise<ContextMcpProbe> {
   const target = filterMcpForTarget(profile, harness).find((entry) => entry.name === serverName);
-  const sharedExecutor =
-    serverName === executorBridgeName && executorMcpServers(profile).length > 0;
+  const sharedExecutor = serverName === executorBridgeName && requiresExecutorBridge(profile);
   const overrides = await readOverrideStore(paths.home);
   const effective = effectiveProjectState(overrides, projectRoot, profile, harness, "mcp");
   if ((!target && !sharedExecutor) || (!sharedExecutor && effective[serverName] !== true)) {

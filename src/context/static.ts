@@ -6,6 +6,7 @@ import {
   executorBridgeName,
   executorMcpServers,
   filterMcpForTarget,
+  requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
@@ -270,7 +271,7 @@ export async function analyzeHarnessStatic(
       route: "direct"
     })
   );
-  const shared = executorMcpServers(profile);
+  const shared = requiresExecutorBridge(profile) ? executorMcpServers(profile) : [];
   if (shared.length > 0) {
     mcpServers.push({
       name: executorBridgeName,
@@ -280,11 +281,9 @@ export async function analyzeHarnessStatic(
       sharedIntegrations: shared.map((entry) => entry.name).sort(),
       sharedConnections: Object.fromEntries(
         shared
-          .filter(
-            (entry): entry is Extract<typeof entry, { route: "executor" }> =>
-              entry.route === "executor"
+          .map(
+            (entry) => [entry.name, Object.keys(entry.executor?.connections ?? {}).sort()] as const
           )
-          .map((entry) => [entry.name, Object.keys(entry.connections ?? {}).sort()] as const)
           .sort(([left], [right]) => left.localeCompare(right))
       )
     });

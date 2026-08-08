@@ -140,23 +140,22 @@ describe("mergeProfiles thread defaults", () => {
   });
 });
 
-describe("MCP route selection", () => {
-  it("defaults concise and grouped direct entries and accepts the shared Executor branch", () => {
+describe("MCP direct and Executor selection", () => {
+  it("accepts direct, Executor-only, and dual MCP entries", () => {
     const profile = profileSchema.parse({
       name: "routes",
       mcp: {
         concise: { agents: ["opencode"] },
-        grouped: { route: "direct", agents: { enabled: ["claude-code"], disabled: ["codex"] } },
-        shared: { route: "executor" }
+        grouped: { agents: { enabled: ["claude-code"], disabled: ["codex"] } },
+        shared: { executor: { enabled: true } },
+        both: { agents: ["opencode"], executor: { enabled: true } }
       }
     });
 
-    expect(profile.mcp.concise).toEqual({ route: "direct", agents: { opencode: true } });
-    expect(profile.mcp.grouped).toEqual({
-      route: "direct",
-      agents: { "claude-code": true, codex: false }
-    });
-    expect(profile.mcp.shared).toEqual({ route: "executor" });
+    expect(profile.mcp.concise).toEqual({ agents: { opencode: true } });
+    expect(profile.mcp.grouped).toEqual({ agents: { "claude-code": true, codex: false } });
+    expect(profile.mcp.shared).toEqual({ executor: { enabled: true } });
+    expect(profile.mcp.both).toEqual({ agents: { opencode: true }, executor: { enabled: true } });
   });
 
   it("rejects boolean MCP agent maps", () => {
@@ -180,11 +179,12 @@ describe("MCP route selection", () => {
     }
   });
 
-  it("rejects an Executor entry with per-agent state", () => {
+  it("requires a direct or enabled Executor selection", () => {
+    expect(() => profileSchema.parse({ name: "routes", mcp: { shared: {} } })).toThrow();
     expect(() =>
       profileSchema.parse({
         name: "routes",
-        mcp: { shared: { route: "executor", agents: ["opencode"] } }
+        mcp: { shared: { executor: { enabled: false } } }
       })
     ).toThrow();
   });
@@ -194,39 +194,45 @@ describe("MCP route selection", () => {
       name: "routes",
       mcp: {
         datadog: {
-          route: "executor",
-          connections: { publicsafety: "oauth", tylertech: "oauth" }
+          executor: {
+            enabled: true,
+            connections: { publicsafety: "oauth", tylertech: "oauth" }
+          }
         }
       }
     });
 
     expect(profile.mcp.datadog).toEqual({
-      route: "executor",
-      connections: { publicsafety: "oauth", tylertech: "oauth" }
+      executor: {
+        enabled: true,
+        connections: { publicsafety: "oauth", tylertech: "oauth" }
+      }
     });
     expect(() =>
       profileSchema.parse({
         name: "routes",
-        mcp: { datadog: { route: "executor", connections: {} } }
+        mcp: { datadog: { executor: { enabled: true, connections: {} } } }
       })
     ).toThrow();
     expect(() =>
       profileSchema.parse({
         name: "routes",
-        mcp: { datadog: { route: "executor", connections: { "../secret": "oauth" } } }
+        mcp: {
+          datadog: { executor: { enabled: true, connections: { "../secret": "oauth" } } }
+        }
       })
     ).toThrow();
     for (const name of ["PublicSafety", "public-safety", "public.safety", "public safety"]) {
       expect(() =>
         profileSchema.parse({
           name: "routes",
-          mcp: { datadog: { route: "executor", connections: { [name]: "oauth" } } }
+          mcp: { datadog: { executor: { enabled: true, connections: { [name]: "oauth" } } } }
         })
       ).toThrow(/address-safe/);
     }
   });
 
-  it("replaces inherited MCP configuration when the route changes", () => {
+  it("switches inherited direct configuration to Executor when agents are omitted", () => {
     const base = profileSchema.parse({
       name: "base",
       mcp: { docs: { agents: ["opencode"] } }
@@ -234,10 +240,10 @@ describe("MCP route selection", () => {
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
-      mcp: { docs: { route: "executor" } }
+      mcp: { docs: { executor: { enabled: true } } }
     });
 
-    expect(mergeProfiles(base, child).mcp.docs).toEqual({ route: "executor" });
+    expect(mergeProfiles(base, child).mcp.docs).toEqual({ executor: { enabled: true } });
   });
 
   it("merges named Executor connections by exact profile name", () => {
@@ -245,8 +251,10 @@ describe("MCP route selection", () => {
       name: "base",
       mcp: {
         datadog: {
-          route: "executor",
-          connections: { publicsafety: "oauth", shared: "oauth" }
+          executor: {
+            enabled: true,
+            connections: { publicsafety: "oauth", shared: "oauth" }
+          }
         }
       }
     });
@@ -255,15 +263,16 @@ describe("MCP route selection", () => {
       extends: "base",
       mcp: {
         datadog: {
-          route: "executor",
-          connections: { tylertech: "oauth" }
+          executor: { enabled: true, connections: { tylertech: "oauth" } }
         }
       }
     });
 
     expect(mergeProfiles(base, child).mcp.datadog).toEqual({
-      route: "executor",
-      connections: { publicsafety: "oauth", shared: "oauth", tylertech: "oauth" }
+      executor: {
+        enabled: true,
+        connections: { publicsafety: "oauth", shared: "oauth", tylertech: "oauth" }
+      }
     });
   });
 
@@ -279,15 +288,14 @@ describe("MCP route selection", () => {
     });
 
     expect(mergeProfiles(base, child).mcp.docs).toEqual({
-      route: "direct",
       agents: { opencode: true, codex: false }
     });
   });
 
-  it("switches an inherited Executor entry to direct when agents are declared", () => {
+  it("retains inherited Executor configuration when direct agents are added", () => {
     const base = profileSchema.parse({
       name: "base",
-      mcp: { docs: { route: "executor" } }
+      mcp: { docs: { executor: { enabled: true } } }
     });
     const child = profileSchema.parse({
       name: "child",
@@ -296,8 +304,8 @@ describe("MCP route selection", () => {
     });
 
     expect(mergeProfiles(base, child).mcp.docs).toEqual({
-      route: "direct",
-      agents: { opencode: true }
+      agents: { opencode: true },
+      executor: { enabled: true }
     });
   });
 
@@ -333,15 +341,14 @@ describe("MCP route selection", () => {
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      ["name: base", "mcp:", "  datadog:", "    route: executor", ""].join("\n"),
+      ["name: base", "mcp:", "  datadog:", "    executor:", "      enabled: true", ""].join("\n"),
       "utf8"
     );
 
     const resolved = await resolveProfile(createRuntimePaths({ root, home }), "base");
     expect(resolved.mcpServers[0]).toMatchObject({
       name: "datadog",
-      route: "executor",
-      connections: { main: "oauth" }
+      executor: { connections: { main: "oauth" } }
     });
   });
 
@@ -373,7 +380,7 @@ describe("MCP route selection", () => {
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      ["name: base", "mcp:", "  example:", "    route: executor", ""].join("\n"),
+      ["name: base", "mcp:", "  example:", "    executor:", "      enabled: true", ""].join("\n"),
       "utf8"
     );
 

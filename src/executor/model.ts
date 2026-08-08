@@ -89,13 +89,13 @@ export function desiredExecutorServer(
   entry: ResolvedMcpServer,
   home = process.env.HOME ?? ""
 ): ExecutorDesiredServer {
-  if (entry.route !== "executor") {
+  if (!entry.executor) {
     throw new Error(`MCP server ${entry.name} is not Executor-routed`);
   }
   validateExecutorMcpServer(entry.name, entry.server);
   const connections =
-    Object.keys(entry.connections).length > 0
-      ? entry.connections
+    Object.keys(entry.executor.connections).length > 0
+      ? entry.executor.connections
       : entry.server.executor?.authentication && entry.server.executor.authentication.length > 1
         ? (() => {
             throw new Error(
@@ -125,7 +125,7 @@ export function buildExecutorDesiredState(
     version: 1,
     profile: profile.name,
     integrations: profile.mcpServers
-      .filter((entry) => entry.route === "executor")
+      .filter((entry) => entry.executor !== undefined)
       .map((entry) => desiredExecutorServer(entry, home))
       .sort((left, right) => left.slug.localeCompare(right.slug))
   };

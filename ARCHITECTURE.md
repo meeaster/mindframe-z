@@ -59,7 +59,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 
 Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
 
-Executor-routed MCP entries use Executor's one native default runtime and store, normally `$HOME/.executor` or the user-selected `EXECUTOR_DATA_DIR`. MFZ never sets `EXECUTOR_DATA_DIR` or `EXECUTOR_SCOPE_DIR`, derives profile runtime data, starts a profile daemon, or passes `--scope`. Each profile may retain `configs/<profile>/executor/desired.json` and `managed.json` as non-secret inspectable desired/ownership snapshots; those snapshots do not become Executor scope input. MFZ owns integration inventory and connection-safe endpoint changes; Executor owns authentication methods, credentials, and connections. `mfz apply` reconciles the shared live state before committing harness cutover, and `--dry-run` never starts Executor or writes runtime state.
+Executor-enabled MCP entries use Executor's one native default runtime and store, normally `$HOME/.executor` or the user-selected `EXECUTOR_DATA_DIR`. MFZ never sets `EXECUTOR_DATA_DIR` or `EXECUTOR_SCOPE_DIR`, derives profile runtime data, starts a profile daemon, or passes `--scope`. Each profile may retain `configs/<profile>/executor/desired.json` and `managed.json` as non-secret inspectable desired/ownership snapshots; those snapshots do not become Executor scope input. MFZ owns integration inventory and connection-safe endpoint changes; Executor owns authentication methods, credentials, and connections. `mfz apply` reconciles the shared live state before committing harness changes, and `--dry-run` never starts Executor or writes runtime state.
 
 Executor authentication has three ownership layers: the catalog may declare an integration's non-secret `authentication` methods, the profile selects exact named connections and method slugs, and Executor stores the resulting authentication templates and credentials. Omitted connections resolve to `main` only when one method is unambiguous. Apply configures method structure but never opens OAuth, accepts a secret, or creates credentialed connections. A `none` method may create its selected named connection automatically; OAuth and API-key connections must be added in the Executor app with the exact profile connection name before a direct-to-Executor cutover. Apply reconciles all declared integrations before reporting every missing credentialed connection together. Existing connection identities, OAuth clients, scopes, and refresh state are preserved independently. Removing or changing a method referenced by durable state blocks until the user disconnects that exact connection explicitly.
 
@@ -77,11 +77,11 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
-MCP profile entries are either direct (`agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, with optional `route: direct`) or shared (`route: executor`). Omitting `route` defaults to direct. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are always-configured shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge per selected supported harness and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; existing direct configuration remains installed until Executor connection metadata succeeds.
+MCP profile entries independently declare native `agents` (`[opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays) and an optional `executor: { enabled: true, connections: ... }` selection. An entry may declare either capability or both. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge when profile-level `executor.bridge` is enabled, and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; direct and Executor configuration can be applied together.
 
 ### MCP Authoring And Migration
 
-The direct authoring model replaces boolean agent maps:
+The independent MCP authoring model replaces route selection and boolean agent maps:
 
 ```yaml
 mcp:
@@ -92,10 +92,17 @@ mcp:
       enabled: [claude-code]
       disabled: [opencode, codex]
   context7:
-    route: executor
+    executor:
+      enabled: true
+  sentry:
+    agents: [opencode, claude-code, codex]
+    executor:
+      enabled: true
+      connections:
+        main: oauth
 ```
 
-An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead. Executor-routed integrations remain configured in the shared inventory for every connected supported harness, so changing one harness's visibility is a profile route change rather than a project override.
+An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead. Executor-enabled integrations remain configured in the shared inventory for every connected supported harness, so changing one harness's visibility affects only the `agents` selection and never the shared Executor inventory.
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
@@ -181,7 +188,7 @@ thread links remain passive historical pointers and are never refreshed by work-
 
 Sandbox code remains engine-owned. Home-specific sandbox overlays belong in homes; engine sandbox files provide the shared image, broker, and runtime scaffolding.
 
-Sandbox remains a separate credential boundary. Profiles containing Executor-routed MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
+Sandbox remains a separate credential boundary. Profiles containing Executor-enabled MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
 
 Existing profile-scoped MFZ Executor directories are legacy state, not an input to the native store. MFZ does not migrate, merge, delete, or authorize that state automatically. An operator who needs it must stop relevant Executor processes, back up and inspect the old `~/.mindframe-z/executor/<profile>/data/` directory, then use an explicitly approved Executor-supported or manual migration/cleanup procedure; only after that deliberate review may the legacy directory be removed.
 

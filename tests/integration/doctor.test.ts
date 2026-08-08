@@ -84,7 +84,8 @@ describe("doctor integration", () => {
         "agents: [opencode]",
         "mcp:",
         "  context7:",
-        "    route: executor",
+        "    executor:",
+        "      enabled: true",
         ""
       ].join("\n"),
       "utf8"

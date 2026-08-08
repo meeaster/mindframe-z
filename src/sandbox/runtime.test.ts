@@ -129,7 +129,6 @@ function remoteMcp(
 ): ResolvedMcpServer {
   return {
     name,
-    route: "direct",
     agents: Object.fromEntries(
       (options.targets ?? ["opencode", "claude-code"]).map((target) => [target, true])
     ),
@@ -176,8 +175,7 @@ describe("sandbox runtime inputs", () => {
     const routed = profile("subscription");
     routed.mcpServers.push({
       ...remoteMcp("context7", "https://example.invalid/mcp"),
-      route: "executor",
-      connections: {}
+      executor: { connections: {} }
     });
 
     await expect(

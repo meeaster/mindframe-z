@@ -190,10 +190,11 @@ export async function renderClaude(
     existingExecutor.type === "stdio" &&
     existingExecutor.command === "executor" &&
     Array.isArray(existingExecutor.args) &&
-    existingExecutor.args.includes("--scope") &&
-    typeof existingExecutor.env === "object" &&
-    existingExecutor.env !== null &&
-    "EXECUTOR_DATA_DIR" in existingExecutor.env;
+    ((existingExecutor.args.includes("--scope") &&
+      typeof existingExecutor.env === "object" &&
+      existingExecutor.env !== null &&
+      "EXECUTOR_DATA_DIR" in existingExecutor.env) ||
+      (existingExecutor.args[0] === "mcp" && existingExecutor.args.includes("--elicitation-mode")));
   const managedClaudeServerNames = new Set([
     ...profile.mcpServers.map((server) => server.name),
     ...(requiresExecutorBridge(profile) || hasGeneratedExecutor ? [executorBridgeName] : [])

@@ -27,7 +27,7 @@ export function validateMcpTuiStates(
   states: Partial<Record<AgentName, McpState>>
 ): void {
   for (const server of profile.mcpServers) {
-    if (server.route !== "direct" || server.agents["claude-code"] === undefined) continue;
+    if (server.agents === undefined || server.agents["claude-code"] === undefined) continue;
     if (states["claude-code"]?.[server.name] === false) {
       assertMcpToggleSupported("claude-code", false);
     }
@@ -36,7 +36,7 @@ export function validateMcpTuiStates(
 
 function optionsForTarget(profile: ResolvedProfile, target: AgentName): McpOption[] {
   return profile.mcpServers
-    .filter((server) => server.route !== "executor" && server.agents[target] !== undefined)
+    .filter((server) => server.agents !== undefined && server.agents[target] !== undefined)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((server) => ({
       value: server.name,

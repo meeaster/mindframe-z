@@ -81,19 +81,14 @@ export function validateExecutorMcpServer(name: string, server: McpServer): void
   }
 }
 
-export type ResolvedMcpServer =
-  | {
-      name: string;
-      server: McpServer;
-      route: "direct";
-      agents: ProfileAgentDefaults;
-    }
-  | {
-      name: string;
-      server: McpServer;
-      route: "executor";
-      connections: Record<string, string>;
-    };
+export interface ResolvedMcpServer {
+  name: string;
+  server: McpServer;
+  agents?: ProfileAgentDefaults;
+  executor?: {
+    connections: Record<string, string>;
+  };
+}
 
 export type ResolvedSkill = SkillEntry & {
   agents: ProfileAgentDefaults;
@@ -109,7 +104,8 @@ export type ResolvedSkill = SkillEntry & {
   };
 };
 
-export type TargetedMcpServer = Extract<ResolvedMcpServer, { route: "direct" }> & {
+export type TargetedMcpServer = ResolvedMcpServer & {
+  agents: ProfileAgentDefaults;
   enabled: boolean;
 };
 
@@ -413,14 +409,12 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
   };
 }
 
-function mcpRoute(config: ProfileMcpConfig): "direct" | "executor" {
-  return config && "route" in config && config.route === "executor" ? "executor" : "direct";
-}
+type ExecutorMcpConfig = NonNullable<ProfileMcpConfig["executor"]>;
 
 function resolveExecutorConnections(
   name: string,
   server: McpServer,
-  config: Extract<ProfileMcpConfig, { route: "executor" }>
+  config: ExecutorMcpConfig
 ): Record<string, string> {
   const methods = server.executor?.authentication ?? [];
   const selected = config.connections;
@@ -452,14 +446,18 @@ function mergeMcpConfigs(
   const merged: ProfileManifest["mcp"] = { ...base };
   for (const [name, childConfig] of Object.entries(child)) {
     const baseConfig = base[name];
-    if (!baseConfig || mcpRoute(baseConfig) !== mcpRoute(childConfig)) {
+    if (!baseConfig) {
       merged[name] = childConfig;
       continue;
     }
-    merged[name] = deepMerge(
+    const combined = deepMerge(
       baseConfig as unknown as Record<string, unknown>,
       childConfig as unknown as Record<string, unknown>
     ) as ProfileManifest["mcp"][string];
+    if (!("agents" in childConfig) && "executor" in childConfig) {
+      delete (combined as { agents?: unknown }).agents;
+    }
+    merged[name] = combined;
   }
   return merged;
 }
@@ -563,21 +561,17 @@ export async function resolveProfile(
     const sourceHome = sources.mcp.get(serverName) ?? manifests;
     const server = sourceHome.mcpServers[serverName];
     if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    if (mcpRoute(config) === "executor") {
+    const executorConfig = config.executor?.enabled ? config.executor : undefined;
+    if (executorConfig) {
       validateExecutorMcpServer(serverName, server);
-      return {
-        name: serverName,
-        server,
-        route: "executor",
-        connections: resolveExecutorConnections(
-          serverName,
-          server,
-          config as Extract<ProfileMcpConfig, { route: "executor" }>
-        )
+      const executor = {
+        connections: resolveExecutorConnections(serverName, server, executorConfig)
       };
+      if (config.agents) return { name: serverName, server, agents: config.agents, executor };
+      return { name: serverName, server, executor };
     }
-    if (!("agents" in config)) throw new Error(`MCP server ${serverName} is missing direct agents`);
-    return { name: serverName, server, route: "direct", agents: config.agents };
+    if (!config.agents) throw new Error(`MCP server ${serverName} has no active routing`);
+    return { name: serverName, server, agents: config.agents };
   });
   if (mcpServers.some((entry) => entry.name === executorBridgeName)) {
     throw new Error(
@@ -615,18 +609,23 @@ export function filterMcpForTarget(
   profile: ResolvedProfile,
   target: ToolTargetName
 ): TargetedMcpServer[] {
-  return profile.mcpServers.flatMap((entry) => {
-    if (entry.route !== "direct" || entry.agents[target] === undefined) return [];
-    return [{ ...entry, enabled: entry.agents[target] }];
+  return profile.mcpServers.flatMap((entry): TargetedMcpServer[] => {
+    const agents = entry.agents;
+    if (!agents || agents[target] === undefined) return [];
+    return [{ ...entry, agents, enabled: agents[target] }];
   });
 }
 
 export function executorMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] {
-  return profile.mcpServers.filter((entry) => entry.route === "executor");
+  return profile.mcpServers.filter((entry) => entry.executor !== undefined);
+}
+
+export function requiresExecutorReconciliation(profile: ResolvedProfile): boolean {
+  return executorMcpServers(profile).length > 0;
 }
 
 export function requiresExecutorBridge(profile: ResolvedProfile): boolean {
-  return executorMcpServers(profile).length > 0;
+  return profile.profile.executor?.bridge !== false && requiresExecutorReconciliation(profile);
 }
 
 export function assertMcpToggleSupported(target: AgentName, enabled: boolean): void {

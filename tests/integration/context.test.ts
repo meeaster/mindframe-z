@@ -46,10 +46,11 @@ describe("context command", () => {
         "opencode:\n",
         [
           "  datadog:",
-          "    route: executor",
-          "    connections:",
-          "      publicsafety: oauth",
-          "      tylertech: oauth",
+          "    executor:",
+          "      enabled: true",
+          "      connections:",
+          "        publicsafety: oauth",
+          "        tylertech: oauth",
           "opencode:",
           ""
         ].join("\n")

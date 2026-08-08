@@ -45,7 +45,7 @@ describe("init and guide integration", () => {
     const home = await makeTempDir();
     const result = await mfz(home, ["guide", "mcp"]);
     expect(result.stdout).toContain("# MCP Guide");
-    expect(result.stdout).toContain("route: executor");
+    expect(result.stdout).toContain("executor:");
     expect(result.stdout).toContain("all connected supported harnesses");
     expect(result.stdout).toContain("Done when every declared credentialed connection");
   });

@@ -481,7 +481,7 @@ function launchCommand(target: SandboxLaunchTarget, args: readonly string[]): st
 function remoteEnabledMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] {
   return profile.mcpServers.filter(
     (entry) =>
-      entry.route !== "executor" &&
+      entry.agents !== undefined &&
       Object.values(entry.agents).some(Boolean) &&
       entry.server.type === "remote"
   );

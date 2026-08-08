@@ -7,7 +7,6 @@ function profile(): ResolvedProfile {
     mcpServers: [
       {
         name: "context7",
-        route: "direct",
         agents: { opencode: true, "claude-code": true, codex: true },
         server: { type: "remote", url: "https://example.invalid/mcp", description: "" }
       }
