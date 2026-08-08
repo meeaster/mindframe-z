@@ -3,8 +3,49 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
-import { fetchCommit, readGitSkillFiles } from "./git.js";
+import { fetchCommit, readGitSkillFiles, safeGitRevision } from "./git.js";
 import { createRuntimePaths } from "../core/paths.js";
+
+describe("Git revision safety", () => {
+  it("accepts the revision spellings callers legitimately pin", () => {
+    for (const revision of [
+      "main",
+      "v1.2.3",
+      "feature/some-branch",
+      "refs/tags/v1",
+      "HEAD~1",
+      "0".repeat(40)
+    ]) {
+      expect(safeGitRevision(revision), revision).toBe(true);
+    }
+  });
+
+  it("rejects option-looking refs and refs carrying space or control characters", () => {
+    for (const revision of [
+      "-x",
+      "--upload-pack=touch /tmp/pwn",
+      "main ",
+      " main",
+      "ma in",
+      "main\n",
+      "main\t",
+      "main\u0000"
+    ]) {
+      expect(safeGitRevision(revision), JSON.stringify(revision)).toBe(false);
+    }
+  });
+
+  it("refuses to fetch an option-looking revision before touching the network", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-git-unsafe-rev-"));
+    await expect(
+      fetchCommit(
+        createRuntimePaths({ root: home, home }),
+        "https://example.invalid/repo.git",
+        "--upload-pack=touch /tmp/pwn"
+      )
+    ).rejects.toThrow(/Unsafe Git revision/);
+  });
+});
 
 describe("Git skill extraction", () => {
   it("reads exact commits with executable and binary content", async () => {
