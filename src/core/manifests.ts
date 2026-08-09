@@ -331,7 +331,8 @@ const miseTomlSchema = z.object({
   tools: z.record(z.string(), miseToolValueSchema).default({}),
   env: z.record(z.string(), z.coerce.string()).default({}),
   tool_alias: z.record(z.string(), z.coerce.string()).default({}),
-  settings: z.record(z.string(), z.unknown()).default({})
+  settings: z.record(z.string(), z.unknown()).default({}),
+  bootstrap: z.record(z.string(), z.unknown()).default({})
 });
 
 const delegateGeneralModelSchema = z.object({
@@ -554,9 +555,10 @@ export const profileSchema = z
         tools: z.record(z.string(), miseToolValueSchema).default({}),
         env: z.record(z.string(), z.string()).default({}),
         tool_alias: z.record(z.string(), z.string()).default({}),
-        settings: z.record(z.string(), z.unknown()).default({})
+        settings: z.record(z.string(), z.unknown()).default({}),
+        bootstrap: z.record(z.string(), z.unknown()).default({})
       })
-      .default({ tools: {}, env: {}, tool_alias: {}, settings: {} }),
+      .default({ tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} }),
     thread: profileThreadSchema,
     dotfiles: z.record(z.string(), z.string()).default({}),
     extra_folders: z.array(extraFolderSchema).default([])
@@ -775,6 +777,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         profile.mise.env = toml.env;
         profile.mise.tool_alias = toml.tool_alias;
         profile.mise.settings = toml.settings;
+        profile.mise.bootstrap = toml.bootstrap;
       } catch {
         // Malformed TOML — skip, keep YAML defaults
       }

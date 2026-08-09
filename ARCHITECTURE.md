@@ -73,7 +73,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
-- `mise`: `config.toml`; injects `node = "24"` when no resolved node tool exists.
+- `mise`: `config.toml`; renders tools, environment, aliases, settings, and bootstrap configuration, and injects `node = "24"` when no resolved node tool exists.
 - `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 

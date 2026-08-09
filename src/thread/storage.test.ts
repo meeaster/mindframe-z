@@ -75,7 +75,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
-      mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
+      mise: { tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} },
       thread: {
         stores: [
           {

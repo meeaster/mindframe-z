@@ -41,6 +41,28 @@ describe("mise integration", () => {
     expect(mise).not.toContain('node = "24"');
   });
 
+  it("renders and merges inherited mise bootstrap configuration", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", "mise.toml"),
+      '[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n',
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "mise.toml"),
+      '[bootstrap.packages]\n"apt:jq" = "latest"\n',
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
+
+    const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
+    expect(mise).toContain('[bootstrap.hooks]');
+    expect(mise).toContain('pre-packages = "prepare-base"');
+    expect(mise).toContain('[bootstrap.packages]');
+    expect(mise).toContain('"apt:curl" = "latest"');
+    expect(mise).toContain('"apt:jq" = "latest"');
+  });
+
   it("verifies rendered OpenCode config shows mise", async () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("mise");

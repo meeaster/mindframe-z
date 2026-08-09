@@ -14,13 +14,14 @@ export async function renderMise(
   const configsMise = path.join(configsProfile, "mise");
   const configPath = path.join(configsMise, "config.toml");
 
-  const { tools, env, tool_alias, settings } = profile.profile.mise;
+  const { tools, env, tool_alias, settings, bootstrap } = profile.profile.mise;
   const renderedTools = { ...ENGINE_MISE_DEFAULT_TOOLS, ...tools };
   const managed = {
     tools: renderedTools,
     ...(Object.keys(env).length > 0 ? { env } : {}),
     ...(Object.keys(tool_alias).length > 0 ? { tool_alias } : {}),
-    ...(Object.keys(settings).length > 0 ? { settings } : {})
+    ...(Object.keys(settings).length > 0 ? { settings } : {}),
+    ...(Object.keys(bootstrap).length > 0 ? { bootstrap } : {})
   };
 
   const content = Object.keys(managed).length > 0 ? stringify(managed) : "";

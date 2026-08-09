@@ -69,7 +69,7 @@ function profile(
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
-      mise: { tools: {}, env: {}, tool_alias: {}, settings: {} },
+      mise: { tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} },
       thread: {
         stores: [],
         defaults: { session_sources: ["claude-code", "opencode"] },

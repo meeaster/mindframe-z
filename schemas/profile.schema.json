@@ -469,7 +469,8 @@
         "tools": {},
         "env": {},
         "tool_alias": {},
-        "settings": {}
+        "settings": {},
+        "bootstrap": {}
       },
       "type": "object",
       "properties": {
@@ -515,6 +516,14 @@
           }
         },
         "settings": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "bootstrap": {
           "default": {},
           "type": "object",
           "propertyNames": {

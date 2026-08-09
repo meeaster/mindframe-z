@@ -392,7 +392,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       ) as ProfileManifest["mise"]["tools"],
       env: { ...base.mise.env, ...child.mise.env },
       tool_alias: { ...base.mise.tool_alias, ...child.mise.tool_alias },
-      settings: { ...base.mise.settings, ...child.mise.settings }
+      settings: { ...base.mise.settings, ...child.mise.settings },
+      bootstrap: deepMerge(base.mise.bootstrap, child.mise.bootstrap)
     },
     thread: {
       stores: (() => {
