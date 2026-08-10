@@ -30,6 +30,7 @@ function paths(home: string): RuntimePaths {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
+    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -72,6 +73,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
         commands: [],
         agents: []
       },
+      opencode_v2: { config: {}, cli: {}, commands: [], agents: [] },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
@@ -118,6 +120,8 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     enabledSkills: [],
     enabledCommands: [],
     enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: []
   };

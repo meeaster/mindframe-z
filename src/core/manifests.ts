@@ -7,14 +7,14 @@ import { pathExists, readDirEntries } from "./fs-util.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
-export const agentSchema = z.enum(["opencode", "claude-code", "codex", "pi"]);
+export const agentSchema = z.enum(["opencode", "opencode-v2", "claude-code", "codex", "pi"]);
 const targetSchema = agentSchema;
 const agentsMapSchema = z
   .partialRecord(agentSchema, z.boolean())
   .refine((agents) => Object.keys(agents).length > 0, {
     message: "agents must contain at least one harness"
   });
-const mcpAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
+const mcpAgentSchema = z.enum(["opencode", "opencode-v2", "claude-code", "codex"]);
 const mcpDisabledAgentSchema = mcpAgentSchema.exclude(["claude-code"]);
 type McpAgentName = z.infer<typeof mcpAgentSchema>;
 type NormalizedMcpAgents = Partial<Record<McpAgentName, boolean>>;
@@ -500,6 +500,13 @@ const opencodeConfigSchema = z.object({
   delegate_general: delegateGeneralSchema.optional()
 });
 
+const opencodeV2ConfigSchema = z.object({
+  config: z.record(z.string(), z.unknown()).default({}),
+  cli: z.record(z.string(), z.unknown()).default({}),
+  commands: z.array(z.string()).default([]),
+  agents: z.array(z.string()).default([])
+});
+
 export const codexPluginSchema = z.object({
   enabled: z.boolean(),
   toggleable: z.boolean().optional()
@@ -539,6 +546,12 @@ export const profileSchema = z
       plugins: [],
       tui: {},
       tui_plugins: [],
+      commands: [],
+      agents: []
+    }),
+    opencode_v2: opencodeV2ConfigSchema.default({
+      config: {},
+      cli: {},
       commands: [],
       agents: []
     }),

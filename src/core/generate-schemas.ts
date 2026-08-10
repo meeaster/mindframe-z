@@ -52,7 +52,7 @@ function strengthenProfileMcpSchema(schema: Record<string, unknown>): void {
     groupedProperties.disabled!.uniqueItems = true;
   }
   grouped.not = {
-    anyOf: ["opencode", "claude-code", "codex"].map((agent) => ({
+    anyOf: ["opencode", "opencode-v2", "claude-code", "codex"].map((agent) => ({
       required: ["enabled", "disabled"],
       properties: {
         enabled: { contains: { const: agent } },

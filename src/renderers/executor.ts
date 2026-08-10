@@ -17,6 +17,16 @@ export function openCodeExecutorEntry(profile: ResolvedProfile): Record<string, 
   };
 }
 
+export function openCodeV2ExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
+  const timeout = executorTimeout(profile);
+  return {
+    type: "local",
+    command: ["executor", ...executorBridgeArgs(profile)],
+    timeout: { startup: timeout, catalog: timeout, execution: timeout },
+    disabled: false
+  };
+}
+
 export function claudeExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
   return {
     type: "stdio",

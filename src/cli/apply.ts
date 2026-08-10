@@ -82,11 +82,18 @@ export async function applyConfig(
   dependencies: ApplyDependencies = {}
 ): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
+  const profile = await resolveProfile(
+    paths,
+    options.profile,
+    options.agent === "all" ? undefined : { evaluateAgents: [options.agent] }
+  );
   const selectedAgents = agentList(options.agent, profile.agents);
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
   const selectedExecutorTarget = selectedAgents.some((target) => target !== "pi");
+  const selectedLegacyExecutorTarget = selectedAgents.some(
+    (target) => target !== "pi" && target !== "opencode-v2"
+  );
   const reconcile = dependencies.reconcileExecutor ?? reconcileExecutor;
   const render = dependencies.renderTarget ?? renderTarget;
   const usePrompts = !options.dryRun && !options.noLink;
@@ -98,8 +105,8 @@ export async function applyConfig(
   try {
     const executorPlan =
       selectedExecutorTarget &&
-      (requiresExecutorReconciliation(profile) ||
-        (await hasManagedExecutorState(paths, profile.name)))
+      (requiresExecutorReconciliation(profile, selectedAgents) ||
+        (selectedLegacyExecutorTarget && (await hasManagedExecutorState(paths, profile.name))))
         ? await reconcile(paths, profile, {
             dryRun: options.dryRun ?? false,
             interactive: Boolean(processStdin.isTTY)
@@ -189,7 +196,10 @@ export async function applyConfig(
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: selectedAgents.filter(
         (target): target is SkillTarget =>
-          target === "opencode" || target === "claude-code" || target === "codex"
+          target === "opencode" ||
+          target === "opencode-v2" ||
+          target === "claude-code" ||
+          target === "codex"
       ),
       dryRun: options.dryRun ?? false,
       link: !options.noLink

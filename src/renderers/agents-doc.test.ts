@@ -26,6 +26,8 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     enabledSkills: [],
     enabledCommands: [],
     enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: [],
     ...overrides

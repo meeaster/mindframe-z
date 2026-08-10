@@ -23,6 +23,8 @@ function profile(): ResolvedProfile {
     enabledSkills: [],
     enabledCommands: [],
     enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
     mcpServers: [
       {
         name: "example",

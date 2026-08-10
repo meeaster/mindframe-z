@@ -20,7 +20,7 @@ interface McpOption {
   hint: string;
 }
 
-const targets: AgentName[] = ["opencode", "claude-code", "codex"];
+const targets = ["opencode", "claude-code", "codex"] as const;
 
 export function validateMcpTuiStates(
   profile: ResolvedProfile,
@@ -47,7 +47,7 @@ function optionsForTarget(profile: ResolvedProfile, target: AgentName): McpOptio
 
 class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
   saved = false;
-  private target: AgentName;
+  private target: (typeof targets)[number];
   private readonly states: Record<AgentName, McpState>;
   private readonly profile: ResolvedProfile;
   private readonly outputStream: Writable;
@@ -59,7 +59,7 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
   ) {
     const initialTarget = profile.agents.includes("opencode")
       ? "opencode"
-      : (profile.agents[0] ?? "opencode");
+      : (targets.find((target) => profile.agents.includes(target)) ?? "opencode");
     const options = optionsForTarget(profile, initialTarget);
     const output = streams.output ?? process.stderr;
     super({
@@ -153,6 +153,11 @@ export async function runMcpTui(
 ): Promise<void> {
   const projectRoot = await findProjectRoot();
   if (!projectRoot) throw new Error("mfz mcp tui must be run inside a git repository");
+  if (!targets.some((target) => profile.agents.includes(target))) {
+    throw new Error(
+      "MCP toggles are only supported for V1 harnesses; OpenCode V2 is not supported"
+    );
+  }
   const store = await readOverrideStore(paths.home);
   const initialStates = Object.fromEntries(
     targets.map((target) => [

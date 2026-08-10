@@ -23,6 +23,7 @@ async function testPaths(): Promise<RuntimePaths> {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
+    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),

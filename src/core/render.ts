@@ -1,4 +1,4 @@
-import { lstat, readFile, rm, unlink } from "node:fs/promises";
+import { chmod, lstat, readFile, rm, unlink } from "node:fs/promises";
 import path from "node:path";
 import { writeTextFile } from "./fs-util.js";
 import type { RuntimePaths, ToolTarget } from "./paths.js";
@@ -9,6 +9,7 @@ import { renderCodex } from "../renderers/codex.js";
 import { renderDotfiles } from "../renderers/dotfiles.js";
 import { renderMise } from "../renderers/mise.js";
 import { renderOpenCode } from "../renderers/opencode.js";
+import { renderOpenCodeV2 } from "../renderers/opencode-v2.js";
 import { renderPi } from "../renderers/pi.js";
 import type { LinkPlan } from "./symlinks.js";
 import { readSkillOverridesFile } from "./skill-overrides.js";
@@ -17,6 +18,7 @@ export interface RenderedFile {
   path: string;
   content: string;
   ifMissing?: boolean;
+  mode?: number;
 }
 
 export interface RenderResult {
@@ -49,7 +51,10 @@ export async function renderRuntimeInstructions(
 }
 
 export async function writeRenderedFiles(files: RenderedFile[]): Promise<void> {
-  for (const file of files) await writeTextFile(file.path, file.content);
+  for (const file of files) {
+    await writeTextFile(file.path, file.content);
+    if (file.mode !== undefined) await chmod(file.path, file.mode);
+  }
 }
 
 export async function removeRenderedFiles(files: string[]): Promise<void> {
@@ -66,6 +71,7 @@ export async function writeLocalFiles(files: RenderedFile[]): Promise<void> {
       // Missing files are created below.
     }
     await writeTextFile(file.path, file.content);
+    if (file.mode !== undefined) await chmod(file.path, file.mode);
   }
 }
 
@@ -84,6 +90,9 @@ export async function renderTarget(
           ? await readSkillOverridesFile(globalSkillStatePath(paths, "opencode"))
           : {}
       });
+      break;
+    case "opencode-v2":
+      rendered = await renderOpenCodeV2(paths, profile);
       break;
     case "claude-code":
       rendered = await renderClaude(paths, profile);

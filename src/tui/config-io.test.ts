@@ -45,6 +45,7 @@ function paths(root: string): RuntimePaths {
     workUnitsRoot: path.join(root, "home", ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(root, "home", ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(root, ".config", "opencode"),
+    opencodeV2ConfigDir: path.join(root, ".config", "opencode-v2"),
     claudeDir: path.join(root, ".claude"),
     codexDir: path.join(root, ".codex"),
     piDir: path.join(root, ".pi", "agent"),

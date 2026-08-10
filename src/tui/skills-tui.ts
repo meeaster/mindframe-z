@@ -169,6 +169,11 @@ export async function runSkillsTui(
   profile: ResolvedProfile,
   streams: { input?: Readable; output?: Writable } = {}
 ): Promise<void> {
+  if (!targets.some((target) => profile.agents.includes(target))) {
+    throw new Error(
+      "Skill toggles are only supported for V1 harnesses; OpenCode V2 is not supported"
+    );
+  }
   const configPaths = await resolveSkillConfigPaths(paths);
   const [opencodeState, claudeCodeState, codexState] = await Promise.all([
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "opencode"),

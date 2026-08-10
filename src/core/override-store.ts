@@ -73,6 +73,9 @@ export async function writeProjectOverrideDelta(
   next: Record<string, boolean>,
   baseDefaults?: Record<string, boolean>
 ): Promise<void> {
+  if (target === "opencode-v2") {
+    throw new Error("OpenCode V2 project overrides are not supported");
+  }
   const store = await readOverrideStore(paths.home);
   const project = { ...store.projects[projectRoot] };
   const current = { ...project[target]?.[kind] };

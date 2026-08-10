@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
@@ -139,6 +139,18 @@ describe("dotfiles integration", () => {
     await expect(realpath(path.join(home, ".npmrc"))).resolves.toBe(
       configsPath(home, "personal", "dotfiles", ".npmrc")
     );
+  });
+
+  it("renders profile-owned local binaries as executable", async () => {
+    const source = path.join(root, "profiles", "personal", ".local", "bin", "example");
+    await mkdir(path.dirname(source), { recursive: true });
+    await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    const rendered = configsPath(home, "personal", "dotfiles", ".local", "bin", "example");
+    expect((await stat(rendered)).mode & 0o111).toBe(0o111);
+    expect((await stat(path.join(home, ".local", "bin", "example"))).mode & 0o111).toBe(0o111);
   });
 
   it("renders and links managed .zshrc with guarded local includes", async () => {

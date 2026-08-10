@@ -9,8 +9,15 @@ import { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
 export { expandHome, machineConfigPath, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
 
-export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
-export type ToolTarget = "opencode" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
+export type AgentName = "opencode" | "opencode-v2" | "claude-code" | "codex" | "pi";
+export type ToolTarget =
+  | "opencode"
+  | "opencode-v2"
+  | "claude-code"
+  | "codex"
+  | "pi"
+  | "mise"
+  | "dotfiles";
 export type InfraTarget = "mise" | "dotfiles";
 export type ApplyAgent = AgentName | "all";
 
@@ -21,6 +28,7 @@ export interface RuntimePaths {
   workUnitsRoot: string;
   configsDir: string;
   opencodeConfigDir: string;
+  opencodeV2ConfigDir: string;
   claudeDir: string;
   codexDir: string;
   piDir: string;
@@ -32,6 +40,7 @@ export interface PathOptions {
   home?: string | undefined;
   workUnitsRoot?: string | undefined;
   opencodeConfigDir?: string | undefined;
+  opencodeV2ConfigDir?: string | undefined;
   claudeDir?: string | undefined;
   codexDir?: string | undefined;
   piDir?: string | undefined;
@@ -92,6 +101,14 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
         home
       )
     ),
+    opencodeV2ConfigDir: path.resolve(
+      expandHome(
+        options.opencodeV2ConfigDir ??
+          process.env.OPENCODE_V2_CONFIG_DIR ??
+          path.join(home, ".config", "opencode-v2"),
+        home
+      )
+    ),
     claudeDir: path.resolve(
       expandHome(
         options.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
@@ -147,6 +164,10 @@ export function skillCandidatesRoot(paths: RuntimePaths): string {
 
 export function skillSnapshotDir(paths: RuntimePaths, profileName: string): string {
   return path.join(profileConfigsDir(paths, profileName), "skills");
+}
+
+export function opencodeV2SkillSnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "opencode-v2", "skills");
 }
 
 export function skillSnapshotManifestPath(paths: RuntimePaths, profileName: string): string {

@@ -39,6 +39,7 @@ function paths(home: string): RuntimePaths {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
+    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -77,6 +78,7 @@ describe("createRuntimePaths", () => {
     "MFZ_ROOT",
     "MFZ_HOME",
     "OPENCODE_CONFIG_DIR",
+    "OPENCODE_V2_CONFIG_DIR",
     "CLAUDE_CONFIG_DIR",
     "CODEX_HOME",
     "PI_CODING_AGENT_DIR",
@@ -108,6 +110,7 @@ describe("createRuntimePaths", () => {
     );
     expect(runtime.configsDir).toBe(path.join("/tmp/home", ".mindframe-z", "configs"));
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", ".config", "opencode"));
+    expect(runtime.opencodeV2ConfigDir).toBe(path.join("/tmp/home", ".config", "opencode-v2"));
     expect(runtime.claudeDir).toBe(path.join("/tmp/home", ".claude"));
     expect(runtime.codexDir).toBe(path.join("/tmp/home", ".codex"));
     expect(runtime.piDir).toBe(path.join("/tmp/home", ".pi", "agent"));
@@ -116,12 +119,14 @@ describe("createRuntimePaths", () => {
 
   it("reads tool config dirs from environment overrides", () => {
     process.env.OPENCODE_CONFIG_DIR = "/env/opencode";
+    process.env.OPENCODE_V2_CONFIG_DIR = "/env/opencode-v2";
     process.env.CLAUDE_CONFIG_DIR = "/env/claude";
     process.env.CODEX_HOME = "/env/codex";
     process.env.PI_CODING_AGENT_DIR = "/env/pi-agent";
     process.env.MISE_CONFIG_DIR = "/env/mise";
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.opencodeConfigDir).toBe("/env/opencode");
+    expect(runtime.opencodeV2ConfigDir).toBe("/env/opencode-v2");
     expect(runtime.claudeDir).toBe("/env/claude");
     expect(runtime.codexDir).toBe("/env/codex");
     expect(runtime.piDir).toBe("/env/pi-agent");
@@ -130,16 +135,19 @@ describe("createRuntimePaths", () => {
 
   it("prefers explicit options over environment overrides", () => {
     process.env.OPENCODE_CONFIG_DIR = "/env/opencode";
+    process.env.OPENCODE_V2_CONFIG_DIR = "/env/opencode-v2";
     process.env.CLAUDE_CONFIG_DIR = "/env/claude";
     const runtime = createRuntimePaths({
       root: "/tmp/repo",
       home: "/tmp/home",
       opencodeConfigDir: "/opt/opencode",
+      opencodeV2ConfigDir: "/opt/opencode-v2",
       claudeDir: "/opt/claude",
       codexDir: "/opt/codex",
       piDir: "/opt/pi-agent"
     });
     expect(runtime.opencodeConfigDir).toBe("/opt/opencode");
+    expect(runtime.opencodeV2ConfigDir).toBe("/opt/opencode-v2");
     expect(runtime.claudeDir).toBe("/opt/claude");
     expect(runtime.codexDir).toBe("/opt/codex");
     expect(runtime.piDir).toBe("/opt/pi-agent");
@@ -147,8 +155,10 @@ describe("createRuntimePaths", () => {
 
   it("expands a ~-relative override against the resolved home", () => {
     process.env.OPENCODE_CONFIG_DIR = "~/nested/opencode";
+    process.env.OPENCODE_V2_CONFIG_DIR = "~/nested/opencode-v2";
     const runtime = createRuntimePaths({ root: "/tmp/repo", home: "/tmp/home" });
     expect(runtime.opencodeConfigDir).toBe(path.join("/tmp/home", "nested", "opencode"));
+    expect(runtime.opencodeV2ConfigDir).toBe(path.join("/tmp/home", "nested", "opencode-v2"));
   });
 
   it("resolves root from MFZ_ROOT when no root option is given", () => {

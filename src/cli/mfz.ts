@@ -112,6 +112,7 @@ async function doctor(options: {
   console.log(`home\t${paths.home}`);
   console.log(`configs\t${paths.configsDir}`);
   console.log(`opencode config dir\t${paths.opencodeConfigDir}`);
+  console.log(`opencode v2 config dir\t${paths.opencodeV2ConfigDir}`);
   console.log(`claude dir\t${paths.claudeDir}`);
   console.log(`codex dir\t${paths.codexDir}`);
   console.log(`pi dir\t${paths.piDir}`);
@@ -245,6 +246,7 @@ async function statusFn(options: {
   );
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
   console.log(`commands\t${profile.enabledCommands.join(", ") || "none"}`);
+  console.log(`opencode-v2 commands\t${profile.enabledOpenCodeV2Commands.join(", ") || "none"}`);
   console.log(`mcp\t${profile.mcpServers.map(formatMcpStatus).join(", ") || "none"}`);
 }
 
@@ -290,7 +292,9 @@ async function contextReport(options: {
   probeMcp?: boolean;
 }) {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
+  const profile = await resolveProfile(paths, options.profile, {
+    evaluateAgents: ["opencode", "claude-code"]
+  });
   const report = await buildContextReport(paths, profile, {
     agent: options.agent,
     probeMcp: options.probeMcp
@@ -310,7 +314,9 @@ async function contextHistoryReport(options: {
     throw new Error("--probe-mcp is only available with mfz context, not context history");
   }
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
+  const profile = await resolveProfile(paths, options.profile, {
+    evaluateAgents: ["opencode", "claude-code"]
+  });
   console.log(
     formatContextHistoryReport(
       await buildContextHistoryReport(paths, profile, options.agent, options.days)
@@ -350,6 +356,58 @@ async function opencodeSmoke(options: {
       return;
     }
     throw error;
+  }
+}
+
+async function opencodeV2Smoke(options: {
+  root?: string | undefined;
+  home?: string | undefined;
+  profile?: string | undefined;
+}): Promise<void> {
+  const paths = createRuntimePaths({ root: options.root, home: options.home });
+  const profile = await resolveProfile(paths, options.profile, {
+    evaluateAgents: ["opencode-v2"]
+  });
+  await applyConfig({ ...options, agent: "opencode-v2", target: "all", noLink: true });
+  const isolated = path.join(paths.home, ".mindframe-z-opencode-v2-smoke");
+  await mkdir(isolated, { recursive: true });
+  const configsOpenCodeV2 = path.join(paths.configsDir, profile.name, "opencode-v2");
+  const env = {
+    ...process.env,
+    HOME: paths.home,
+    OPENCODE_TEST_HOME: paths.home,
+    OPENCODE_CONFIG_DIR: configsOpenCodeV2,
+    OPENCODE_DB: path.join(isolated, "data", "opencode-v2.db"),
+    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    XDG_CONFIG_HOME: path.join(isolated, "config"),
+    XDG_DATA_HOME: path.join(isolated, "data"),
+    XDG_STATE_HOME: path.join(isolated, "state"),
+    XDG_CACHE_HOME: path.join(isolated, "cache")
+  };
+  let binaryFound = true;
+  try {
+    const result = await execa("opencode2", ["debug", "config"], {
+      cwd: paths.home,
+      env,
+      timeout: 30_000
+    });
+    console.log(result.stdout);
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "ENOENT") {
+      binaryFound = false;
+      console.log("opencode2 not found; skipped smoke check");
+      return;
+    }
+    throw error;
+  } finally {
+    if (binaryFound) {
+      await execa("opencode2", ["service", "stop"], {
+        cwd: paths.home,
+        env,
+        timeout: 10_000
+      });
+    }
   }
 }
 
@@ -413,14 +471,16 @@ program
   .option("--profile <profile>", "target profile to write changes to (skip interactive prompt)")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
-    const profile = await resolveProfile(paths, program.opts().profile);
+    const profile = await resolveProfile(paths, program.opts().profile, {
+      evaluateAgents: ["opencode", "claude-code", "codex"]
+    });
     await runSync(paths, profile, options.profile);
   });
 
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option("--agent <agent>", "opencode, claude-code, codex, pi, or all", "all")
+  .option("--agent <agent>", "opencode, opencode-v2, claude-code, codex, pi, or all", "all")
   .option("--target <target>", "mise, dotfiles, or all", "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
@@ -877,17 +937,26 @@ const skills = program
     await runSkillsTui(paths, profile);
   });
 
-const skillTargets = ["opencode", "claude-code", "codex"] as const;
+const skillTargets = ["opencode", "opencode-v2", "claude-code", "codex"] as const;
 
-function parseSkillTarget(target: string | undefined): SkillToggleTarget | undefined {
+function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget | undefined {
   if (!target) return undefined;
   if (target === "opencode" || target === "claude-code" || target === "codex") return target;
+  if (target === "opencode-v2") {
+    throw new Error("OpenCode V2 skill toggles are not supported");
+  }
   throw new Error(`Unknown skill target: ${target}`);
 }
 
-function parseSkillAgentOption(agent: string | undefined): SkillToggleTarget | undefined {
+function parseSkillRenderTarget(target: string | undefined): SkillTarget | undefined {
+  if (!target) return undefined;
+  if (skillTargets.includes(target as (typeof skillTargets)[number])) return target as SkillTarget;
+  throw new Error(`Unknown skill target: ${target}`);
+}
+
+function parseSkillAgentOption(agent: string | undefined): SkillTarget | undefined {
   if (!agent || agent === "all") return undefined;
-  return parseSkillTarget(agent);
+  return parseSkillRenderTarget(agent);
 }
 
 async function setSkillEnabled(
@@ -900,11 +969,14 @@ async function setSkillEnabled(
   const skill = profile.enabledSkills.find((entry) => entry.name === name);
   if (!skill) throw new Error(`Profile ${profile.name} does not declare skill: ${name}`);
   if (!skill.toggleable) throw new Error(`Skill "${name}" is not toggleable`);
-  const requestedTarget = parseSkillTarget(options.target);
+  const requestedTarget = parseSkillToggleTarget(options.target);
   const targets = (requestedTarget ? [requestedTarget] : skill.targets).filter(
     (target): target is SkillToggleTarget =>
-      skillTargets.includes(target as (typeof skillTargets)[number])
+      target === "opencode" || target === "claude-code" || target === "codex"
   );
+  if (targets.length === 0 && skill.targets.includes("opencode-v2")) {
+    throw new Error("OpenCode V2 skill toggles are not supported");
+  }
   for (const target of targets) {
     await setLocalSkillState(paths, profile, target, name, enabled);
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
@@ -938,12 +1010,16 @@ skills
 skills
   .command("sync")
   .description("Render the profile skill snapshot and reconcile owned harness links")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
+  .option("--agent <agent>", "opencode, opencode-v2, claude-code, or codex")
   .option("--dry-run", "print the snapshot and link plan without changing state")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
-    const profile = await resolveProfile(paths, program.opts().profile);
     const requestedAgent = parseSkillAgentOption(options.agent);
+    const profile = await resolveProfile(
+      paths,
+      program.opts().profile,
+      requestedAgent ? { evaluateAgents: [requestedAgent] } : undefined
+    );
     const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
       (target): target is SkillTarget =>
         skillTargets.includes(target as (typeof skillTargets)[number])
@@ -1065,7 +1141,13 @@ skills
 
 function parseAgentOption(agent: string | undefined): AgentName | undefined {
   if (!agent) return undefined;
-  if (agent === "opencode" || agent === "claude-code" || agent === "codex" || agent === "pi")
+  if (
+    agent === "opencode" ||
+    agent === "opencode-v2" ||
+    agent === "claude-code" ||
+    agent === "codex" ||
+    agent === "pi"
+  )
     return agent;
   throw new Error(`Unknown agent: ${agent}`);
 }
@@ -1085,10 +1167,18 @@ async function setMcpEnabled(
     );
   }
   const requestedAgent = parseAgentOption(options.agent);
+  if (requestedAgent === "opencode-v2") {
+    throw new Error("OpenCode V2 project MCP toggles are not supported");
+  }
   if (requestedAgent === "pi") {
     throw new Error("Pi MCP toggles are not supported yet");
   }
-  const targets = requestedAgent ? [requestedAgent] : (Object.keys(server.agents) as AgentName[]);
+  const targets = requestedAgent
+    ? [requestedAgent]
+    : (Object.keys(server.agents).filter((target) => target !== "opencode-v2") as AgentName[]);
+  if (targets.length === 0) {
+    throw new Error("OpenCode V2 project MCP toggles are not supported");
+  }
   for (const target of targets) {
     if (server.agents[target] === undefined) {
       throw new Error(`MCP server ${name} is not available for ${target}`);
@@ -1163,6 +1253,11 @@ program
   .command("smoke-opencode")
   .description("Render OpenCode config and verify it with isolated opencode debug config")
   .action(async () => opencodeSmoke(program.opts()));
+
+program
+  .command("smoke-opencode-v2")
+  .description("Render OpenCode V2 config and verify it with isolated opencode2 debug config")
+  .action(async () => opencodeV2Smoke(program.opts()));
 
 const refs = program.command("refs").description("Manage AI reference repositories");
 

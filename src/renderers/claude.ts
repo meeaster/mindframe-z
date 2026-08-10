@@ -177,7 +177,7 @@ export async function renderClaude(
       renderClaudeMcpServer(server, paths.home)
     ])
   );
-  if (requiresExecutorBridge(profile))
+  if (requiresExecutorBridge(profile, "claude-code"))
     managedClaudeMcp[executorBridgeName] = claudeExecutorEntry(profile);
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");

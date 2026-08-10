@@ -20,6 +20,7 @@ import { jsonFileContent, readDirEntries } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
+import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
 
 interface OpenCodeRenderOptions {
   readonly skillOverrides?: Record<string, boolean>;
@@ -140,41 +141,6 @@ async function collectPluginFiles(
   return { files, entries };
 }
 
-async function collectMarkdownFiles(
-  rootByName: (name: string) => string,
-  configsOpencode: string,
-  kind: "commands" | "agents",
-  names: readonly string[]
-): Promise<RenderResult["files"]> {
-  const files: RenderResult["files"] = [];
-  const label = kind === "commands" ? "command" : "agent";
-
-  for (const name of names) {
-    const sourceDir = path.join(rootByName(name), "opencode", kind);
-    const fileName = `${name}.md`;
-    const candidates =
-      kind === "commands"
-        ? [path.join(sourceDir, fileName), path.join(sourceDir, name, "COMMAND.md")]
-        : [path.join(sourceDir, fileName)];
-    let content: string | undefined;
-    for (const filePath of candidates) {
-      try {
-        content = await readFile(filePath, "utf8");
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-    }
-    if (content === undefined) throw new Error(`Unknown ${label}: ${name}`);
-    files.push({
-      path: path.join(configsOpencode, kind, fileName),
-      content
-    });
-  }
-
-  return files;
-}
-
 export async function renderOpenCode(
   paths: RuntimePaths,
   profile: ResolvedProfile,
@@ -202,13 +168,13 @@ export async function renderOpenCode(
     false
   );
   const plugin = pluginResult.entries;
-  const commandFiles = await collectMarkdownFiles(
+  const commandFiles = await collectOpenCodeMarkdownFiles(
     (name) => profile.sources.commands.get(name)?.root ?? paths.root,
     configsOpencode,
     "commands",
     profile.enabledCommands
   );
-  const agentFiles = await collectMarkdownFiles(
+  const agentFiles = await collectOpenCodeMarkdownFiles(
     (name) => profile.sources.agents.get(name)?.root ?? paths.root,
     configsOpencode,
     "agents",
@@ -239,7 +205,8 @@ export async function renderOpenCode(
       ];
     })
   );
-  if (requiresExecutorBridge(profile)) mcp[executorBridgeName] = openCodeExecutorEntry(profile);
+  if (requiresExecutorBridge(profile, "opencode"))
+    mcp[executorBridgeName] = openCodeExecutorEntry(profile);
   const extraFolders = profile.extraFolders;
   const externalDirectory: Record<string, string> = {};
   const edit: Record<string, string> = {};

@@ -266,7 +266,7 @@ describe("generated profile MCP schema", () => {
     for (const variant of grouped.anyOf as Record<string, unknown>[]) {
       const groupedProperties = variant.properties as Record<string, Record<string, unknown>>;
       const disabledItems = groupedProperties.disabled!.items as Record<string, unknown>;
-      expect(disabledItems.enum).toEqual(["opencode", "codex"]);
+      expect(disabledItems.enum).toEqual(["opencode", "opencode-v2", "codex"]);
     }
 
     const executor = entryProperties.executor!;

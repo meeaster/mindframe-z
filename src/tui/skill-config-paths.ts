@@ -1,8 +1,8 @@
 import path from "node:path";
 import { findProjectRoot } from "../core/git-root.js";
-import { globalSkillStatePath, type AgentName, type RuntimePaths } from "../core/paths.js";
+import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 
-export type SkillToggleTarget = Exclude<AgentName, "pi">;
+export type SkillToggleTarget = "opencode" | "claude-code" | "codex";
 
 export type SkillConfigPaths =
   | {

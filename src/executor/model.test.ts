@@ -20,6 +20,8 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     enabledSkills: [],
     enabledCommands: [],
     enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
     mcpServers: [server],
     extraFolders: []
   };

@@ -1,5 +1,6 @@
 import {
   access,
+  chmod,
   lstat,
   mkdir,
   readFile,
@@ -88,6 +89,117 @@ describe("apply integration", () => {
       mcpServers?: Record<string, unknown>;
     };
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
+  });
+
+  it("renders OpenCode V2 independently with native config and skill paths", async () => {
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const profile = (await readFile(profilePath, "utf8"))
+      .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
+      .replace("    - config-marker", "    - missing-v1-plugin")
+      .replace(
+        "  context7:\n    agents: [opencode, claude-code]",
+        "  context7:\n    agents: [opencode-v2]"
+      )
+      .replace(
+        "claude:\n",
+        [
+          "opencode_v2:",
+          "  config:",
+          "    model: v2/test-model",
+          "  cli:",
+          "    theme: dark",
+          "  commands:",
+          "    - test-cmd",
+          "",
+          "claude:",
+          ""
+        ].join("\n")
+      );
+    await writeFile(profilePath, profile, "utf8");
+
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    const configPath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
+    const config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+    const mcp = config.mcp as { servers: Record<string, Record<string, unknown>> };
+
+    expect(result.stderr).toContain("OpenCode V1 plugins omitted from OpenCode V2 render");
+    expect(config.model).toBe("v2/test-model");
+    expect(config.plugin).toBeUndefined();
+    expect(mcp.servers.context7).toMatchObject({
+      type: "remote",
+      url: "https://mcp.context7.com/mcp",
+      disabled: false
+    });
+    expect(config.skills).toEqual([configsPath(home, "personal", "opencode-v2", "skills")]);
+    expect(
+      await readFile(
+        configsPath(home, "personal", "opencode-v2", "commands", "test-cmd.md"),
+        "utf8"
+      )
+    ).toContain("Run the test command.");
+    await expect(
+      realpath(path.join(home, ".config", "opencode-v2", "opencode.jsonc"))
+    ).resolves.toBe(configPath);
+    await expect(
+      access(configsPath(home, "personal", "opencode", "opencode.jsonc"))
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("smokes OpenCode V2 with an isolated binary environment", async () => {
+    const binDir = path.join(home, "bin");
+    const capturePath = path.join(home, "opencode-v2-smoke.json");
+    const binaryPath = path.join(binDir, "opencode2");
+    await mkdir(binDir, { recursive: true });
+    await writeFile(
+      binaryPath,
+      [
+        "#!/usr/bin/env node",
+        'const { existsSync, readFileSync, writeFileSync } = require("node:fs");',
+        "const events = existsSync(process.env.MFZ_SMOKE_CAPTURE) ? JSON.parse(readFileSync(process.env.MFZ_SMOKE_CAPTURE, 'utf8')) : [];",
+        "events.push({ argv: process.argv.slice(2), cwd: process.cwd(), env: process.env });",
+        "writeFileSync(process.env.MFZ_SMOKE_CAPTURE, JSON.stringify(events));",
+        'console.log("parsed");',
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await chmod(binaryPath, 0o755);
+
+    const ambientDb = path.join(home, "v1", "opencode.db");
+    const result = await cli("mfz", root, home, ["smoke-opencode-v2"], {
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      MFZ_SMOKE_CAPTURE: capturePath,
+      OPENCODE_DB: ambientDb,
+      XDG_CONFIG_HOME: path.join(home, "v1", "config"),
+      XDG_DATA_HOME: path.join(home, "v1", "data"),
+      XDG_STATE_HOME: path.join(home, "v1", "state"),
+      XDG_CACHE_HOME: path.join(home, "v1", "cache")
+    });
+    const captures = JSON.parse(await readFile(capturePath, "utf8")) as Array<{
+      argv: string[];
+      cwd: string;
+      env: Record<string, string>;
+    }>;
+    const capture = captures[0]!;
+    const isolated = path.join(home, ".mindframe-z-opencode-v2-smoke");
+
+    expect(result.stdout).toContain("parsed");
+    expect(captures.map((event) => event.argv)).toEqual([
+      ["debug", "config"],
+      ["service", "stop"]
+    ]);
+    expect(capture.argv).toEqual(["debug", "config"]);
+    expect(capture.cwd).toBe(home);
+    expect(capture.env.OPENCODE_TEST_HOME).toBe(home);
+    expect(capture.env.OPENCODE_CONFIG_DIR).toBe(configsPath(home, "personal", "opencode-v2"));
+    expect(capture.env.OPENCODE_DB).toBe(path.join(isolated, "data", "opencode-v2.db"));
+    expect(capture.env.OPENCODE_DB).not.toBe(ambientDb);
+    expect(capture.env.XDG_CONFIG_HOME).toBe(path.join(isolated, "config"));
+    expect(capture.env.XDG_DATA_HOME).toBe(path.join(isolated, "data"));
+    expect(capture.env.XDG_STATE_HOME).toBe(path.join(isolated, "state"));
+    expect(capture.env.XDG_CACHE_HOME).toBe(path.join(isolated, "cache"));
   });
 
   it("renders, links, and removes merged OpenCode runtime dependencies", async () => {

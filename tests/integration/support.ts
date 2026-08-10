@@ -19,6 +19,7 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
+    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -220,6 +221,7 @@ export function cli(
       MFZ_ROOT: root,
       MFZ_HOME: home,
       OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
+      OPENCODE_V2_CONFIG_DIR: path.join(home, ".config", "opencode-v2"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       CODEX_HOME: path.join(home, ".codex"),
       PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
@@ -255,6 +257,7 @@ export function cliWithMachineHomePath(home: string, args: string[]) {
         MFZ_HOME: home,
         MFZ_ROOT: undefined,
         OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
+        OPENCODE_V2_CONFIG_DIR: path.join(home, ".config", "opencode-v2"),
         CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
         CODEX_HOME: path.join(home, ".codex"),
         PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent")

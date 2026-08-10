@@ -24,6 +24,7 @@
         "type": "string",
         "enum": [
           "opencode",
+          "opencode-v2",
           "claude-code",
           "codex",
           "pi"
@@ -59,6 +60,7 @@
               "type": "string",
               "enum": [
                 "opencode",
+                "opencode-v2",
                 "claude-code",
                 "codex",
                 "pi"
@@ -93,6 +95,7 @@
                   "type": "string",
                   "enum": [
                     "opencode",
+                    "opencode-v2",
                     "claude-code",
                     "codex"
                   ]
@@ -111,6 +114,7 @@
                           "type": "string",
                           "enum": [
                             "opencode",
+                            "opencode-v2",
                             "claude-code",
                             "codex"
                           ]
@@ -124,6 +128,7 @@
                           "type": "string",
                           "enum": [
                             "opencode",
+                            "opencode-v2",
                             "codex"
                           ]
                         },
@@ -145,6 +150,7 @@
                           "type": "string",
                           "enum": [
                             "opencode",
+                            "opencode-v2",
                             "claude-code",
                             "codex"
                           ]
@@ -158,6 +164,7 @@
                           "type": "string",
                           "enum": [
                             "opencode",
+                            "opencode-v2",
                             "codex"
                           ]
                         },
@@ -186,6 +193,24 @@
                         "disabled": {
                           "contains": {
                             "const": "opencode"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "required": [
+                        "enabled",
+                        "disabled"
+                      ],
+                      "properties": {
+                        "enabled": {
+                          "contains": {
+                            "const": "opencode-v2"
+                          }
+                        },
+                        "disabled": {
+                          "contains": {
+                            "const": "opencode-v2"
                           }
                         }
                       }
@@ -378,6 +403,47 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    "opencode_v2": {
+      "default": {
+        "config": {},
+        "cli": {},
+        "commands": [],
+        "agents": []
+      },
+      "type": "object",
+      "properties": {
+        "config": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "cli": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "commands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agents": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }

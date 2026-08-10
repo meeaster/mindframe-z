@@ -111,7 +111,8 @@ export async function renderDotfiles(
 
   const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => ({
     path: path.join(configsDotfiles, filename),
-    content: renderDotfile(paths, filename, content)
+    content: renderDotfile(paths, filename, content),
+    ...(filename.startsWith(".local/bin/") ? { mode: 0o755 } : {})
   }));
 
   const links = Object.keys(profile.profile.dotfiles).map((filename) => ({

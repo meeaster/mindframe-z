@@ -5,7 +5,8 @@ import {
   claudeExecutorEntry,
   codexExecutorEntry,
   executorBridgeArgs,
-  openCodeExecutorEntry
+  openCodeExecutorEntry,
+  openCodeV2ExecutorEntry
 } from "./executor.js";
 
 function profile(): ResolvedProfile {
@@ -21,6 +22,8 @@ function profile(): ResolvedProfile {
     enabledSkills: [],
     enabledCommands: [],
     enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: []
   };
@@ -36,6 +39,12 @@ describe("Executor bridge rendering", () => {
       command: ["executor", "mcp", "--elicitation-mode", "browser"],
       timeout: 45_000,
       enabled: true
+    });
+    expect(openCodeV2ExecutorEntry(resolved)).toEqual({
+      type: "local",
+      command: ["executor", "mcp", "--elicitation-mode", "browser"],
+      timeout: { startup: 45_000, catalog: 45_000, execution: 45_000 },
+      disabled: false
     });
     expect(claudeExecutorEntry(resolved)).toEqual({
       type: "stdio",
