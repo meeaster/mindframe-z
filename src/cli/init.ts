@@ -55,7 +55,7 @@ executor:
 
 Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`discoveryUrl\` and \`registrationScopes\`; those scopes are used only while registering the public client. Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly. Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
 
-Verify with \`mfz apply --target all --agent all\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
+Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
 `;
 
 const guideMarkdown = `# mindframe-z Home Guide
@@ -64,7 +64,7 @@ A home is a git repository with \`mfz_home.yml\` at its root. The engine loads f
 
 Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz_home.yml#extends\`.
 
-The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run \`mfz apply --target all --agent all\` to re-render. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
+The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
 
 Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Before adding or changing a skill, run \`mfz guide skills\`.
 
@@ -101,7 +101,7 @@ Write \`description\` as capability-map metadata, not a miniature repository sum
 
 Within profile inheritance, a child entry overrides its parent by path, and a machine-config entry overrides both. Active and upstream homes are not granted implicitly; declare any home agents should edit as an extra folder.
 
-Run \`mfz apply --target all --agent all\`, then inspect \`~/.mindframe-z/extra_folders.md\` and run \`mfz doctor\`. Done when the index shows the intended role and permissions and the profile reports healthy links.
+Run plain \`mfz apply\`, then inspect \`~/.mindframe-z/extra_folders.md\` and run \`mfz doctor\`. Done when the index shows the intended role and permissions and the profile reports healthy links.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
@@ -138,7 +138,7 @@ Add a local skill:
        agents: { opencode: true, claude-code: true, codex: true }
    \`\`\`
 
-4. Run \`mfz apply --target all --agent all\`, then \`mfz skills list\` and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
+4. Run plain \`mfz apply\`, then \`mfz skills list\` and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
 
 Add a vendored skill:
 
@@ -177,7 +177,7 @@ Add a reference:
      - example
    \`\`\`
 
-3. Run \`mfz refs sync example\` to clone or update it, then \`mfz apply --target all --agent all\` to regenerate the reference index and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate only the index.
+3. Run \`mfz refs sync example\` to clone or update it, then plain \`mfz apply\` to regenerate the reference index and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate only the index.
 
 Write descriptions as routing metadata, not miniature repository summaries. Lead with the stack or repository type and its purpose, name the concepts or situations that should cause an agent to inspect it, and include at most one or two durable entrypoints, packages, or config models. Keep descriptions concise; avoid promotional language, exhaustive feature lists, volatile counts, and details agents can discover after opening the repository.
 

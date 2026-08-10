@@ -24,12 +24,13 @@ pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
 pnpm check             # lint -> fmt:check -> build -> fast test
 pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
 pnpm dev doctor
+# Isolated test examples only:
 pnpm dev --profile personal apply --target all --dry-run
 pnpm dev --home /tmp/mindframe-z-home smoke-opencode
 pnpm dev refs list
 ```
 
-Use `pnpm dev <command>` for source execution via `tsx`; do not insert `--` before the command because this repo's script passes it through to Commander as a literal argument. Put global options before the subcommand, for example `pnpm dev --profile personal apply --target opencode --dry-run`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz`, `npm link`, or globally linked `mfz` behavior.
+Use `pnpm dev <command>` for source execution via `tsx`; do not insert `--` before the command because this repo's script passes it through to Commander as a literal argument. The `--root`, `--home`, and `--profile` options in the isolated examples are test-only and require an explicit test home; normal machine activation uses plain `mfz apply`, which follows `~/.mindframe-z/config.yml`. The installed `mfz` binary imports from `dist/`, so run `pnpm build` before testing `bin/mfz`, `npm link`, or globally linked `mfz` behavior.
 
 ## Verification
 
