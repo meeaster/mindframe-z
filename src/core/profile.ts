@@ -531,6 +531,92 @@ function resolveSkillConfig(
   };
 }
 
+async function resolveEnabledSkills(
+  profileName: string,
+  build: ProfileBuild,
+  manifests: LoadedManifests,
+  agents: AgentName[]
+): Promise<ResolvedSkill[]> {
+  const enabled = Object.entries(build.profile.skills)
+    .map(([skillName, config]): ResolvedSkill => {
+      const sourceHome = build.sources.skills.get(skillName) ?? manifests;
+      const skill = sourceHome.skills.find((entry) => entry.name === skillName);
+      if (!skill) throw new Error(`Profile ${profileName} references unknown skill: ${skillName}`);
+      return { ...skill, ...resolveSkillConfig(config, agents), sourceRoot: sourceHome.root };
+    })
+    .filter((entry) => entry.targets.length > 0);
+
+  const validatedVendorRoots = new Set<string>();
+  for (const skill of enabled) {
+    if (skill.name === skillUpdateReviewName) {
+      throw new Error(
+        "Trust anchor invalid: engine-owned skill-update-review cannot be overridden by a home catalog entry"
+      );
+    }
+    if (skill.source !== "vendored") continue;
+    if (!validatedVendorRoots.has(skill.sourceRoot)) {
+      const failures = await validateVendoredSkills(skill.sourceRoot);
+      if (failures.length > 0) throw new Error(failures.join("; "));
+      validatedVendorRoots.add(skill.sourceRoot);
+    }
+    const lock = await readVendorLock(skill.sourceRoot);
+    const entry = lock.skills[skill.name];
+    if (!entry) throw new Error(`Vendored skill ${skill.name} has no vendor lock entry`);
+    await validateVendoredSkill(skill.sourceRoot, skill, lock);
+    skill.vendor = {
+      repository: skill.repo,
+      ref: skill.ref,
+      subtree: skill.subtree,
+      commit: entry.commit,
+      digest: entry.digest
+    };
+  }
+  return enabled;
+}
+
+function resolveMcpServers(
+  profileName: string,
+  build: ProfileBuild,
+  manifests: LoadedManifests,
+  evaluateAgents: readonly AgentName[]
+): ResolvedMcpServer[] {
+  const resolved = Object.entries(build.profile.mcp).map(
+    ([serverName, config]): ResolvedMcpServer => {
+      const sourceHome = build.sources.mcp.get(serverName) ?? manifests;
+      const server = sourceHome.mcpServers[serverName];
+      if (!server) {
+        throw new Error(`Profile ${profileName} references unknown MCP server: ${serverName}`);
+      }
+      const executorConfig = config.executor?.enabled ? config.executor : undefined;
+      const executorRelevant =
+        executorConfig !== undefined &&
+        (config.agents === undefined
+          ? evaluateAgents.some((agent) => agent !== "pi")
+          : evaluateAgents.some((agent) => agent !== "pi" && config.agents?.[agent] !== undefined));
+      if (executorConfig && executorRelevant) {
+        validateExecutorMcpServer(serverName, server);
+        const executor = {
+          connections: resolveExecutorConnections(serverName, server, executorConfig)
+        };
+        if (config.agents) return { name: serverName, server, agents: config.agents, executor };
+        return { name: serverName, server, executor };
+      }
+      if (executorConfig) {
+        if (config.agents) return { name: serverName, server, agents: config.agents };
+        return { name: serverName, server };
+      }
+      if (!config.agents) throw new Error(`MCP server ${serverName} has no active routing`);
+      return { name: serverName, server, agents: config.agents };
+    }
+  );
+  if (resolved.some((entry) => entry.name === executorBridgeName)) {
+    throw new Error(
+      `MCP server name ${executorBridgeName} is reserved for the generated Executor bridge`
+    );
+  }
+  return resolved;
+}
+
 async function resolveProfileByName(
   manifests: LoadedManifests,
   name: string,
@@ -606,74 +692,12 @@ export async function resolveProfile(
     if (!ref) throw new Error(`Profile ${name} references unknown reference: ${refName}`);
     return ref;
   });
-  const enabledSkills: ResolvedSkill[] = Object.entries(profile.skills)
-    .map(([skillName, config]): ResolvedSkill => {
-      const sourceHome = sources.skills.get(skillName) ?? manifests;
-      const skill = sourceHome.skills.find((s) => s.name === skillName);
-      if (!skill) throw new Error(`Profile ${name} references unknown skill: ${skillName}`);
-      return { ...skill, ...resolveSkillConfig(config, skillAgents), sourceRoot: sourceHome.root };
-    })
-    .filter((entry) => entry.targets.length > 0);
-  const validatedVendorRoots = new Set<string>();
-  for (const skill of enabledSkills) {
-    if (skill.name === skillUpdateReviewName) {
-      throw new Error(
-        "Trust anchor invalid: engine-owned skill-update-review cannot be overridden by a home catalog entry"
-      );
-    }
-    if (skill.source === "vendored") {
-      if (!validatedVendorRoots.has(skill.sourceRoot)) {
-        const failures = await validateVendoredSkills(skill.sourceRoot);
-        if (failures.length > 0) throw new Error(failures.join("; "));
-        validatedVendorRoots.add(skill.sourceRoot);
-      }
-      const lock = await readVendorLock(skill.sourceRoot);
-      const entry = lock.skills[skill.name];
-      if (!entry) throw new Error(`Vendored skill ${skill.name} has no vendor lock entry`);
-      await validateVendoredSkill(skill.sourceRoot, skill, lock);
-      skill.vendor = {
-        repository: skill.repo,
-        ref: skill.ref,
-        subtree: skill.subtree,
-        commit: entry.commit,
-        digest: entry.digest
-      };
-    }
-  }
+  const enabledSkills = await resolveEnabledSkills(name, profileBuild, manifests, skillAgents);
   const enabledCommands = includeOpenCode ? dedupe(profile.opencode.commands) : [];
   const enabledAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
   const enabledOpenCodeV2Commands = includeOpenCodeV2 ? dedupe(profile.opencode_v2.commands) : [];
   const enabledOpenCodeV2Agents = includeOpenCodeV2 ? dedupe(profile.opencode_v2.agents) : [];
-  const mcpServers = Object.entries(profile.mcp).map(([serverName, config]): ResolvedMcpServer => {
-    const sourceHome = sources.mcp.get(serverName) ?? manifests;
-    const server = sourceHome.mcpServers[serverName];
-    if (!server) throw new Error(`Profile ${name} references unknown MCP server: ${serverName}`);
-    const executorConfig = config.executor?.enabled ? config.executor : undefined;
-    const executorRelevant =
-      executorConfig !== undefined &&
-      (config.agents === undefined
-        ? evaluateAgents.some((agent) => agent !== "pi")
-        : evaluateAgents.some((agent) => agent !== "pi" && config.agents?.[agent] !== undefined));
-    if (executorConfig && executorRelevant) {
-      validateExecutorMcpServer(serverName, server);
-      const executor = {
-        connections: resolveExecutorConnections(serverName, server, executorConfig)
-      };
-      if (config.agents) return { name: serverName, server, agents: config.agents, executor };
-      return { name: serverName, server, executor };
-    }
-    if (executorConfig) {
-      if (config.agents) return { name: serverName, server, agents: config.agents };
-      return { name: serverName, server };
-    }
-    if (!config.agents) throw new Error(`MCP server ${serverName} has no active routing`);
-    return { name: serverName, server, agents: config.agents };
-  });
-  if (mcpServers.some((entry) => entry.name === executorBridgeName)) {
-    throw new Error(
-      `MCP server name ${executorBridgeName} is reserved for the generated Executor bridge`
-    );
-  }
+  const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();

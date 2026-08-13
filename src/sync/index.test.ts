@@ -1,5 +1,9 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { parseProfileChoice, resolveMoves, setNested } from "./index.js";
+import { resolveProfile } from "../core/profile.js";
+import { makeTempDir, testRuntimePaths, writeFixture } from "../../tests/integration/support.js";
+import { parseProfileChoice, resolveMoves, runSync, setNested } from "./index.js";
 
 describe("parseProfileChoice", () => {
   const profiles = ["base", "personal", "work"];
@@ -85,5 +89,41 @@ describe("setNested", () => {
     const doc: Record<string, unknown> = { name: "personal" };
     setNested(doc, "", "theme", "dark");
     expect(doc).toEqual({ name: "personal" });
+  });
+});
+
+describe("runSync source writes", () => {
+  it("does not overwrite malformed profile.yml", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeFixture(root, home);
+    const paths = testRuntimePaths(home, root);
+    const profile = await resolveProfile(paths, "personal");
+    const settingsPath = path.join(paths.configsDir, "personal", "claude", "settings.json");
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(settingsPath, '{"unmanaged":true}\n', "utf8");
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const broken = "name: personal\nclaude: [\n";
+    await writeFile(profilePath, broken, "utf8");
+
+    await expect(runSync(paths, profile, "personal")).rejects.toThrow(profilePath);
+    expect(await readFile(profilePath, "utf8")).toBe(broken);
+  });
+
+  it("does not overwrite malformed mise.toml", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeFixture(root, home);
+    const paths = testRuntimePaths(home, root);
+    const profile = await resolveProfile(paths, "personal");
+    const renderedPath = path.join(paths.configsDir, "personal", "mise", "config.toml");
+    await mkdir(path.dirname(renderedPath), { recursive: true });
+    await writeFile(renderedPath, '[tools]\ndeno = "2"\n', "utf8");
+    const misePath = path.join(root, "profiles", "personal", "mise.toml");
+    const broken = "[tools\ndeno = ";
+    await writeFile(misePath, broken, "utf8");
+
+    await expect(runSync(paths, profile, "personal")).rejects.toThrow(misePath);
+    expect(await readFile(misePath, "utf8")).toBe(broken);
   });
 });

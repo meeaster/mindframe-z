@@ -62,11 +62,10 @@ describe("syncClaude", () => {
     expect(candidates).toEqual([]);
   });
 
-  it("returns no candidates when the settings file is not a JSON object", async () => {
+  it("rejects a settings file that is not a JSON object", async () => {
     const dir = await makeTempDir();
     const settingsPath = await writeJson(dir, "settings.json", ["theme", "dark"]);
-    const { candidates } = await syncClaude(settingsPath, profile);
-    expect(candidates).toEqual([]);
+    await expect(syncClaude(settingsPath, profile)).rejects.toThrow(settingsPath);
   });
 });
 
@@ -108,11 +107,10 @@ describe("syncOpencode", () => {
     expect(candidates).toEqual([]);
   });
 
-  it("returns no candidates when the config file is not a JSON object", async () => {
+  it("rejects a config file that is not a JSON object", async () => {
     const dir = await makeTempDir();
     const file = await writeJson(dir, "opencode.jsonc", ["theme", "dim"]);
-    const { candidates } = await syncOpencode(file, profile);
-    expect(candidates).toEqual([]);
+    await expect(syncOpencode(file, profile)).rejects.toThrow(file);
   });
 });
 

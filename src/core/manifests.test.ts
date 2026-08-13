@@ -194,13 +194,22 @@ describe("loadManifests", () => {
     expect(mise?.settings).toEqual({ minimum_release_age: "3d" });
   });
 
-  it("keeps the profile.yml mise block when mise.toml is malformed", async () => {
+  it("rejects a malformed mise.toml with path context", async () => {
     const { root, home } = await tmpHome();
     const dir = await writeProfile(root, "base", 'name: base\nmise:\n  tools:\n    jq: "1.0"\n');
-    await writeFile(path.join(dir, "mise.toml"), "[tools\njq = ", "utf8");
+    const misePath = path.join(dir, "mise.toml");
+    await writeFile(misePath, "[tools\njq = ", "utf8");
 
-    const mise = (await loadManifests(root, home)).profiles.get("base")?.mise;
-    expect(mise?.tools).toEqual({ jq: "1.0" });
+    await expect(loadManifests(root, home)).rejects.toThrow(misePath);
+  });
+
+  it("rejects a schema-invalid mise.toml with path context", async () => {
+    const { root, home } = await tmpHome();
+    const dir = await writeProfile(root, "base", "name: base\n");
+    const misePath = path.join(dir, "mise.toml");
+    await writeFile(misePath, "[tools]\nBROKEN = 42\n", "utf8");
+
+    await expect(loadManifests(root, home)).rejects.toThrow(misePath);
   });
 
   it("collects dotfiles recursively and excludes profile.yml and mise.toml", async () => {

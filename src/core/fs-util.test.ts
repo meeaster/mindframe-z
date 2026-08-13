@@ -357,11 +357,40 @@ describe("readJsoncObject", () => {
     expect(await readJsoncObject(path.join(dir, "absent.jsonc"))).toEqual({});
   });
 
-  it("defaults to an empty object when the content is not a plain object", async () => {
+  it("rejects valid non-object content with path context", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
     const file = path.join(dir, "array.jsonc");
     await writeFile(file, '["theme", "dim"]', "utf8");
-    expect(await readJsoncObject(file)).toEqual({});
+    await expect(readJsoncObject(file)).rejects.toThrow(file);
+  });
+
+  it("rejects malformed content with path context", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "broken.jsonc");
+    await writeFile(file, '{ "theme": ', "utf8");
+    await expect(readJsoncObject(file)).rejects.toThrow(file);
+  });
+});
+
+describe("readJsonObject", () => {
+  it("defaults to an empty object only when the file is missing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    expect(await readJsonObject(path.join(dir, "absent.json"))).toEqual({});
+  });
+
+  it.each([
+    ["malformed", "{ broken"],
+    ["non-object", "[]"]
+  ])("rejects %s content with path context", async (_case, content) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    const file = path.join(dir, "settings.json");
+    await writeFile(file, content, "utf8");
+    await expect(readJsonObject(file)).rejects.toThrow(file);
+  });
+
+  it("propagates non-ENOENT read failures with path context", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
+    await expect(readJsonObject(dir)).rejects.toThrow(dir);
   });
 });
 
@@ -391,10 +420,10 @@ describe("readTomlObject", () => {
     expect(await readTomlObject(path.join(dir, "absent.toml"))).toEqual({});
   });
 
-  it("defaults to an empty object on malformed TOML", async () => {
+  it("rejects malformed TOML with path context", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
     const file = path.join(dir, "broken.toml");
     await writeFile(file, "this is = = not valid toml", "utf8");
-    expect(await readTomlObject(file)).toEqual({});
+    await expect(readTomlObject(file)).rejects.toThrow(file);
   });
 });

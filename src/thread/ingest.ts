@@ -20,6 +20,8 @@ import {
   resolveSynthesisDefaults,
   withThreadMutation,
   writeSessionFile,
+  type ParsedModelId,
+  type SessionLedgerEntry,
   type ThreadDispatchRun
 } from "./storage.js";
 import {
@@ -69,6 +71,96 @@ export interface IngestResult {
   runId: string;
   totalCostUsd: number | null;
   publication: ThreadPublication;
+}
+
+interface SessionIngestContext {
+  paths: RuntimePaths;
+  threadDir: string;
+  manifest: ThreadManifest;
+  priorBySession: Map<string, ThreadManifest["sessions"][number]>;
+  changedSet: Set<string>;
+  strategy: "full" | "delta";
+  runner: AgentRunner;
+  runId: string;
+  gatherModel: ParsedModelId;
+  synthModel: ParsedModelId;
+  synthId: string;
+}
+
+interface SessionIngestResult {
+  dossier: { source: ThreadHarness; id: string; text: string };
+  entry: SessionLedgerEntry;
+  dispatches: ThreadDispatchRun[];
+  wrote: boolean;
+}
+
+async function ingestSession(
+  id: string,
+  context: SessionIngestContext
+): Promise<SessionIngestResult> {
+  const { source, bare } = parseSessionId(id);
+  const key = `${source}:${bare}`;
+  const prior = context.priorBySession.get(key);
+  const revisable =
+    context.strategy === "delta" &&
+    context.changedSet.has(key) &&
+    prior?.last_message_id !== undefined
+      ? await readSessionFile(context.threadDir, source, bare)
+      : undefined;
+  const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
+  const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
+  const transcriptPath = await resolveTranscriptPath(context.paths, source, bare);
+
+  const gather = await dispatch(context.runner, context.paths, context.runId, `${id}-gather`, {
+    role: "gather",
+    harness: context.gatherModel.harness,
+    model: context.gatherModel.model,
+    effort: context.gatherModel.effort,
+    persona: THREAD_PERSONAS.gather,
+    skills: ["thread-sessions"],
+    sessionSources: [source],
+    prompt: gatherPrompt(bare, context.manifest.charter, cursor, transcriptPath)
+  });
+  const watermark = await readWatermark(context.paths, { source, id: bare });
+  if (
+    classifyGather(gather.result.text, {
+      cursor,
+      watermark,
+      transcriptPath,
+      id,
+      runId: context.runId
+    }) === "short-circuit"
+  ) {
+    return {
+      dossier: { source, id: bare, text: gather.result.text },
+      entry: { id: bare, source, ...watermark },
+      dispatches: [gather.dispatch],
+      wrote: false
+    };
+  }
+
+  const synth = await dispatch(context.runner, context.paths, context.runId, `${id}-synthesize`, {
+    role: "synthesize",
+    harness: context.synthModel.harness,
+    model: context.synthModel.model,
+    effort: context.synthModel.effort,
+    persona: THREAD_PERSONAS.synthesize,
+    skills: ["thread-contract"],
+    prompt: synthesizePrompt(bare, context.manifest.charter, gather.result.text, priorFile)
+  });
+  await writeSessionFile(context.threadDir, source, bare, synth.result.text);
+  return {
+    dossier: { source, id: bare, text: gather.result.text },
+    entry: {
+      id: bare,
+      source,
+      title: parseSessionTitle(synth.result.text),
+      synthesizer: context.synthId,
+      ...watermark
+    },
+    dispatches: [gather.dispatch, synth.dispatch],
+    wrote: true
+  };
 }
 
 export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
@@ -140,92 +232,20 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     };
     await writeRunStatus(paths, status);
 
-    // Each session fans out into its own gather → synthesize pair and returns its
-    // own dispatches, so the shared ledger is assembled deterministically after the
-    // parallel work rather than mutated concurrently.
-    const perSession = await Promise.all(
-      workSet.map(async (id) => {
-        const { source, bare } = parseSessionId(id);
-        const key = `${source}:${bare}`;
-        const prior = priorBySession.get(key);
-        // Delta engages only for a session that genuinely grew (is in the changed set),
-        // has a stored cursor, and has a prior file to revise. A named-but-unchanged
-        // session has no messages past the cursor, so a delta gather would return an empty
-        // dossier and trip the abort guard below — those fall back to a full re-synthesis.
-        const revisable =
-          strategy === "delta" && changedSet.has(key) && prior?.last_message_id !== undefined
-            ? await readSessionFile(thread.dir, source, bare)
-            : undefined;
-        // A pre-Phases prior file also falls back to full: a delta gather only sees past
-        // the cursor, so revising it could only backfill a silently partial `## Phases`
-        // section. One full re-synthesis rewrites the file with complete phases; every
-        // later refresh delta-revises as normal.
-        const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
-        const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
-        // Resolve the session's exact mounted path host-side and hand it to gather so it
-        // reads a known file instead of rediscovering it — the discovery step is where a
-        // weak gather model wandered into its own ~/.claude and declared the session
-        // missing. A defined path also proves the session is host-readable (the guard
-        // below). Present OpenCode sessions keep today's sqlite-discovery path (no
-        // explicit path); only a hydrated cache copy gets one, for either harness.
-        const transcriptPath = await resolveTranscriptPath(paths, source, bare);
-
-        const gather = await dispatch(runner, paths, runId, `${id}-gather`, {
-          role: "gather",
-          harness: gatherModel.harness,
-          model: gatherModel.model,
-          effort: gatherModel.effort,
-          persona: THREAD_PERSONAS.gather,
-          skills: ["thread-sessions"],
-          sessionSources: [source],
-          prompt: gatherPrompt(bare, manifest.charter, cursor, transcriptPath)
-        });
-        // Capture the store's current tail once, host-side. It serves three readers below:
-        // it confirms the session is present (refusal guard), lets an irrelevant-delta
-        // short-circuit advance the ledger, and becomes this entry's watermark so a later
-        // ingest can tell whether it has grown. Read before synthesize — which never
-        // touches the store — so the guards see it; a store we can't read leaves it absent.
-        const watermark = await readWatermark(paths, { source, id: bare });
-        // Irrelevant-delta short-circuit (classifyGather threw on any fabricated dossier):
-        // skip synthesize and the file write, advance the watermark to the current tail so
-        // the same noise never re-triggers, and preserve the prior title/synthesizer
-        // (recordSessions keeps the fields this entry omits). The gather spend was real,
-        // so its dispatch and dossier are still recorded.
-        if (
-          classifyGather(gather.result.text, { cursor, watermark, transcriptPath, id, runId }) ===
-          "short-circuit"
-        ) {
-          return {
-            dossier: { source, id: bare, text: gather.result.text },
-            entry: { id: bare, source, ...watermark },
-            dispatches: [gather.dispatch],
-            wrote: false
-          };
-        }
-        const synth = await dispatch(runner, paths, runId, `${id}-synthesize`, {
-          role: "synthesize",
-          harness: synthModel.harness,
-          model: synthModel.model,
-          effort: synthModel.effort,
-          persona: THREAD_PERSONAS.synthesize,
-          skills: ["thread-contract"],
-          prompt: synthesizePrompt(bare, manifest.charter, gather.result.text, priorFile)
-        });
-        await writeSessionFile(thread.dir, source, bare, synth.result.text);
-        return {
-          dossier: { source, id: bare, text: gather.result.text },
-          entry: {
-            id: bare,
-            source,
-            title: parseSessionTitle(synth.result.text),
-            synthesizer: synthId,
-            ...watermark
-          },
-          dispatches: [gather.dispatch, synth.dispatch],
-          wrote: true
-        };
-      })
-    );
+    const sessionContext: SessionIngestContext = {
+      paths,
+      threadDir: thread.dir,
+      manifest,
+      priorBySession,
+      changedSet,
+      strategy,
+      runner,
+      runId,
+      gatherModel,
+      synthModel,
+      synthId
+    };
+    const perSession = await Promise.all(workSet.map((id) => ingestSession(id, sessionContext)));
 
     const dispatches: ThreadDispatchRun[] = perSession.flatMap((item) => item.dispatches);
     await recordSessions(

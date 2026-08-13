@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonFileContent } from "../core/fs-util.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
@@ -130,8 +130,35 @@ function rewriteSandboxPaths(content: string, replacements: readonly [string, st
 async function readOptional(file: string): Promise<string | undefined> {
   try {
     return await readFile(file, "utf8");
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw new Error(`Failed to read sandbox input at ${file}`, { cause: error });
+  }
+}
+
+function parseSandboxJson(file: string, content: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("Expected a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`Invalid generated sandbox JSON at ${file}`, { cause: error });
+  }
+}
+
+async function writeSeed(file: string, content: string): Promise<void> {
+  try {
+    await writeFile(file, content, { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST" && (await lstat(file)).isFile()) return;
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw new Error(`Failed to seed sandbox state at ${file}`, { cause: error });
+    }
+    throw new Error(`Failed to seed sandbox state at ${file}: existing path is not a file`, {
+      cause: error
+    });
   }
 }
 
@@ -206,11 +233,10 @@ async function writeSandboxRuntimeConfig(
   await renderSandboxReferencesIndex(runtimeDir, profile);
   await renderSandboxExtraFoldersIndex(paths, runtimeDir, profile, extraMounts);
 
-  const opencodeSource = await readOptional(
-    path.join(configsProfile, "opencode", "opencode.jsonc")
-  );
+  const opencodePath = path.join(configsProfile, "opencode", "opencode.jsonc");
+  const opencodeSource = await readOptional(opencodePath);
   const opencodeConfig = opencodeSource
-    ? (JSON.parse(rewriteSandboxPaths(opencodeSource, replacements)) as Record<string, unknown>)
+    ? parseSandboxJson(opencodePath, rewriteSandboxPaths(opencodeSource, replacements))
     : {
         instructions: [
           path.posix.join(containerMindframeDir, "AGENTS.md"),
@@ -237,14 +263,10 @@ async function writeSandboxRuntimeConfig(
   );
   await writeFile(path.join(runtimeDir, "claude", "CLAUDE.md"), claudeMd, "utf8");
 
-  const claudeSettingsSource = await readOptional(
-    path.join(configsProfile, "claude", "settings.json")
-  );
+  const claudeSettingsPath = path.join(configsProfile, "claude", "settings.json");
+  const claudeSettingsSource = await readOptional(claudeSettingsPath);
   const claudeSettings = claudeSettingsSource
-    ? (JSON.parse(rewriteSandboxPaths(claudeSettingsSource, replacements)) as Record<
-        string,
-        unknown
-      >)
+    ? parseSandboxJson(claudeSettingsPath, rewriteSandboxPaths(claudeSettingsSource, replacements))
     : {};
   await writeFile(
     path.join(runtimeDir, "claude", "settings.json"),
@@ -361,7 +383,7 @@ export async function ensureSandboxState(
   for (const dir of ["claude", "opencode-data", "opencode-state"]) {
     await mkdir(path.join(stateDir, dir), { recursive: true });
   }
-  await writeFile(path.join(stateDir, "claude.json"), "{}\n", { flag: "wx" }).catch(() => {});
+  await writeSeed(path.join(stateDir, "claude.json"), "{}\n");
 
   // Placeholder opencode ChatGPT-OAuth auth so opencode follows its Codex
   // request path; Agent Vault swaps the Bearer token and account header. The
@@ -375,11 +397,7 @@ export async function ensureSandboxState(
       accountId: "00000000-0000-0000-0000-000000000000"
     }
   };
-  await writeFile(
-    path.join(stateDir, "opencode-data", "auth.json"),
-    jsonFileContent(opencodeAuth),
-    { flag: "wx" }
-  ).catch(() => {});
+  await writeSeed(path.join(stateDir, "opencode-data", "auth.json"), jsonFileContent(opencodeAuth));
 
   if (credentialMode === "subscription") {
     // Placeholder subscription credential: keeps Claude Code in OAuth mode so it
@@ -394,11 +412,10 @@ export async function ensureSandboxState(
         subscriptionType: "pro"
       }
     };
-    await writeFile(
+    await writeSeed(
       path.join(stateDir, "claude", ".credentials.json"),
-      jsonFileContent(credentials),
-      { flag: "wx" }
-    ).catch(() => {});
+      jsonFileContent(credentials)
+    );
   }
 }
 

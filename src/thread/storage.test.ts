@@ -8,6 +8,7 @@ import { makeTempDir } from "../../tests/integration/support.js";
 import {
   defaultThreadStore,
   listThreads,
+  parseModelId,
   readSessionFile,
   readThreadManifest,
   readThreadRuns,
@@ -140,6 +141,24 @@ function thread(slug: string, store: string): ThreadManifest {
 }
 
 describe("thread storage", () => {
+  it("parses valid model IDs and rejects empty or malformed components", () => {
+    expect(parseModelId("claude-code:sonnet@high")).toEqual({
+      harness: "claude-code",
+      model: "sonnet",
+      effort: "high"
+    });
+    for (const id of [
+      "claude-code:@high",
+      "claude-code:sonnet@",
+      "claude-code: @high",
+      "claude-code:sonnet@ ",
+      "claude-code:sonnet@@high",
+      "claude-code:sonnet:fast@high"
+    ]) {
+      expect(() => parseModelId(id)).toThrow(/Invalid model ID/);
+    }
+  });
+
   it("composes stores from profile and machine config with machine precedence", async () => {
     const home = await makeTempDir();
     const resolved = resolveThreadStores(
