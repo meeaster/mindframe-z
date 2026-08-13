@@ -1,11 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import * as readline from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
 import { execa } from "execa";
-import { parse, stringify } from "smol-toml";
+import { stringify } from "smol-toml";
 import YAML from "yaml";
-import { readDirEntries } from "../core/fs-util.js";
+import { isPlainObject, readDirEntries, readTextFile, readTomlObject } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
 import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -67,15 +67,15 @@ async function readProfileYaml(
   targetProfile: string
 ): Promise<Record<string, unknown>> {
   const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
+  const content = await readTextFile(yamlPath);
+  if (content === undefined) return { name: targetProfile };
   try {
-    const parsed = YAML.parse(await readFile(yamlPath, "utf8")) as unknown;
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Missing or unreadable profile YAML starts from the minimum profile shape.
+    const parsed = YAML.parse(content) as unknown;
+    if (!isPlainObject(parsed)) throw new Error("Expected a YAML object");
+    return parsed;
+  } catch (error) {
+    throw new Error(`Invalid profile YAML at ${yamlPath}`, { cause: error });
   }
-  return { name: targetProfile };
 }
 
 async function writeProfileYaml(
@@ -94,13 +94,7 @@ function miseTomlSection(candidate: SyncCandidate): string {
 
 async function writeMiseToml(root: string, targetProfile: string, candidate: SyncCandidate) {
   const tomlPath = path.join(root, "profiles", targetProfile, "mise.toml");
-  let doc: Record<string, unknown> = {};
-  try {
-    const raw = await readFile(tomlPath, "utf8");
-    doc = parse(raw) as Record<string, unknown>;
-  } catch {
-    // File doesn't exist — start fresh
-  }
+  const doc = await readTomlObject(tomlPath);
   const section = miseTomlSection(candidate);
   ensureRecord(doc, section)[candidate.key] = candidate.value;
   await writeFile(tomlPath, stringify(doc), "utf8");

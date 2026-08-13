@@ -20,7 +20,8 @@ import {
   removeRenderedFiles,
   renderTarget,
   writeLocalFiles,
-  writeRenderedFiles
+  writeRenderedFiles,
+  type RenderResult
 } from "../core/render.js";
 import {
   ensureGitConfigInclude,
@@ -75,6 +76,77 @@ function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir
   if (!resolvedTarget) return false;
   const relative = path.relative(configsDir, resolvedTarget);
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+async function applyRenderedTarget(
+  paths: ReturnType<typeof createRuntimePaths>,
+  result: RenderResult,
+  options: Pick<ApplyOptions, "dryRun" | "noLink">,
+  rl: readline.Interface | null
+): Promise<void> {
+  if (!options.dryRun) {
+    await removeRenderedFiles(result.staleFiles ?? []);
+    await writeRenderedFiles(result.files);
+  }
+  for (const file of result.files) {
+    console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
+  }
+
+  if (result.localFiles && !options.noLink) {
+    if (!options.dryRun) {
+      await removeRenderedFiles(result.localStaleFiles ?? []);
+      await writeLocalFiles(result.localFiles);
+    }
+    for (const file of result.localFiles) {
+      console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
+    }
+  }
+  if (options.noLink) return;
+
+  for (const link of result.staleLinks ?? []) {
+    const status = await verifyLink(link);
+    if (
+      status.state !== "ok" &&
+      !staleManagedConfigTarget(status.resolvedTarget, paths.configsDir)
+    ) {
+      continue;
+    }
+    if (!options.dryRun) await unlink(link.linkPath);
+    console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
+  }
+
+  for (const link of result.links) {
+    const status = await verifyLink(link);
+    if (options.dryRun) {
+      const action =
+        status.state === "missing"
+          ? "would link"
+          : status.state === "ok"
+            ? "link ok"
+            : "would replace after backup";
+      console.log(`${action}\t${link.linkPath} -> ${link.targetPath}`);
+      continue;
+    }
+    if (status.state === "ok") {
+      console.log(`link ok\t${link.linkPath} -> ${link.targetPath}`);
+      continue;
+    }
+    if (status.state === "missing") {
+      await createLink(link);
+      console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+      continue;
+    }
+
+    const backupPath = backupPathFor(link.linkPath);
+    const autoReplace = staleManagedConfigTarget(status.resolvedTarget, paths.configsDir);
+    if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
+      console.log(`skipped\t${link.linkPath} (${status.detail})`);
+      continue;
+    }
+    await replaceWithBackup(link, backupPath);
+    console.log(`backed up\t${link.linkPath} -> ${backupPath}`);
+    console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+  }
 }
 
 export async function applyConfig(
@@ -132,63 +204,7 @@ export async function applyConfig(
       const result = await render(paths, profile, target, {
         includeGlobalSkillState: !options.noLink
       });
-      if (!options.dryRun) await removeRenderedFiles(result.staleFiles ?? []);
-      if (!options.dryRun) await writeRenderedFiles(result.files);
-      for (const file of result.files)
-        console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
-      if (result.localFiles && !options.noLink) {
-        if (!options.dryRun) await removeRenderedFiles(result.localStaleFiles ?? []);
-        if (!options.dryRun) await writeLocalFiles(result.localFiles);
-        for (const file of result.localFiles)
-          console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
-      }
-      if (!options.noLink) {
-        for (const link of result.staleLinks ?? []) {
-          const status = await verifyLink(link);
-          if (
-            status.state === "ok" ||
-            staleManagedConfigTarget(status.resolvedTarget, paths.configsDir)
-          ) {
-            if (!options.dryRun) await unlink(link.linkPath);
-            console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
-          }
-        }
-        for (const link of result.links) {
-          const status = await verifyLink(link);
-          if (options.dryRun) {
-            const action =
-              status.state === "missing"
-                ? "would link"
-                : status.state === "ok"
-                  ? "link ok"
-                  : "would replace after backup";
-            console.log(`${action}\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          if (status.state === "ok") {
-            console.log(`link ok\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          if (status.state === "missing") {
-            await createLink(link);
-            console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
-            continue;
-          }
-
-          const backupPath = backupPathFor(link.linkPath);
-          const autoReplace = staleManagedConfigTarget(status.resolvedTarget, paths.configsDir);
-          if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
-            console.log(`skipped\t${link.linkPath} (${status.detail})`);
-            continue;
-          }
-
-          await replaceWithBackup(link, backupPath);
-          console.log(`backed up\t${link.linkPath} -> ${backupPath}`);
-          console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
-        }
-      }
+      await applyRenderedTarget(paths, result, options, rl);
     }
     if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
       console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);

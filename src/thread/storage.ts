@@ -138,14 +138,25 @@ const FALLBACK_SYNTHESIZE = "claude-code:sonnet@high";
 export function parseModelId(id: string): ParsedModelId {
   const colon = id.indexOf(":");
   const at = id.lastIndexOf("@");
-  if (colon === -1 || at === -1 || at <= colon) {
+  if (
+    colon <= 0 ||
+    at <= colon + 1 ||
+    at === id.length - 1 ||
+    id.indexOf(":", colon + 1) !== -1 ||
+    id.indexOf("@") !== at
+  ) {
     throw new Error(`Invalid model ID: ${id} (expected harness:model@effort)`);
   }
   const harness = id.slice(0, colon);
   if (harness !== "claude-code" && harness !== "opencode") {
     throw new Error(`Unknown harness: ${harness}`);
   }
-  return { harness, model: id.slice(colon + 1, at), effort: id.slice(at + 1) };
+  const model = id.slice(colon + 1, at);
+  const effort = id.slice(at + 1);
+  if (model.trim() !== model || effort.trim() !== effort || !model || !effort) {
+    throw new Error(`Invalid model ID: ${id} (expected harness:model@effort)`);
+  }
+  return { harness, model, effort };
 }
 
 export function resolveSynthesisDefaults(

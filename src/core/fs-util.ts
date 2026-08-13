@@ -1,7 +1,7 @@
 import type { Dirent } from "node:fs";
 import { access, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parse as parseJsonc } from "jsonc-parser";
+import { parse as parseJsonc, printParseErrorCode, type ParseError } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
 
@@ -89,35 +89,44 @@ export function parseJsonlObjects(content: string): Record<string, unknown>[] {
   return records;
 }
 
-/**
- * Read a JSON object from disk, defaulting to an empty object when the file is
- * missing, unreadable, or does not parse to a plain object. Renderers use this
- * to merge managed settings into pre-existing local config without failing on a
- * missing or hand-broken file.
- */
-export async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
+async function readObjectFile(
+  file: string,
+  format: string,
+  parse: (content: string) => unknown
+): Promise<Record<string, unknown>> {
+  let content: string;
   try {
-    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
-    return isPlainObject(parsed) ? parsed : {};
-  } catch {
-    return {};
+    content = await readFile(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw new Error(`Failed to read ${format} object at ${file}`, { cause: error });
+  }
+
+  try {
+    const parsed = parse(content);
+    if (!isPlainObject(parsed))
+      throw new Error(`Expected a plain object, received ${typeof parsed}`);
+    return parsed;
+  } catch (error) {
+    throw new Error(`Failed to parse ${format} object at ${file}`, { cause: error });
   }
 }
 
-/**
- * Read a JSONC object from disk, defaulting to an empty object when the file is
- * missing, unreadable, or does not parse to a plain object. The comment-
- * tolerant counterpart to {@link readJsonObject}; the OpenCode sync path uses
- * it to inspect a hand-edited `opencode.jsonc` without failing on comments, a
- * missing file, or broken content.
- */
+/** Read an optional JSON object. Only a missing file defaults to an empty object. */
+export async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
+  return readObjectFile(filePath, "JSON", (content) => JSON.parse(content) as unknown);
+}
+
+/** Read an optional JSONC object. Only a missing file defaults to an empty object. */
 export async function readJsoncObject(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    const parsed = parseJsonc(await readFile(filePath, "utf8")) as unknown;
-    return isPlainObject(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+  return readObjectFile(filePath, "JSONC", (content) => {
+    const errors: ParseError[] = [];
+    const parsed = parseJsonc(content, errors, { allowTrailingComma: true }) as unknown;
+    if (errors.length > 0) {
+      throw new Error(errors.map((error) => printParseErrorCode(error.error)).join(", "));
+    }
+    return parsed;
+  });
 }
 
 /** Parse TOML text into a plain object, defaulting to an empty object when the
@@ -128,19 +137,9 @@ export function parseTomlObject(content: string): Record<string, unknown> {
   return isPlainObject(parsed) ? parsed : {};
 }
 
-/**
- * Read a TOML object from disk, defaulting to an empty object when the file is
- * missing, unreadable, or does not parse to a table. The TOML counterpart to
- * {@link readJsonObject}; the codex renderer and sync path use it to merge
- * managed config into a pre-existing local config.toml without failing on a
- * missing or hand-broken file.
- */
+/** Read an optional TOML object. Only a missing file defaults to an empty object. */
 export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
-  try {
-    return parseTomlObject(await readFile(file, "utf8"));
-  } catch {
-    return {};
-  }
+  return readObjectFile(file, "TOML", parseTomlObject);
 }
 
 /**

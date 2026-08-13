@@ -1,9 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "smol-toml";
 import YAML from "yaml";
 import { z } from "zod";
-import { pathExists, readDirEntries } from "./fs-util.js";
+import { pathExists, readDirEntries, readTomlObject } from "./fs-util.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
@@ -783,17 +782,15 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     const profile = await parseYaml(profileYaml, profileSchema);
 
     const miseToml = path.join(profileDir, "mise.toml");
-    if (await pathExists(miseToml)) {
-      try {
-        const toml = miseTomlSchema.parse(parse(await readFile(miseToml, "utf8")));
-        profile.mise.tools = toml.tools;
-        profile.mise.env = toml.env;
-        profile.mise.tool_alias = toml.tool_alias;
-        profile.mise.settings = toml.settings;
-        profile.mise.bootstrap = toml.bootstrap;
-      } catch {
-        // Malformed TOML — skip, keep YAML defaults
-      }
+    try {
+      const toml = miseTomlSchema.parse(await readTomlObject(miseToml));
+      profile.mise.tools = toml.tools;
+      profile.mise.env = toml.env;
+      profile.mise.tool_alias = toml.tool_alias;
+      profile.mise.settings = toml.settings;
+      profile.mise.bootstrap = toml.bootstrap;
+    } catch (error) {
+      throw new Error(`Invalid mise manifest at ${miseToml}`, { cause: error });
     }
 
     for (const [rel, content] of await readDotfileEntries(profileDir)) {

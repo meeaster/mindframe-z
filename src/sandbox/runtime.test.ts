@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { MachineManifest } from "../core/manifests.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedMcpServer, ResolvedProfile } from "../core/profile.js";
-import { resolveSandboxRuntimeInputs } from "./runtime.js";
+import { makeTempDir } from "../../tests/integration/support.js";
+import { ensureSandboxState, resolveSandboxRuntimeInputs } from "./runtime.js";
 
 function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
   return {
@@ -147,6 +148,60 @@ function remoteMcp(
 }
 
 describe("sandbox runtime inputs", () => {
+  it("reports malformed generated config with its source path", async () => {
+    const home = await makeTempDir();
+    const root = await makeTempDir();
+    const runtimePaths = paths(home, root);
+    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(configPath, '{"broken":', "utf8");
+    await mkdir(path.join(root, "instructions"), { recursive: true });
+    await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");
+
+    await expect(
+      resolveSandboxRuntimeInputs(runtimePaths, profile("subscription", { home, root }))
+    ).rejects.toThrow(configPath);
+  });
+
+  it("propagates non-missing generated config read failures with path context", async () => {
+    const home = await makeTempDir();
+    const root = await makeTempDir();
+    const runtimePaths = paths(home, root);
+    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
+    await mkdir(configPath, { recursive: true });
+    await mkdir(path.join(root, "instructions"), { recursive: true });
+    await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");
+
+    await expect(
+      resolveSandboxRuntimeInputs(runtimePaths, profile("subscription", { home, root }))
+    ).rejects.toThrow(configPath);
+  });
+
+  it("keeps exclusive sandbox state seeds idempotent", async () => {
+    const home = await makeTempDir();
+    const runtimePaths = paths(home);
+    const resolved = profile("subscription", { home });
+
+    await ensureSandboxState(runtimePaths, resolved, "subscription");
+    await ensureSandboxState(runtimePaths, resolved, "subscription");
+
+    expect(
+      await readFile(path.join(home, ".mindframe-z", "sandbox", "personal", "claude.json"), "utf8")
+    ).toBe("{}\n");
+  });
+
+  it("rejects a wrong-type sandbox seed collision", async () => {
+    const home = await makeTempDir();
+    const runtimePaths = paths(home);
+    const resolved = profile("subscription", { home });
+    const seedPath = path.join(home, ".mindframe-z", "sandbox", "personal", "claude.json");
+    await mkdir(seedPath, { recursive: true });
+
+    await expect(ensureSandboxState(runtimePaths, resolved, "subscription")).rejects.toThrow(
+      seedPath
+    );
+  });
+
   it("generates Agent Vault plus Bedrock signer services in Bedrock mode", async () => {
     const runtime = await resolveSandboxRuntimeInputs(paths(), profile("bedrock"), {
       workspace: "/tmp/project"
