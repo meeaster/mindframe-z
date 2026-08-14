@@ -7,10 +7,10 @@ import { stringify } from "smol-toml";
 import YAML from "yaml";
 import { isPlainObject, readDirEntries, readTextFile, readTomlObject } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
-import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import { activeOpenCodeSnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { syncMise } from "./mise.js";
-import { syncOpencode } from "./opencode.js";
+import { syncOpencode, syncOpencodeV2 } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
 import type { SyncCandidate } from "./types.js";
@@ -229,15 +229,17 @@ export async function runSync(
   const configsProfile = profileConfigsDir(paths, profile.name);
 
   const mcp = path.join(configsProfile, "mise", "config.toml");
-  const ocp = path.join(configsProfile, "opencode", "opencode.jsonc");
+  const ocp = path.join(activeOpenCodeSnapshotDir(paths, profile.name), "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
   const [miseResult, opencodeResult, claudeResult, codexResult, commandCandidates] =
     await Promise.all([
       syncMise(mcp, profile),
-      profile.agents.includes("opencode")
-        ? syncOpencode(ocp, profile)
+      profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
+        ? paths.activeOpenCodeRuntime === "v2"
+          ? syncOpencodeV2(ocp, profile)
+          : syncOpencode(ocp, profile)
         : Promise.resolve({ candidates: [] }),
       profile.agents.includes("claude-code")
         ? syncClaude(clp, profile)
@@ -245,7 +247,9 @@ export async function runSync(
       profile.agents.includes("codex")
         ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
         : Promise.resolve({ candidates: [] }),
-      profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
+      profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
+        ? syncCommands(paths, profile)
+        : Promise.resolve([])
     ]);
 
   const candidates = [

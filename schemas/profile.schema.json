@@ -410,7 +410,10 @@
     "opencode_v2": {
       "default": {
         "config": {},
+        "dependencies": {},
         "cli": {},
+        "plugins": [],
+        "tui_plugins": [],
         "commands": [],
         "agents": []
       },
@@ -424,6 +427,18 @@
           },
           "additionalProperties": {}
         },
+        "dependencies": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+          }
+        },
         "cli": {
           "default": {},
           "type": "object",
@@ -431,6 +446,20 @@
             "type": "string"
           },
           "additionalProperties": {}
+        },
+        "plugins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tui_plugins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "commands": {
           "default": [],

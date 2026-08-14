@@ -108,6 +108,7 @@ export async function renderDotfiles(
 ): Promise<RenderResult> {
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsDotfiles = path.join(configsProfile, "dotfiles");
+  const legacyOpencode2Path = path.join(configsDotfiles, ".local", "bin", "opencode2");
 
   const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => ({
     path: path.join(configsDotfiles, filename),
@@ -122,6 +123,13 @@ export async function renderDotfiles(
 
   return {
     files,
+    staleFiles: [legacyOpencode2Path],
+    staleLinks: [
+      {
+        linkPath: path.join(paths.home, ".local", "bin", "opencode2"),
+        targetPath: legacyOpencode2Path
+      }
+    ],
     ...(hasManagedZsh(profile)
       ? { localFiles: [{ path: zshSecretsFile(paths), content: "", ifMissing: true }] }
       : {}),

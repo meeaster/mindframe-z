@@ -129,6 +129,8 @@ export interface ResolvedProfile {
   enabledAgents: string[];
   enabledOpenCodeV2Commands: string[];
   enabledOpenCodeV2Agents: string[];
+  enabledOpenCodeV2Plugins?: string[];
+  enabledOpenCodeV2TuiPlugins?: string[];
   mcpServers: ResolvedMcpServer[];
   extraFolders: ExtraFolder[];
 }
@@ -341,6 +343,20 @@ function normalizeProfile(
   const opencodeV2 = options.includeOpenCodeV2
     ? {
         ...profile.opencode_v2,
+        plugins: normalizeSourceNames(
+          home,
+          profile.opencode_v2.plugins,
+          sources.plugins,
+          "opencode plugin",
+          "OpenCode V2 plugin"
+        ),
+        tui_plugins: normalizeSourceNames(
+          home,
+          profile.opencode_v2.tui_plugins,
+          sources.plugins,
+          "opencode TUI plugin",
+          "OpenCode V2 TUI plugin"
+        ),
         commands: normalizeSourceNames(
           home,
           profile.opencode_v2.commands,
@@ -419,7 +435,10 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     },
     opencode_v2: {
       config: deepMerge(base.opencode_v2.config, child.opencode_v2.config),
+      dependencies: { ...base.opencode_v2.dependencies, ...child.opencode_v2.dependencies },
       cli: deepMerge(base.opencode_v2.cli, child.opencode_v2.cli),
+      plugins: dedupe([...base.opencode_v2.plugins, ...child.opencode_v2.plugins]),
+      tui_plugins: dedupe([...base.opencode_v2.tui_plugins, ...child.opencode_v2.tui_plugins]),
       commands: dedupe([...base.opencode_v2.commands, ...child.opencode_v2.commands]),
       agents: dedupe([...base.opencode_v2.agents, ...child.opencode_v2.agents])
     },
@@ -639,7 +658,8 @@ export const openCodeV2ManagedConfigFields = [
   "instructions",
   "mcp",
   "skills",
-  "permissions"
+  "permissions",
+  "plugins"
 ] as const;
 
 export function assertOpenCodeV2ConfigOwned(profile: ProfileManifest): void {
@@ -666,7 +686,9 @@ export async function resolveProfile(
   });
   const evaluateAgents = options.evaluateAgents ?? preliminary.profile.agents;
   const includeOpenCode = evaluateAgents.includes("opencode");
-  const includeOpenCodeV2 = evaluateAgents.includes("opencode-v2");
+  const includeOpenCodeV2 =
+    evaluateAgents.includes("opencode-v2") ||
+    (paths.activeOpenCodeRuntime === "v2" && evaluateAgents.includes("opencode"));
   const profileBuild =
     includeOpenCode || includeOpenCodeV2
       ? await resolveProfileByName(manifests, name, { includeOpenCode, includeOpenCodeV2 })
@@ -697,6 +719,10 @@ export async function resolveProfile(
   const enabledAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
   const enabledOpenCodeV2Commands = includeOpenCodeV2 ? dedupe(profile.opencode_v2.commands) : [];
   const enabledOpenCodeV2Agents = includeOpenCodeV2 ? dedupe(profile.opencode_v2.agents) : [];
+  const enabledOpenCodeV2Plugins = includeOpenCodeV2 ? dedupe(profile.opencode_v2.plugins) : [];
+  const enabledOpenCodeV2TuiPlugins = includeOpenCodeV2
+    ? dedupe(profile.opencode_v2.tui_plugins)
+    : [];
   const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
 
   const extraFolders: ExtraFolder[] = (() => {
@@ -722,6 +748,8 @@ export async function resolveProfile(
     enabledAgents,
     enabledOpenCodeV2Commands,
     enabledOpenCodeV2Agents,
+    enabledOpenCodeV2Plugins,
+    enabledOpenCodeV2TuiPlugins,
     mcpServers,
     extraFolders
   };

@@ -29,6 +29,7 @@ export interface RuntimePaths {
   configsDir: string;
   opencodeConfigDir: string;
   opencodeV2ConfigDir: string;
+  activeOpenCodeRuntime?: "v1" | "v2";
   claudeDir: string;
   codexDir: string;
   piDir: string;
@@ -85,6 +86,7 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   const root = resolveRoot(options.root, home);
   const workRoot = path.join(mindframeZDir(home), "work", "v1");
   const configuredWorkUnitsRoot = options.workUnitsRoot ?? machineConfig(home)?.work.units_root;
+  const activeOpenCodeRuntime = machineConfig(home)?.opencode.runtime ?? "v1";
   return {
     root,
     home,
@@ -109,6 +111,7 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
         home
       )
     ),
+    activeOpenCodeRuntime,
     claudeDir: path.resolve(
       expandHome(
         options.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
@@ -136,6 +139,20 @@ export async function ensureDir(dir: string): Promise<void> {
 
 export function profileConfigsDir(paths: RuntimePaths, profileName: string): string {
   return path.join(paths.configsDir, profileName);
+}
+
+export function opencodeV1SnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "opencode-v1");
+}
+
+export function opencodeV2SnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "opencode-v2");
+}
+
+export function activeOpenCodeSnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return paths.activeOpenCodeRuntime === "v2"
+    ? opencodeV2SnapshotDir(paths, profileName)
+    : opencodeV1SnapshotDir(paths, profileName);
 }
 
 export function executorDataDir(): string {

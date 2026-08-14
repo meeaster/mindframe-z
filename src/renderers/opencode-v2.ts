@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   expandHome,
   extraFoldersIndexPath,
+  opencodeV1SnapshotDir,
   opencodeV2SkillSnapshotDir,
   profileConfigsDir,
   referenceIndexPath,
@@ -18,7 +19,27 @@ import { jsonFileContent } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
+import { collectPluginFiles } from "./opencode.js";
 import { openCodeV2ExecutorEntry } from "./executor.js";
+
+export function mergeOpenCodeV2CliPlugins(
+  cli: Record<string, unknown>,
+  managedEntries: readonly string[],
+  previouslyManagedEntries: readonly string[]
+): Record<string, unknown> {
+  const plugins = Array.isArray(cli.plugins) ? cli.plugins : [];
+  const preserved = plugins.filter(
+    (entry) => typeof entry !== "string" || !previouslyManagedEntries.includes(entry)
+  );
+  const nextPlugins = [...preserved, ...managedEntries];
+
+  if (plugins.length === 0 && managedEntries.length === 0 && !Array.isArray(cli.plugins)) return cli;
+  if (nextPlugins.length === 0) {
+    const { plugins: _, ...withoutPlugins } = cli;
+    return withoutPlugins;
+  }
+  return { ...cli, plugins: nextPlugins };
+}
 
 interface NativePermissionRule {
   action: string;
@@ -92,7 +113,7 @@ function nativePermissions(paths: RuntimePaths, profile: ResolvedProfile): Nativ
 
   rules.push({
     action: "read",
-    resource: path.join(paths.opencodeV2ConfigDir, "service.json"),
+    resource: path.join(paths.opencodeConfigDir, "service.json"),
     effect: "deny"
   });
 
@@ -107,32 +128,34 @@ export async function renderOpenCodeV2(
 
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpenCodeV2 = path.join(configsProfile, "opencode-v2");
+  const pluginsPath = path.join(configsOpenCodeV2, "plugins");
+  const tuiPluginsPath = path.join(pluginsPath, "tui");
   const configPath = path.join(configsOpenCodeV2, "opencode.jsonc");
-  const cliPath = path.join(configsOpenCodeV2, "cli.json");
+  const packagePath = path.join(configsOpenCodeV2, "package.json");
   const commandsPath = path.join(configsOpenCodeV2, "commands");
   const agentsPath = path.join(configsOpenCodeV2, "agents");
   const skillsPath = opencodeV2SkillSnapshotDir(paths, profile.name);
   const instructions = [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
   if (profile.extraFolders.length > 0) instructions.push(extraFoldersIndexPath(paths));
 
-  const omittedPlugins = [
-    ...profile.profile.opencode.plugins.map((name) => `plugin:${name}`),
-    ...profile.profile.opencode.tui_plugins.map((name) => `tui-plugin:${name}`)
-  ];
-  if (omittedPlugins.length > 0) {
-    console.warn(
-      `warning\tOpenCode V1 plugins omitted from OpenCode V2 render: ${omittedPlugins.join(", ")}`
-    );
-  }
-  if (Object.keys(profile.profile.opencode.tui).length > 0) {
-    console.warn("warning\tOpenCode V1 TUI config omitted from OpenCode V2 render");
-  }
-  if (Object.keys(profile.profile.opencode.dependencies).length > 0) {
-    console.warn("warning\tOpenCode V1 dependencies omitted from OpenCode V2 render");
-  }
-  if (profile.profile.opencode.delegate_general !== undefined) {
-    console.warn("warning\tOpenCode V1 delegate_general omitted from OpenCode V2 render");
-  }
+  const pluginResult = await collectPluginFiles(
+    paths.root,
+    (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
+    pluginsPath,
+    profile.enabledOpenCodeV2Plugins ?? [],
+    true,
+    false,
+    "v2"
+  );
+  const tuiPluginResult = await collectPluginFiles(
+    paths.root,
+    (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
+    tuiPluginsPath,
+    profile.enabledOpenCodeV2TuiPlugins ?? [],
+    true,
+    false,
+    "v2"
+  );
 
   const commandFiles = await collectOpenCodeMarkdownFiles(
     (name) => profile.sources.commands.get(name)?.root ?? paths.root,
@@ -151,33 +174,104 @@ export async function renderOpenCodeV2(
     $schema: "https://opencode.ai/config.json",
     instructions,
     mcp: nativeMcp(profile, paths),
+    ...(pluginResult.entries.length > 0 ? { plugins: pluginResult.entries } : {}),
     skills: [skillsPath],
     permissions: nativePermissions(paths, profile)
   };
-  const hasCli = Object.keys(profile.profile.opencode_v2.cli).length > 0;
+  const hasDependencies = Object.keys(profile.profile.opencode_v2.dependencies).length > 0;
   const files: RenderResult["files"] = [
     ...commandFiles,
     ...agentFiles,
     { path: configPath, content: jsonFileContent(config) },
-    ...(hasCli
-      ? [{ path: cliPath, content: jsonFileContent(profile.profile.opencode_v2.cli) }]
+           ...(hasDependencies
+             ? [
+                 {
+            path: packagePath,
+            content: jsonFileContent({ dependencies: profile.profile.opencode_v2.dependencies })
+          }
+        ]
       : [])
   ];
-  const links: RenderResult["links"] = [
-    { linkPath: path.join(paths.opencodeV2ConfigDir, "opencode.jsonc"), targetPath: configPath },
-    ...(hasCli
-      ? [{ linkPath: path.join(paths.opencodeV2ConfigDir, "cli.json"), targetPath: cliPath }]
-      : []),
-    { linkPath: path.join(paths.opencodeV2ConfigDir, "commands"), targetPath: commandsPath },
-    { linkPath: path.join(paths.opencodeV2ConfigDir, "agents"), targetPath: agentsPath }
-  ];
+  const links: RenderResult["links"] =
+    paths.activeOpenCodeRuntime === "v2"
+      ? [
+          {
+            linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
+            targetPath: configPath
+          },
+          ...(hasDependencies
+            ? [
+                {
+                  linkPath: path.join(paths.opencodeConfigDir, "package.json"),
+                  targetPath: packagePath
+                }
+               ]
+             : []),
+           { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
+           { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
+           {
+             linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
+             targetPath: tuiPluginsPath
+          }
+        ]
+      : [];
 
   return {
     files,
+    localFiles: [
+      ...new Map(
+        [...pluginResult.files, ...tuiPluginResult.files].map((file) => [file.path, file])
+      ).values()
+    ],
+    localStaleFiles: [pluginsPath],
+    ...(paths.activeOpenCodeRuntime === "v2"
+      ? {
+           cliPlugins: {
+             path: path.join(paths.opencodeConfigDir, "cli.json"),
+             entries: tuiPluginResult.entries,
+             registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
+             settings: profile.profile.opencode_v2.cli
+           }
+        }
+      : {}),
     links,
-    staleFiles: hasCli ? [] : [cliPath],
-    staleLinks: hasCli
-      ? []
-      : [{ linkPath: path.join(paths.opencodeV2ConfigDir, "cli.json"), targetPath: cliPath }]
+    staleLinks: [
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "cli.json"),
+        targetPath: path.join(configsOpenCodeV2, "cli.json")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "tui.json"),
+        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "tui.json")
+      },
+      ...(!hasDependencies
+        ? [
+            {
+              linkPath: path.join(paths.opencodeConfigDir, "package.json"),
+              targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "package.json")
+            }
+          ]
+        : []),
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "delegate-general.json"),
+        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "delegate-general.json")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "commands"),
+        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "commands")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "agents"),
+        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "agents")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "node_modules"),
+        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "node_modules")
+      },
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "plugins"),
+        targetPath: path.join(paths.configsDir, profile.name, "opencode-v1", "plugins")
+      }
+    ]
   };
 }

@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
@@ -151,6 +151,21 @@ describe("dotfiles integration", () => {
     const rendered = configsPath(home, "personal", "dotfiles", ".local", "bin", "example");
     expect((await stat(rendered)).mode & 0o111).toBe(0o111);
     expect((await stat(path.join(home, ".local", "bin", "example"))).mode & 0o111).toBe(0o111);
+  });
+
+  it("removes the retired opencode2 wrapper", async () => {
+    const legacyPath = path.join(root, "profiles", "base", ".local", "bin", "opencode2");
+    await mkdir(path.dirname(legacyPath), { recursive: true });
+    await writeFile(legacyPath, "#!/bin/sh\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    await unlink(legacyPath);
+    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
+
+    await expect(
+      readFile(path.join(home, ".local", "bin", "opencode2"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("renders and links managed .zshrc with guarded local includes", async () => {

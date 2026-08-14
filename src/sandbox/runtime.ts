@@ -2,7 +2,12 @@ import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonFileContent } from "../core/fs-util.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
-import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import {
+  activeOpenCodeSnapshotDir,
+  expandHome,
+  profileConfigsDir,
+  type RuntimePaths
+} from "../core/paths.js";
 import {
   executorMcpServers,
   filterMcpForTarget,
@@ -233,7 +238,7 @@ async function writeSandboxRuntimeConfig(
   await renderSandboxReferencesIndex(runtimeDir, profile);
   await renderSandboxExtraFoldersIndex(paths, runtimeDir, profile, extraMounts);
 
-  const opencodePath = path.join(configsProfile, "opencode", "opencode.jsonc");
+  const opencodePath = path.join(activeOpenCodeSnapshotDir(paths, profile.name), "opencode.jsonc");
   const opencodeSource = await readOptional(opencodePath);
   const opencodeConfig = opencodeSource
     ? parseSandboxJson(opencodePath, rewriteSandboxPaths(opencodeSource, replacements))
@@ -289,6 +294,7 @@ function renderedMounts(
   extraMounts: readonly SandboxMount[]
 ): SandboxMount[] {
   const configsProfile = profileConfigsDir(paths, profile.name);
+  const activeOpenCode = activeOpenCodeSnapshotDir(paths, profile.name);
   const dotfiles = profile.profile.dotfiles;
   const mounts: SandboxMount[] = [
     {
@@ -312,12 +318,12 @@ function renderedMounts(
       mode: "ro"
     },
     {
-      source: path.join(configsProfile, "opencode", "commands"),
+      source: path.join(activeOpenCode, "commands"),
       target: path.join(containerHome, ".config", "opencode", "commands"),
       mode: "ro"
     },
     {
-      source: path.join(configsProfile, "opencode", "plugins"),
+      source: path.join(activeOpenCode, "plugins"),
       target: path.join(containerHome, ".config", "opencode", "plugins"),
       mode: "ro"
     },

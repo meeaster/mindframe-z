@@ -77,7 +77,15 @@ function profile(root = "/tmp/home"): ResolvedProfile {
         commands: [],
         agents: []
       },
-      opencode_v2: { config: {}, cli: {}, commands: [], agents: [] },
+      opencode_v2: {
+        config: {},
+        dependencies: {},
+        cli: {},
+        plugins: [],
+        tui_plugins: [],
+        commands: [],
+        agents: []
+      },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },

@@ -8,6 +8,7 @@ import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
 import {
+  activeOpenCodeSnapshotDir,
   createRuntimePaths,
   infraTargetList,
   machineConfigPath,
@@ -330,17 +331,26 @@ async function opencodeSmoke(options: {
   profile?: string | undefined;
 }): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const profile = await resolveProfile(paths, options.profile);
-  await applyConfig({ ...options, agent: "opencode", target: "all", noLink: true });
-  const isolated = `${paths.home}/.mindframe-z-opencode-smoke`;
+  const runtime = paths.activeOpenCodeRuntime ?? "v1";
+  const agent = runtime === "v2" ? "opencode-v2" : "opencode";
+  const binary = runtime === "v2" ? "opencode2" : "opencode";
+  const profile = await resolveProfile(paths, options.profile, { evaluateAgents: [agent] });
+  await applyConfig({ ...options, agent, target: "all", noLink: true });
+  const isolated = `${paths.home}/.mindframe-z-opencode-${runtime}-smoke`;
   await mkdir(isolated, { recursive: true });
-  const configsOpencode = path.join(paths.configsDir, profile.name, "opencode");
+  const configsOpencode = activeOpenCodeSnapshotDir(paths, profile.name);
   try {
-    const result = await execa("opencode", ["debug", "config"], {
+    const result = await execa(binary, ["debug", "config"], {
       cwd: paths.root,
       env: {
         ...process.env,
         OPENCODE_CONFIG_DIR: configsOpencode,
+        ...(runtime === "v2"
+          ? {
+              OPENCODE_TEST_HOME: paths.home,
+              OPENCODE_DB: path.join(isolated, "data", "opencode-v2.db")
+            }
+          : {}),
         OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
         XDG_CONFIG_HOME: `${isolated}/config`,
         XDG_DATA_HOME: `${isolated}/data`,
@@ -352,7 +362,7 @@ async function opencodeSmoke(options: {
   } catch (error) {
     const code = (error as { code?: string }).code;
     if (code === "ENOENT") {
-      console.log("opencode not found; skipped smoke check");
+      console.log(`${binary} not found; skipped smoke check`);
       return;
     }
     throw error;

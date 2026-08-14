@@ -92,6 +92,11 @@ describe("apply integration", () => {
   });
 
   it("renders OpenCode V2 independently with native config and skill paths", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      "profile: personal\nopencode:\n  runtime: v2\n",
+      "utf8"
+    );
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
@@ -122,7 +127,7 @@ describe("apply integration", () => {
     const config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
     const mcp = config.mcp as { servers: Record<string, Record<string, unknown>> };
 
-    expect(result.stderr).toContain("OpenCode V1 plugins omitted from OpenCode V2 render");
+    expect(result.stderr).not.toContain("OpenCode V1 plugins omitted from OpenCode V2 render");
     expect(config.model).toBe("v2/test-model");
     expect(config.plugin).toBeUndefined();
     expect(mcp.servers.context7).toMatchObject({
@@ -137,15 +142,82 @@ describe("apply integration", () => {
         "utf8"
       )
     ).toContain("Run the test command.");
-    await expect(
-      realpath(path.join(home, ".config", "opencode-v2", "opencode.jsonc"))
-    ).resolves.toBe(configPath);
+    await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
+      configPath
+    );
     await expect(
       access(configsPath(home, "personal", "opencode", "opencode.jsonc"))
     ).rejects.toMatchObject({
       code: "ENOENT"
     });
   });
+
+  it("merges and removes only MFZ-owned OpenCode V2 TUI plugins from CLI settings", async () => {
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      "profile: personal\nopencode:\n  runtime: v2\n",
+      "utf8"
+    );
+    await mkdir(path.join(root, "opencode", "plugins", "session-cost-tui", "v2"), {
+      recursive: true
+    });
+    await writeFile(
+      path.join(root, "opencode", "plugins", "session-cost-tui", "v2", "package.json"),
+      '{"type":"module"}\n',
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "opencode", "plugins", "session-cost-tui", "v2", "index.tsx"),
+      "export default {}\n",
+      "utf8"
+    );
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const profile = (await readFile(profilePath, "utf8"))
+      .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
+      .replace(
+        "claude:\n",
+        ["opencode_v2:", "  tui_plugins:", "    - session-cost-tui", "", "claude:", ""].join(
+          "\n"
+        )
+      );
+    await writeFile(profilePath, profile, "utf8");
+    const cliPath = path.join(home, ".config", "opencode", "cli.json");
+    await mkdir(path.dirname(cliPath), { recursive: true });
+    const userPlugin = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "user-plugin")}`;
+    await writeFile(
+      cliPath,
+      JSON.stringify({
+        theme: "dark",
+        plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
+      }),
+      "utf8"
+    );
+
+    const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    const managed = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui")}`;
+    expect(applied.stdout).toContain(`merged\t${cliPath} plugins`);
+    expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
+      theme: "dark",
+      plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin, managed]
+    });
+    expect(
+      JSON.parse(
+        await readFile(path.join(home, ".mindframe-z", "opencode-v2-cli-plugins.json"), "utf8")
+      )
+    ).toEqual({ version: 1, entries: [managed] });
+    expect((await lstat(cliPath)).isSymbolicLink()).toBe(false);
+
+    await writeFile(
+      path.join(home, ".mindframe-z", "config.yml"),
+      "profile: personal\nopencode:\n  runtime: v1\n",
+      "utf8"
+    );
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
+      theme: "dark",
+      plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
+    });
+  }, 15_000);
 
   it("smokes OpenCode V2 with an isolated binary environment", async () => {
     const binDir = path.join(home, "bin");

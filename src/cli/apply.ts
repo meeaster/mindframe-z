@@ -33,6 +33,14 @@ import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../cor
 import { writeExtraFoldersIndex, writeReferenceIndex } from "../ref-store/references.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
+import {
+  jsonFileContent,
+  pathExists,
+  readJsonObject,
+  writeJsonFileAtomic,
+  writeTextFile
+} from "../core/fs-util.js";
+import { mergeOpenCodeV2CliPlugins } from "../renderers/opencode-v2.js";
 
 export interface ApplyOptions {
   root?: string | undefined;
@@ -115,6 +123,29 @@ async function applyRenderedTarget(
     console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
   }
 
+  if (result.cliPlugins) {
+    const exists = await pathExists(result.cliPlugins.path);
+    const registry = await readJsonObject(result.cliPlugins.registryPath);
+    const previousEntries = Array.isArray(registry.entries)
+      ? registry.entries.filter((entry): entry is string => typeof entry === "string")
+      : [];
+    if (exists || result.cliPlugins.entries.length > 0) {
+      const cli = await readJsonObject(result.cliPlugins.path);
+      const merged = mergeOpenCodeV2CliPlugins(
+        { ...cli, ...result.cliPlugins.settings },
+        result.cliPlugins.entries,
+        previousEntries
+      );
+      if (!options.dryRun) await writeTextFile(result.cliPlugins.path, jsonFileContent(merged));
+      console.log(`${options.dryRun ? "would merge" : "merged"}\t${result.cliPlugins.path} plugins`);
+    }
+    if (!options.dryRun && (previousEntries.length > 0 || result.cliPlugins.entries.length > 0))
+      await writeJsonFileAtomic(result.cliPlugins.registryPath, {
+        version: 1,
+        entries: result.cliPlugins.entries
+      });
+  }
+
   for (const link of result.links) {
     const status = await verifyLink(link);
     if (options.dryRun) {
@@ -154,12 +185,19 @@ export async function applyConfig(
   dependencies: ApplyDependencies = {}
 ): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
+  const includeActiveV2 = options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
   const profile = await resolveProfile(
     paths,
     options.profile,
-    options.agent === "all" ? undefined : { evaluateAgents: [options.agent] }
+    options.agent === "all"
+      ? includeActiveV2
+        ? { evaluateAgents: ["opencode-v2"] }
+        : undefined
+      : { evaluateAgents: [options.agent] }
   );
   const selectedAgents = agentList(options.agent, profile.agents);
+  if (includeActiveV2 && !selectedAgents.includes("opencode-v2"))
+    selectedAgents.push("opencode-v2");
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
   const selectedExecutorTarget = selectedAgents.some((target) => target !== "pi");

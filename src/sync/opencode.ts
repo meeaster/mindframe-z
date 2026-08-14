@@ -19,3 +19,22 @@ export async function syncOpencode(
 
   return { candidates: unmanagedCandidates(existing, "opencode", "opencode.config", managedKeys) };
 }
+
+export async function syncOpencodeV2(
+  configPath: string,
+  profile: ResolvedProfile
+): Promise<SyncResult> {
+  const existing = await readJsoncObject(configPath);
+  const managedKeys = new Set([
+    "$schema",
+    "instructions",
+    "mcp",
+    "plugins",
+    "skills",
+    "permissions",
+    ...Object.keys(profile.profile.opencode_v2.config)
+  ]);
+  return {
+    candidates: unmanagedCandidates(existing, "opencode-v2", "opencode_v2.config", managedKeys)
+  };
+}

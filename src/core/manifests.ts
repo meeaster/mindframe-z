@@ -107,6 +107,7 @@ const profileSkillConfigSchema = z
 export const referenceSchema = z.object({
   name: z.string().min(1),
   url: z.string().min(1),
+  ref: z.string().min(1).optional(),
   description: z.string().default("")
 });
 
@@ -501,7 +502,10 @@ const opencodeConfigSchema = z.object({
 
 const opencodeV2ConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
+  dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: z.record(z.string(), z.unknown()).default({}),
+  plugins: z.array(z.string()).default([]),
+  tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([])
 });
@@ -550,7 +554,10 @@ export const profileSchema = z
     }),
     opencode_v2: opencodeV2ConfigSchema.default({
       config: {},
+      dependencies: {},
       cli: {},
+      plugins: [],
+      tui_plugins: [],
       commands: [],
       agents: []
     }),
@@ -606,7 +613,10 @@ export const machineSchema = z.object({
     })
     .default({}),
   archives: z.array(archiveSchema).default([]),
-  opencode: z.record(z.string(), z.unknown()).default({}),
+  opencode: z
+    .object({ runtime: z.enum(["v1", "v2"]).optional() })
+    .catchall(z.unknown())
+    .default({ runtime: "v1" }),
   claude: z.record(z.string(), z.unknown()).default({})
 });
 

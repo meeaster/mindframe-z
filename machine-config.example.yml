@@ -45,6 +45,7 @@ references_dir: ~/.mindframe-z/references
 #     edit: deny
 
 # opencode:
+#   runtime: v1 # or v2; selects the complete snapshot linked to ~/.config/opencode
 #   permission:
 #     websearch: allow
 #     external_directory:

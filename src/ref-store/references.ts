@@ -48,18 +48,28 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
   await mkdir(profile.referencesDir, { recursive: true });
   try {
     await access(destination);
-    await updateReference(destination);
+    await updateReference(destination, ref.ref);
     return `updated ${name} at ${destination}`;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      await execa("git", ["clone", ref.url, destination], { stdio: "pipe" });
+      const cloneArgs = ["clone"];
+      if (ref.ref) cloneArgs.push("--branch", ref.ref);
+      cloneArgs.push(ref.url, destination);
+      await execa("git", cloneArgs, { stdio: "pipe" });
       return `cloned ${name} to ${destination}`;
     }
     throw error;
   }
 }
 
-async function updateReference(destination: string): Promise<void> {
+async function updateReference(destination: string, ref?: string): Promise<void> {
+  if (ref) {
+    await execa("git", ["-C", destination, "fetch", "origin", ref], { stdio: "pipe" });
+    await execa("git", ["-C", destination, "checkout", "--force", "-B", ref, `origin/${ref}`], {
+      stdio: "pipe"
+    });
+    return;
+  }
   try {
     await pullReference(destination);
   } catch (error) {

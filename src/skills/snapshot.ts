@@ -98,7 +98,7 @@ function linkDirectories(paths: RuntimePaths, targets: readonly SkillTarget[]): 
         target === "claude-code"
           ? path.join(paths.claudeDir, "skills")
           : target === "opencode-v2"
-            ? path.join(paths.opencodeV2ConfigDir, "skills")
+            ? path.join(paths.opencodeConfigDir, "skills")
             : path.join(paths.home, ".agents", "skills")
       )
     )
@@ -107,7 +107,7 @@ function linkDirectories(paths: RuntimePaths, targets: readonly SkillTarget[]): 
 
 async function skillLinkDir(paths: RuntimePaths, target: SkillTarget): Promise<string> {
   if (target === "claude-code") return path.join(paths.claudeDir, "skills");
-  if (target === "opencode-v2") return path.join(paths.opencodeV2ConfigDir, "skills");
+  if (target === "opencode-v2") return path.join(paths.opencodeConfigDir, "skills");
   return path.join(paths.home, ".agents", "skills");
 }
 
@@ -430,7 +430,7 @@ function selectedLinkPlans(
         target === "claude-code"
           ? paths.claudeDir
           : target === "opencode-v2"
-            ? paths.opencodeV2ConfigDir
+            ? paths.opencodeConfigDir
             : path.join(paths.home, ".agents");
       links.push({
         linkPath: path.join(directory, "skills", name),
@@ -480,7 +480,7 @@ async function syncSkillSnapshotGroup(
   });
   const universalDir = path.join(paths.home, ".agents", "skills") + path.sep;
   const claudeDir = path.join(paths.claudeDir, "skills") + path.sep;
-  const opencodeV2Dir = path.join(paths.opencodeV2ConfigDir, "skills") + path.sep;
+  const opencodeV2Dir = path.join(paths.opencodeConfigDir, "skills") + path.sep;
   const useUniversal = selectedTargets.includes("opencode") || selectedTargets.includes("codex");
   const useOpenCodeV2 = selectedTargets.includes("opencode-v2");
   const prepared = {

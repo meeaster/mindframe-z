@@ -28,6 +28,7 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
 }
 
 export function configsPath(home: string, ...segments: string[]): string {
+  if (segments[1] === "opencode") segments[1] = "opencode-v1";
   return path.join(home, ".mindframe-z", "configs", ...segments);
 }
 

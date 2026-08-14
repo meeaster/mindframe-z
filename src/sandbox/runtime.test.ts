@@ -68,7 +68,15 @@ function profile(
         commands: [],
         agents: []
       },
-      opencode_v2: { config: {}, cli: {}, commands: [], agents: [] },
+      opencode_v2: {
+        config: {},
+        dependencies: {},
+        cli: {},
+        plugins: [],
+        tui_plugins: [],
+        commands: [],
+        agents: []
+      },
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
@@ -152,7 +160,12 @@ describe("sandbox runtime inputs", () => {
     const home = await makeTempDir();
     const root = await makeTempDir();
     const runtimePaths = paths(home, root);
-    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
+    const configPath = path.join(
+      runtimePaths.configsDir,
+      "personal",
+      "opencode-v1",
+      "opencode.jsonc"
+    );
     await mkdir(path.dirname(configPath), { recursive: true });
     await writeFile(configPath, '{"broken":', "utf8");
     await mkdir(path.join(root, "instructions"), { recursive: true });
@@ -167,7 +180,12 @@ describe("sandbox runtime inputs", () => {
     const home = await makeTempDir();
     const root = await makeTempDir();
     const runtimePaths = paths(home, root);
-    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
+    const configPath = path.join(
+      runtimePaths.configsDir,
+      "personal",
+      "opencode-v1",
+      "opencode.jsonc"
+    );
     await mkdir(configPath, { recursive: true });
     await mkdir(path.join(root, "instructions"), { recursive: true });
     await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");

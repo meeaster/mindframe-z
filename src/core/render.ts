@@ -25,6 +25,12 @@ export interface RenderResult {
   files: RenderedFile[];
   localFiles?: RenderedFile[];
   localStaleFiles?: string[];
+  cliPlugins?: {
+    path: string;
+    entries: string[];
+    registryPath: string;
+    settings?: Record<string, unknown>;
+  };
   links: LinkPlan[];
   staleFiles?: string[];
   staleLinks?: LinkPlan[];

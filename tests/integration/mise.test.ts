@@ -56,9 +56,9 @@ describe("mise integration", () => {
     await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
     const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
-    expect(mise).toContain('[bootstrap.hooks]');
+    expect(mise).toContain("[bootstrap.hooks]");
     expect(mise).toContain('pre-packages = "prepare-base"');
-    expect(mise).toContain('[bootstrap.packages]');
+    expect(mise).toContain("[bootstrap.packages]");
     expect(mise).toContain('"apt:curl" = "latest"');
     expect(mise).toContain('"apt:jq" = "latest"');
   });

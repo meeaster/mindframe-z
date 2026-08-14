@@ -232,10 +232,18 @@
       }
     },
     "opencode": {
-      "default": {},
+      "default": {
+        "runtime": "v1"
+      },
       "type": "object",
-      "propertyNames": {
-        "type": "string"
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "enum": [
+            "v1",
+            "v2"
+          ]
+        }
       },
       "additionalProperties": {}
     },
