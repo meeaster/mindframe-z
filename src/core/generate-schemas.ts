@@ -110,18 +110,21 @@ function strengthenMcpSchema(schema: Record<string, unknown>): void {
       return kind?.const === "oauth2";
     }) as Record<string, unknown> | undefined;
     if (!oauth) throw new Error("mcp.schema.json Executor authentication lacks an oauth2 branch");
-    const requireWhenPresent = (field: string, required: string): Record<string, unknown> => {
-      const rule: Record<string, unknown> = { if: { required: [field] } };
+    const requireWhenPresent = (field: string, required: string): JsonSchemaConditional => ({
+      if: { required: [field] },
       // JSON Schema's conditional keyword is intentionally named `then`.
-      // oxlint-disable-next-line unicorn/no-thenable
-      rule.then = { required: [required] };
-      return rule;
-    };
+      then: { required: [required] }
+    });
     oauth.allOf = [
       requireWhenPresent("discoveryUrl", "registrationScopes"),
       requireWhenPresent("registrationScopes", "discoveryUrl")
     ];
   }
+}
+
+interface JsonSchemaConditional {
+  if: { required: string[] };
+  then: { required: string[] };
 }
 
 function strengthenThreadManifestSchema(schema: Record<string, unknown>): void {

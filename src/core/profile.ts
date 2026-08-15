@@ -204,7 +204,7 @@ function resolveQualifiedName(
   rawName: string,
   kind: SourceKind,
   options: { allowLocalSlash?: boolean } = {}
-): { name: string; home: LoadedManifests } {
+) {
   const parts = rawName.split("/");
   const upstream = eachUpstream(home)
     .sort((a, b) => b.aliasPath.length - a.aliasPath.length)
@@ -402,10 +402,7 @@ function normalizeProfile(
   };
 }
 
-export function deepMerge(
-  base: Record<string, unknown>,
-  child: Record<string, unknown>
-): Record<string, unknown> {
+export function deepMerge(base: DeepMergeObject, child: DeepMergeObject): DeepMergeObject {
   const result = { ...base };
   for (const [key, value] of Object.entries(child)) {
     const existing = result[key];
@@ -416,7 +413,7 @@ export function deepMerge(
 }
 
 export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileManifest {
-  const dotfiles: Record<string, string> = { ...base.dotfiles };
+  const dotfiles = { ...base.dotfiles };
   for (const [key, value] of Object.entries(child.dotfiles)) {
     dotfiles[key] = key in dotfiles ? dotfiles[key] + "\n" + value : value;
   }
@@ -491,7 +488,7 @@ function resolveExecutorConnections(
   name: string,
   server: McpServer,
   config: ExecutorMcpConfig
-): Record<string, string> {
+): ExecutorConnections {
   const methods = server.executor?.authentication ?? [];
   const selected = config.connections;
   if (!selected) {
@@ -541,7 +538,7 @@ function mergeMcpConfigs(
 function resolveSkillConfig(
   config: ProfileManifest["skills"][string],
   agents: AgentName[]
-): { agents: ProfileAgentDefaults; toggleable: boolean; targets: ToolTargetName[] } {
+): ResolvedSkillConfig {
   if (!config?.agents) {
     throw new Error("Skill entries must declare agents after profile inheritance is resolved");
   }
@@ -554,6 +551,20 @@ function resolveSkillConfig(
     toggleable: config.toggleable,
     targets
   };
+}
+
+interface DeepMergeObject {
+  [key: string]: unknown;
+}
+
+interface ExecutorConnections {
+  [connection: string]: string;
+}
+
+interface ResolvedSkillConfig {
+  agents: ProfileAgentDefaults;
+  toggleable: boolean;
+  targets: ToolTargetName[];
 }
 
 async function resolveEnabledSkills(

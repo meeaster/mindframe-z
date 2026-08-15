@@ -33,13 +33,17 @@ type SkillCodec = {
   readonly decode: (value: string) => boolean;
 };
 
+interface SkillEntries {
+  [name: string]: string;
+}
+
 function readCodexEntries(
   data: Record<string, unknown>,
   context: SkillOverrideContext
-): Record<string, string> {
+): SkillEntries {
   const skills = record(data.skills);
   const entries = Array.isArray(skills.config) ? skills.config : [];
-  const result: Record<string, string> = {};
+  const result: SkillEntries = {};
   for (const entry of entries) {
     const item = record(entry);
     if (typeof item.path !== "string" || typeof item.enabled !== "boolean") continue;
@@ -54,7 +58,7 @@ function writeCodexEntries(
   data: Record<string, unknown>,
   entries: Record<string, string>,
   context: SkillOverrideContext
-): Record<string, unknown> {
+) {
   const skills = record(data.skills);
   const existingConfig = Array.isArray(skills.config) ? skills.config : [];
   const managedPaths = new Set<string>();
@@ -104,9 +108,9 @@ export async function writeConfigFile(
   await writeTextFile(file, content);
 }
 
-function stringRecord(value: unknown): Record<string, string> {
+function stringRecord(value: unknown): SkillEntries {
   if (!isPlainObject(value)) return {};
-  const result: Record<string, string> = {};
+  const result: SkillEntries = {};
   for (const [key, entry] of Object.entries(value)) {
     if (typeof entry === "string") result[key] = entry;
   }
@@ -184,7 +188,7 @@ function record(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
 }
 
-const codecs: Record<SkillOverrideTarget, SkillCodec> = {
+const codecs = {
   opencode: {
     format: "jsonc",
     read: (data) => stringRecord(record(data.permission).skill),
@@ -209,7 +213,7 @@ const codecs: Record<SkillOverrideTarget, SkillCodec> = {
     encode: (enabled) => (enabled ? "on" : "off"),
     decode: (value) => value !== "off"
   }
-};
+} satisfies Record<SkillOverrideTarget, SkillCodec>;
 
 function encodeOverrides(
   target: SkillOverrideTarget,

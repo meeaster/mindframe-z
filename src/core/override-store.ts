@@ -7,6 +7,10 @@ import type { ResolvedProfile } from "./profile.js";
 
 export type OverrideKind = "mcp" | "skills";
 
+interface BooleanOverrides {
+  [name: string]: boolean;
+}
+
 const booleanMapSchema = z.record(z.string(), z.boolean()).default({});
 const payloadSchema = z
   .object({
@@ -60,7 +64,7 @@ export function projectOverrides(
   projectRoot: string,
   target: AgentName,
   kind: OverrideKind
-): Record<string, boolean> {
+): BooleanOverrides {
   return { ...store.projects[projectRoot]?.[target]?.[kind] };
 }
 
@@ -120,7 +124,7 @@ export function effectiveProjectState(
   profile: ResolvedProfile,
   target: AgentName,
   kind: OverrideKind
-): Record<string, boolean> {
+): BooleanOverrides {
   const defaults = kind === "mcp" ? mcpDefaults(profile, target) : skillDefaults(profile, target);
   if (!projectRoot) return defaults;
   return { ...defaults, ...projectOverrides(store, projectRoot, target, kind) };
@@ -170,11 +174,8 @@ async function renderProjectPayloads(
   }
 }
 
-function pruneDefaults(
-  overrides: Record<string, boolean>,
-  defaults: Record<string, boolean>
-): Record<string, boolean> {
-  const pruned: Record<string, boolean> = {};
+function pruneDefaults(overrides: BooleanOverrides, defaults: BooleanOverrides): BooleanOverrides {
+  const pruned: BooleanOverrides = {};
   for (const [name, enabled] of Object.entries(overrides)) {
     if (defaults[name] !== enabled) pruned[name] = enabled;
   }

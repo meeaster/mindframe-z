@@ -72,14 +72,11 @@ const groupedMcpAgentsSchema = z
 const directMcpAgentsSchema = z
   .union([conciseMcpAgentsSchema, groupedMcpAgentsSchema])
   .transform((agents): NormalizedMcpAgents => {
-    const normalized: NormalizedMcpAgents = {};
-    if (Array.isArray(agents)) {
-      for (const agent of agents) normalized[agent] = true;
-      return normalized;
-    }
-    for (const agent of agents.enabled ?? []) normalized[agent] = true;
-    for (const agent of agents.disabled ?? []) normalized[agent] = false;
-    return normalized;
+    if (Array.isArray(agents)) return Object.fromEntries(agents.map((agent) => [agent, true]));
+    return Object.fromEntries([
+      ...(agents.enabled ?? []).map((agent) => [agent, true] as const),
+      ...(agents.disabled ?? []).map((agent) => [agent, false] as const)
+    ]);
   });
 const executorMcpConfigSchema = z
   .object({
