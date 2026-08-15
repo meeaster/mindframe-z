@@ -96,15 +96,15 @@ export async function renderMise(
       if (previousOwned.has(host)) safeLocal.push({ ...file, path: host });
     }
   }
-  return {
-    files,
-    ...(!options.sandbox ? { localFiles: safeLocal } : {}),
-    ...(!options.sandbox
-      ? { localStaleFiles: [...previousOwned].filter((file) => !current.has(file)) }
-      : {}),
-    links: [],
-    ...(!options.sandbox
-      ? { ownership: { target: "mise" as const, snapshots: files.map((file) => file.path), host: installableHostPaths } }
-      : {})
-  };
+  const result: RenderResult = { files, links: [] };
+  if (!options.sandbox) {
+    result.localFiles = safeLocal;
+    result.localStaleFiles = [...previousOwned].filter((file) => !current.has(file));
+    result.ownership = {
+      target: "mise",
+      snapshots: files.map((file) => file.path),
+      host: installableHostPaths
+    };
+  }
+  return result;
 }

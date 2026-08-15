@@ -39,27 +39,19 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile): Record<s
             literalHeaders[header] = value;
           }
         }
-        return [
-          name,
-          {
-            url: server.url,
-            enabled,
-            ...(Object.keys(literalHeaders).length > 0 ? { http_headers: literalHeaders } : {}),
-            ...(Object.keys(envHeaders).length > 0 ? { env_http_headers: envHeaders } : {})
-          }
-        ];
+        const entry = { url: server.url, enabled };
+        if (Object.keys(literalHeaders).length > 0)
+          Object.assign(entry, { http_headers: literalHeaders });
+        if (Object.keys(envHeaders).length > 0)
+          Object.assign(entry, { env_http_headers: envHeaders });
+        return [name, entry];
       }
 
       const [command, ...args] = server.command.map((part) => expandHome(part, paths.home));
-      return [
-        name,
-        {
-          command,
-          ...(args.length > 0 ? { args } : {}),
-          enabled,
-          ...(server.env ? { env: server.env } : {})
-        }
-      ];
+      const entry = { command, enabled };
+      if (args.length > 0) Object.assign(entry, { args });
+      if (server.env) Object.assign(entry, { env: server.env });
+      return [name, entry];
     })
   );
   if (requiresExecutorBridge(profile, "codex"))
@@ -105,13 +97,11 @@ export function renderCodexPlugins(
   profile: ResolvedProfile
 ): Record<string, { enabled: boolean; toggleable?: boolean }> {
   return Object.fromEntries(
-    Object.entries(profile.profile.codex.plugins).map(([id, plugin]) => [
-      id,
-      {
-        enabled: plugin.enabled,
-        ...(plugin.toggleable === undefined ? {} : { toggleable: plugin.toggleable })
-      }
-    ])
+    Object.entries(profile.profile.codex.plugins).map(([id, plugin]) => {
+      const entry = { enabled: plugin.enabled };
+      if (plugin.toggleable !== undefined) Object.assign(entry, { toggleable: plugin.toggleable });
+      return [id, entry];
+    })
   );
 }
 
@@ -125,11 +115,12 @@ export async function renderCodex(
 
   const plugins = renderCodexPlugins(profile);
   const hasPlugins = Object.keys(plugins).length > 0;
-  const config = deepMerge(profile.profile.codex.config, {
+  const generatedConfig = {
     ...renderCodexPermissions(paths, profile),
-    mcp_servers: renderCodexMcp(paths, profile),
-    ...(hasPlugins ? { plugins } : {})
-  });
+    mcp_servers: renderCodexMcp(paths, profile)
+  };
+  if (hasPlugins) Object.assign(generatedConfig, { plugins });
+  const config = deepMerge(profile.profile.codex.config, generatedConfig);
   const skillDefaults = skillRuntimeDefaults(profile, "codex");
   const skillPaths = Object.fromEntries(
     Object.keys(skillDefaults).map((name) => [

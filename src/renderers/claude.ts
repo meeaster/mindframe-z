@@ -48,26 +48,25 @@ function renderClaudeMcpServer(
   home: string
 ): unknown {
   if (server.server.type === "remote") {
-    return {
+    const entry = {
       type: server.server.transport === "sse" ? "sse" : "http",
-      url: server.server.url,
-      ...(server.server.headers
-        ? {
-            headers: Object.fromEntries(
-              Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v as string)])
-            )
-          }
-        : {})
+      url: server.server.url
     };
+    if (server.server.headers) {
+      Object.assign(entry, {
+        headers: Object.fromEntries(
+          Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v as string)])
+        )
+      });
+    }
+    return entry;
   }
 
   const [command, ...args] = server.server.command.map((part) => expandHome(part, home));
-  return {
-    type: "stdio",
-    command,
-    ...(args.length > 0 ? { args } : {}),
-    ...(server.server.env ? { env: server.server.env } : {})
-  };
+  const entry = { type: "stdio", command };
+  if (args.length > 0) Object.assign(entry, { args });
+  if (server.server.env) Object.assign(entry, { env: server.server.env });
+  return entry;
 }
 
 function mergeClaudeMcp(
@@ -157,13 +156,9 @@ export async function renderClaude(
   if (denyPermissions.length > 0) permissions.deny = denyPermissions;
   const { permissions: machinePermissions, ...machineClaudeRest } = profile.manifests.machine
     .claude as Record<string, unknown> & { permissions?: Record<string, string[]> };
-  const settings: Record<string, unknown> = deepMerge(
-    {
-      ...profile.profile.claude.settings,
-      ...(profile.profile.claude.model ? { model: profile.profile.claude.model } : {})
-    },
-    machineClaudeRest
-  );
+  const profileSettings = { ...profile.profile.claude.settings };
+  if (profile.profile.claude.model) profileSettings.model = profile.profile.claude.model;
+  const settings: Record<string, unknown> = deepMerge(profileSettings, machineClaudeRest);
   settings.permissions = mergeClaudePermissions(
     mergeClaudePermissions(settings.permissions, permissions),
     machinePermissions ?? {}

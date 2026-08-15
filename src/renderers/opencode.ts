@@ -199,25 +199,17 @@ export async function renderOpenCode(
   const mcp: Record<string, unknown> = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
-        return [
-          name,
-          {
-            type: "remote",
-            url: server.url,
-            enabled,
-            ...(server.headers ? { headers: server.headers } : {})
-          }
-        ];
+        const entry = { type: "remote", url: server.url, enabled };
+        if (server.headers) Object.assign(entry, { headers: server.headers });
+        return [name, entry];
       }
-      return [
-        name,
-        {
-          type: "local",
-          command: server.command.map((part) => expandHome(part, paths.home)),
-          enabled,
-          ...(server.env ? { env: server.env } : {})
-        }
-      ];
+      const entry = {
+        type: "local",
+        command: server.command.map((part) => expandHome(part, paths.home)),
+        enabled
+      };
+      if (server.env) Object.assign(entry, { env: server.env });
+      return [name, entry];
     })
   );
   if (requiresExecutorBridge(profile, "opencode"))
@@ -261,14 +253,14 @@ export async function renderOpenCode(
     | Record<string, unknown>
     | undefined;
   const permission = profilePermission ? deepMerge(profilePermission, mergedPerms) : mergedPerms;
-  const config = {
-    ...profile.profile.opencode.config,
-    ...(permission ? { permission } : {}),
+  const config = { ...profile.profile.opencode.config };
+  if (permission) Object.assign(config, { permission });
+  Object.assign(config, {
     $schema: "https://opencode.ai/config.json",
     instructions,
     plugin,
     mcp
-  };
+  });
   const renderedConfig = mergeSkillOverrides("opencode", config, {
     ...skillRuntimeDefaults(profile, "opencode"),
     ...options.skillOverrides
@@ -346,19 +338,10 @@ export async function renderOpenCode(
       });
   }
 
-  return {
+  const result: RenderResult = {
     files,
     localFiles: pluginFiles,
     localStaleFiles: [appliedPluginsPath],
-    ...(paths.activeOpenCodeRuntime === "v1"
-      ? {
-          cliPlugins: {
-            path: path.join(paths.opencodeConfigDir, "cli.json"),
-            entries: [],
-            registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json")
-          }
-        }
-      : {}),
     links,
     staleFiles: hasDependencies
       ? [
@@ -401,4 +384,12 @@ export async function renderOpenCode(
         : [])
     ]
   };
+  if (paths.activeOpenCodeRuntime === "v1") {
+    result.cliPlugins = {
+      path: path.join(paths.opencodeConfigDir, "cli.json"),
+      entries: [],
+      registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json")
+    };
+  }
+  return result;
 }

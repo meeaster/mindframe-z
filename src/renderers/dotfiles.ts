@@ -110,18 +110,21 @@ export async function renderDotfiles(
   const configsDotfiles = path.join(configsProfile, "dotfiles");
   const legacyOpencode2Path = path.join(configsDotfiles, ".local", "bin", "opencode2");
 
-  const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => ({
-    path: path.join(configsDotfiles, filename),
-    content: renderDotfile(paths, filename, content),
-    ...(filename.startsWith(".local/bin/") ? { mode: 0o755 } : {})
-  }));
+  const files = Object.entries(profile.profile.dotfiles).map(([filename, content]) => {
+    const file: RenderResult["files"][number] = {
+      path: path.join(configsDotfiles, filename),
+      content: renderDotfile(paths, filename, content)
+    };
+    if (filename.startsWith(".local/bin/")) file.mode = 0o755;
+    return file;
+  });
 
   const links = Object.keys(profile.profile.dotfiles).map((filename) => ({
     linkPath: path.join(paths.home, filename),
     targetPath: path.join(configsDotfiles, filename)
   }));
 
-  return {
+  const result: RenderResult = {
     files,
     staleFiles: [legacyOpencode2Path],
     staleLinks: [
@@ -130,9 +133,10 @@ export async function renderDotfiles(
         targetPath: legacyOpencode2Path
       }
     ],
-    ...(hasManagedZsh(profile)
-      ? { localFiles: [{ path: zshSecretsFile(paths), content: "", ifMissing: true }] }
-      : {}),
     links
   };
+  if (hasManagedZsh(profile)) {
+    result.localFiles = [{ path: zshSecretsFile(paths), content: "", ifMissing: true }];
+  }
+  return result;
 }

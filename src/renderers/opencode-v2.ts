@@ -57,25 +57,17 @@ function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths): Record<string
   const servers: Record<string, unknown> = Object.fromEntries(
     filterMcpForTarget(profile, "opencode-v2").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
-        return [
-          name,
-          {
-            type: "remote",
-            url: server.url,
-            disabled: !enabled,
-            ...(server.headers ? { headers: server.headers } : {})
-          }
-        ];
+        const entry = { type: "remote", url: server.url, disabled: !enabled };
+        if (server.headers) Object.assign(entry, { headers: server.headers });
+        return [name, entry];
       }
-      return [
-        name,
-        {
-          type: "local",
-          command: server.command.map((part) => expandHome(part, paths.home)),
-          disabled: !enabled,
-          ...(server.env ? { environment: server.env } : {})
-        }
-      ];
+      const entry = {
+        type: "local",
+        command: server.command.map((part) => expandHome(part, paths.home)),
+        disabled: !enabled
+      };
+      if (server.env) Object.assign(entry, { environment: server.env });
+      return [name, entry];
     })
   );
   if (requiresExecutorBridge(profile, "opencode-v2")) {
@@ -178,11 +170,13 @@ export async function renderOpenCodeV2(
     ...profile.profile.opencode_v2.config,
     $schema: "https://opencode.ai/config.json",
     instructions,
-    mcp: nativeMcp(profile, paths),
-    ...(pluginResult.entries.length > 0 ? { plugins: pluginResult.entries } : {}),
+    mcp: nativeMcp(profile, paths)
+  };
+  if (pluginResult.entries.length > 0) Object.assign(config, { plugins: pluginResult.entries });
+  Object.assign(config, {
     skills: [skillsPath],
     permissions: nativePermissions(paths, profile)
-  };
+  });
   const hasDependencies = Object.keys(profile.profile.opencode_v2.dependencies).length > 0;
   const files: RenderResult["files"] = [
     ...commandFiles,
@@ -229,7 +223,7 @@ export async function renderOpenCodeV2(
         ]
       : [];
 
-  return {
+  const result: RenderResult = {
     files,
     localFiles: [
       ...new Map(
@@ -237,16 +231,6 @@ export async function renderOpenCodeV2(
       ).values()
     ],
     localStaleFiles: [pluginsPath],
-    ...(paths.activeOpenCodeRuntime === "v2"
-      ? {
-          cliPlugins: {
-            path: path.join(paths.opencodeConfigDir, "cli.json"),
-            entries: tuiPluginResult.entries,
-            registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
-            settings: profile.profile.opencode_v2.cli
-          }
-        }
-      : {}),
     links,
     staleLinks: [
       ...(useGlobalInstructions
@@ -295,4 +279,13 @@ export async function renderOpenCodeV2(
       }
     ]
   };
+  if (paths.activeOpenCodeRuntime === "v2") {
+    result.cliPlugins = {
+      path: path.join(paths.opencodeConfigDir, "cli.json"),
+      entries: tuiPluginResult.entries,
+      registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
+      settings: profile.profile.opencode_v2.cli
+    };
+  }
+  return result;
 }
