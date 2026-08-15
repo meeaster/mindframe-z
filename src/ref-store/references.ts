@@ -11,6 +11,16 @@ import {
 } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 
+type RunGit = (file: string, args: readonly string[], options: { stdio: "pipe" }) => Promise<void>;
+
+async function runGitCommand(
+  file: string,
+  args: readonly string[],
+  options: { stdio: "pipe" }
+): Promise<void> {
+  await execa(file, args, options);
+}
+
 export function referencePath(profile: ResolvedProfile, reference: ReferenceEntry): string {
   return path.join(profile.referencesDir, reference.name);
 }
@@ -39,7 +49,11 @@ export async function writeReferenceIndex(
   return indexPath;
 }
 
-export async function syncReference(profile: ResolvedProfile, name: string): Promise<string> {
+export async function syncReference(
+  profile: ResolvedProfile,
+  name: string,
+  runGit: RunGit = runGitCommand
+): Promise<string> {
   const ref =
     profile.enabledReferences.find((entry) => entry.name === name) ??
     profile.manifests.references.find((entry) => entry.name === name);
@@ -48,39 +62,43 @@ export async function syncReference(profile: ResolvedProfile, name: string): Pro
   await mkdir(profile.referencesDir, { recursive: true });
   try {
     await access(destination);
-    await updateReference(destination, ref.ref);
+    await updateReference(destination, ref.ref, runGit);
     return `updated ${name} at ${destination}`;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       const cloneArgs = ["clone"];
       if (ref.ref) cloneArgs.push("--branch", ref.ref);
       cloneArgs.push(ref.url, destination);
-      await execa("git", cloneArgs, { stdio: "pipe" });
+      await runGit("git", cloneArgs, { stdio: "pipe" });
       return `cloned ${name} to ${destination}`;
     }
     throw error;
   }
 }
 
-async function updateReference(destination: string, ref?: string): Promise<void> {
+async function updateReference(
+  destination: string,
+  ref: string | undefined,
+  runGit: RunGit
+): Promise<void> {
   if (ref) {
-    await execa("git", ["-C", destination, "fetch", "origin", ref], { stdio: "pipe" });
-    await execa("git", ["-C", destination, "checkout", "--force", "-B", ref, `origin/${ref}`], {
+    await runGit("git", ["-C", destination, "fetch", "origin", ref], { stdio: "pipe" });
+    await runGit("git", ["-C", destination, "checkout", "--force", "-B", ref, `origin/${ref}`], {
       stdio: "pipe"
     });
     return;
   }
   try {
-    await pullReference(destination);
+    await pullReference(destination, runGit);
   } catch (error) {
     if (!isStaleRemoteRefError(error)) throw error;
-    await execa("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
-    await pullReference(destination);
+    await runGit("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
+    await pullReference(destination, runGit);
   }
 }
 
-async function pullReference(destination: string): Promise<void> {
-  await execa("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
+async function pullReference(destination: string, runGit: RunGit): Promise<void> {
+  await runGit("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
 }
 
 export function isStaleRemoteRefError(error: unknown): boolean {

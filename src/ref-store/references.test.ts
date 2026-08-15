@@ -1,16 +1,9 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { execa } from "execa";
+import { describe, expect, it } from "vitest";
 import type { ResolvedProfile } from "../core/profile.js";
 import { isStaleRemoteRefError, syncReference } from "./references.js";
-
-vi.mock("execa", () => ({ execa: vi.fn() }));
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe("syncReference", () => {
   it("prunes origin and retries once when git reports stale remote refs", async () => {
@@ -22,33 +15,39 @@ describe("syncReference", () => {
         "error: some local refs could not be updated; try running\n 'git remote prune origin' to remove any old, conflicting branches"
     });
 
-    vi.mocked(execa)
-      .mockRejectedValueOnce(staleRefError)
-      .mockResolvedValueOnce({} as never)
-      .mockResolvedValueOnce({} as never);
+    const calls: Array<[string, readonly string[], { stdio: "pipe" }]> = [];
+    const outcomes: Array<Error | undefined> = [staleRefError, undefined, undefined];
+    const runGit = async (
+      file: string,
+      args: readonly string[],
+      options: { stdio: "pipe" }
+    ): Promise<void> => {
+      calls.push([file, args, options]);
+      const outcome = outcomes.shift();
+      if (outcome instanceof Error) throw outcome;
+    };
 
-    await expect(syncReference(profile, "datadog-agent")).resolves.toBe(
+    await expect(syncReference(profile, "datadog-agent", runGit)).resolves.toBe(
       `updated datadog-agent at ${path.join(referencesDir, "datadog-agent")}`
     );
 
-    expect(execa).toHaveBeenNthCalledWith(
-      1,
-      "git",
-      ["-C", path.join(referencesDir, "datadog-agent"), "pull", "--ff-only"],
-      { stdio: "pipe" }
-    );
-    expect(execa).toHaveBeenNthCalledWith(
-      2,
-      "git",
-      ["-C", path.join(referencesDir, "datadog-agent"), "remote", "prune", "origin"],
-      { stdio: "pipe" }
-    );
-    expect(execa).toHaveBeenNthCalledWith(
-      3,
-      "git",
-      ["-C", path.join(referencesDir, "datadog-agent"), "pull", "--ff-only"],
-      { stdio: "pipe" }
-    );
+    expect(calls).toEqual([
+      [
+        "git",
+        ["-C", path.join(referencesDir, "datadog-agent"), "pull", "--ff-only"],
+        { stdio: "pipe" }
+      ],
+      [
+        "git",
+        ["-C", path.join(referencesDir, "datadog-agent"), "remote", "prune", "origin"],
+        { stdio: "pipe" }
+      ],
+      [
+        "git",
+        ["-C", path.join(referencesDir, "datadog-agent"), "pull", "--ff-only"],
+        { stdio: "pipe" }
+      ]
+    ]);
   });
 });
 

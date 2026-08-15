@@ -351,15 +351,17 @@ export const threadIdentifierSchema = z
     "must be lowercase alphanumeric with . _ - and no path separators"
   );
 
+const threadPullRequestBaseSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(
+    /^(?!.*\.\.)(?!.*(?:^|\/)\.)(?!.*(?:^|\/)[^/]*\.lock(?:\/|$))(?!.*\/\/)(?!.*[/.]$)[A-Za-z0-9][A-Za-z0-9._/-]*$/,
+    "must be a safe Git branch name"
+  );
+
 const threadPullRequestSchema = z.object({
-  base: z
-    .string()
-    .min(1)
-    .max(255)
-    .regex(
-      /^(?!.*\.\.)(?!.*(?:^|\/)\.)(?!.*(?:^|\/)[^/]*\.lock(?:\/|$))(?!.*\/\/)(?!.*[/.]$)[A-Za-z0-9][A-Za-z0-9._/-]*$/,
-      "must be a safe Git branch name"
-    )
+  base: threadPullRequestBaseSchema
 });
 
 const threadStoreRootSchema = z
@@ -398,7 +400,7 @@ const pullRequestThreadStoreSchema = z.object({
   publication: z
     .object({
       mode: z.literal("pull-request"),
-      base: threadPullRequestSchema.shape.base,
+      base: threadPullRequestBaseSchema,
       auto_merge: z.boolean().default(false)
     })
     .strict(),
