@@ -37,12 +37,13 @@ export function encodeExecutorAuthenticationMethod(
     ];
     (placement.carrier === "header" ? headers : queryParams)[placement.name] = parts;
   }
-  return {
+  const encoded = {
     slug: method.slug,
-    type: "apiKey",
-    ...(Object.keys(headers).length > 0 ? { headers } : {}),
-    ...(Object.keys(queryParams).length > 0 ? { queryParams } : {})
+    type: "apiKey"
   };
+  if (Object.keys(headers).length > 0) Object.assign(encoded, { headers });
+  if (Object.keys(queryParams).length > 0) Object.assign(encoded, { queryParams });
+  return encoded;
 }
 
 export function encodeExecutorAuthenticationMethods(

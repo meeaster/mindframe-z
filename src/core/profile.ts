@@ -382,6 +382,11 @@ function normalizeProfile(
       }
     : profile.opencode_v2;
 
+  const miseLayer: ResolvedMiseLayer = {
+    name: profile.name,
+    root: home.root
+  };
+  if (home.miseFiles.has(profile.name)) miseLayer.content = home.miseFiles.get(profile.name)!;
   return {
     profile: {
       ...profile,
@@ -393,11 +398,7 @@ function normalizeProfile(
       opencode_v2: opencodeV2
     },
     sources,
-    miseLayers: [{
-      name: profile.name,
-      root: home.root,
-      ...(home.miseFiles.has(profile.name) ? { content: home.miseFiles.get(profile.name)! } : {})
-    }],
+    miseLayers: [miseLayer]
   };
 }
 
@@ -655,7 +656,7 @@ async function resolveProfileByName(
   return {
     profile: mergeProfiles(parent.profile, own.profile),
     sources: mergeSources(parent.sources, own.sources),
-    miseLayers: [...parent.miseLayers, ...own.miseLayers],
+    miseLayers: [...parent.miseLayers, ...own.miseLayers]
   };
 }
 

@@ -146,7 +146,9 @@ async function applyRenderedTarget(
         previousEntries
       );
       if (!options.dryRun) await writeTextFile(result.cliPlugins.path, jsonFileContent(merged));
-      console.log(`${options.dryRun ? "would merge" : "merged"}\t${result.cliPlugins.path} plugins`);
+      console.log(
+        `${options.dryRun ? "would merge" : "merged"}\t${result.cliPlugins.path} plugins`
+      );
     }
     if (!options.dryRun && (previousEntries.length > 0 || result.cliPlugins.entries.length > 0))
       await writeJsonFileAtomic(result.cliPlugins.registryPath, {
@@ -195,17 +197,18 @@ export async function applyConfig(
 ): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const rendersAgents = options.target === "all";
-  const includeActiveV2 = rendersAgents && options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
+  const includeActiveV2 =
+    rendersAgents && options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
   const profile = await resolveProfile(
     paths,
     options.profile,
     !rendersAgents
       ? { evaluateAgents: [] }
       : options.agent === "all"
-      ? includeActiveV2
-        ? { evaluateAgents: ["opencode-v2"] }
-        : undefined
-      : { evaluateAgents: [options.agent] }
+        ? includeActiveV2
+          ? { evaluateAgents: ["opencode-v2"] }
+          : undefined
+        : { evaluateAgents: [options.agent] }
   );
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
   if (includeActiveV2 && !selectedAgents.includes("opencode-v2"))
@@ -254,17 +257,17 @@ export async function applyConfig(
       console.log(`${options.dryRun ? "would update" : "updated"}\t${configPath}`);
     }
     for (const target of selectedTargets) {
-      const previousOwnership = target === "mise" ? await readOwnership(paths, previousProfile, target) : undefined;
+      const previousOwnership =
+        target === "mise" ? await readOwnership(paths, previousProfile, target) : undefined;
       const previousOwnedHostPaths = previousOwnership?.host.map((relative) =>
-        path.resolve(
-          paths.miseConfigDir,
-          relative
-        )
+        path.resolve(paths.miseConfigDir, relative)
       );
-      const result = await render(paths, profile, target, {
-        includeGlobalSkillState: !options.noLink,
-        ...(previousOwnedHostPaths === undefined ? {} : { previousOwnedHostPaths })
-      });
+      const renderOptions = {
+        includeGlobalSkillState: !options.noLink
+      };
+      if (previousOwnedHostPaths !== undefined)
+        Object.assign(renderOptions, { previousOwnedHostPaths });
+      const result = await render(paths, profile, target, renderOptions);
       await applyRenderedTarget(paths, result, options, rl);
       if (!options.dryRun && result.ownership) {
         await writeOwnership(paths, profile.name, result.ownership);

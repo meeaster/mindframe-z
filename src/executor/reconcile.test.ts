@@ -16,6 +16,13 @@ function profileWithServer(
   authentication?: ExecutorAuthenticationMethod[],
   connections?: Record<string, string>
 ): ResolvedProfile {
+  const server: ResolvedProfile["mcpServers"][number]["server"] = {
+    type: "remote",
+    description,
+    url: endpoint,
+    transport: "http"
+  };
+  if (authentication) server.executor = { authentication };
   return {
     name,
     agents: ["opencode"],
@@ -40,17 +47,11 @@ function profileWithServer(
               ? Object.fromEntries(authentication.map((method) => ["main", method.slug]))
               : {})
         },
-        server: {
-          type: "remote",
-          description,
-          url: endpoint,
-          transport: "http",
-          ...(authentication ? { executor: { authentication } } : {})
-        }
+        server
       }
     ],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 

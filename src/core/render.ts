@@ -129,20 +129,32 @@ export async function renderTarget(
       rendered = await renderPi(paths, profile);
       break;
     case "mise":
-      rendered = await renderMise(paths, profile, {
-        ...(options.sandbox === undefined ? {} : { sandbox: options.sandbox }),
-        ...(options.previousOwnedHostPaths === undefined
-          ? {}
-          : { previousOwnedHostPaths: options.previousOwnedHostPaths })
-      });
+      {
+        const miseOptions = {};
+        if (options.sandbox !== undefined) Object.assign(miseOptions, { sandbox: options.sandbox });
+        if (options.previousOwnedHostPaths !== undefined) {
+          Object.assign(miseOptions, { previousOwnedHostPaths: options.previousOwnedHostPaths });
+        }
+        rendered = await renderMise(paths, profile, miseOptions);
+      }
       break;
     case "dotfiles":
       rendered = await renderDotfiles(paths, profile);
       break;
   }
-  const snapshotRoot = path.join(profileConfigsDir(paths, profile.name), snapshotName(target, paths));
-  const current = new Set(rendered.files.filter((file) => file.path.startsWith(`${snapshotRoot}${path.sep}`)).map((file) => file.path));
-  const staleFiles = [...(rendered.staleFiles ?? []), ...(await staleSnapshotFiles(snapshotRoot, current))];
+  const snapshotRoot = path.join(
+    profileConfigsDir(paths, profile.name),
+    snapshotName(target, paths)
+  );
+  const current = new Set(
+    rendered.files
+      .filter((file) => file.path.startsWith(`${snapshotRoot}${path.sep}`))
+      .map((file) => file.path)
+  );
+  const staleFiles = [
+    ...(rendered.staleFiles ?? []),
+    ...(await staleSnapshotFiles(snapshotRoot, current))
+  ];
   return { ...rendered, staleFiles, files: [...instructions, ...rendered.files] };
 }
 
@@ -151,7 +163,8 @@ function isAgentTarget(target: ToolTarget): boolean {
 }
 
 function snapshotName(target: ToolTarget, paths: RuntimePaths): string {
-  if (target === "opencode") return paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode-v1";
+  if (target === "opencode")
+    return paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode-v1";
   if (target === "opencode-v2") return "opencode-v2";
   return target;
 }
@@ -160,7 +173,11 @@ async function staleSnapshotFiles(root: string, current: Set<string>): Promise<s
   const stale: string[] = [];
   async function walk(dir: string): Promise<void> {
     let entries;
-    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(file);

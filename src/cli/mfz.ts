@@ -339,24 +339,25 @@ async function opencodeSmoke(options: {
   const isolated = `${paths.home}/.mindframe-z-opencode-${runtime}-smoke`;
   await mkdir(isolated, { recursive: true });
   const configsOpencode = activeOpenCodeSnapshotDir(paths, profile.name);
+  const env = {
+    ...process.env,
+    OPENCODE_CONFIG_DIR: configsOpencode,
+    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    XDG_CONFIG_HOME: `${isolated}/config`,
+    XDG_DATA_HOME: `${isolated}/data`,
+    XDG_CACHE_HOME: `${isolated}/cache`,
+    XDG_STATE_HOME: `${isolated}/state`
+  };
+  if (runtime === "v2") {
+    Object.assign(env, {
+      OPENCODE_TEST_HOME: paths.home,
+      OPENCODE_DB: path.join(isolated, "data", "opencode-v2.db")
+    });
+  }
   try {
     const result = await execa(binary, ["debug", "config"], {
       cwd: paths.root,
-      env: {
-        ...process.env,
-        OPENCODE_CONFIG_DIR: configsOpencode,
-        ...(runtime === "v2"
-          ? {
-              OPENCODE_TEST_HOME: paths.home,
-              OPENCODE_DB: path.join(isolated, "data", "opencode-v2.db")
-            }
-          : {}),
-        OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
-        XDG_CONFIG_HOME: `${isolated}/config`,
-        XDG_DATA_HOME: `${isolated}/data`,
-        XDG_CACHE_HOME: `${isolated}/cache`,
-        XDG_STATE_HOME: `${isolated}/state`
-      }
+      env
     });
     console.log(result.stdout);
   } catch (error) {

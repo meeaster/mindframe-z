@@ -183,11 +183,10 @@ export async function createWorkUnit(
   if (await pathExists(file)) throw new Error(`Work unit already exists: ${slug}`);
   const timestamp = now();
   const phase = input.phase ?? "explore";
-  const unit = workUnitSchema.parse({
+  const inputRecord = {
     schema_version: 1,
     domain: "personal",
     scope: input.scope ?? "global",
-    ...(input.project ? { project: workSlugSchema.parse(input.project) } : {}),
     slug,
     title: input.title,
     objective: input.objective,
@@ -195,7 +194,6 @@ export async function createWorkUnit(
     phase_history: [{ phase, at: timestamp }],
     repositories: input.repositories ?? [],
     context: input.context ?? [],
-    ...(input.thread ? { thread: input.thread } : {}),
     orientation: {
       revision: 1,
       outcome: input.objective,
@@ -208,7 +206,10 @@ export async function createWorkUnit(
     checkpoint_hashes: {},
     created_at: timestamp,
     updated_at: timestamp
-  });
+  };
+  if (input.project) Object.assign(inputRecord, { project: workSlugSchema.parse(input.project) });
+  if (input.thread) Object.assign(inputRecord, { thread: input.thread });
+  const unit = workUnitSchema.parse(inputRecord);
   await writeJsonFileAtomic(file, unit);
   const authored = workAuthoringPaths(paths, slug);
   await mkdir(authored.checkpoints, { recursive: true });

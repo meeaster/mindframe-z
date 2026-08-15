@@ -99,15 +99,17 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     body?: unknown
   ): Promise<T> {
     try {
-      const response = await this.requestFetch(`${this.baseUrl}/api${endpoint}`, {
+      const headers = { authorization: `Bearer ${this.token}` };
+      const request = {
         method,
-        headers: {
-          authorization: `Bearer ${this.token}`,
-          ...(body === undefined ? {} : { "content-type": "application/json" })
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        headers,
         signal: AbortSignal.timeout(this.timeoutMs)
-      });
+      };
+      if (body !== undefined) {
+        Object.assign(headers, { "content-type": "application/json" });
+        Object.assign(request, { body: JSON.stringify(body) });
+      }
+      const response = await this.requestFetch(`${this.baseUrl}/api${endpoint}`, request);
       const text = await response.text();
       if (!response.ok)
         throw executorError(
@@ -161,18 +163,21 @@ class HttpExecutorAdapter implements ExecutorAdapter {
             ),
             slug: server.slug
           }
-        : {
-            transport: "stdio",
-            name: server.name,
-            description: server.description,
-            command: config.command,
-            ...(config.args ? { args: config.args } : {}),
-            ...(config.env ? { env: config.env } : {}),
-            authenticationTemplate: encodeExecutorAuthenticationMethods(
-              config.authenticationTemplate ?? [{ slug: "none", kind: "none" }]
-            ),
-            slug: server.slug
-          };
+        : (() => {
+            const stdioBody = {
+              transport: "stdio",
+              name: server.name,
+              description: server.description,
+              command: config.command,
+              authenticationTemplate: encodeExecutorAuthenticationMethods(
+                config.authenticationTemplate ?? [{ slug: "none", kind: "none" }]
+              ),
+              slug: server.slug
+            };
+            if (config.args) Object.assign(stdioBody, { args: config.args });
+            if (config.env) Object.assign(stdioBody, { env: config.env });
+            return stdioBody;
+          })();
     await this.request("POST", "/mcp/servers", z.unknown(), body);
   }
 

@@ -189,28 +189,21 @@ async function renderPayload(
   skills: Record<string, boolean>
 ): Promise<ProjectHarnessOverrides["payload"]> {
   if (target === "opencode") {
+    const config: NonNullable<ProjectHarnessOverrides["payload"]>["config"] = {};
+    if (Object.keys(mcp).length > 0) {
+      config.mcp = Object.fromEntries(
+        Object.entries(mcp).map(([name, enabled]) => [name, { enabled }])
+      );
+    }
+    if (Object.keys(skills).length > 0) {
+      config.permission = {
+        skill: Object.fromEntries(
+          Object.entries(skills).map(([name, enabled]) => [name, enabled ? "allow" : "deny"])
+        )
+      };
+    }
     return {
-      config: {
-        ...(Object.keys(mcp).length > 0
-          ? {
-              mcp: Object.fromEntries(
-                Object.entries(mcp).map(([name, enabled]) => [name, { enabled }])
-              )
-            }
-          : {}),
-        ...(Object.keys(skills).length > 0
-          ? {
-              permission: {
-                skill: Object.fromEntries(
-                  Object.entries(skills).map(([name, enabled]) => [
-                    name,
-                    enabled ? "allow" : "deny"
-                  ])
-                )
-              }
-            }
-          : {})
-      }
+      config
     };
   }
 

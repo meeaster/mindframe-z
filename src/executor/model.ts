@@ -77,12 +77,13 @@ function stdioConfig(
 ): ExecutorStdioConfig {
   const [command, ...args] = server.command;
   if (!command) throw new Error(`Executor route for ${name} has no local command`);
-  return {
+  const config: ExecutorStdioConfig = {
     transport: "stdio",
     command: expandHome(command, home),
-    ...(args.length > 0 ? { args: args.map((arg) => expandHome(arg, home)) } : {}),
     authenticationTemplate: server.executor?.authentication ?? [{ slug: "none", kind: "none" }]
   };
+  if (args.length > 0) config.args = args.map((arg) => expandHome(arg, home));
+  return config;
 }
 
 export function desiredExecutorServer(

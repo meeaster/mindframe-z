@@ -70,15 +70,16 @@ export async function runWorkCreate(
     options,
     async () => {
       const paths = createRuntimePaths(options);
-      const unit = await createWorkUnit(paths, {
+      const input: Parameters<typeof createWorkUnit>[1] = {
         slug,
         title: options.title ?? titleFromSlug(slug),
-        objective: "",
-        ...(options.scope ? { scope: workScopeSchema.parse(options.scope) } : {}),
-        ...(options.project ? { project: options.project } : {}),
-        ...(options.phase ? { phase: workPhaseSchema.parse(options.phase) } : {}),
-        ...(options.thread ? { thread: options.thread } : {})
-      });
+        objective: ""
+      };
+      if (options.scope) input.scope = workScopeSchema.parse(options.scope);
+      if (options.project) input.project = options.project;
+      if (options.phase) input.phase = workPhaseSchema.parse(options.phase);
+      if (options.thread) input.thread = options.thread;
+      const unit = await createWorkUnit(paths, input);
       return { unit, files: workAuthoringPaths(paths, slug) };
     },
     ({ unit, files }) => [

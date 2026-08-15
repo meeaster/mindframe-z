@@ -793,11 +793,10 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     profileMap.set(profile.name, profile);
     if (mise !== undefined) miseMap.set(profile.name, mise);
   }
-  return {
+  const loaded: LoadedManifests = {
     homeManifest,
     root,
     aliasPath: [],
-    ...(upstream ? { upstream: withAliasPrefix(upstream, homeManifest.extends!.name) } : {}),
     references: refs.references,
     skills: skills.skills,
     mcpServers: mcp.servers,
@@ -805,12 +804,15 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     miseFiles: miseMap,
     machine
   };
+  if (upstream) loaded.upstream = withAliasPrefix(upstream, homeManifest.extends!.name);
+  return loaded;
 }
 
 function withAliasPrefix(manifests: LoadedManifests, alias: string): LoadedManifests {
-  return {
+  const prefixed: LoadedManifests = {
     ...manifests,
-    aliasPath: [alias, ...manifests.aliasPath],
-    ...(manifests.upstream ? { upstream: withAliasPrefix(manifests.upstream, alias) } : {})
+    aliasPath: [alias, ...manifests.aliasPath]
   };
+  if (manifests.upstream) prefixed.upstream = withAliasPrefix(manifests.upstream, alias);
+  return prefixed;
 }
