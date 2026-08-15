@@ -25,7 +25,7 @@ export const CODEX_DERIVED_KEYS = new Set([
   "skills"
 ]);
 
-function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile): Record<string, unknown> {
+function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile) {
   const mcp = Object.fromEntries(
     filterMcpForTarget(profile, "codex").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
@@ -59,13 +59,10 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile): Record<s
   return mcp;
 }
 
-function renderCodexPermissions(
-  paths: RuntimePaths,
-  profile: ResolvedProfile
-): Record<string, unknown> {
-  const filesystem: Record<string, string> = {
+function renderCodexPermissions(paths: RuntimePaths, profile: ResolvedProfile) {
+  const filesystem = {
     [profile.referencesDir]: "read"
-  };
+  } satisfies Record<string, string>;
 
   if (hasManagedZsh(profile)) {
     filesystem[zshSecretsDir(paths)] = "deny";

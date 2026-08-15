@@ -3,6 +3,8 @@ import { executorConnectionNameSchema } from "../core/manifests.js";
 
 export type ExecutorOwner = "user" | "org";
 
+type ExecutorAuthenticationPart = string | { type: "variable"; name: string };
+
 export function executorConnectionAddress(
   owner: ExecutorOwner,
   integration: string,
@@ -23,15 +25,13 @@ export function assertExecutorConnectionIdentifier(name: string, context = "conn
   }
 }
 
-export function encodeExecutorAuthenticationMethod(
-  method: ExecutorAuthenticationMethod
-): Record<string, unknown> {
+export function encodeExecutorAuthenticationMethod(method: ExecutorAuthenticationMethod) {
   if (method.kind !== "apikey") return { slug: method.slug, kind: method.kind };
 
-  const headers: Record<string, unknown> = {};
-  const queryParams: Record<string, unknown> = {};
+  const headers: Record<string, ExecutorAuthenticationPart[]> = {};
+  const queryParams: Record<string, ExecutorAuthenticationPart[]> = {};
   for (const placement of method.placements) {
-    const parts = [
+    const parts: ExecutorAuthenticationPart[] = [
       ...(placement.prefix ? [placement.prefix] : []),
       { type: "variable", name: placement.variable }
     ];
@@ -48,6 +48,6 @@ export function encodeExecutorAuthenticationMethod(
 
 export function encodeExecutorAuthenticationMethods(
   methods: readonly ExecutorAuthenticationMethod[]
-): Record<string, unknown>[] {
+) {
   return methods.map(encodeExecutorAuthenticationMethod);
 }

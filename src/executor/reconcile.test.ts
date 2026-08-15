@@ -77,12 +77,7 @@ function durableConnection(name = "main", template = "api-key"): ExecutorConnect
   };
 }
 
-function fakeAdapter(): {
-  adapter: ExecutorAdapter;
-  mutations: string[];
-  integrations: Map<string, ExecutorIntegration>;
-  connections: Map<string, ExecutorConnection[]>;
-} {
+function fakeAdapter() {
   const integrations = new Map<string, ExecutorIntegration>();
   const connections = new Map<string, ExecutorConnection[]>();
   const mutations: string[] = [];

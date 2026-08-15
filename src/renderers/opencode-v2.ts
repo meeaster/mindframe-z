@@ -26,7 +26,7 @@ export function mergeOpenCodeV2CliPlugins(
   cli: Record<string, unknown>,
   managedEntries: readonly string[],
   previouslyManagedEntries: readonly string[]
-): Record<string, unknown> {
+) {
   const plugins = Array.isArray(cli.plugins) ? cli.plugins : [];
   const preserved = plugins.filter(
     (entry) => typeof entry !== "string" || !previouslyManagedEntries.includes(entry)
@@ -53,8 +53,8 @@ function nativeBoundary(absPath: string): string {
   return path.join(normalized, "*");
 }
 
-function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths): Record<string, unknown> {
-  const servers: Record<string, unknown> = Object.fromEntries(
+function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths) {
+  const servers = Object.fromEntries(
     filterMcpForTarget(profile, "opencode-v2").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
         const entry = { type: "remote", url: server.url, disabled: !enabled };

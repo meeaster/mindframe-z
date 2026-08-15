@@ -132,7 +132,7 @@ export function buildExecutorDesiredState(
   };
 }
 
-export function normalizedExecutorConfig(server: ExecutorDesiredServer): Record<string, unknown> {
+export function normalizedExecutorConfig(server: ExecutorDesiredServer) {
   return {
     name: server.name,
     description: server.description,

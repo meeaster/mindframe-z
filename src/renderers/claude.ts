@@ -43,10 +43,7 @@ function stripEnvRef(value: string): string {
   return name === null ? value : `\${${name}}`;
 }
 
-function renderClaudeMcpServer(
-  server: ResolvedProfile["mcpServers"][number],
-  home: string
-): unknown {
+function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], home: string) {
   if (server.server.type === "remote") {
     const entry = {
       type: server.server.transport === "sse" ? "sse" : "http",
@@ -73,7 +70,7 @@ function mergeClaudeMcp(
   existingClaudeJson: Record<string, unknown>,
   managedMcp: Record<string, unknown>,
   managedServerNames: Set<string>
-): Record<string, unknown> {
+) {
   const existingMcpServersRaw = existingClaudeJson.mcpServers;
   const existingMcpServers = isPlainObject(existingMcpServersRaw)
     ? { ...existingMcpServersRaw }

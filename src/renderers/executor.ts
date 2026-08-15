@@ -8,7 +8,7 @@ export function executorTimeout(profile: ResolvedProfile): number {
   return profile.profile.executor?.timeout_ms ?? 60_000;
 }
 
-export function openCodeExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
+export function openCodeExecutorEntry(profile: ResolvedProfile) {
   return {
     type: "local",
     command: ["executor", ...executorBridgeArgs(profile)],
@@ -17,7 +17,7 @@ export function openCodeExecutorEntry(profile: ResolvedProfile): Record<string, 
   };
 }
 
-export function openCodeV2ExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
+export function openCodeV2ExecutorEntry(profile: ResolvedProfile) {
   const timeout = executorTimeout(profile);
   return {
     type: "local",
@@ -27,7 +27,7 @@ export function openCodeV2ExecutorEntry(profile: ResolvedProfile): Record<string
   };
 }
 
-export function claudeExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
+export function claudeExecutorEntry(profile: ResolvedProfile) {
   return {
     type: "stdio",
     command: "executor",
@@ -35,7 +35,7 @@ export function claudeExecutorEntry(profile: ResolvedProfile): Record<string, un
   };
 }
 
-export function codexExecutorEntry(profile: ResolvedProfile): Record<string, unknown> {
+export function codexExecutorEntry(profile: ResolvedProfile) {
   return {
     command: "executor",
     args: executorBridgeArgs(profile),

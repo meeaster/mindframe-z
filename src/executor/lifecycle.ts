@@ -51,6 +51,11 @@ export interface ExecutorLifecycleClassification {
   blockers: string[];
 }
 
+export interface ExecutorRemovalClassification {
+  removable: boolean;
+  blockers: string[];
+}
+
 const dangerousConfigFields = [
   "transport",
   "endpoint",
@@ -254,7 +259,7 @@ export function classifyExecutorRemoval(
   slug: string,
   current: ExecutorIntegration | null,
   connections: readonly ExecutorConnection[]
-): { removable: boolean; blockers: string[] } {
+): ExecutorRemovalClassification {
   if (!current) return { removable: false, blockers: [] };
   if (connections.some(executorConnectionHasDurableState)) {
     return {
