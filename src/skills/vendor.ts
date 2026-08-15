@@ -375,9 +375,9 @@ export async function stageVendoredSkill(
     subtree: entry.subtree,
     commit,
     digest,
-    sourceRoot,
-    ...(oldLock ? { oldCommit: oldLock.commit, oldDigest: oldLock.digest } : {})
+    sourceRoot
   };
+  if (oldLock) Object.assign(provenance, { oldCommit: oldLock.commit, oldDigest: oldLock.digest });
   const candidate: SkillCandidate = {
     path: candidateFile(skillCandidatesRoot(paths), id),
     sourcePath: candidateFile(skillCandidatesRoot(paths), path.join(id, "source")),

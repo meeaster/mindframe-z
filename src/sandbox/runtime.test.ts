@@ -129,7 +129,7 @@ function profile(
           }
         ]
       : [],
-    miseLayers: [{ name: "personal", root: options.root ?? "/tmp/mfz-root" }],
+    miseLayers: [{ name: "personal", root: options.root ?? "/tmp/mfz-root" }]
   };
 }
 
@@ -141,18 +141,19 @@ function remoteMcp(
     targets?: ["opencode" | "claude-code", ...("opencode" | "claude-code")[]];
   } = {}
 ): ResolvedMcpServer {
+  const server = {
+    type: "remote" as const,
+    transport: "http" as const,
+    description: `${name} MCP`,
+    url
+  };
+  if (options.headers) Object.assign(server, { headers: options.headers });
   return {
     name,
     agents: Object.fromEntries(
       (options.targets ?? ["opencode", "claude-code"]).map((target) => [target, true])
     ),
-    server: {
-      type: "remote",
-      transport: "http",
-      description: `${name} MCP`,
-      url,
-      ...(options.headers ? { headers: options.headers } : {})
-    }
+    server
   };
 }
 

@@ -204,7 +204,7 @@ function size(label: string, repetitions = 1): TextSize {
 }
 
 function opencodeReport(withHistory: boolean): HarnessReport {
-  return {
+  const report: HarnessReport = {
     harness: "opencode",
     scopeNotes: [
       "mfz profile, generated indexes, enabled skills/MCP, and repository instructions",
@@ -261,34 +261,33 @@ function opencodeReport(withHistory: boolean): HarnessReport {
       estimatedTokens:
         size("nested instruction", 19).estimatedTokens +
         size("deeper instruction", 11).estimatedTokens
-    },
-    ...(withHistory
-      ? {
-          history: {
-            windowDays: 7,
-            sessions: 3,
-            childSessions: 1,
-            modelRequests: 20,
-            usageBearingRequests: 18,
-            uncachedInputTokens: 2400,
-            cacheReadTokens: 8800,
-            cacheWriteTokens: 1100,
-            maxPromptInputTokens: 1900,
-            outputTokens: 1950,
-            compactions: 2,
-            capabilities: [
-              { kind: "skill", name: "review", current: true, calls: 5 },
-              { kind: "mcp", name: "github", current: true, calls: 2 },
-              { kind: "skill", name: "old-planner", current: false, calls: 3 }
-            ]
-          }
-        }
-      : {})
+    }
   };
+  if (withHistory) {
+    report.history = {
+      windowDays: 7,
+      sessions: 3,
+      childSessions: 1,
+      modelRequests: 20,
+      usageBearingRequests: 18,
+      uncachedInputTokens: 2400,
+      cacheReadTokens: 8800,
+      cacheWriteTokens: 1100,
+      maxPromptInputTokens: 1900,
+      outputTokens: 1950,
+      compactions: 2,
+      capabilities: [
+        { kind: "skill", name: "review", current: true, calls: 5 },
+        { kind: "mcp", name: "github", current: true, calls: 2 },
+        { kind: "skill", name: "old-planner", current: false, calls: 3 }
+      ]
+    };
+  }
+  return report;
 }
 
 function claudeReport(withHistory: boolean): HarnessReport {
-  return {
+  const report: HarnessReport = {
     harness: "claude-code",
     scopeNotes: [
       "mfz instructions, Claude rules, enabled skills/MCP, and repository instructions",
@@ -337,30 +336,29 @@ function claudeReport(withHistory: boolean): HarnessReport {
       path: "src/ui",
       contributorNames: [".claude/rules/ui.md"],
       estimatedTokens: size("ui rule", 20).estimatedTokens
-    },
-    ...(withHistory
-      ? {
-          history: {
-            windowDays: 7,
-            sessions: 4,
-            childSessions: 2,
-            modelRequests: 8,
-            usageBearingRequests: 6,
-            uncachedInputTokens: 3100,
-            cacheReadTokens: 8500,
-            cacheWriteTokens: 700,
-            maxPromptInputTokens: 5200,
-            outputTokens: 2300,
-            compactions: 1,
-            capabilities: [
-              { kind: "skill", name: "review", current: true, calls: 0 },
-              { kind: "mcp", name: "github", current: true, calls: 1 },
-              { kind: "skill", name: "legacy-search", current: false, calls: 2 }
-            ]
-          }
-        }
-      : {})
+    }
   };
+  if (withHistory) {
+    report.history = {
+      windowDays: 7,
+      sessions: 4,
+      childSessions: 2,
+      modelRequests: 8,
+      usageBearingRequests: 6,
+      uncachedInputTokens: 3100,
+      cacheReadTokens: 8500,
+      cacheWriteTokens: 700,
+      maxPromptInputTokens: 5200,
+      outputTokens: 2300,
+      compactions: 1,
+      capabilities: [
+        { kind: "skill", name: "review", current: true, calls: 0 },
+        { kind: "mcp", name: "github", current: true, calls: 1 },
+        { kind: "skill", name: "legacy-search", current: false, calls: 2 }
+      ]
+    };
+  }
+  return report;
 }
 
 export function scenarioNames(): string[] {

@@ -237,7 +237,11 @@ async function writeSandboxRuntimeConfig(
   const mise = await renderTarget(paths, profile, "mise", { sandbox: true });
   for (const file of mise.files) {
     const relative = path.relative(path.join(configsProfile, "mise"), file.path);
-    const target = path.join(runtimeDir, "mise", relative.startsWith("tasks/") ? relative : path.join("conf.d", relative));
+    const target = path.join(
+      runtimeDir,
+      "mise",
+      relative.startsWith("tasks/") ? relative : path.join("conf.d", relative)
+    );
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, file.content, "utf8");
   }
@@ -596,47 +600,32 @@ function sandboxMcpForTarget(
       if (entry.server.type === "remote") {
         const url = shim ? localMcpShimUrl(shim.port, entry.server.url) : entry.server.url;
         if (target === "opencode") {
-          return [
-            entry.name,
-            {
-              type: "remote",
-              url,
-              enabled: entry.enabled,
-              ...(headers ? { headers } : {})
-            }
-          ];
+          const server = { type: "remote" as const, url, enabled: entry.enabled };
+          if (headers) Object.assign(server, { headers });
+          return [entry.name, server];
         }
-        return [
-          entry.name,
-          {
-            type: entry.server.transport === "sse" ? "sse" : "http",
-            url,
-            ...(headers ? { headers } : {})
-          }
-        ];
+        const server = {
+          type: entry.server.transport === "sse" ? ("sse" as const) : ("http" as const),
+          url
+        };
+        if (headers) Object.assign(server, { headers });
+        return [entry.name, server];
       }
 
       if (target === "opencode") {
-        return [
-          entry.name,
-          {
-            type: "local",
-            command: entry.server.command.map((part) => expandHome(part, paths.home)),
-            enabled: entry.enabled,
-            ...(entry.server.env ? { env: entry.server.env } : {})
-          }
-        ];
+        const server = {
+          type: "local" as const,
+          command: entry.server.command.map((part) => expandHome(part, paths.home)),
+          enabled: entry.enabled
+        };
+        if (entry.server.env) Object.assign(server, { env: entry.server.env });
+        return [entry.name, server];
       }
       const [command, ...args] = entry.server.command;
-      return [
-        entry.name,
-        {
-          type: "stdio",
-          command,
-          ...(args.length > 0 ? { args } : {}),
-          ...(entry.server.env ? { env: entry.server.env } : {})
-        }
-      ];
+      const server = { type: "stdio" as const, command };
+      if (args.length > 0) Object.assign(server, { args });
+      if (entry.server.env) Object.assign(server, { env: entry.server.env });
+      return [entry.name, server];
     })
   );
 }
@@ -646,7 +635,9 @@ function sandboxMcpHeaders(
   shimmed: boolean
 ): Record<string, string> | undefined {
   if (!headers && !shimmed) return undefined;
-  return { ...headers, ...(shimmed ? { Authorization: "PLACEHOLDER" } : {}) };
+  const result = { ...headers };
+  if (shimmed) result.Authorization = "PLACEHOLDER";
+  return result;
 }
 
 function dockerRunArgs(

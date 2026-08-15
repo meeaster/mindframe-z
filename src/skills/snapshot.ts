@@ -297,22 +297,23 @@ export async function renderSkillSnapshot(
     if (targets.length === 0) continue;
     const source = skill.source === "vendored" ? "vendored" : "local";
     sources.set(skill.name, { sourcePath: sourcePath(skill), source });
-    selected.push({
+    const selectedSkill: SnapshotSkill = {
       name: skill.name,
       source,
       digest: "",
       targets,
       sourceRoot: skill.sourceRoot,
-      sourcePath: sourcePath(skill),
-      ...(skill.source === "vendored" && skill.vendor
-        ? {
-            repository: skill.vendor.repository,
-            ref: skill.vendor.ref,
-            subtree: skill.vendor.subtree,
-            commit: skill.vendor.commit
-          }
-        : {})
-    });
+      sourcePath: sourcePath(skill)
+    };
+    if (skill.source === "vendored" && skill.vendor) {
+      Object.assign(selectedSkill, {
+        repository: skill.vendor.repository,
+        ref: skill.vendor.ref,
+        subtree: skill.vendor.subtree,
+        commit: skill.vendor.commit
+      });
+    }
+    selected.push(selectedSkill);
   }
   for (const entry of engineEntries) {
     const targets = engineTargets(profile, selectedTargets);
