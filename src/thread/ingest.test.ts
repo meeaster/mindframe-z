@@ -19,7 +19,7 @@ import {
 import { DatabaseSync } from "node:sqlite";
 import { ingestThread, resolveRefreshSet } from "./ingest.js";
 import type { AgentRunner, AgentRunRequest, AgentRunResult } from "./runner.js";
-import type { ThreadManifest } from "./schema.js";
+import type { ThreadManifest, ThreadSession } from "./schema.js";
 import type { hydrateSession } from "../sessions/hydrate.js";
 
 function paths(home: string): RuntimePaths {
@@ -132,7 +132,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 
@@ -375,17 +375,16 @@ async function ingestFixture(
     charter: "Keep sessions fresh.",
     store: "personal",
     created_at: "2026-06-27T00:00:00.000Z",
-    sessions: sessions.map((s) => ({
-      id: s.id,
-      source: s.source,
-      ...(s.message_count !== undefined ? { message_count: s.message_count } : {}),
-      ...(s.last_message_id !== undefined ? { last_message_id: s.last_message_id } : {}),
-      ...(s.message_count !== undefined || s.last_message_id !== undefined
-        ? { last_activity_at: "2026-06-27T00:00:00.000Z" }
-        : {}),
-      ...(s.title !== undefined ? { title: s.title } : {}),
-      ...(s.extracted_by !== undefined ? { synthesizer: s.extracted_by } : {})
-    })),
+    sessions: sessions.map((s): ThreadSession => {
+      const session: ThreadSession = { id: s.id, source: s.source };
+      if (s.message_count !== undefined) session.message_count = s.message_count;
+      if (s.last_message_id !== undefined) session.last_message_id = s.last_message_id;
+      if (s.message_count !== undefined || s.last_message_id !== undefined)
+        session.last_activity_at = "2026-06-27T00:00:00.000Z";
+      if (s.title !== undefined) session.title = s.title;
+      if (s.extracted_by !== undefined) session.synthesizer = s.extracted_by;
+      return session;
+    }),
     excluded: [],
     synthesis: {}
   });

@@ -127,31 +127,31 @@ export async function migrateThreadDirectory(
   const sessions = [];
   for (const session of legacy.sessions) {
     const watermark = await legacyWatermark(request.paths, session);
-    const converted = {
+    const converted: z.infer<typeof threadManifestSchema>["sessions"][number] = {
       id: session.id,
-      source: session.source,
-      ...(session.title !== undefined ? { title: session.title } : {}),
-      ...(session.project !== undefined ? { project: session.project } : {}),
-      ...(session.time_range !== undefined ? { time_range: session.time_range } : {}),
-      ...((session.synthesizer ?? session.extracted_by)
-        ? { synthesizer: session.synthesizer ?? session.extracted_by }
-        : {}),
-      ...(watermark ? watermark : {})
+      source: session.source
     };
+    if (session.title !== undefined) converted.title = session.title;
+    if (session.project !== undefined) converted.project = session.project;
+    if (session.time_range !== undefined) converted.time_range = session.time_range;
+    const synthesizer = session.synthesizer ?? session.extracted_by;
+    if (synthesizer) converted.synthesizer = synthesizer;
+    if (watermark !== undefined) Object.assign(converted, watermark);
     sessions.push(converted);
   }
 
-  const manifest = threadManifestSchema.parse({
+  const manifestInput: z.infer<typeof threadManifestSchema> = {
     slug: legacy.slug,
-    ...(legacy.title !== undefined ? { title: legacy.title } : {}),
     charter: legacy.charter,
     store: request.storeName,
     created_at: legacy.created_at,
-    ...(legacy.read_subagents !== undefined ? { read_subagents: legacy.read_subagents } : {}),
     sessions,
     excluded: legacy.excluded.map((entry) => (typeof entry === "string" ? { id: entry } : entry)),
     synthesis: legacy.synthesis
-  });
+  };
+  if (legacy.title !== undefined) manifestInput.title = legacy.title;
+  if (legacy.read_subagents !== undefined) manifestInput.read_subagents = legacy.read_subagents;
+  const manifest = threadManifestSchema.parse(manifestInput);
 
   const targetDir = request.targetDir ?? request.sourceDir;
   if (targetDir !== request.sourceDir) await cp(request.sourceDir, targetDir, { recursive: true });
@@ -197,11 +197,12 @@ export async function migrateStore(request: MigrateStoreRequest): Promise<Migrat
     if (!request.dryRun && request.writeBack) {
       await copyDirectoryContents(preparedStore, request.outputPath ?? request.storePath);
     }
-    return {
+    const result: MigratedStore = {
       storeName: request.storeName,
-      threads,
-      ...(request.outputPath !== undefined ? { outputPath: request.outputPath } : {})
+      threads
     };
+    if (request.outputPath !== undefined) result.outputPath = request.outputPath;
+    return result;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -329,19 +330,22 @@ async function migrateRuns(
         run.kind === "native" || run.kind === "imported" ? run : { kind: "native", ...run }
       )
     : [];
-  const imported = embedded.map((run, index) => ({
-    kind: "imported" as const,
-    id: `imported-${slug}-${index + 1}-${createHash("sha256").update(JSON.stringify(run)).digest("hex").slice(0, 12)}`,
-    thread: slug,
-    at: run.at,
-    mode: run.mode,
-    sessions: run.sessions,
-    ...(run.model !== undefined ? { model: run.model } : {}),
-    ...(run.duration_ms !== undefined ? { duration_ms: run.duration_ms } : {}),
-    ...(run.num_turns !== undefined ? { num_turns: run.num_turns } : {}),
-    ...(run.usage !== undefined ? { usage: run.usage } : {}),
-    ...(run.cost_usd !== undefined ? { cost_usd: run.cost_usd } : {})
-  }));
+  const imported = embedded.map((run, index) => {
+    const importedRun: Extract<ThreadRuns["runs"][number], { kind: "imported" }> = {
+      kind: "imported",
+      id: `imported-${slug}-${index + 1}-${createHash("sha256").update(JSON.stringify(run)).digest("hex").slice(0, 12)}`,
+      thread: slug,
+      at: run.at,
+      mode: run.mode,
+      sessions: run.sessions
+    };
+    if (run.model !== undefined) importedRun.model = run.model;
+    if (run.duration_ms !== undefined) importedRun.duration_ms = run.duration_ms;
+    if (run.num_turns !== undefined) importedRun.num_turns = run.num_turns;
+    if (run.usage !== undefined) importedRun.usage = run.usage;
+    if (run.cost_usd !== undefined) importedRun.cost_usd = run.cost_usd;
+    return importedRun;
+  });
   return threadRunsSchema.parse({ runs: [...existingRuns, ...imported] });
 }
 

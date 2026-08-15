@@ -388,13 +388,11 @@ function watermarkFromManifestSession(session: {
   last_message_id?: string | undefined;
   last_activity_at?: string | undefined;
 }): Partial<Watermark> {
-  return {
-    ...(session.message_count !== undefined ? { message_count: session.message_count } : {}),
-    ...(session.last_message_id !== undefined ? { last_message_id: session.last_message_id } : {}),
-    ...(session.last_activity_at !== undefined
-      ? { last_activity_at: session.last_activity_at }
-      : {})
-  };
+  const watermark: Partial<Watermark> = {};
+  if (session.message_count !== undefined) watermark.message_count = session.message_count;
+  if (session.last_message_id !== undefined) watermark.last_message_id = session.last_message_id;
+  if (session.last_activity_at !== undefined) watermark.last_activity_at = session.last_activity_at;
+  return watermark;
 }
 
 function triagePrompt(signal: SweepSessionSignal, threads: readonly SweepThread[]): string {

@@ -5,7 +5,19 @@ const HOOK_URL = process.env.LAPDOG_URL ? `${process.env.LAPDOG_URL}/claude/hook
 
 const HOOK_TIMEOUT_MS = 2000;
 
-async function postHook(body: Record<string, unknown>): Promise<void> {
+type HookBody = {
+  hook_event_name: string;
+  session_id: string;
+  tool_name?: string;
+  tool_use_id?: string;
+  tool_input?: unknown;
+  tool_response?: unknown;
+  prompt?: string;
+  status?: string;
+  error?: unknown;
+};
+
+async function postHook(body: HookBody): Promise<void> {
   if (!HOOK_URL) return;
   try {
     await fetch(HOOK_URL, {
@@ -99,15 +111,16 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
     "tool.execute.after": async (input, output) => {
       const metadata = (output.metadata ?? {}) as { error?: unknown };
       const failed = metadata.error !== undefined && metadata.error !== null;
-      await postHook({
+      const hook: HookBody = {
         hook_event_name: failed ? "PostToolUseFailure" : "PostToolUse",
         session_id: input.sessionID,
         tool_name: input.tool,
         tool_input: input.args,
         tool_use_id: input.callID,
-        tool_response: output.output,
-        ...(failed ? { error: metadata.error } : {})
-      });
+        tool_response: output.output
+      };
+      if (failed) hook.error = metadata.error;
+      await postHook(hook);
     },
 
     "chat.message": async (input, output) => {

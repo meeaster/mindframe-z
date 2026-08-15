@@ -165,6 +165,10 @@ export async function runThreadCreate(
     const dir = path.join(store.path, slug);
     if (await pathExists(path.join(dir, "manifest.json")))
       throw new Error(`Thread already exists: ${slug}`);
+    const synthesis: ThreadManifest["synthesis"] = {};
+    if (options.discover) synthesis.discover = options.discover;
+    if (options.gather) synthesis.gather = options.gather;
+    if (options.synthesize) synthesis.synthesize = options.synthesize;
     const manifest: ThreadManifest = {
       slug,
       charter: options.charter,
@@ -172,11 +176,7 @@ export async function runThreadCreate(
       created_at: new Date().toISOString(),
       sessions: [],
       excluded: [],
-      synthesis: {
-        ...(options.discover ? { discover: options.discover } : {}),
-        ...(options.gather ? { gather: options.gather } : {}),
-        ...(options.synthesize ? { synthesize: options.synthesize } : {})
-      }
+      synthesis
     };
     if (store.publication !== "direct") {
       const workspace = await mkdtemp(path.join(tmpdir(), "mfz-thread-run-"));
