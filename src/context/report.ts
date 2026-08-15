@@ -119,10 +119,10 @@ export async function buildContextReport(
   const report: ContextReport = {
     profile: profile.name,
     inspectedDirectory,
-    ...(projectRoot ? { projectRoot } : {}),
     homeDirectory: paths.home,
     harnesses: reports
   };
+  if (projectRoot) report.projectRoot = projectRoot;
   return options.probeMcp
     ? { ...report, mcpProbes: await enrichMcpProbes(paths, profile, report) }
     : report;
@@ -183,13 +183,14 @@ export async function buildContextHistoryReport(
         : unavailableHistory(historyDays)
     });
   }
-  return {
+  const report: ContextReport = {
     profile: profile.name,
     inspectedDirectory,
-    ...(projectRoot ? { projectRoot } : {}),
     homeDirectory: paths.home,
     harnesses: reports
   };
+  if (projectRoot) report.projectRoot = projectRoot;
+  return report;
 }
 
 function formatNumber(value: number): string {

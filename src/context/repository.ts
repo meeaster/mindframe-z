@@ -223,5 +223,7 @@ export async function analyzeRepository(
     }
   }
 
-  return { contributors, ...(maxConditionalPath ? { maxConditionalPath } : {}) };
+  const result: RepositoryAnalysis = { contributors };
+  if (maxConditionalPath) result.maxConditionalPath = maxConditionalPath;
+  return result;
 }

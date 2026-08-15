@@ -30,12 +30,12 @@ export function addOpenCodeUsage(value: unknown): UsageComponents | undefined {
   ) {
     return undefined;
   }
-  return {
-    ...(input === undefined ? {} : { input }),
-    ...(cacheRead === undefined ? {} : { cacheRead }),
-    ...(cacheWrite === undefined ? {} : { cacheWrite }),
-    ...(output === undefined ? {} : { output })
-  };
+  const result: UsageComponents = {};
+  if (input !== undefined) result.input = input;
+  if (cacheRead !== undefined) result.cacheRead = cacheRead;
+  if (cacheWrite !== undefined) result.cacheWrite = cacheWrite;
+  if (output !== undefined) result.output = output;
+  return result;
 }
 
 export function addClaudeUsage(value: unknown): UsageComponents | undefined {
@@ -53,12 +53,12 @@ export function addClaudeUsage(value: unknown): UsageComponents | undefined {
   ) {
     return undefined;
   }
-  return {
-    ...(input === undefined ? {} : { input }),
-    ...(cacheRead === undefined ? {} : { cacheRead }),
-    ...(cacheWrite === undefined ? {} : { cacheWrite }),
-    ...(output === undefined ? {} : { output })
-  };
+  const result: UsageComponents = {};
+  if (input !== undefined) result.input = input;
+  if (cacheRead !== undefined) result.cacheRead = cacheRead;
+  if (cacheWrite !== undefined) result.cacheWrite = cacheWrite;
+  if (output !== undefined) result.output = output;
+  return result;
 }
 
 export class HistoryCollector {
@@ -88,19 +88,15 @@ export class HistoryCollector {
       return;
     }
     if (!usage) return;
-    this.requests.set(id, {
-      ...(existing.input === undefined && usage.input !== undefined ? { input: usage.input } : {}),
-      ...(existing.cacheRead === undefined && usage.cacheRead !== undefined
-        ? { cacheRead: usage.cacheRead }
-        : {}),
-      ...(existing.cacheWrite === undefined && usage.cacheWrite !== undefined
-        ? { cacheWrite: usage.cacheWrite }
-        : {}),
-      ...(existing.output === undefined && usage.output !== undefined
-        ? { output: usage.output }
-        : {}),
-      ...existing
-    });
+    const merged: UsageComponents = {};
+    if (existing.input === undefined && usage.input !== undefined) merged.input = usage.input;
+    if (existing.cacheRead === undefined && usage.cacheRead !== undefined)
+      merged.cacheRead = usage.cacheRead;
+    if (existing.cacheWrite === undefined && usage.cacheWrite !== undefined)
+      merged.cacheWrite = usage.cacheWrite;
+    if (existing.output === undefined && usage.output !== undefined) merged.output = usage.output;
+    Object.assign(merged, existing);
+    this.requests.set(id, merged);
   }
 
   addActivation(
@@ -123,13 +119,14 @@ export class HistoryCollector {
     const key = `${category}:${name}:${source ?? ""}`;
     const existing = this.activations.get(key);
     if (!existing) {
-      this.activations.set(key, {
+      const activation: ContextActivation = {
         category,
         name,
-        count,
-        ...(characters === undefined ? {} : { characters }),
-        ...(source === undefined ? {} : { source })
-      });
+        count
+      };
+      if (characters !== undefined) activation.characters = characters;
+      if (source !== undefined) activation.source = source;
+      this.activations.set(key, activation);
       return;
     }
     existing.count += count;
@@ -164,7 +161,7 @@ export class HistoryCollector {
       const promptInput = (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
       maxPromptInputTokens = Math.max(maxPromptInputTokens ?? 0, promptInput);
     }
-    return buildHistory(windowDays, {
+    const values: Parameters<typeof buildHistory>[1] = {
       sessions: this.sessionsById.size,
       childSessions: [...this.sessionsById.values()].filter(Boolean).length,
       modelRequests: this.requests.size,
@@ -173,14 +170,15 @@ export class HistoryCollector {
       cacheReadTokens,
       cacheWriteTokens,
       promptInputTokensWindowTotal: uncachedInputTokens + cacheReadTokens + cacheWriteTokens,
-      ...(maxPromptInputTokens === undefined ? {} : { maxPromptInputTokens }),
       outputTokens,
       compactions: this.compactions,
       activations: [...this.activations.values()].sort(
         (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
       ),
       versions: [...this.versions].sort()
-    });
+    };
+    if (maxPromptInputTokens !== undefined) values.maxPromptInputTokens = maxPromptInputTokens;
+    return buildHistory(windowDays, values);
   }
 }
 

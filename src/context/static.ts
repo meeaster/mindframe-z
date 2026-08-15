@@ -307,12 +307,13 @@ export async function analyzeHarnessStatic(
     scopeNotes.push("repository scan includes tracked and non-ignored untracked instruction files");
   }
 
-  return {
+  const report: HarnessReport = {
     harness,
     scopeNotes,
     contributors,
     mcpServers,
-    visibleSkillNames: skills.visibleSkillNames,
-    ...(repository.maxConditionalPath ? { maxConditionalPath: repository.maxConditionalPath } : {})
+    visibleSkillNames: skills.visibleSkillNames
   };
+  if (repository.maxConditionalPath) report.maxConditionalPath = repository.maxConditionalPath;
+  return report;
 }

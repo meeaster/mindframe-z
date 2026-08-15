@@ -90,14 +90,15 @@ class HttpConnection implements McpConnection {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
+      const headers: { [key: string]: string } = {
+        ...this.headers,
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json"
+      };
+      if (this.sessionId) headers["Mcp-Session-Id"] = this.sessionId;
       const response = await fetch(this.url, {
         method: "POST",
-        headers: {
-          ...this.headers,
-          Accept: "application/json, text/event-stream",
-          "Content-Type": "application/json",
-          ...(this.sessionId ? { "Mcp-Session-Id": this.sessionId } : {})
-        },
+        headers,
         body: JSON.stringify(message),
         signal: controller.signal
       });
