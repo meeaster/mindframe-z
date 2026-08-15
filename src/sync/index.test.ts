@@ -110,20 +110,4 @@ describe("runSync source writes", () => {
     expect(await readFile(profilePath, "utf8")).toBe(broken);
   });
 
-  it("does not overwrite malformed mise.toml", async () => {
-    const root = await makeTempDir();
-    const home = await makeTempDir();
-    await writeFixture(root, home);
-    const paths = testRuntimePaths(home, root);
-    const profile = await resolveProfile(paths, "personal");
-    const renderedPath = path.join(paths.configsDir, "personal", "mise", "config.toml");
-    await mkdir(path.dirname(renderedPath), { recursive: true });
-    await writeFile(renderedPath, '[tools]\ndeno = "2"\n', "utf8");
-    const misePath = path.join(root, "profiles", "personal", "mise.toml");
-    const broken = "[tools\ndeno = ";
-    await writeFile(misePath, broken, "utf8");
-
-    await expect(runSync(paths, profile, "personal")).rejects.toThrow(misePath);
-    expect(await readFile(misePath, "utf8")).toBe(broken);
-  });
 });

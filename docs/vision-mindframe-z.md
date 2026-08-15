@@ -11,7 +11,7 @@ stays honest to it. It is intentionally a sketch, not a spec.
 ## Why mindframe-z
 
 mindframe-z already resolves "who you are in a given context" into rendered
-artifacts: dotfiles (`.zshrc`, `.p10k.zsh`), `mise/config.toml`, and agent config
+artifacts: dotfiles (`.zshrc`, `.p10k.zsh`), native Mise fragments/tasks, and agent config
 (opencode, claude). A sandbox needs exactly those artifacts plus a security
 boundary. So the sandbox is not a new thing to configure — it is one more runner
 hanging off profile resolution that already exists.

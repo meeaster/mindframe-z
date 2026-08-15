@@ -289,4 +289,29 @@ describe("dotfiles integration", () => {
       configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json")
     );
   });
+
+  it("renders systemd units as ordinary dotfiles", async () => {
+    await mkdir(path.join(root, "profiles", "personal", ".config", "systemd", "user"), {
+      recursive: true
+    });
+    await writeFile(
+      path.join(root, "profiles", "personal", ".config", "systemd", "user", "example.service"),
+      "[Unit]\nDescription=Example\n",
+      "utf8"
+    );
+
+    await cli("mfz", root, home, ["apply", "--target", "all"]);
+
+    const snapshot = configsPath(
+      home,
+      "personal",
+      "dotfiles",
+      ".config",
+      "systemd",
+      "user",
+      "example.service"
+    );
+    expect(await readFile(snapshot, "utf8")).toContain("Description=Example");
+    await expect(realpath(path.join(home, ".config", "systemd", "user", "example.service"))).resolves.toBe(snapshot);
+  });
 });

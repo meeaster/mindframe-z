@@ -33,7 +33,8 @@ export function mergeOpenCodeV2CliPlugins(
   );
   const nextPlugins = [...preserved, ...managedEntries];
 
-  if (plugins.length === 0 && managedEntries.length === 0 && !Array.isArray(cli.plugins)) return cli;
+  if (plugins.length === 0 && managedEntries.length === 0 && !Array.isArray(cli.plugins))
+    return cli;
   if (nextPlugins.length === 0) {
     const { plugins: _, ...withoutPlugins } = cli;
     return withoutPlugins;
@@ -135,8 +136,12 @@ export async function renderOpenCodeV2(
   const commandsPath = path.join(configsOpenCodeV2, "commands");
   const agentsPath = path.join(configsOpenCodeV2, "agents");
   const skillsPath = opencodeV2SkillSnapshotDir(paths, profile.name);
-  const instructions = [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
-  if (profile.extraFolders.length > 0) instructions.push(extraFoldersIndexPath(paths));
+  const useGlobalInstructions = profile.profile.opencode_v2.global_instructions === true;
+  const instructions = useGlobalInstructions
+    ? []
+    : [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
+  if (!useGlobalInstructions && profile.extraFolders.length > 0)
+    instructions.push(extraFoldersIndexPath(paths));
 
   const pluginResult = await collectPluginFiles(
     paths.root,
@@ -183,9 +188,9 @@ export async function renderOpenCodeV2(
     ...commandFiles,
     ...agentFiles,
     { path: configPath, content: jsonFileContent(config) },
-           ...(hasDependencies
-             ? [
-                 {
+    ...(hasDependencies
+      ? [
+          {
             path: packagePath,
             content: jsonFileContent({ dependencies: profile.profile.opencode_v2.dependencies })
           }
@@ -195,6 +200,14 @@ export async function renderOpenCodeV2(
   const links: RenderResult["links"] =
     paths.activeOpenCodeRuntime === "v2"
       ? [
+          ...(useGlobalInstructions
+            ? [
+                {
+                  linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
+                  targetPath: path.join(configsProfile, "AGENTS.md")
+                }
+              ]
+            : []),
           {
             linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
             targetPath: configPath
@@ -205,13 +218,13 @@ export async function renderOpenCodeV2(
                   linkPath: path.join(paths.opencodeConfigDir, "package.json"),
                   targetPath: packagePath
                 }
-               ]
-             : []),
-           { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
-           { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
-           {
-             linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
-             targetPath: tuiPluginsPath
+              ]
+            : []),
+          { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
+          { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
+          {
+            linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
+            targetPath: tuiPluginsPath
           }
         ]
       : [];
@@ -226,16 +239,24 @@ export async function renderOpenCodeV2(
     localStaleFiles: [pluginsPath],
     ...(paths.activeOpenCodeRuntime === "v2"
       ? {
-           cliPlugins: {
-             path: path.join(paths.opencodeConfigDir, "cli.json"),
-             entries: tuiPluginResult.entries,
-             registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
-             settings: profile.profile.opencode_v2.cli
-           }
+          cliPlugins: {
+            path: path.join(paths.opencodeConfigDir, "cli.json"),
+            entries: tuiPluginResult.entries,
+            registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
+            settings: profile.profile.opencode_v2.cli
+          }
         }
       : {}),
     links,
     staleLinks: [
+      ...(useGlobalInstructions
+        ? []
+        : [
+            {
+              linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
+              targetPath: path.join(configsProfile, "AGENTS.md")
+            }
+          ]),
       {
         linkPath: path.join(paths.opencodeConfigDir, "cli.json"),
         targetPath: path.join(configsOpenCodeV2, "cli.json")

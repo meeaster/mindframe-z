@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { profileSchema } from "../core/manifests.js";
 import { createRuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
+import { renderTarget } from "../core/render.js";
 import { mergeOpenCodeV2CliPlugins, renderOpenCodeV2 } from "./opencode-v2.js";
 
 function profile(home: string): ResolvedProfile {
@@ -25,7 +26,8 @@ function profile(home: string): ResolvedProfile {
     },
     opencode_v2: {
       config: { model: "v2/model" },
-      cli: { theme: "dark" }
+      cli: { theme: "dark" },
+      global_instructions: true
     }
   });
   return {
@@ -65,7 +67,8 @@ function profile(home: string): ResolvedProfile {
         agents: { "opencode-v2": false }
       }
     ],
-    extraFolders: manifest.extra_folders
+    extraFolders: manifest.extra_folders,
+    miseLayers: [],
   };
 }
 
@@ -96,7 +99,15 @@ describe("OpenCode V2 renderer", () => {
     });
 
     expect(result.localFiles?.map((file) => file.path)).toContain(
-      path.join(paths.configsDir, "personal", "opencode-v2", "plugins", "tui", "example", "index.ts")
+      path.join(
+        paths.configsDir,
+        "personal",
+        "opencode-v2",
+        "plugins",
+        "tui",
+        "example",
+        "index.ts"
+      )
     );
     expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
     expect(result.links.some((link) => link.linkPath.endsWith("node_modules"))).toBe(false);
@@ -133,6 +144,7 @@ describe("OpenCode V2 renderer", () => {
       expect(config).toMatchObject({
         $schema: "https://opencode.ai/config.json",
         model: "v2/model",
+        instructions: [],
         skills: [path.join(paths.configsDir, "personal", "opencode-v2", "skills")]
       });
       expect(config.plugin).toBeUndefined();
@@ -205,6 +217,10 @@ describe("OpenCode V2 renderer", () => {
       expect(result.files.some((entry) => entry.path.endsWith("cli.json"))).toBe(false);
       expect(result.links.some((link) => link.linkPath.endsWith("cli.json"))).toBe(false);
       expect(result.links).toContainEqual({
+        linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
+        targetPath: path.join(paths.configsDir, "personal", "AGENTS.md")
+      });
+      expect(result.links).toContainEqual({
         linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
         targetPath: path.join(paths.configsDir, "personal", "opencode-v2", "opencode.jsonc")
       });
@@ -212,6 +228,21 @@ describe("OpenCode V2 renderer", () => {
     } finally {
       warning.mockRestore();
     }
+  });
+
+  it("renders indexes into the globally discovered V2 AGENTS file", async () => {
+    const home = "/tmp/mfz-opencode-v2-global-instructions";
+    const paths = createRuntimePaths({ root: "/tmp/root", home });
+    paths.activeOpenCodeRuntime = "v2";
+    const result = await renderTarget(paths, profile(home), "opencode-v2");
+    const agents = result.files.find((entry) => entry.path.endsWith("personal/AGENTS.md"));
+
+    expect(agents?.content).toContain("# Enabled References");
+    expect(agents?.content).toContain("# Extra Folders");
+    expect(result.links).toContainEqual({
+      linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
+      targetPath: path.join(paths.configsDir, "personal", "AGENTS.md")
+    });
   });
 
   it("rejects V2 config ownership collisions", async () => {

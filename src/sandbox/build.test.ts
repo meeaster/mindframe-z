@@ -21,6 +21,14 @@ describe("sandbox image build plan", () => {
       "utf8"
     );
     await writeFile(path.join(root, "sandbox", "scripts", "helper.mjs"), "export {};\n", "utf8");
+    await mkdir(path.join(root, "profiles", "personal", ".config", "mise", "tasks"), {
+      recursive: true
+    });
+    await writeFile(
+      path.join(root, "profiles", "personal", ".config", "mise", "tasks", "check.toml"),
+      '[check]\nrun = "true"\n',
+      "utf8"
+    );
 
     const paths = createRuntimePaths({ root, home });
     const profile = await resolveProfile(paths, "personal");
@@ -28,7 +36,8 @@ describe("sandbox image build plan", () => {
     const second = await sandboxImageBuildPlan(paths, profile);
 
     expect(first.hash).toBe(second.hash);
-    expect(first.inputs.resolvedMiseToml).toContain('jq = "latest"');
+    expect(first.inputs.resolvedMiseTree["conf.d/10-base.toml"]).toContain('jq = "latest"');
+    expect(first.inputs.resolvedMiseTree["tasks/personal/check.toml"]).toContain('run = "true"');
     expect(first.inputs.agents).toEqual(["claude-code", "opencode"]);
     expect(first.inputs.contextFiles).toHaveProperty("sandbox/scripts/helper.mjs");
     expect(first.label).toContain(first.hash);
@@ -95,8 +104,8 @@ describe("sandbox image build plan", () => {
     expect(log).toContain("image\ninspect");
     expect(log).toContain("build\n-t\nlocal-ai-dev-sandbox-agent:latest");
     expect(log).toContain(`--label\n${sandboxBuildHashLabel}=${plan.hash}`);
-    expect(await readFile(path.join(plan.contextDir, "generated", "mise.toml"), "utf8")).toContain(
-      'jq = "latest"'
-    );
+    expect(
+      await readFile(path.join(plan.contextDir, "generated", "conf.d", "10-base.toml"), "utf8")
+    ).toContain('jq = "latest"');
   });
 });

@@ -3,13 +3,11 @@ import * as readline from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
 import { execa } from "execa";
-import { stringify } from "smol-toml";
 import YAML from "yaml";
-import { isPlainObject, readDirEntries, readTextFile, readTomlObject } from "../core/fs-util.js";
+import { isPlainObject, readDirEntries, readTextFile } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
 import { activeOpenCodeSnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { syncMise } from "./mise.js";
 import { syncOpencode, syncOpencodeV2 } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
@@ -85,19 +83,6 @@ async function writeProfileYaml(
 ): Promise<void> {
   const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
   await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
-}
-
-function miseTomlSection(candidate: SyncCandidate): string {
-  const parts = candidate.yamlPrefix.split(".");
-  return parts.length > 1 ? parts[1]! : "tools";
-}
-
-async function writeMiseToml(root: string, targetProfile: string, candidate: SyncCandidate) {
-  const tomlPath = path.join(root, "profiles", targetProfile, "mise.toml");
-  const doc = await readTomlObject(tomlPath);
-  const section = miseTomlSection(candidate);
-  ensureRecord(doc, section)[candidate.key] = candidate.value;
-  await writeFile(tomlPath, stringify(doc), "utf8");
 }
 
 async function promptProfileChoice(
@@ -228,14 +213,12 @@ export async function runSync(
 ): Promise<void> {
   const configsProfile = profileConfigsDir(paths, profile.name);
 
-  const mcp = path.join(configsProfile, "mise", "config.toml");
   const ocp = path.join(activeOpenCodeSnapshotDir(paths, profile.name), "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
-  const [miseResult, opencodeResult, claudeResult, codexResult, commandCandidates] =
+  const [opencodeResult, claudeResult, codexResult, commandCandidates] =
     await Promise.all([
-      syncMise(mcp, profile),
       profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
         ? paths.activeOpenCodeRuntime === "v2"
           ? syncOpencodeV2(ocp, profile)
@@ -253,7 +236,6 @@ export async function runSync(
     ]);
 
   const candidates = [
-    ...miseResult.candidates,
     ...opencodeResult.candidates,
     ...claudeResult.candidates,
     ...codexResult.candidates
@@ -285,21 +267,10 @@ export async function runSync(
 
   for (const { item: candidate, targetProfile } of manualMoves) {
     const target = targetByLabel.get(targetProfile)!;
-    if (candidate.target === "mise") {
-      await writeMiseToml(target.root, target.profile, candidate);
-      console.log(
-        `  Updated ${target.label}/mise.toml: ${miseTomlSection(candidate)}.${candidate.key}`
-      );
-    } else {
-      const doc = await readProfileYaml(target.root, target.profile);
-
-      setNested(doc, candidate.yamlPrefix, candidate.key, candidate.value);
-
-      await writeProfileYaml(target.root, target.profile, doc);
-      console.log(
-        `  Updated ${target.label}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`
-      );
-    }
+    const doc = await readProfileYaml(target.root, target.profile);
+    setNested(doc, candidate.yamlPrefix, candidate.key, candidate.value);
+    await writeProfileYaml(target.root, target.profile, doc);
+    console.log(`  Updated ${target.label}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`);
     if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 

@@ -37,7 +37,8 @@ function profile(): ResolvedProfile {
         }
       }
     ],
-    extraFolders: []
+    extraFolders: [],
+    miseLayers: [],
   };
 }
 

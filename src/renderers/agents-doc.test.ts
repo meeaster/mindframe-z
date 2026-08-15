@@ -30,6 +30,7 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: [],
+    miseLayers: [],
     ...overrides
   };
 }

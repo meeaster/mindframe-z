@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
@@ -20,28 +20,38 @@ describe("mise integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
-    const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
+    const ownership = JSON.parse(
+      await readFile(path.join(home, ".mindframe-z", "configs", "personal", ".mfz-owned.json"), "utf8")
+    ) as { targets: Record<string, unknown> };
+    expect(ownership.targets).toHaveProperty("mise");
+    await expect(access(path.join(home, ".config", "mise", ".mfz-owned.json"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const mise = await readFile(configsPath(home, "personal", "mise", "10-base.toml"), "utf8");
     expect(mise).toContain('jq = "latest"');
     expect(mise).toContain('node = "24"');
     expect(mise).toContain("[settings]");
     expect(mise).toContain('minimum_release_age = "3d"');
+    await expect(access(path.join(home, ".config", "mise", "conf.d", "10-base.toml"))).resolves.toBeUndefined();
+    await expect(access(path.join(home, ".config", "mise", "10-base.toml"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("keeps a profile-declared node version", async () => {
+  it("keeps each layer as an exact native fragment", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "mise.toml"),
-      '[tools]\nnode = "22"\n',
+      '[tools]\nnode = "22"\n\n[hooks]\npostinstall = { task = "twg-update" }\n',
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--target", "mise"]);
 
-    const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
-    expect(mise).toContain('node = "22"');
-    expect(mise).not.toContain('node = "24"');
+    const mise = await readFile(configsPath(home, "personal", "mise", "20-personal.toml"), "utf8");
+    expect(mise).toBe('[tools]\nnode = "22"\n\n[hooks]\npostinstall = { task = "twg-update" }\n');
+    expect(
+      await readFile(path.join(home, ".config", "mise", "conf.d", "20-personal.toml"), "utf8")
+    ).toBe(mise);
   });
 
-  it("renders and merges inherited mise bootstrap configuration", async () => {
+  it("renders inherited native mise fragments without merging them", async () => {
     await writeFile(
       path.join(root, "profiles", "base", "mise.toml"),
       '[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n',
@@ -55,12 +65,10 @@ describe("mise integration", () => {
 
     await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
-    const mise = await readFile(configsPath(home, "personal", "mise", "config.toml"), "utf8");
-    expect(mise).toContain("[bootstrap.hooks]");
-    expect(mise).toContain('pre-packages = "prepare-base"');
-    expect(mise).toContain("[bootstrap.packages]");
-    expect(mise).toContain('"apt:curl" = "latest"');
-    expect(mise).toContain('"apt:jq" = "latest"');
+    const base = await readFile(configsPath(home, "personal", "mise", "10-base.toml"), "utf8");
+    const personal = await readFile(configsPath(home, "personal", "mise", "20-personal.toml"), "utf8");
+    expect(base).toBe('[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n');
+    expect(personal).toBe('[bootstrap.packages]\n"apt:jq" = "latest"\n');
   });
 
   it("verifies rendered OpenCode config shows mise", async () => {
@@ -68,51 +76,18 @@ describe("mise integration", () => {
     expect(result.stdout).toContain("mise");
   });
 
-  it("sync detects unmanaged mise tools and promotes them to base profile mise.toml", async () => {
-    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
-
-    const misePath = configsPath(home, "personal", "mise", "config.toml");
-    // Simulate mise use -g rust@latest: write TOML with an unmanaged tool
-    await writeFile(
-      misePath,
-      '[tools]\njq = "latest"\nrust = "latest"\n\n[settings]\nminimum_release_age = "3d"\n',
-      "utf8"
-    );
-
-    const syncResult = await cli("mfz", root, home, ["sync"], {}, "base\n");
-    expect(syncResult.stdout).toContain("Updated base/mise.toml");
-
-    const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
-    expect(baseMise).toContain("rust");
-
-    // Re-render and verify rust is still there
-    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
-    const miseAfter = await readFile(misePath, "utf8");
-    expect(miseAfter).toContain('rust = "latest"');
-    expect(miseAfter).toContain('jq = "latest"');
+  it("renders profile tasks in a native namespace", async () => {
+    const task = path.join(root, "profiles", "personal", ".config", "mise", "tasks", "check.toml");
+    await mkdir(path.dirname(task), { recursive: true });
+    await writeFile(task, '[check]\ndescription = "Check the tree"\nrun = "true"\n', "utf8");
+    await cli("mfz", root, home, ["apply", "--target", "mise"]);
+    expect(await readFile(configsPath(home, "personal", "mise", "tasks", "personal", "check.toml"), "utf8")).toContain("Check the tree");
+    expect(await readFile(path.join(home, ".config", "mise", "tasks", "personal", "check.toml"), "utf8")).toContain("run = \"true\"");
   });
 
-  it("sync detects unmanaged mise settings and promotes them to base profile mise.toml", async () => {
+  it("does not promote Mise edits through sync", async () => {
     await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
-
-    const misePath = configsPath(home, "personal", "mise", "config.toml");
-    await writeFile(
-      misePath,
-      '[tools]\njq = "latest"\n\n[settings]\nminimum_release_age = "3d"\nidiomatic_version_file_enable_tools = ["node"]\n',
-      "utf8"
-    );
-
-    const syncResult = await cli("mfz", root, home, ["sync"], {}, "base\n");
-    expect(syncResult.stdout).toContain(
-      "Updated base/mise.toml: settings.idiomatic_version_file_enable_tools"
-    );
-
-    const baseMise = await readFile(path.join(root, "profiles", "base", "mise.toml"), "utf8");
-    expect(baseMise).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
-
-    await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
-    const miseAfter = await readFile(misePath, "utf8");
-    expect(miseAfter).toMatch(/idiomatic_version_file_enable_tools\s*=\s*\[\s*"node"\s*\]/);
-    expect(miseAfter).toContain('minimum_release_age = "3d"');
+    const result = await cli("mfz", root, home, ["sync"]);
+    expect(result.stdout).toContain("No unmanaged keys found");
   });
 });

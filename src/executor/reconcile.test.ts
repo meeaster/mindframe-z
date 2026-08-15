@@ -49,7 +49,8 @@ function profileWithServer(
         }
       }
     ],
-    extraFolders: []
+    extraFolders: [],
+    miseLayers: [],
   };
 }
 

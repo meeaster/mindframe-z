@@ -41,6 +41,12 @@ import {
   writeTextFile
 } from "../core/fs-util.js";
 import { mergeOpenCodeV2CliPlugins } from "../renderers/opencode-v2.js";
+import {
+  readActiveProfile,
+  readOwnership,
+  writeOwnership,
+  activeProfilePath
+} from "../core/ownership.js";
 
 export interface ApplyOptions {
   root?: string | undefined;
@@ -101,6 +107,9 @@ async function applyRenderedTarget(
   }
 
   if (result.localFiles && !options.noLink) {
+    for (const file of result.localStaleFiles ?? []) {
+      console.log(`${options.dryRun ? "would remove local" : "removed local"}\t${file}`);
+    }
     if (!options.dryRun) {
       await removeRenderedFiles(result.localStaleFiles ?? []);
       await writeLocalFiles(result.localFiles);
@@ -185,17 +194,20 @@ export async function applyConfig(
   dependencies: ApplyDependencies = {}
 ): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const includeActiveV2 = options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
+  const rendersAgents = options.target === "all";
+  const includeActiveV2 = rendersAgents && options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
   const profile = await resolveProfile(
     paths,
     options.profile,
-    options.agent === "all"
+    !rendersAgents
+      ? { evaluateAgents: [] }
+      : options.agent === "all"
       ? includeActiveV2
         ? { evaluateAgents: ["opencode-v2"] }
         : undefined
       : { evaluateAgents: [options.agent] }
   );
-  const selectedAgents = agentList(options.agent, profile.agents);
+  const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
   if (includeActiveV2 && !selectedAgents.includes("opencode-v2"))
     selectedAgents.push("opencode-v2");
   const selectedInfraTargets = infraTargetList(options.target);
@@ -207,6 +219,7 @@ export async function applyConfig(
   const reconcile = dependencies.reconcileExecutor ?? reconcileExecutor;
   const render = dependencies.renderTarget ?? renderTarget;
   const usePrompts = !options.dryRun && !options.noLink;
+  const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
   const rl =
     usePrompts && processStdin.isTTY
       ? readline.createInterface({ input: processStdin, output: processStdout })
@@ -224,11 +237,13 @@ export async function applyConfig(
         : undefined;
     if (executorPlan) console.log(`executor\t${executorPlanSummary(executorPlan)}`);
     if (!options.dryRun) {
-      await writeReferenceIndex(paths, profile);
-      await writeExtraFoldersIndex(paths, profile);
-      await renderAllPayloads(paths, profile);
+      if (rendersAgents) {
+        await writeReferenceIndex(paths, profile);
+        await writeExtraFoldersIndex(paths, profile);
+        await renderAllPayloads(paths, profile);
+      }
     }
-    if (!options.noLink) {
+    if (!options.noLink && rendersAgents) {
       const fragmentPath = gitIdentityFragmentPath(paths);
       const configPath = globalGitConfigPath(paths);
       if (!options.dryRun) {
@@ -239,14 +254,27 @@ export async function applyConfig(
       console.log(`${options.dryRun ? "would update" : "updated"}\t${configPath}`);
     }
     for (const target of selectedTargets) {
+      const previousOwnership = target === "mise" ? await readOwnership(paths, previousProfile, target) : undefined;
+      const previousOwnedHostPaths = previousOwnership?.host.map((relative) =>
+        path.resolve(
+          paths.miseConfigDir,
+          relative
+        )
+      );
       const result = await render(paths, profile, target, {
-        includeGlobalSkillState: !options.noLink
+        includeGlobalSkillState: !options.noLink,
+        ...(previousOwnedHostPaths === undefined ? {} : { previousOwnedHostPaths })
       });
       await applyRenderedTarget(paths, result, options, rl);
+      if (!options.dryRun && result.ownership) {
+        await writeOwnership(paths, profile.name, result.ownership);
+      }
     }
-    if (!options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
+    if (!options.dryRun) await writeTextFile(activeProfilePath(paths), `${profile.name}\n`);
+    if (rendersAgents && !options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
       console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
     }
+    if (!rendersAgents) return;
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: selectedAgents.filter(
         (target): target is SkillTarget =>

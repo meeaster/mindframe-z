@@ -1,9 +1,11 @@
-import { chmod, lstat, readFile, rm, unlink } from "node:fs/promises";
+import { chmod, lstat, readFile, readdir, rm, unlink } from "node:fs/promises";
 import path from "node:path";
 import { writeTextFile } from "./fs-util.js";
 import type { RuntimePaths, ToolTarget } from "./paths.js";
 import { globalSkillStatePath, profileConfigsDir } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
+import type { RenderOwnership } from "./ownership.js";
+import { extraFoldersIndexContent, referenceIndexContent } from "../ref-store/references.js";
 import { renderClaude } from "../renderers/claude.js";
 import { renderCodex } from "../renderers/codex.js";
 import { renderDotfiles } from "../renderers/dotfiles.js";
@@ -34,24 +36,35 @@ export interface RenderResult {
   links: LinkPlan[];
   staleFiles?: string[];
   staleLinks?: LinkPlan[];
+  ownership?: RenderOwnership;
 }
 
 export interface RenderOptions {
   readonly includeGlobalSkillState?: boolean;
+  readonly sandbox?: boolean;
+  readonly previousOwnedHostPaths?: readonly string[];
 }
 
 export async function renderRuntimeInstructions(
   paths: RuntimePaths,
-  profile: ResolvedProfile
+  profile: ResolvedProfile,
+  includeIndexes = false
 ): Promise<RenderedFile[]> {
-  if (profile.instructionFiles.length === 0) return [];
+  if (profile.instructionFiles.length === 0 && !includeIndexes) return [];
   const contents = await Promise.all(
     profile.instructionFiles.map((file) => readFile(file, "utf8"))
   );
   return [
     {
       path: path.join(profileConfigsDir(paths, profile.name), "AGENTS.md"),
-      content: contents.map((content) => content.trimEnd()).join("\n\n") + "\n"
+      content:
+        [
+          ...contents.map((content) => content.trimEnd()),
+          ...(includeIndexes ? [referenceIndexContent(profile).trimEnd()] : []),
+          ...(includeIndexes && profile.extraFolders.length > 0
+            ? [extraFoldersIndexContent(paths, profile).trimEnd()]
+            : [])
+        ].join("\n\n") + "\n"
     }
   ];
 }
@@ -87,7 +100,13 @@ export async function renderTarget(
   target: ToolTarget,
   options: RenderOptions = {}
 ): Promise<RenderResult> {
-  const instructions = await renderRuntimeInstructions(paths, profile);
+  const instructions = isAgentTarget(target)
+    ? await renderRuntimeInstructions(
+        paths,
+        profile,
+        profile.profile.opencode_v2.global_instructions === true
+      )
+    : [];
   let rendered: RenderResult;
   switch (target) {
     case "opencode":
@@ -110,11 +129,44 @@ export async function renderTarget(
       rendered = await renderPi(paths, profile);
       break;
     case "mise":
-      rendered = await renderMise(paths, profile);
+      rendered = await renderMise(paths, profile, {
+        ...(options.sandbox === undefined ? {} : { sandbox: options.sandbox }),
+        ...(options.previousOwnedHostPaths === undefined
+          ? {}
+          : { previousOwnedHostPaths: options.previousOwnedHostPaths })
+      });
       break;
     case "dotfiles":
       rendered = await renderDotfiles(paths, profile);
       break;
   }
-  return { ...rendered, files: [...instructions, ...rendered.files] };
+  const snapshotRoot = path.join(profileConfigsDir(paths, profile.name), snapshotName(target, paths));
+  const current = new Set(rendered.files.filter((file) => file.path.startsWith(`${snapshotRoot}${path.sep}`)).map((file) => file.path));
+  const staleFiles = [...(rendered.staleFiles ?? []), ...(await staleSnapshotFiles(snapshotRoot, current))];
+  return { ...rendered, staleFiles, files: [...instructions, ...rendered.files] };
+}
+
+function isAgentTarget(target: ToolTarget): boolean {
+  return !["mise", "dotfiles"].includes(target);
+}
+
+function snapshotName(target: ToolTarget, paths: RuntimePaths): string {
+  if (target === "opencode") return paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode-v1";
+  if (target === "opencode-v2") return "opencode-v2";
+  return target;
+}
+
+async function staleSnapshotFiles(root: string, current: Set<string>): Promise<string[]> {
+  const stale: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(file);
+      else if (entry.isFile() && !current.has(file)) stale.push(file);
+    }
+  }
+  await walk(root);
+  return stale;
 }

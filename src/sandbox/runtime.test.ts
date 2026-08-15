@@ -80,7 +80,6 @@ function profile(
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
-      mise: { tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} },
       thread: {
         stores: [],
         defaults: { session_sources: ["claude-code", "opencode"] },
@@ -97,6 +96,7 @@ function profile(
       skills: [],
       mcpServers: {},
       profiles: new Map(),
+      miseFiles: new Map(),
       machine
     },
     sources: {
@@ -128,7 +128,8 @@ function profile(
             description: "Test extra folder."
           }
         ]
-      : []
+      : [],
+    miseLayers: [{ name: "personal", root: options.root ?? "/tmp/mfz-root" }],
   };
 }
 
@@ -272,7 +273,7 @@ describe("sandbox runtime inputs", () => {
     expect(byTarget.get("/home/sandbox/.config/opencode/opencode.jsonc")).toMatchObject({
       mode: "ro"
     });
-    expect(byTarget.get("/home/sandbox/.config/mise/config.toml")).toMatchObject({ mode: "ro" });
+    expect(byTarget.get("/home/sandbox/.config/mise")).toMatchObject({ mode: "ro" });
     expect(byTarget.get("/home/sandbox/.gitconfig")).toMatchObject({ mode: "ro" });
     expect(byTarget.get("/home/sandbox/.mindframe-z/references.md")).toMatchObject({ mode: "ro" });
     expect(byTarget.get("/references")).toMatchObject({

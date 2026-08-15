@@ -25,7 +25,8 @@ function profile(): ResolvedProfile {
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
-    extraFolders: []
+    extraFolders: [],
+    miseLayers: [],
   };
 }
 

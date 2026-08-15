@@ -86,7 +86,6 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       claude: { settings: {} },
       codex: { config: {}, plugins: {} },
       pi: { settings: {}, subagent_config: {} },
-      mise: { tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} },
       thread: {
         stores: [
           {
@@ -112,6 +111,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       skills: [],
       mcpServers: {},
       profiles: new Map(),
+      miseFiles: new Map(),
       machine: manifest
     },
     sources: {
@@ -132,7 +132,8 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
-    extraFolders: []
+    extraFolders: [],
+    miseLayers: [],
   };
 }
 

@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Product And Compatibility Policy
+
+Mindframe-Z is Mark's personal, unreleased development tool. Design for the current repository and machine rather than for external consumers or a public upgrade path.
+
+- Breaking changes are acceptable when they produce a simpler or more correct design.
+- Prefer one direct implementation over backward-compatibility layers, fallbacks, and compatibility aliases.
+- Do not add in-tool migrations for development-only changes. Handle existing local state with a deliberate one-time manual cleanup or migration outside MFZ when needed.
+- Treat persisted local state as disposable unless the task explicitly requires preserving it.
+
 ## Commands
 
 ```sh
@@ -79,7 +88,7 @@ Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`;
 
 `shared/*.yml` is the catalog of available refs, skills, and MCP servers. `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and machine-specific OpenCode overrides.
 
-Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, `claude`, and `mise` are deep-merged with child keys overriding parent keys. `agents` is replaced by the child when set.
+Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, and `claude` are deep-merged with child keys overriding parent keys. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 
 MCP enablement is profile-owned: the MCP catalog defines connection details only; profiles use `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays for native MCPs, plus an optional per-server `executor: { enabled: true, connections: ... }` block when Executor should also reconcile the same server. Claude Code cannot be declared in a direct `disabled` group; Executor inventory is shared across connected supported harnesses and is not per-agent toggleable. Set profile-level `executor.bridge: false` to keep Executor reconciliation without adding its MCP bridge to agents.
 
@@ -137,7 +146,7 @@ Lint/format tooling is oxlint/oxfmt, not ESLint/Prettier. `.oxfmtrc.json` intent
 
 `pnpm-workspace.yaml` enforces `minimumReleaseAge`, `strictDepBuilds`, and allowed build scripts; do not bypass these when adding packages.
 
-This repo has no external users yet. Prefer one direct implementation over fallback or backward-compatibility paths unless persisted data, shipped behavior, or an explicit requirement makes compatibility necessary.
+This repo has no external users yet; follow the product and compatibility policy above when choosing between a clean breaking change and compatibility machinery.
 
 ## Reference Descriptions
 

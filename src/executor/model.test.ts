@@ -23,7 +23,8 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [server],
-    extraFolders: []
+    extraFolders: [],
+    miseLayers: [],
   };
 }
 

@@ -73,7 +73,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
-- `mise`: `config.toml`; renders tools, environment, aliases, settings, and bootstrap configuration, and injects `node = "24"` when no resolved node tool exists.
+- `mise`: ordered native fragments under `conf.d/` plus namespaced task files; snapshots live under `configs/<profile>/mise/` and the single `configs/<profile>/.mfz-owned.json` manifest limits host cleanup to exact MFZ-owned paths.
 - `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.
 - `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
 
@@ -108,7 +108,9 @@ Renderer source files for inherited OpenCode plugins, commands, agents, and loca
 
 ## Sync
 
-`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged keys back into profiles or `mise.toml`. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.
+`mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged harness keys back into profiles. Mise is intentionally excluded: native Mise commands own unmanaged user edits. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.
+
+Managed source layout follows the target-relative path: profile dotfiles under `profiles/<name>/.config/systemd/user/` render to `configs/<profile>/dotfiles/.config/systemd/user/` and are installed at `~/.config/systemd/user/`. Dedicated renderers are reserved for target-specific semantics; systemd is currently file-only. `mfz apply` writes units but does not call `systemctl` or `loginctl`, reload, enable, start, stop, or disable services.
 
 Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations and named connections are not removed automatically; apply blocks with a metadata-only remediation message naming the exact connection until the user disconnects it explicitly.
 
@@ -187,6 +189,8 @@ and exact receipt details on demand. Optional MFZ
 thread links remain passive historical pointers and are never refreshed by work-unit operations.
 
 Sandbox code remains engine-owned. Home-specific sandbox overlays belong in homes; engine sandbox files provide the shared image, broker, and runtime scaffolding.
+
+Sandbox Mise projection is deliberately smaller than the host projection: it contains only `conf.d/*.toml` fragments and namespaced `tasks/<layer>/` files. Host ownership manifests and bootstrap configuration are omitted from the sandbox tree; bootstrap remains host-only because it may reference host repositories.
 
 Sandbox remains a separate credential boundary. Profiles containing Executor-enabled MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
 

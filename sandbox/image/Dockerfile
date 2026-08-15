@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV MISE_INSTALL_PATH=/usr/local/bin/mise \
     MISE_VERSION=v2026.6.2 \
     MISE_YES=1 \
-    MISE_GLOBAL_CONFIG_FILE=/home/sandbox/mise.toml \
+    MISE_CONFIG_DIR=/home/sandbox/.config/mise \
     PATH=/home/sandbox/.local/share/mise/shims:/home/sandbox/.local/bin:/home/sandbox/.opencode/bin:$PATH
 
 ARG MFZ_SANDBOX_AGENTS="claude-code,opencode"
@@ -37,7 +37,7 @@ RUN useradd --create-home --home-dir /home/sandbox --shell /usr/bin/zsh sandbox 
 
 COPY --chown=sandbox:sandbox placeholders/claude/settings.json /home/sandbox/.claude/settings.json
 COPY --chown=sandbox:sandbox placeholders/opencode/auth.json /home/sandbox/.local/share/opencode/auth.json
-COPY --chown=sandbox:sandbox generated/mise.toml /home/sandbox/mise.toml
+COPY --chown=sandbox:sandbox generated/ /home/sandbox/.config/mise/
 COPY --chown=sandbox:sandbox scripts/ /opt/mindframe-z/sandbox/scripts/
 
 USER sandbox

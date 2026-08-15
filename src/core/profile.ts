@@ -42,6 +42,13 @@ interface ProfileSources {
 interface ProfileBuild {
   profile: ProfileManifest;
   sources: ProfileSources;
+  miseLayers: ResolvedMiseLayer[];
+}
+
+export interface ResolvedMiseLayer {
+  name: string;
+  root: string;
+  content?: string;
 }
 
 export interface ProfileResolutionOptions {
@@ -133,6 +140,7 @@ export interface ResolvedProfile {
   enabledOpenCodeV2TuiPlugins?: string[];
   mcpServers: ResolvedMcpServer[];
   extraFolders: ExtraFolder[];
+  miseLayers: ResolvedMiseLayer[];
 }
 
 function emptySources(): ProfileSources {
@@ -384,7 +392,12 @@ function normalizeProfile(
       opencode,
       opencode_v2: opencodeV2
     },
-    sources
+    sources,
+    miseLayers: [{
+      name: profile.name,
+      root: home.root,
+      ...(home.miseFiles.has(profile.name) ? { content: home.miseFiles.get(profile.name)! } : {})
+    }],
   };
 }
 
@@ -437,6 +450,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       config: deepMerge(base.opencode_v2.config, child.opencode_v2.config),
       dependencies: { ...base.opencode_v2.dependencies, ...child.opencode_v2.dependencies },
       cli: deepMerge(base.opencode_v2.cli, child.opencode_v2.cli),
+      global_instructions:
+        child.opencode_v2.global_instructions ?? base.opencode_v2.global_instructions,
       plugins: dedupe([...base.opencode_v2.plugins, ...child.opencode_v2.plugins]),
       tui_plugins: dedupe([...base.opencode_v2.tui_plugins, ...child.opencode_v2.tui_plugins]),
       commands: dedupe([...base.opencode_v2.commands, ...child.opencode_v2.commands]),
@@ -453,16 +468,6 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     pi: {
       settings: deepMerge(base.pi.settings, child.pi.settings),
       subagent_config: deepMerge(base.pi.subagent_config, child.pi.subagent_config)
-    },
-    mise: {
-      tools: deepMerge(
-        base.mise.tools as Record<string, unknown>,
-        child.mise.tools as Record<string, unknown>
-      ) as ProfileManifest["mise"]["tools"],
-      env: { ...base.mise.env, ...child.mise.env },
-      tool_alias: { ...base.mise.tool_alias, ...child.mise.tool_alias },
-      settings: { ...base.mise.settings, ...child.mise.settings },
-      bootstrap: deepMerge(base.mise.bootstrap, child.mise.bootstrap)
     },
     thread: {
       stores: (() => {
@@ -649,7 +654,8 @@ async function resolveProfileByName(
   const parent = await resolveProfileByName(resolvedName.home, profile.extends, options);
   return {
     profile: mergeProfiles(parent.profile, own.profile),
-    sources: mergeSources(parent.sources, own.sources)
+    sources: mergeSources(parent.sources, own.sources),
+    miseLayers: [...parent.miseLayers, ...own.miseLayers],
   };
 }
 
@@ -751,7 +757,8 @@ export async function resolveProfile(
     enabledOpenCodeV2Plugins,
     enabledOpenCodeV2TuiPlugins,
     mcpServers,
-    extraFolders
+    extraFolders,
+    miseLayers: profileBuild.miseLayers
   };
 }
 

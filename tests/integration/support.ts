@@ -145,7 +145,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   );
   await writeFile(
     path.join(root, "profiles", "base", "mise.toml"),
-    '[tools]\njq = "latest"\n\n[settings]\nminimum_release_age = "3d"\n',
+    '[tools]\njq = "latest"\nnode = "24"\n\n[settings]\nminimum_release_age = "3d"\n',
     "utf8"
   );
   await writeFile(

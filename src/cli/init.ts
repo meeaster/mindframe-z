@@ -66,6 +66,12 @@ Catalog files define what exists. Profiles select entries by name. Unqualified n
 
 The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
 
+Runtime-managed files:
+
+- Mise profile settings live in \`profiles/<profile>/mise.toml\`; profile task files live under \`profiles/<profile>/.config/mise/tasks/\`. Run \`mfz apply --target mise\` after changing them. MFZ renders native Mise fragments under \`conf.d/\` and namespaced tasks under \`tasks/\`.
+- User systemd files live under \`profiles/<profile>/.config/systemd/user/\`. Run \`mfz apply --target dotfiles\` after changing them. MFZ writes unit files under \`~/.config/systemd/user/\`, but does not reload, enable, start, stop, or disable services.
+- When a systemd service should run, use \`systemctl --user daemon-reload\`, then explicitly \`systemctl --user enable <unit>\` and \`systemctl --user start <unit>\` as appropriate. \`WantedBy=default.target\` affects enablement only.
+
 Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Before adding or changing a skill, run \`mfz guide skills\`.
 
 MCP catalog entries define connection details; profiles select direct per-harness routing or shared Executor routing. Before adding or changing MCP configuration or Executor authentication, run \`mfz guide mcp\`.

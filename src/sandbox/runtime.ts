@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonFileContent } from "../core/fs-util.js";
+import { renderTarget } from "../core/render.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
 import {
   activeOpenCodeSnapshotDir,
@@ -232,6 +233,14 @@ async function writeSandboxRuntimeConfig(
   await mkdir(path.join(runtimeDir, "mindframe-z"), { recursive: true });
   await mkdir(path.join(runtimeDir, "opencode"), { recursive: true });
   await mkdir(path.join(runtimeDir, "claude"), { recursive: true });
+  await mkdir(path.join(runtimeDir, "mise"), { recursive: true });
+  const mise = await renderTarget(paths, profile, "mise", { sandbox: true });
+  for (const file of mise.files) {
+    const relative = path.relative(path.join(configsProfile, "mise"), file.path);
+    const target = path.join(runtimeDir, "mise", relative.startsWith("tasks/") ? relative : path.join("conf.d", relative));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, file.content, "utf8");
+  }
 
   const agents = await Promise.all(profile.instructionFiles.map((file) => readFile(file, "utf8")));
   await writeFile(path.join(runtimeDir, "mindframe-z", "AGENTS.md"), agents.join("\n"), "utf8");
@@ -328,8 +337,8 @@ function renderedMounts(
       mode: "ro"
     },
     {
-      source: path.join(configsProfile, "mise", "config.toml"),
-      target: path.join(containerHome, ".config", "mise", "config.toml"),
+      source: path.join(runtimeDir, "mise"),
+      target: path.join(containerHome, ".config", "mise"),
       mode: "ro"
     },
     {

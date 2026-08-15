@@ -12,7 +12,7 @@ export const sandboxBuildHashLabel = "dev.mindframe-z.sandbox.build-hash";
 export interface SandboxImageBuildInputs {
   readonly dockerfile: string;
   readonly contextFiles: Record<string, string>;
-  readonly resolvedMiseToml: string;
+  readonly resolvedMiseTree: Record<string, string>;
   readonly agents: readonly string[];
   readonly installerVersions: Record<string, string>;
 }
@@ -42,11 +42,11 @@ async function writeGeneratedBuildContext(plan: SandboxImageBuildPlan): Promise<
     path.join(plan.root, "sandbox", "scripts"),
     path.join(plan.contextDir, "scripts")
   );
-  await writeFile(
-    path.join(plan.contextDir, "generated", "mise.toml"),
-    plan.inputs.resolvedMiseToml,
-    "utf8"
-  );
+  for (const [name, content] of Object.entries(plan.inputs.resolvedMiseTree)) {
+    const target = path.join(plan.contextDir, "generated", name);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, content, "utf8");
+  }
   await writeFile(
     path.join(plan.contextDir, "generated", "agents.txt"),
     `${plan.inputs.agents.join("\n")}\n`,
@@ -151,17 +151,22 @@ export async function sandboxImageBuildPlan(
 ): Promise<SandboxImageBuildPlan> {
   const dockerfilePath = path.join(paths.root, "sandbox", "image", "Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");
-  const miseRender = await renderTarget(paths, profile, "mise");
-  const resolvedMiseToml =
-    miseRender.files.find((file) => file.path.endsWith(path.join("mise", "config.toml")))
-      ?.content ?? "";
+  const miseRender = await renderTarget(paths, profile, "mise", { sandbox: true });
+  const resolvedMiseTree = Object.fromEntries(
+    miseRender.files
+      .filter((file) => file.path.includes(`${path.sep}mise${path.sep}`))
+      .map((file) => {
+        const relative = path.relative(path.join(paths.configsDir, profile.name, "mise"), file.path);
+        return [relative.startsWith("tasks/") ? relative : path.join("conf.d", relative), file.content];
+      })
+  );
   const inputs: SandboxImageBuildInputs = {
     dockerfile,
     contextFiles: await optionalContextFiles(paths.root, [
       path.join(paths.root, "sandbox", "image", "placeholders"),
       path.join(paths.root, "sandbox", "scripts")
     ]),
-    resolvedMiseToml,
+    resolvedMiseTree,
     agents: [...profile.agents].sort(),
     installerVersions: {
       claude: "install.sh",

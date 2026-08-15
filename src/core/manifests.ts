@@ -315,8 +315,6 @@ export const mcpManifestSchema = z.object({
   servers: z.record(z.string(), mcpServerSchema).default({})
 });
 
-const miseToolValueSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
-
 export const extraFolderSchema = z.object({
   path: z.string().min(1),
   description: z.string().default(""),
@@ -325,14 +323,6 @@ export const extraFolderSchema = z.object({
   url: z.string().optional(),
   read: z.enum(["allow", "ask", "deny"]).default("allow"),
   edit: z.enum(["allow", "ask", "deny"]).default("allow")
-});
-
-const miseTomlSchema = z.object({
-  tools: z.record(z.string(), miseToolValueSchema).default({}),
-  env: z.record(z.string(), z.coerce.string()).default({}),
-  tool_alias: z.record(z.string(), z.coerce.string()).default({}),
-  settings: z.record(z.string(), z.unknown()).default({}),
-  bootstrap: z.record(z.string(), z.unknown()).default({})
 });
 
 const delegateGeneralModelSchema = z.object({
@@ -504,6 +494,7 @@ const opencodeV2ConfigSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: z.record(z.string(), z.unknown()).default({}),
+  global_instructions: z.boolean().optional(),
   plugins: z.array(z.string()).default([]),
   tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
@@ -569,15 +560,6 @@ export const profileSchema = z
       .default({ settings: {} }),
     codex: codexConfigSchema.default({ config: {}, plugins: {} }),
     pi: piConfigSchema.default({ settings: {}, subagent_config: {} }),
-    mise: z
-      .object({
-        tools: z.record(z.string(), miseToolValueSchema).default({}),
-        env: z.record(z.string(), z.string()).default({}),
-        tool_alias: z.record(z.string(), z.string()).default({}),
-        settings: z.record(z.string(), z.unknown()).default({}),
-        bootstrap: z.record(z.string(), z.unknown()).default({})
-      })
-      .default({ tools: {}, env: {}, tool_alias: {}, settings: {}, bootstrap: {} }),
     thread: profileThreadSchema,
     dotfiles: z.record(z.string(), z.string()).default({}),
     extra_folders: z.array(extraFolderSchema).default([])
@@ -651,6 +633,7 @@ export interface LoadedManifests {
   skills: SkillEntry[];
   mcpServers: Record<string, McpServer>;
   profiles: Map<string, ProfileManifest>;
+  miseFiles: Map<string, string>;
   machine: MachineManifest;
 }
 
@@ -741,6 +724,7 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
   const result: Array<[string, string]> = [];
   for (const entry of entries) {
     if (entry.name === "profile.yml" || entry.name === "mise.toml") continue;
+    if (prefix === ".config" && entry.name === "mise") continue;
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -786,19 +770,19 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     ? await readYaml(machineConfigPath(effectiveHome), machineSchema, machineDefaults())
     : machineDefaults();
   const profileMap = new Map<string, ProfileManifest>();
+  const miseMap = new Map<string, string>();
   for (const profileDir of await listProfileDirs(root)) {
     const profileYaml = path.join(profileDir, "profile.yml");
     if (!(await pathExists(profileYaml))) continue;
     const profile = await parseYaml(profileYaml, profileSchema);
 
     const miseToml = path.join(profileDir, "mise.toml");
+    let mise: string | undefined;
     try {
-      const toml = miseTomlSchema.parse(await readTomlObject(miseToml));
-      profile.mise.tools = toml.tools;
-      profile.mise.env = toml.env;
-      profile.mise.tool_alias = toml.tool_alias;
-      profile.mise.settings = toml.settings;
-      profile.mise.bootstrap = toml.bootstrap;
+      if (await pathExists(miseToml)) {
+        mise = await readFile(miseToml, "utf8");
+        await readTomlObject(miseToml);
+      }
     } catch (error) {
       throw new Error(`Invalid mise manifest at ${miseToml}`, { cause: error });
     }
@@ -806,8 +790,8 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     for (const [rel, content] of await readDotfileEntries(profileDir)) {
       profile.dotfiles[rel] = content;
     }
-
     profileMap.set(profile.name, profile);
+    if (mise !== undefined) miseMap.set(profile.name, mise);
   }
   return {
     homeManifest,
@@ -818,6 +802,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     skills: skills.skills,
     mcpServers: mcp.servers,
     profiles: profileMap,
+    miseFiles: miseMap,
     machine
   };
 }

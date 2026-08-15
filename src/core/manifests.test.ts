@@ -179,51 +179,54 @@ describe("loadManifests", () => {
     await expect(loadManifests(root, home)).rejects.toThrow();
   });
 
-  it("lets mise.toml override the profile.yml mise block", async () => {
+  it("preserves arbitrary native mise.toml content", async () => {
     const { root, home } = await tmpHome();
-    const dir = await writeProfile(root, "base", 'name: base\nmise:\n  tools:\n    jq: "1.0"\n');
+    const dir = await writeProfile(root, "base", "name: base\n");
+    const content = '[tools]\njq = "latest"\n\n[hooks]\npostinstall = { task = "check" }\n';
     await writeFile(
       path.join(dir, "mise.toml"),
-      '[tools]\njq = "latest"\n\n[env]\nFOO = "bar"\n\n[settings]\nminimum_release_age = "3d"\n',
+      content,
       "utf8"
     );
 
-    const mise = (await loadManifests(root, home)).profiles.get("base")?.mise;
-    expect(mise?.tools).toEqual({ jq: "latest" });
-    expect(mise?.env).toEqual({ FOO: "bar" });
-    expect(mise?.settings).toEqual({ minimum_release_age: "3d" });
+    const manifests = await loadManifests(root, home);
+    expect(manifests.miseFiles.get("base")).toBe(content);
   });
 
   it("rejects a malformed mise.toml with path context", async () => {
     const { root, home } = await tmpHome();
-    const dir = await writeProfile(root, "base", 'name: base\nmise:\n  tools:\n    jq: "1.0"\n');
+    const dir = await writeProfile(root, "base", "name: base\n");
     const misePath = path.join(dir, "mise.toml");
     await writeFile(misePath, "[tools\njq = ", "utf8");
 
     await expect(loadManifests(root, home)).rejects.toThrow(misePath);
   });
 
-  it("rejects a schema-invalid mise.toml with path context", async () => {
+  it("accepts native mise sections with path context for syntax errors", async () => {
     const { root, home } = await tmpHome();
     const dir = await writeProfile(root, "base", "name: base\n");
     const misePath = path.join(dir, "mise.toml");
-    await writeFile(misePath, "[tools]\nBROKEN = 42\n", "utf8");
-
+    await writeFile(misePath, "[hooks\n", "utf8");
     await expect(loadManifests(root, home)).rejects.toThrow(misePath);
   });
 
-  it("collects dotfiles recursively and excludes profile.yml and mise.toml", async () => {
+  it("collects dotfiles recursively and excludes profile.yml, mise.toml, and .config/mise", async () => {
     const { root, home } = await tmpHome();
     const dir = await writeProfile(root, "base", "name: base\n");
     await writeFile(path.join(dir, "mise.toml"), '[tools]\njq = "latest"\n', "utf8");
     await writeFile(path.join(dir, ".npmrc"), "min-release-age=3\n", "utf8");
     await mkdir(path.join(dir, "config", "nested"), { recursive: true });
     await writeFile(path.join(dir, "config", "nested", "rc.toml"), "a = 1\n", "utf8");
+    await mkdir(path.join(dir, ".config", "systemd", "user"), { recursive: true });
+    await writeFile(path.join(dir, ".config", "systemd", "user", "example.service"), "[Unit]\n", "utf8");
+    await mkdir(path.join(dir, ".config", "mise"), { recursive: true });
+    await writeFile(path.join(dir, ".config", "mise", "ignored.toml"), "ignored = true\n", "utf8");
 
     const dotfiles = (await loadManifests(root, home)).profiles.get("base")?.dotfiles;
     expect(dotfiles).toEqual({
       ".npmrc": "min-release-age=3\n",
-      "config/nested/rc.toml": "a = 1\n"
+      "config/nested/rc.toml": "a = 1\n",
+      ".config/systemd/user/example.service": "[Unit]\n"
     });
   });
 
