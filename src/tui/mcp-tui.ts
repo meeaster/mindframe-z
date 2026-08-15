@@ -1,5 +1,5 @@
 import { styleText } from "node:util";
-import { getColumns, isCancel, MultiSelectPrompt } from "@clack/core";
+import { getColumns, isCancel, MultiSelectPrompt, type MultiSelectOptions } from "@clack/core";
 import { limitOptions } from "@clack/prompts";
 import type { Key } from "node:readline";
 import type { Readable, Writable } from "node:stream";
@@ -62,9 +62,8 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
       : (targets.find((target) => profile.agents.includes(target)) ?? "opencode");
     const options = optionsForTarget(profile, initialTarget);
     const output = streams.output ?? process.stderr;
-    super({
+    const promptOptions: MultiSelectOptions<McpOption> = {
       options,
-      ...(streams.input ? { input: streams.input } : {}),
       output,
       initialValues: options.filter((o) => states[initialTarget][o.value]).map((o) => o.value),
       render() {
@@ -103,7 +102,9 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
         });
         return `${styleText("bold", title)}\n${lines.join("\n")}\n${help}`;
       }
-    });
+    };
+    if (streams.input !== undefined) promptOptions.input = streams.input;
+    super(promptOptions);
     this.target = initialTarget;
     this.states = states;
     this.profile = profile;

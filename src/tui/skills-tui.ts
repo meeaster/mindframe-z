@@ -1,5 +1,5 @@
 import { styleText } from "node:util";
-import { getColumns, MultiSelectPrompt, isCancel } from "@clack/core";
+import { getColumns, MultiSelectPrompt, isCancel, type MultiSelectOptions } from "@clack/core";
 import { limitOptions } from "@clack/prompts";
 import type { Key } from "node:readline";
 import type { Readable, Writable } from "node:stream";
@@ -66,9 +66,8 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
         ) ?? "opencode");
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
-    super({
+    const promptOptions: MultiSelectOptions<SkillOption> = {
       options,
-      ...(streams.input ? { input: streams.input } : {}),
       output: resolvedOutput,
       initialValues: options.filter((o) => states[initialTarget][o.value]).map((o) => o.value),
       render() {
@@ -120,7 +119,9 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
 
         return `${styleText("bold", title)}\n${lines.join("\n")}\n${help}`;
       }
-    });
+    };
+    if (streams.input !== undefined) promptOptions.input = streams.input;
+    super(promptOptions);
     this.outputStream = resolvedOutput;
     this.profile = profile;
     this.states = states;
@@ -180,11 +181,11 @@ export async function runSkillsTui(
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code"),
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "codex")
   ]);
-  const states: Record<SkillToggleTarget, SkillToggleState> = {
+  const states = {
     opencode: opencodeState,
     "claude-code": claudeCodeState,
     codex: codexState
-  };
+  } satisfies Record<SkillToggleTarget, SkillToggleState>;
   const prompt = new SkillsTogglePrompt(profile, states, streams);
   const result = await prompt.prompt();
   if (isCancel(result) || !prompt.result.saved) return;

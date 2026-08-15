@@ -4,13 +4,13 @@
 
 // The five event buckets, by their Title-Case session-file header → lowercase log tag.
 // State buckets (Intent & Vision, Artifacts Touched, Sources) never reach the log.
-const EVENT_TAGS: Record<string, string> = {
-  Decisions: "decision",
-  Learnings: "learning",
-  "Mistakes Fixed": "mistake_fixed",
-  Issues: "issue",
-  "Open Questions": "open_question"
-};
+const EVENT_TAGS = new Map<string, string>([
+  ["Decisions", "decision"],
+  ["Learnings", "learning"],
+  ["Mistakes Fixed", "mistake_fixed"],
+  ["Issues", "issue"],
+  ["Open Questions", "open_question"]
+]);
 
 interface LogEntry {
   timestamp: string;
@@ -50,7 +50,7 @@ function eventBullets(file: string): { tag: string; text: string }[] {
     const header = /^##\s+(.+?)\s*$/.exec(line);
     if (header) {
       flush();
-      tag = EVENT_TAGS[header[1] ?? ""] ?? null;
+      tag = EVENT_TAGS.get(header[1] ?? "") ?? null;
       continue;
     }
     if (/^-\s+/.test(line)) {
