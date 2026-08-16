@@ -1,20 +1,20 @@
-import { isPlainObject } from "../core/fs-util.js";
 import {
   buildHistory,
   type ContextActivation,
   type ContextHistory,
   type UsageComponents
 } from "./model.js";
+import { jsonNumber, parseJsonObject, type JsonObject, type JsonValue } from "./json.js";
 
-export function numberField(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+export function numberField(value: JsonValue | undefined): number | undefined {
+  return jsonNumber(value);
 }
 
-export function objectField(value: unknown): Record<string, unknown> | undefined {
-  return isPlainObject(value) ? value : undefined;
+export function objectField(value: JsonValue | undefined): JsonObject | undefined {
+  return parseJsonObject(value);
 }
 
-export function addOpenCodeUsage(value: unknown): UsageComponents | undefined {
+export function addOpenCodeUsage(value: JsonValue | undefined): UsageComponents | undefined {
   const tokens = objectField(value);
   if (!tokens) return undefined;
   const cache = objectField(tokens.cache);
@@ -38,7 +38,7 @@ export function addOpenCodeUsage(value: unknown): UsageComponents | undefined {
   return result;
 }
 
-export function addClaudeUsage(value: unknown): UsageComponents | undefined {
+export function addClaudeUsage(value: JsonValue | undefined): UsageComponents | undefined {
   const usage = objectField(value);
   if (!usage) return undefined;
   const input = numberField(usage.input_tokens);

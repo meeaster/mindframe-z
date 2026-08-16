@@ -28,6 +28,7 @@ import type {
   ContextMcpMembership,
   HarnessReport
 } from "./model.js";
+import { jsonObjectSchema, jsonString, type JsonObject } from "./json.js";
 
 function openCodeMcpLoading(): "per-step" | "unknown" {
   const flag = (name: string): boolean | undefined => {
@@ -52,7 +53,7 @@ function claudeMcpLoading(): "unknown" {
 interface SkillFile {
   path: string;
   content: string;
-  metadata: Record<string, unknown>;
+  metadata: JsonObject;
 }
 
 async function readSkillFile(
@@ -79,7 +80,8 @@ async function readSkillFile(
   for (const candidate of new Set(candidates)) {
     try {
       const content = await readFile(candidate, "utf8");
-      return { path: candidate, content, metadata: parseFrontmatter(content) };
+      const metadata = jsonObjectSchema.safeParse(parseFrontmatter(content));
+      return { path: candidate, content, metadata: metadata.success ? metadata.data : {} };
     } catch {
       // Try the next source-of-truth or installed location.
     }
@@ -138,10 +140,7 @@ async function skillContributors(
     visibleSkillNames.push(skill.name);
     const file = await readSkillFile(paths, skill, harness);
     const source = file?.path ?? path.join(skill.sourceRoot, "skills");
-    const description =
-      typeof file?.metadata.description === "string"
-        ? file.metadata.description
-        : skill.description;
+    const description = jsonString(file?.metadata.description) ?? skill.description;
     const catalogue = `${skill.name}\n${description}\n${file?.path ?? "mfz catalogue metadata"}`;
     const disabled =
       harness === "claude-code" && file?.metadata["disable-model-invocation"] === true;

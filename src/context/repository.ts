@@ -4,6 +4,7 @@ import { execa } from "execa";
 import { parseFrontmatter } from "../core/fs-util.js";
 import type { ContextContributor, ContextHarness, ConditionalPathSummary } from "./model.js";
 import { measuredContributor } from "./measurement.js";
+import { jsonObjectSchema, jsonStringArray } from "./json.js";
 
 export function isPathWithin(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
@@ -156,11 +157,9 @@ export async function analyzeRepository(
       continue;
     }
 
-    const metadata = parseFrontmatter(content);
-    const rulePaths =
-      kind.category === "Claude rule" && Array.isArray(metadata.paths)
-        ? metadata.paths.filter((entry): entry is string => typeof entry === "string")
-        : [];
+    const parsedMetadata = jsonObjectSchema.safeParse(parseFrontmatter(content));
+    const metadata = parsedMetadata.success ? parsedMetadata.data : {};
+    const rulePaths = kind.category === "Claude rule" ? jsonStringArray(metadata.paths) : [];
     const isRulePathScoped = rulePaths.length > 0;
     const unsupportedRuleGlob = rulePaths.some((pattern) => globPattern(pattern) === undefined);
     const directory = path.dirname(absolute);

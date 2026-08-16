@@ -156,7 +156,8 @@ export async function buildContextHistoryReport(
 ): Promise<ContextReport> {
   const inspectedDirectory = path.resolve(process.cwd());
   const projectRoot = await findProjectRoot(inspectedDirectory);
-  const harnesses = (["opencode", "claude-code"] as ContextHarness[]).filter(
+  const supported: ContextHarness[] = ["opencode", "claude-code"];
+  const harnesses = supported.filter(
     (harness) => (!agent || agent === harness) && profile.agents.includes(harness)
   );
   if (agent && !profile.agents.includes(agent)) {

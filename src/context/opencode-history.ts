@@ -1,34 +1,36 @@
 import { pathExists } from "../core/fs-util.js";
+import { z } from "zod";
 import { opencodeDbPath, type RuntimePaths } from "../core/paths.js";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import { HistoryCollector, addOpenCodeUsage, objectField, unavailableHistory } from "./history.js";
 import { isPathWithin } from "./repository.js";
 import type { ContextHistory } from "./model.js";
+import {
+  jsonString,
+  jsonStringArray,
+  parseJsonObject,
+  parseJsonText,
+  type JsonObject
+} from "./json.js";
 
-interface SessionRow {
-  id: string;
-  parent_id: string | null;
-  directory: string;
-  version: string;
-  time_updated: number;
-}
-
-interface MessageRow {
-  id: string;
-  time_created: number;
-  data: string;
-}
-
-interface PartRow {
-  time_created: number;
-  data: string;
-}
+const sessionRowSchema = z.object({
+  id: z.string(),
+  parent_id: z.string().nullable(),
+  directory: z.string(),
+  version: z.string(),
+  time_updated: z.number()
+});
+const messageRowSchema = z.object({ id: z.string(), time_created: z.number(), data: z.string() });
+const partRowSchema = z.object({ time_created: z.number(), data: z.string() });
+const pragmaRowSchema = z.object({ name: z.string() });
 
 function tableColumns(db: SqliteDatabase, table: string): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all();
   return new Set(
-    (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
-      (column) => column.name
-    )
+    rows.flatMap((row) => {
+      const column = pragmaRowSchema.safeParse(row);
+      return column.success ? [column.data.name] : [];
+    })
   );
 }
 
@@ -44,36 +46,26 @@ function hasRequiredSchema(db: SqliteDatabase): boolean {
   });
 }
 
-function loadedInstructionPaths(data: Record<string, unknown>): string[] {
+function loadedInstructionPaths(data: JsonObject): string[] {
   const candidates = [
     objectField(data.metadata)?.loaded,
     objectField(data.state)?.metadata && objectField(objectField(data.state)?.metadata)?.loaded
   ];
   return candidates.flatMap((value) => {
-    if (typeof value === "string") return [value];
-    return Array.isArray(value)
-      ? value.filter((entry): entry is string => typeof entry === "string")
-      : [];
+    const string = jsonString(value);
+    if (string !== undefined) return [string];
+    return jsonStringArray(value);
   });
 }
 
-function partActivations(
-  collector: HistoryCollector,
-  data: Record<string, unknown>,
-  mcpNames: string[]
-): void {
+function partActivations(collector: HistoryCollector, data: JsonObject, mcpNames: string[]): void {
   if (data.type === "compaction") collector.addCompaction();
-  const tool = typeof data.tool === "string" ? data.tool : undefined;
+  const tool = jsonString(data.tool);
   if (tool) {
     if (tool === "skill") {
       const state = objectField(data.state);
       const input = objectField(state?.input) ?? objectField(data.input);
-      const skillName =
-        typeof input?.name === "string"
-          ? input.name
-          : typeof input?.skill === "string"
-            ? input.skill
-            : "name unavailable";
+      const skillName = jsonString(input?.name) ?? jsonString(input?.skill) ?? "name unavailable";
       collector.addActivation("skill", skillName);
     } else {
       const server = mcpNames.find(
@@ -109,38 +101,49 @@ export async function readOpenCodeHistory(
       return unavailableHistory(windowDays, "required tables or fields are missing");
     const sessions = db
       .prepare("SELECT id, parent_id, directory, version, time_updated FROM session")
-      .all() as SessionRow[];
+      .all()
+      .flatMap((row) => {
+        const parsed = sessionRowSchema.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      });
     for (const session of sessions) {
       if (!isPathWithin(projectRoot, session.directory)) continue;
       const messages = db
         .prepare(
           "SELECT id, time_created, data FROM message WHERE session_id = $id AND time_created >= $cutoff"
         )
-        .all({ id: session.id, cutoff }) as MessageRow[];
+        .all({ id: session.id, cutoff })
+        .flatMap((row) => {
+          const parsed = messageRowSchema.safeParse(row);
+          return parsed.success ? [parsed.data] : [];
+        });
       if (messages.length === 0 && session.time_updated < cutoff) continue;
       collector.addSession(session.id, session.parent_id !== null, session.version);
       for (const message of messages) {
-        let data: Record<string, unknown>;
+        let data: JsonObject;
         try {
-          const parsed = JSON.parse(message.data);
-          data = objectField(parsed) ?? {};
+          data = parseJsonObject(parseJsonText(message.data) ?? {}) ?? {};
         } catch {
           continue;
         }
         if (data.role !== "assistant") continue;
         const usage = addOpenCodeUsage(data.tokens);
         collector.addRequest(`${session.id}:${message.id}`, usage);
-        const modelVersion = typeof data.version === "string" ? data.version : undefined;
+        const modelVersion = jsonString(data.version);
         if (modelVersion) collector.addVersion(modelVersion);
       }
       const parts = db
         .prepare(
           "SELECT time_created, data FROM part WHERE session_id = $id AND time_created >= $cutoff"
         )
-        .all({ id: session.id, cutoff }) as PartRow[];
+        .all({ id: session.id, cutoff })
+        .flatMap((row) => {
+          const parsed = partRowSchema.safeParse(row);
+          return parsed.success ? [parsed.data] : [];
+        });
       for (const part of parts) {
         try {
-          const data = objectField(JSON.parse(part.data));
+          const data = objectField(parseJsonText(part.data));
           if (data) partActivations(collector, data, mcpNames);
         } catch {
           // Ignore malformed structural parts without exposing their content.

@@ -14,6 +14,13 @@ import {
 import type { ContextHarness, ContextMcpProbe } from "./model.js";
 import { measureText } from "./measurement.js";
 import { executorBridgeArgs } from "../renderers/executor.js";
+import {
+  jsonString,
+  parseJsonObject,
+  parseJsonText,
+  type JsonObject,
+  type JsonValue
+} from "./json.js";
 
 const protocolVersion = "2025-06-18";
 const clientVersion = "mfz-context-probe";
@@ -21,8 +28,8 @@ const requestTimeoutMs = 30_000;
 const maxToolPages = 100;
 
 interface McpConnection {
-  request(method: string, params: Record<string, unknown>, id: number): Promise<unknown>;
-  notify(method: string, params: Record<string, unknown>): Promise<void>;
+  request(method: string, params: JsonObject, id: number): Promise<JsonValue>;
+  notify(method: string, params: JsonObject): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -44,16 +51,13 @@ function temporaryEnvironment(directory: string): NodeJS.ProcessEnv {
   };
 }
 
-function parseResponse(response: unknown): unknown {
-  if (typeof response !== "object" || response === null || Array.isArray(response)) {
-    throw probeError();
-  }
-  const message = response as { error?: unknown; result?: unknown };
-  if (message.error !== undefined || message.result === undefined) throw probeError();
+function parseResponse(response: JsonValue): JsonValue {
+  const message = parseJsonObject(response);
+  if (!message || message.error !== undefined || message.result === undefined) throw probeError();
   return message.result;
 }
 
-function parseSseResponse(body: string): unknown {
+function parseSseResponse(body: string): JsonValue {
   const data = body
     .split(/\r?\n/)
     .filter((line) => line.startsWith("data:"))
@@ -61,7 +65,9 @@ function parseSseResponse(body: string): unknown {
     .join("\n");
   if (!data) throw probeError();
   try {
-    return JSON.parse(data);
+    const parsed = parseJsonText(data);
+    if (parsed === undefined) throw probeError();
+    return parsed;
   } catch {
     throw probeError();
   }
@@ -75,18 +81,18 @@ class HttpConnection implements McpConnection {
     private readonly headers: Record<string, string> | undefined
   ) {}
 
-  async request(method: string, params: Record<string, unknown>, id: number): Promise<unknown> {
+  async request(method: string, params: JsonObject, id: number): Promise<JsonValue> {
     const response = await this.post({ jsonrpc: "2.0", id, method, params });
     return parseResponse(response);
   }
 
-  async notify(method: string, params: Record<string, unknown>): Promise<void> {
+  async notify(method: string, params: JsonObject): Promise<void> {
     await this.post({ jsonrpc: "2.0", method, params });
   }
 
   async close(): Promise<void> {}
 
-  private async post(message: Record<string, unknown>): Promise<unknown> {
+  private async post(message: JsonObject): Promise<JsonValue> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -109,7 +115,9 @@ class HttpConnection implements McpConnection {
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("text/event-stream")) return parseSseResponse(body);
       try {
-        return JSON.parse(body) as unknown;
+        const parsed = parseJsonText(body);
+        if (parsed === undefined) throw probeError();
+        return parsed;
       } catch {
         throw probeError();
       }
@@ -123,9 +131,9 @@ class HttpConnection implements McpConnection {
 
 class StdioConnection implements McpConnection {
   private buffer = Buffer.alloc(0);
-  private readonly messages: unknown[] = [];
+  private readonly messages: JsonValue[] = [];
   private readonly waiters: Array<{
-    resolve: (message: unknown) => void;
+    resolve: (message: JsonValue) => void;
     reject: (error: Error) => void;
   }> = [];
   private failure: Error | undefined;
@@ -140,18 +148,17 @@ class StdioConnection implements McpConnection {
     child.on("close", () => this.fail());
   }
 
-  async request(method: string, params: Record<string, unknown>, id: number): Promise<unknown> {
+  async request(method: string, params: JsonObject, id: number): Promise<JsonValue> {
     this.write({ jsonrpc: "2.0", id, method, params });
     while (true) {
       const message = await this.next();
-      if (typeof message !== "object" || message === null || Array.isArray(message)) continue;
-      const response = message as { id?: unknown };
-      if (response.id !== id) continue;
+      const response = parseJsonObject(message);
+      if (!response || response.id !== id) continue;
       return parseResponse(message);
     }
   }
 
-  async notify(method: string, params: Record<string, unknown>): Promise<void> {
+  async notify(method: string, params: JsonObject): Promise<void> {
     this.write({ jsonrpc: "2.0", method, params });
   }
 
@@ -177,13 +184,14 @@ class StdioConnection implements McpConnection {
     await killed;
   }
 
-  private write(message: Record<string, unknown>): void {
+  private write(message: JsonObject): void {
     if (this.failure) throw this.failure;
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
 
-  private async next(): Promise<unknown> {
-    if (this.messages.length > 0) return this.messages.shift();
+  private async next(): Promise<JsonValue> {
+    const message = this.messages.shift();
+    if (message !== undefined) return message;
     if (this.failure) throw this.failure;
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -216,7 +224,8 @@ class StdioConnection implements McpConnection {
       this.buffer = this.buffer.subarray(lineEnd + 1);
       if (!body.trim()) continue;
       try {
-        const message = JSON.parse(body) as unknown;
+        const message = parseJsonText(body);
+        if (message === undefined) throw probeError();
         const waiter = this.waiters.shift();
         if (waiter) waiter.resolve(message);
         else this.messages.push(message);
@@ -263,18 +272,18 @@ function createConnection(
 
 async function collectTools(
   connection: McpConnection
-): Promise<{ tools: unknown[]; pages: number }> {
-  const tools: unknown[] = [];
+): Promise<{ tools: JsonValue[]; pages: number }> {
+  const tools: JsonValue[] = [];
   let cursor: string | undefined;
   for (let pages = 1; pages <= maxToolPages; pages += 1) {
     const result = await connection.request("tools/list", cursor ? { cursor } : {}, pages + 1);
-    if (typeof result !== "object" || result === null || Array.isArray(result)) throw probeError();
-    const page = result as { tools?: unknown; nextCursor?: unknown };
-    if (!Array.isArray(page.tools)) throw probeError();
-    tools.push(...page.tools);
-    if (typeof page.nextCursor !== "string" || page.nextCursor.length === 0)
-      return { tools, pages };
-    cursor = page.nextCursor;
+    const page = parseJsonObject(result);
+    const pageTools = page ? page.tools : undefined;
+    if (!Array.isArray(pageTools)) throw probeError();
+    tools.push(...pageTools);
+    const nextCursor = page ? jsonString(page.nextCursor) : undefined;
+    if (!nextCursor) return { tools, pages };
+    cursor = nextCursor;
   }
   throw probeError();
 }
@@ -326,13 +335,9 @@ export async function probeMcpServer(
       },
       1
     );
-    if (typeof initialized !== "object" || initialized === null || Array.isArray(initialized)) {
-      throw probeError();
-    }
-    const instructions =
-      typeof (initialized as { instructions?: unknown }).instructions === "string"
-        ? (initialized as { instructions: string }).instructions
-        : "";
+    const initializedObject = parseJsonObject(initialized);
+    if (!initializedObject) throw probeError();
+    const instructions = jsonString(initializedObject.instructions) ?? "";
     await connection.notify("notifications/initialized", {});
     const collected = await collectTools(connection);
     return {

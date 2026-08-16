@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RuntimePaths } from "../core/paths.js";
 import { readClaudeHistory } from "./claude-history.js";
+import type { JsonObject } from "./json.js";
 
 function paths(home: string): RuntimePaths {
   return {
@@ -32,7 +33,7 @@ describe("Claude context history", () => {
     await mkdir(fallbackProject, { recursive: true });
     const now = new Date().toISOString();
     const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    const record = (value: Record<string, unknown>) =>
+    const record = (value: JsonObject) =>
       JSON.stringify({ cwd: root, timestamp: now, sessionId: "main", version: "2.1", ...value });
     const lines = [
       "not-json",
