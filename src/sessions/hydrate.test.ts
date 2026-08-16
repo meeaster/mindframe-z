@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { GetObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
 import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
 import type { Archive } from "../core/manifests.js";
@@ -27,7 +27,7 @@ class FakeArchiveS3 {
     private failGetKeys: Set<string> = new Set()
   ) {}
 
-  async send(command: unknown): Promise<unknown> {
+  async send(command: ListObjectsV2Command | GetObjectCommand): Promise<FakeS3Response> {
     if (this.objects === "unreachable") throw new Error("network unreachable");
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
@@ -37,15 +37,27 @@ class FakeArchiveS3 {
       return { Contents: contents, IsTruncated: false };
     }
     if (command instanceof GetObjectCommand) {
-      const key = command.input.Key as string;
+      const key = command.input.Key;
+      if (key === undefined) throw new Error("FakeArchiveS3: missing object key");
       this.gotten.push(key);
       if (this.failGetKeys.has(key)) throw new Error(`simulated failure fetching key: ${key}`);
       const body = this.objects.get(key);
       if (body === undefined) throw new Error(`no such key: ${key}`);
       return { Body: { transformToByteArray: async () => new Uint8Array(body) } };
     }
-    throw new Error(`FakeArchiveS3: unsupported command ${command?.constructor?.name}`);
+    throw new Error("FakeArchiveS3: unsupported command");
   }
+}
+
+type FakeS3Response =
+  | { Contents: Array<{ Key: string }>; IsTruncated: false }
+  | { Body: { transformToByteArray: () => Promise<Uint8Array> } };
+
+function asS3Client(fake: FakeArchiveS3): S3Client {
+  const client = new S3Client({ region: "us-east-1" });
+  // SAFETY: The fake handles exactly the commands hydrateSession sends in these tests.
+  client.send = fake.send.bind(fake) as S3Client["send"];
+  return client;
 }
 
 describe("hydrateSession", () => {
@@ -62,7 +74,7 @@ describe("hydrateSession", () => {
       [archive("default")],
       "claude-code",
       "sess-1",
-      () => fake as unknown as S3Client
+      () => asS3Client(fake)
     );
 
     expect(ok).toBe(true);
@@ -115,7 +127,7 @@ describe("hydrateSession", () => {
       [archive("default")],
       "claude-code",
       "missing",
-      () => fake as unknown as S3Client
+      () => asS3Client(fake)
     );
 
     expect(ok).toBe(false);
@@ -134,10 +146,7 @@ describe("hydrateSession", () => {
       [archive("primary"), archive("secondary")],
       "claude-code",
       "sess-2",
-      (a) =>
-        a.name === "primary"
-          ? (unreachable as unknown as S3Client)
-          : (reachable as unknown as S3Client)
+      (a) => (a.name === "primary" ? asS3Client(unreachable) : asS3Client(reachable))
     );
 
     expect(ok).toBe(true);
@@ -167,7 +176,7 @@ describe("hydrateSession", () => {
       [archive("default")],
       "claude-code",
       "sess-3",
-      () => fake as unknown as S3Client
+      () => asS3Client(fake)
     );
 
     expect(ok).toBe(false);
@@ -189,7 +198,7 @@ describe("hydrateSession", () => {
       [archive("default")],
       "claude-code",
       "sess-4",
-      () => unreachable as unknown as S3Client
+      () => asS3Client(unreachable)
     );
 
     expect(ok).toBe(false);
@@ -210,7 +219,7 @@ describe("hydrateSession", () => {
       [archive("default")],
       "claude-code",
       "sess-5",
-      () => empty as unknown as S3Client
+      () => asS3Client(empty)
     );
     expect(first).toBe(false);
 
@@ -246,7 +255,7 @@ describe("hydrateSession", () => {
       "sess-6",
       (a) => {
         if (a.name === "pinned") pinnedClientConstructed = true;
-        return readable as unknown as S3Client;
+        return asS3Client(readable);
       }
     );
 

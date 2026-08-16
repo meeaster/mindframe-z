@@ -3,8 +3,12 @@ import type { RuntimePaths } from "../core/paths.js";
 import { pathExists } from "../core/fs-util.js";
 import { opencodeDataHome, opencodeDbPath } from "../core/paths.js";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
+import { z } from "zod";
 import type { BackupItem } from "./backup-item.js";
 import { primaryRelPath } from "./archive.js";
+
+const sessionRowSchema = z.object({ id: z.string(), time_updated: z.number() });
+const messageTimeRowSchema = z.object({ session_id: z.string(), last_ms: z.number().nullable() });
 
 // Extract one session via the vendor-maintained `opencode export` — never pass
 // --sanitize, since the archive is meant to be full-fidelity (the private,
@@ -41,19 +45,27 @@ export async function listOpencodeItems(
     return [];
   }
   try {
-    const sessions = db
-      .prepare(
-        `SELECT id, time_updated FROM session${options.includeChildren === false ? " WHERE parent_id IS NULL" : ""}`
-      )
-      .all() as Array<{
-      id: string;
-      time_updated: number;
-    }>;
+    const sessions = z
+      .array(sessionRowSchema)
+      .parse(
+        db
+          .prepare(
+            `SELECT id, time_updated FROM session${options.includeChildren === false ? " WHERE parent_id IS NULL" : ""}`
+          )
+          .all()
+      );
     const lastMessageMs = new Map<string, number>();
-    for (const row of db
-      .prepare("SELECT session_id, MAX(time_created) AS last_ms FROM message GROUP BY session_id")
-      .all() as Array<{ session_id: string; last_ms: number }>) {
-      lastMessageMs.set(row.session_id, row.last_ms);
+    const messageTimes = z
+      .array(messageTimeRowSchema)
+      .parse(
+        db
+          .prepare(
+            "SELECT session_id, MAX(time_created) AS last_ms FROM message GROUP BY session_id"
+          )
+          .all()
+      );
+    for (const row of messageTimes) {
+      if (row.last_ms !== null) lastMessageMs.set(row.session_id, row.last_ms);
     }
     return sessions.map((session) => ({
       relPath: primaryRelPath("opencode", session.id),

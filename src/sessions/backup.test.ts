@@ -5,7 +5,7 @@ import {
   GetPublicAccessBlockCommand,
   ListObjectsV2Command,
   PutObjectCommand,
-  type S3Client
+  S3Client
 } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
 import { makeTempDir, testRuntimePaths } from "../../tests/integration/support.js";
@@ -94,7 +94,9 @@ class FakeS3 {
     }
   ) {}
 
-  async send(command: unknown): Promise<unknown> {
+  async send(
+    command: ListObjectsV2Command | PutObjectCommand | GetPublicAccessBlockCommand
+  ): Promise<FakeS3Response> {
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
       const contents = [...this.objects.entries()]
@@ -103,10 +105,14 @@ class FakeS3 {
       return { Contents: contents, IsTruncated: false };
     }
     if (command instanceof PutObjectCommand) {
-      const body = command.input.Body as Buffer;
-      this.objects.set(command.input.Key as string, Date.now());
+      const body = command.input.Body;
+      const key = command.input.Key;
+      if (!Buffer.isBuffer(body) || key === undefined) {
+        throw new Error("FakeS3: invalid put object input");
+      }
+      this.objects.set(key, Date.now());
       this.puts.push({
-        Key: command.input.Key as string,
+        Key: key,
         Body: body,
         ServerSideEncryption: command.input.ServerSideEncryption
       });
@@ -118,13 +124,25 @@ class FakeS3 {
       }
       return { PublicAccessBlockConfiguration: this.accessBlock };
     }
-    throw new Error(`FakeS3: unsupported command ${command?.constructor?.name}`);
+    throw new Error("FakeS3: unsupported command");
   }
+}
+
+type FakeS3Response =
+  | { Contents: Array<{ Key: string; LastModified: Date }>; IsTruncated: false }
+  | { PublicAccessBlockConfiguration: Record<string, boolean> }
+  | Record<string, never>;
+
+function asS3Client(fake: FakeS3): S3Client {
+  const client = new S3Client({ region: "us-east-1" });
+  // SAFETY: The fake handles exactly the commands backup and preflight send in these tests.
+  client.send = fake.send.bind(fake) as S3Client["send"];
+  return client;
 }
 
 describe("assertBucketHardened", () => {
   it("passes when all four Block Public Access flags are true", async () => {
-    const client = new FakeS3(new Map()) as unknown as S3Client;
+    const client = asS3Client(new FakeS3(new Map()));
     await expect(assertBucketHardened(client, bucketArchive)).resolves.toBeUndefined();
   });
 
@@ -134,14 +152,14 @@ describe("assertBucketHardened", () => {
       IgnorePublicAcls: true,
       BlockPublicPolicy: false,
       RestrictPublicBuckets: true
-    }) as unknown as S3Client;
-    await expect(assertBucketHardened(client, bucketArchive)).rejects.toThrow(
+    });
+    await expect(assertBucketHardened(asS3Client(client), bucketArchive)).rejects.toThrow(
       /Block Public Access/
     );
   });
 
   it("aborts when the public-access-block config is unreadable", async () => {
-    const client = new FakeS3(new Map(), "unreadable") as unknown as S3Client;
+    const client = asS3Client(new FakeS3(new Map(), "unreadable"));
     await expect(assertBucketHardened(client, bucketArchive)).rejects.toThrow(
       /BUCKET-LEVEL Block Public Access/
     );
@@ -191,7 +209,7 @@ describe("backupHarness", () => {
       ["claude-code/unchanged.jsonl", now],
       ["claude-code/changed.jsonl", now - 10 * 60_000]
     ]);
-    const client = new FakeS3(store) as unknown as S3Client;
+    const client = asS3Client(new FakeS3(store));
 
     const summary = await backupHarness(client, bucketArchive, "claude-code", [
       item("new.jsonl", now),
@@ -205,7 +223,7 @@ describe("backupHarness", () => {
   it("sets ServerSideEncryption AES256 on every upload", async () => {
     const client = new FakeS3(new Map());
 
-    await backupHarness(client as unknown as S3Client, bucketArchive, "claude-code", [
+    await backupHarness(asS3Client(client), bucketArchive, "claude-code", [
       item("new.jsonl", Date.now())
     ]);
 
@@ -216,7 +234,7 @@ describe("backupHarness", () => {
   it("keys subagent transcripts under the session's own prefix", async () => {
     const client = new FakeS3(new Map());
 
-    await backupHarness(client as unknown as S3Client, bucketArchive, "claude-code", [
+    await backupHarness(asS3Client(client), bucketArchive, "claude-code", [
       item("sess-1/subagents/agent-1.jsonl", Date.now())
     ]);
 
@@ -234,12 +252,10 @@ describe("backupHarness", () => {
       }
     };
 
-    const summary = await backupHarness(
-      client as unknown as S3Client,
-      bucketArchive,
-      "claude-code",
-      [failing, item("ok.jsonl", Date.now())]
-    );
+    const summary = await backupHarness(asS3Client(client), bucketArchive, "claude-code", [
+      failing,
+      item("ok.jsonl", Date.now())
+    ]);
 
     expect(summary).toEqual({ uploaded: 1, skipped: 0, failed: 1 });
   });
