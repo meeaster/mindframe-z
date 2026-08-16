@@ -142,6 +142,7 @@ describe("skill override merge vs replace", () => {
       permission: { bash: { "*": "ask" }, skill: { keep: "allow" } }
     };
 
+    // SAFETY: The fixture supplies the fields asserted below and the codec preserves them.
     const merged = mergeSkillOverrides("opencode", config, { added: false }) as {
       instructions: string[];
       permission: { bash: Record<string, string>; skill: Record<string, string> };
@@ -150,6 +151,7 @@ describe("skill override merge vs replace", () => {
     expect(merged.permission.bash).toEqual({ "*": "ask" });
     expect(merged.permission.skill).toEqual({ keep: "allow", added: "deny" });
 
+    // SAFETY: The fixture supplies the fields asserted below and the codec preserves them.
     const replaced = replaceSkillOverrides("opencode", config, { added: false }) as {
       permission: { bash: Record<string, string>; skill: Record<string, string> };
     };
@@ -158,6 +160,7 @@ describe("skill override merge vs replace", () => {
   });
 
   it("encodes claude-code toggles under skillOverrides", () => {
+    // SAFETY: The fixture supplies model and the codec writes skillOverrides.
     const merged = replaceSkillOverrides(
       "claude-code",
       { model: "sonnet" },

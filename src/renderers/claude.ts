@@ -8,7 +8,7 @@ import {
   referenceIndexPath
 } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
-import { isPlainObject, jsonFileContent, readJsonObject } from "../core/fs-util.js";
+import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import {
   deepMerge,
   executorBridgeName,
@@ -186,18 +186,20 @@ export async function renderClaude(
   const existingClaudeJson = jsonObjectSchema.parse(await readJsonObject(localClaudeJsonPath));
   const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data;
   const existingExecutor = existingMcpServers?.[executorBridgeName];
-  const existingExecutorEnv = isPlainObject(existingExecutor)
-    ? jsonObjectSchema.safeParse(existingExecutor.env).data
+  const existingExecutorObject = jsonObjectSchema.safeParse(existingExecutor).data;
+  const existingExecutorEnv = existingExecutorObject
+    ? jsonObjectSchema.safeParse(existingExecutorObject.env).data
     : undefined;
   const hasGeneratedExecutor =
-    isPlainObject(existingExecutor) &&
-    existingExecutor.type === "stdio" &&
-    existingExecutor.command === "executor" &&
-    Array.isArray(existingExecutor.args) &&
-    ((existingExecutor.args.includes("--scope") &&
+    existingExecutorObject !== undefined &&
+    existingExecutorObject.type === "stdio" &&
+    existingExecutorObject.command === "executor" &&
+    Array.isArray(existingExecutorObject.args) &&
+    ((existingExecutorObject.args.includes("--scope") &&
       existingExecutorEnv !== undefined &&
       "EXECUTOR_DATA_DIR" in existingExecutorEnv) ||
-      (existingExecutor.args[0] === "mcp" && existingExecutor.args.includes("--elicitation-mode")));
+      (existingExecutorObject.args[0] === "mcp" &&
+        existingExecutorObject.args.includes("--elicitation-mode")));
   const managedClaudeServerNames = new Set([
     ...profile.mcpServers.map((server) => server.name),
     ...(requiresExecutorBridge(profile) || hasGeneratedExecutor ? [executorBridgeName] : [])

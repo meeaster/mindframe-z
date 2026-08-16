@@ -89,16 +89,6 @@ export async function readTextFile(file: string): Promise<string | undefined> {
 }
 
 /**
- * Narrow an unknown value to a plain object: a non-null, non-array object. This
- * is the canonical guard behind the "parse to a plain object or fall back"
- * seams (config merges and history record extraction), so the accepted shape
- * stays identical wherever renderers, sync, and context readers rely on it.
- */
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
  * Scan JSONL text for its plain-object records, skipping blank lines and any
  * line that does not parse to one. This is the canonical scan behind the "read
  * a line-delimited harness stream" seams (thread run traces and Claude

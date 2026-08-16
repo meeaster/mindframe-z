@@ -28,7 +28,8 @@ async function tmpPaths(): Promise<RuntimePaths> {
 }
 
 function profile(codexDefault: boolean): ResolvedProfile {
-  return {
+  // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
+  const result: Partial<ResolvedProfile> = {
     mcpServers: [
       {
         name: "jira",
@@ -37,7 +38,9 @@ function profile(codexDefault: boolean): ResolvedProfile {
       }
     ],
     enabledSkills: []
-  } as unknown as ResolvedProfile;
+  };
+  // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
+  return result as ResolvedProfile;
 }
 
 // Defaults chosen so every override in the payload tests below flips a value:
@@ -46,7 +49,8 @@ function profile(codexDefault: boolean): ResolvedProfile {
 // is per-target because only the flip each harness actually supports is worth
 // pinning — Claude Code rejects disabling an MCP server (assertMcpToggleSupported).
 function harnessProfile(target: AgentName, mcpDefault: boolean): ResolvedProfile {
-  return {
+  // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
+  const result: Partial<ResolvedProfile> = {
     mcpServers: [
       {
         name: "jira",
@@ -55,10 +59,34 @@ function harnessProfile(target: AgentName, mcpDefault: boolean): ResolvedProfile
       }
     ],
     enabledSkills: [
-      { name: "pr-writer", agents: { [target]: true } },
-      { name: "dataviz", agents: { [target]: false } }
+      {
+        name: "pr-writer",
+        description: "",
+        source: "vendored",
+        repo: "",
+        ref: "",
+        subtree: "",
+        agents: { [target]: true },
+        toggleable: false,
+        targets: [],
+        sourceRoot: ""
+      },
+      {
+        name: "dataviz",
+        description: "",
+        source: "vendored",
+        repo: "",
+        ref: "",
+        subtree: "",
+        agents: { [target]: false },
+        toggleable: false,
+        targets: [],
+        sourceRoot: ""
+      }
     ]
-  } as unknown as ResolvedProfile;
+  };
+  // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
+  return result as ResolvedProfile;
 }
 
 describe("override store", () => {

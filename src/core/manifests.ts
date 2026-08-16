@@ -551,7 +551,7 @@ export const profileSchema = z
     claude: z
       .object({
         model: z.string().optional(),
-        settings: z.record(z.string(), z.unknown()).default({})
+        settings: jsonObjectSchema.default({})
       })
       .default({ settings: {} }),
     codex: codexConfigSchema.default({ config: {}, plugins: {} }),

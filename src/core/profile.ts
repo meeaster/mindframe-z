@@ -1,5 +1,4 @@
 import path from "node:path";
-import { isPlainObject } from "./fs-util.js";
 import { dedupe, expandHome, type AgentName, type RuntimePaths } from "./paths.js";
 import {
   eachUpstream,
@@ -293,20 +292,18 @@ function normalizeProfile(
     setSource(sources.references, "reference", resolved.name, resolved.home);
     return resolved.name;
   });
-  const skills = Object.fromEntries(
-    Object.entries(profile.skills).map(([rawName, config]) => {
-      const resolved = resolveCatalogName(home, rawName, "skill");
-      setSource(sources.skills, "skill", resolved.name, resolved.home);
-      return [resolved.name, config];
-    })
-  ) as ProfileManifest["skills"];
-  const mcp = Object.fromEntries(
-    Object.entries(profile.mcp).map(([rawName, config]) => {
-      const resolved = resolveCatalogName(home, rawName, "mcp");
-      setSource(sources.mcp, "MCP", resolved.name, resolved.home);
-      return [resolved.name, config];
-    })
-  ) as ProfileManifest["mcp"];
+  const skills: ProfileManifest["skills"] = {};
+  for (const [rawName, config] of Object.entries(profile.skills)) {
+    const resolved = resolveCatalogName(home, rawName, "skill");
+    setSource(sources.skills, "skill", resolved.name, resolved.home);
+    skills[resolved.name] = config;
+  }
+  const mcp: ProfileManifest["mcp"] = {};
+  for (const [rawName, config] of Object.entries(profile.mcp)) {
+    const resolved = resolveCatalogName(home, rawName, "mcp");
+    setSource(sources.mcp, "MCP", resolved.name, resolved.home);
+    mcp[resolved.name] = config;
+  }
   const instructions = normalizeSourceNames(
     home,
     profile.instructions,
@@ -402,17 +399,31 @@ function normalizeProfile(
   };
 }
 
-export function deepMerge(
-  base: DeepMergeObject,
-  child: DeepMergeObject
-): DeepMergeObject {
-  const result = { ...base };
+type MergeValue =
+  | string
+  | number
+  | bigint
+  | boolean
+  | Date
+  | null
+  | undefined
+  | MergeValue[]
+  | MergeInput;
+interface MergeInput {
+  [key: string]: MergeValue;
+}
+
+export function deepMerge<T extends object, U extends object>(base: T, child: U): T & U;
+export function deepMerge(base: MergeInput, child: MergeInput): MergeInput {
+  const result = new Map<string, MergeValue>(Object.entries(base));
   for (const [key, value] of Object.entries(child)) {
-    const existing = result[key];
-    result[key] =
-      isPlainObject(value) && isPlainObject(existing) ? deepMerge(existing, value) : value;
+    const existing = result.get(key);
+    result.set(
+      key,
+      isMergeObject(value) && isMergeObject(existing) ? deepMerge(existing, value) : value
+    );
   }
-  return result;
+  return Object.fromEntries(result);
 }
 
 export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): ProfileManifest {
@@ -434,32 +445,23 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       for (const f of child.extra_folders) map.set(f.path, f);
       return [...map.values()];
     })(),
-    skills: deepMerge(base.skills, child.skills) as ProfileManifest["skills"],
+    skills: deepMerge(base.skills, child.skills),
     mcp: mergeMcpConfigs(base.mcp, child.mcp),
-    executor: deepMerge(base.executor ?? {}, child.executor ?? {}) as ProfileManifest["executor"],
+    executor: deepMerge(base.executor ?? {}, child.executor ?? {}),
     opencode: {
-      config: deepMerge(
-        base.opencode.config,
-        child.opencode.config
-      ) as ProfileManifest["opencode"]["config"],
+      config: deepMerge(base.opencode.config, child.opencode.config),
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
-      tui: deepMerge(base.opencode.tui, child.opencode.tui) as ProfileManifest["opencode"]["tui"],
+      tui: deepMerge(base.opencode.tui, child.opencode.tui),
       tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
       delegate_general: child.opencode.delegate_general ?? base.opencode.delegate_general
     },
     opencode_v2: {
-      config: deepMerge(
-        base.opencode_v2.config,
-        child.opencode_v2.config
-      ) as ProfileManifest["opencode_v2"]["config"],
+      config: deepMerge(base.opencode_v2.config, child.opencode_v2.config),
       dependencies: { ...base.opencode_v2.dependencies, ...child.opencode_v2.dependencies },
-      cli: deepMerge(
-        base.opencode_v2.cli,
-        child.opencode_v2.cli
-      ) as ProfileManifest["opencode_v2"]["cli"],
+      cli: deepMerge(base.opencode_v2.cli, child.opencode_v2.cli),
       global_instructions:
         child.opencode_v2.global_instructions ?? base.opencode_v2.global_instructions,
       plugins: dedupe([...base.opencode_v2.plugins, ...child.opencode_v2.plugins]),
@@ -467,23 +469,14 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       commands: dedupe([...base.opencode_v2.commands, ...child.opencode_v2.commands]),
       agents: dedupe([...base.opencode_v2.agents, ...child.opencode_v2.agents])
     },
-    claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
+    claude: deepMerge(base.claude, child.claude),
     codex: {
-      config: deepMerge(
-        base.codex.config,
-        child.codex.config
-      ) as ProfileManifest["codex"]["config"],
-      plugins: deepMerge(
-        base.codex.plugins,
-        child.codex.plugins
-      ) as ProfileManifest["codex"]["plugins"]
+      config: deepMerge(base.codex.config, child.codex.config),
+      plugins: deepMerge(base.codex.plugins, child.codex.plugins)
     },
     pi: {
-      settings: deepMerge(base.pi.settings, child.pi.settings) as ProfileManifest["pi"]["settings"],
-      subagent_config: deepMerge(
-        base.pi.subagent_config,
-        child.pi.subagent_config
-      ) as ProfileManifest["pi"]["subagent_config"]
+      settings: deepMerge(base.pi.settings, child.pi.settings),
+      subagent_config: deepMerge(base.pi.subagent_config, child.pi.subagent_config)
     },
     thread: {
       stores: (() => {
@@ -541,12 +534,11 @@ function mergeMcpConfigs(
       merged[name] = childConfig;
       continue;
     }
-    const combined = deepMerge(
-      baseConfig as unknown as Record<string, unknown>,
-      childConfig as unknown as Record<string, unknown>
-    ) as ProfileManifest["mcp"][string];
+    const combined = deepMerge(baseConfig, childConfig);
     if (!("agents" in childConfig) && "executor" in childConfig) {
-      delete (combined as { agents?: unknown }).agents;
+      const { agents: _agents, ...withoutAgents } = combined;
+      merged[name] = withoutAgents;
+      continue;
     }
     merged[name] = combined;
   }
@@ -563,7 +555,7 @@ function resolveSkillConfig(
   const targets = Object.entries(config.agents)
     .filter(([, enabled]) => enabled)
     .map(([target]) => target)
-    .filter((target): target is ToolTargetName => agents.includes(target as AgentName));
+    .filter((target): target is ToolTargetName => agents.some((agent) => agent === target));
   return {
     agents: config.agents,
     toggleable: config.toggleable,
@@ -571,8 +563,8 @@ function resolveSkillConfig(
   };
 }
 
-interface DeepMergeObject {
-  [key: string]: unknown;
+function isMergeObject(value: MergeValue): value is MergeInput {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
 interface ExecutorConnections {

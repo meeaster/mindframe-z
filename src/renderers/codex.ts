@@ -131,7 +131,7 @@ export async function renderCodex(
   const localConfigPath = path.join(paths.codexDir, "config.toml");
   const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), renderedConfig);
   if (hasPlugins) {
-    mergedLocalConfig.plugins = config.plugins;
+    mergedLocalConfig.plugins = plugins;
   } else {
     delete mergedLocalConfig.plugins;
   }

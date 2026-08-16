@@ -317,11 +317,7 @@
       "properties": {
         "config": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "dependencies": {
           "default": {},
@@ -344,11 +340,7 @@
         },
         "tui": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "tui_plugins": {
           "default": [],
@@ -421,11 +413,7 @@
       "properties": {
         "config": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "dependencies": {
           "default": {},
@@ -441,11 +429,7 @@
         },
         "cli": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "global_instructions": {
           "type": "boolean"
@@ -491,11 +475,7 @@
         },
         "settings": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         }
       }
     },
@@ -508,11 +488,7 @@
       "properties": {
         "config": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "plugins": {
           "default": {},
@@ -546,19 +522,11 @@
       "properties": {
         "settings": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         },
         "subagent_config": {
           "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/$defs/__schema0"
         }
       }
     },
@@ -773,5 +741,41 @@
   "required": [
     "name"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema1"
+      }
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        {
+          "$ref": "#/$defs/__schema0"
+        }
+      ]
+    }
+  }
 }

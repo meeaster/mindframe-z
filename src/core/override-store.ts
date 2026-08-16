@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "./fs-util.js";
+import { jsonValueSchema, type JsonObject } from "./json.js";
 import { overrideStorePath, type AgentName, type RuntimePaths } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
 
@@ -15,8 +16,8 @@ const booleanMapSchema = z.record(z.string(), z.boolean()).default({});
 const payloadSchema = z
   .object({
     argv: z.array(z.string()).optional(),
-    config: z.record(z.string(), z.unknown()).optional(),
-    settings: z.record(z.string(), z.unknown()).optional()
+    config: z.record(z.string(), jsonValueSchema).optional(),
+    settings: z.record(z.string(), jsonValueSchema).optional()
   })
   .default({});
 const projectHarnessSchema = z
@@ -34,8 +35,8 @@ export interface ProjectHarnessOverrides {
   skills?: Record<string, boolean>;
   payload?: {
     argv?: string[];
-    config?: Record<string, unknown>;
-    settings?: Record<string, unknown>;
+    config?: JsonObject;
+    settings?: JsonObject;
   };
 }
 
@@ -46,9 +47,12 @@ export interface OverrideStore {
 export async function readOverrideStore(home: string): Promise<OverrideStore> {
   const file = overrideStorePath(home);
   try {
-    return overrideStoreSchema.parse(JSON.parse(await readFile(file, "utf8"))) as OverrideStore;
+    return overrideStoreSchema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { projects: {} };
+    // SAFETY: Node filesystem errors expose the standard errno code property.
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return { projects: {} };
+    }
     throw new Error(
       `Failed to read ${file}: ${error instanceof Error ? error.message : String(error)}`
     );
