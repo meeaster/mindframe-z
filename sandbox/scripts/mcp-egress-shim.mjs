@@ -130,7 +130,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(listenPort, listenHost, () => {
   const address = server.address();
-  const boundPort = typeof address === "object" && address ? address.port : listenPort;
+  const boundPort = address?.port ?? listenPort;
   log("listening", { listenHost, listenPort: boundPort, upstream: upstream.href, vaultHint });
 });
 
