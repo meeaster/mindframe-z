@@ -16,7 +16,7 @@ export type McpState = Record<string, boolean>;
 
 interface McpTuiResult {
   saved: boolean;
-  states: Record<AgentName, McpState>;
+  states: Record<(typeof targets)[number], McpState>;
 }
 
 interface McpOption {
@@ -53,30 +53,30 @@ function optionsForTarget(profile: ResolvedProfile, target: AgentName): McpOptio
 class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
   saved = false;
   private target: (typeof targets)[number];
-  private readonly states: Record<AgentName, McpState>;
+  private readonly targetState: { value: (typeof targets)[number] };
+  private readonly states: Record<(typeof targets)[number], McpState>;
   private readonly profile: ResolvedProfile;
-  private readonly outputStream: Writable;
 
   constructor(
     profile: ResolvedProfile,
-    states: Record<AgentName, McpState>,
+    states: Record<(typeof targets)[number], McpState>,
     streams: { input?: Readable; output?: Writable } = {}
   ) {
     const initialTarget = profile.agents.includes("opencode")
       ? "opencode"
       : (targets.find((target) => profile.agents.includes(target)) ?? "opencode");
+    const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const output = streams.output ?? process.stderr;
     const promptOptions: MultiSelectOptions<McpOption> = {
       options,
       output,
-      initialValues: options.filter((o) => states[initialTarget][o.value]).map((o) => o.value),
+      initialValues: options.filter((o) => states[targetState.value][o.value]).map((o) => o.value),
       render() {
         const value = this.value ?? [];
-        const prompt = this as unknown as McpTogglePrompt;
         if (this.state === "cancel") return `${styleText("bold", "MCP toggles")} cancelled`;
         const count = `${value.length}/${this.options.length}`;
-        const title = `MCP toggles (${prompt.target}, ${count} enabled)`;
+        const title = `MCP toggles (${targetState.value}, ${count} enabled)`;
         if (this.state === "submit")
           return `${styleText("bold", title)} ${styleText("green", "✓ saved")}`;
         const help = styleText(
@@ -86,11 +86,11 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
         if (this.options.length === 0) {
           return `${styleText("bold", title)}\n${styleText("dim", "No MCP servers for this target")}\n${help}`;
         }
-        const columns = getColumns(prompt.outputStream);
+        const columns = getColumns(output);
         const lines = limitOptions({
           cursor: this.cursor,
           options: this.options,
-          output: prompt.outputStream,
+          output,
           rowPadding: 2,
           style: (option, active) => {
             const checked = value.includes(option.value) ? "◉" : "○";
@@ -111,9 +111,9 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
     if (streams.input !== undefined) promptOptions.input = streams.input;
     super(promptOptions);
     this.target = initialTarget;
+    this.targetState = targetState;
     this.states = states;
     this.profile = profile;
-    this.outputStream = output;
     this.on("key", (char, key) => this.handleKey(char, key));
   }
 
@@ -146,6 +146,7 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
     this.captureCurrentState();
     const currentIndex = targets.indexOf(this.target);
     this.target = targets[(currentIndex + 1) % targets.length] ?? "opencode";
+    this.targetState.value = this.target;
     this.options = optionsForTarget(this.profile, this.target);
     this.cursor = 0;
     this.value = this.options.filter((o) => this.states[this.target][o.value]).map((o) => o.value);
@@ -165,12 +166,11 @@ export async function runMcpTui(
     );
   }
   const store = await readOverrideStore(paths.home);
-  const initialStates = Object.fromEntries(
-    targets.map((target) => [
-      target,
-      effectiveProjectState(store, projectRoot, profile, target, "mcp")
-    ])
-  ) as Record<AgentName, McpState>;
+  const initialStates = {
+    opencode: effectiveProjectState(store, projectRoot, profile, "opencode", "mcp"),
+    "claude-code": effectiveProjectState(store, projectRoot, profile, "claude-code", "mcp"),
+    codex: effectiveProjectState(store, projectRoot, profile, "codex", "mcp")
+  } satisfies Record<(typeof targets)[number], McpState>;
   const prompt = new McpTogglePrompt(profile, initialStates, streams);
   const result = await prompt.prompt();
   if (isCancel(result) || !prompt.result.saved) return;

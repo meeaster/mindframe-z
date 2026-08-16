@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { parse as parseToml } from "smol-toml";
+import { z } from "zod";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -14,6 +15,113 @@ import {
   writeChangedSkillOverrides,
   writeLocalSkillOverrides
 } from "./config-io.js";
+import { readOverrideStore } from "../core/override-store.js";
+
+const codexConfigSchema = z.object({
+  skills: z
+    .object({ config: z.array(z.object({ path: z.string(), enabled: z.boolean() })).optional() })
+    .optional()
+});
+const skillStateSchema = z.record(z.string(), z.boolean());
+
+function skill(
+  name: string,
+  agents: ResolvedProfile["enabledSkills"][number]["agents"],
+  targets: ResolvedProfile["enabledSkills"][number]["targets"]
+) {
+  return {
+    name,
+    description: "",
+    source: "local" as const,
+    agents,
+    targets,
+    toggleable: true,
+    sourceRoot: "/tmp"
+  };
+}
+
+function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): ResolvedProfile {
+  return {
+    name: "test",
+    agents: ["opencode", "claude-code", "codex"],
+    profile: {
+      name: "test",
+      description: "",
+      agents: ["opencode", "claude-code", "codex"],
+      instructions: [],
+      references: [],
+      skills: {},
+      mcp: {},
+      opencode: {
+        config: {},
+        dependencies: {},
+        plugins: [],
+        tui: {},
+        tui_plugins: [],
+        commands: [],
+        agents: []
+      },
+      opencode_v2: {
+        config: {},
+        dependencies: {},
+        cli: {},
+        plugins: [],
+        tui_plugins: [],
+        commands: [],
+        agents: []
+      },
+      claude: { settings: {} },
+      codex: { config: {}, plugins: {} },
+      pi: { settings: {}, subagent_config: {} },
+      thread: { stores: [], defaults: {}, credentials: "subscription" },
+      dotfiles: {},
+      extra_folders: []
+    },
+    manifests: {
+      homeManifest: {},
+      root: "/tmp",
+      aliasPath: [],
+      references: [],
+      skills: [],
+      mcpServers: {},
+      profiles: new Map(),
+      miseFiles: new Map(),
+      machine: {
+        references_dir: "~/.mindframe-z/references",
+        extra_folders: [],
+        git: {},
+        sandbox: {},
+        thread: { stores: [] },
+        work: {},
+        archives: [],
+        opencode: {},
+        claude: {}
+      }
+    },
+    sources: {
+      references: new Map(),
+      skills: new Map(),
+      mcp: new Map(),
+      instructions: new Map(),
+      plugins: new Map(),
+      commands: new Map(),
+      agents: new Map()
+    },
+    instructionFiles: [],
+    referencesDir: "/tmp",
+    enabledReferences: [],
+    enabledSkills,
+    enabledCommands: [],
+    enabledAgents: [],
+    enabledOpenCodeV2Commands: [],
+    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeV2Plugins: [],
+    enabledOpenCodeV2TuiPlugins: [],
+    mcpServers: [],
+    extraFolders: [],
+    miseLayers: []
+  };
+}
 
 async function tmpDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-config-io-"));
@@ -22,11 +130,9 @@ async function tmpDir(): Promise<string> {
 async function readCodexSkillsConfig(
   runtimePaths: RuntimePaths
 ): Promise<Array<{ path: string; enabled: boolean }> | undefined> {
-  const data = parseToml(
-    await readFile(path.join(runtimePaths.codexDir, "config.toml"), "utf8")
-  ) as {
-    skills?: { config?: Array<{ path: string; enabled: boolean }> };
-  };
+  const data = codexConfigSchema.parse(
+    parseToml(await readFile(path.join(runtimePaths.codexDir, "config.toml"), "utf8"))
+  );
   return data.skills?.config;
 }
 
@@ -218,9 +324,9 @@ describe("skill config global writes", () => {
     await writeLocalSkillOverrides(runtimePaths, "opencode", { first: false });
     await writeLocalSkillOverrides(runtimePaths, "opencode", { second: true });
 
-    const state = JSON.parse(
-      await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8")
-    ) as Record<string, boolean>;
+    const state = skillStateSchema.parse(
+      JSON.parse(await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8"))
+    );
     expect(state).toEqual({ first: false, second: true });
   });
 
@@ -240,9 +346,7 @@ describe("skill config global writes", () => {
     process.chdir(root);
     const runtimePaths = paths(root);
     const skillPath = await writeInstalledSkill(runtimePaths, "changed");
-    const profile = {
-      enabledSkills: [{ name: "changed", agents: { codex: true }, targets: ["codex"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("changed", { codex: true }, ["codex"])]);
 
     await setLocalSkillState(runtimePaths, profile, "codex", "changed", false);
 
@@ -254,9 +358,7 @@ describe("skill config global writes", () => {
   it("drops the global override when a skill returns to its profile default", async () => {
     process.chdir(root);
     const runtimePaths = paths(root);
-    const profile = {
-      enabledSkills: [{ name: "changed", agents: { opencode: true }, targets: ["opencode"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("changed", { opencode: true }, ["opencode"])]);
 
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ changed: false });
@@ -264,9 +366,9 @@ describe("skill config global writes", () => {
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", true);
 
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({});
-    const state = JSON.parse(
-      await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8")
-    ) as Record<string, boolean>;
+    const state = skillStateSchema.parse(
+      JSON.parse(await readFile(globalSkillStatePath(runtimePaths, "opencode"), "utf8"))
+    );
     expect(state).toEqual({});
   });
 
@@ -305,9 +407,7 @@ describe("skill override precedence", () => {
     await initGitRepo(root);
     process.chdir(root);
     const runtimePaths = paths(root);
-    const profile = {
-      enabledSkills: [{ name: "local", agents: { opencode: true }, targets: ["opencode"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("local", { opencode: true }, ["opencode"])]);
     await setLocalSkillState(runtimePaths, profile, "opencode", "local", false);
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ local: false });
 
@@ -325,13 +425,11 @@ describe("skill override precedence", () => {
 
     await initGitRepo(root);
     process.chdir(root);
-    const profile = {
-      enabledSkills: [
-        { name: "default", agents: { opencode: true }, targets: ["opencode"] },
-        { name: "global", agents: { opencode: true }, targets: ["opencode"] },
-        { name: "both", agents: { opencode: false }, targets: ["opencode"] }
-      ]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([
+      skill("default", { opencode: true }, ["opencode"]),
+      skill("global", { opencode: true }, ["opencode"]),
+      skill("both", { opencode: false }, ["opencode"])
+    ]);
     await setLocalSkillState(runtimePaths, profile, "opencode", "both", true);
 
     await expect(resolveSkillToggleState(runtimePaths, profile, "opencode")).resolves.toEqual({
@@ -367,21 +465,17 @@ describe("skill override delta writes", () => {
 
     await initGitRepo(root);
     process.chdir(root);
-    const profile = {
-      enabledSkills: [
-        { name: "inherited", agents: { opencode: true }, targets: ["opencode"] },
-        { name: "changed", agents: { opencode: true }, targets: ["opencode"] }
-      ]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([
+      skill("inherited", { opencode: true }, ["opencode"]),
+      skill("changed", { opencode: true }, ["opencode"])
+    ]);
 
     await writeChangedSkillOverrides(runtimePaths, profile, "opencode", {
       inherited: false,
       changed: false
     });
 
-    const store = JSON.parse(
-      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
+    const store = await readOverrideStore(runtimePaths.home);
     expect(store.projects?.[root]?.opencode?.skills).toEqual({ changed: false });
   });
 
@@ -389,18 +483,14 @@ describe("skill override delta writes", () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
-    const profile = {
-      enabledSkills: [
-        { name: "kept", agents: { opencode: true }, targets: ["opencode"] },
-        { name: "changed", agents: { opencode: true }, targets: ["opencode"] }
-      ]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([
+      skill("kept", { opencode: true }, ["opencode"]),
+      skill("changed", { opencode: true }, ["opencode"])
+    ]);
 
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
 
-    const store = JSON.parse(
-      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as { projects?: Record<string, { opencode?: { skills?: Record<string, boolean> } }> };
+    const store = await readOverrideStore(runtimePaths.home);
     expect(store.projects?.[root]?.opencode?.skills).toEqual({ changed: false });
   });
 
@@ -411,15 +501,11 @@ describe("skill override delta writes", () => {
     const skillPath = path.join(runtimePaths.home, ".agents", "skills", "changed", "SKILL.md");
     await mkdir(path.dirname(skillPath), { recursive: true });
     await writeFile(skillPath, "# Changed\n", "utf8");
-    const profile = {
-      enabledSkills: [{ name: "changed", agents: { codex: true }, targets: ["codex"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("changed", { codex: true }, ["codex"])]);
 
     await setLocalSkillState(runtimePaths, profile, "codex", "changed", false);
 
-    const store = JSON.parse(
-      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as { projects?: Record<string, { codex?: { payload?: { argv?: string[] } } }> };
+    const store = await readOverrideStore(runtimePaths.home);
     expect(store.projects?.[root]?.codex?.payload?.argv?.join("\n")).toContain(
       JSON.stringify([{ path: skillPath, enabled: false }])
     );
@@ -429,14 +515,10 @@ describe("skill override delta writes", () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
-    const profile = {
-      enabledSkills: [{ name: "missing", agents: { codex: true }, targets: ["codex"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("missing", { codex: true }, ["codex"])]);
 
     await setLocalSkillState(runtimePaths, profile, "codex", "missing", false);
-    const store = JSON.parse(
-      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as { projects?: Record<string, { codex?: { payload?: { argv?: string[] } } }> };
+    const store = await readOverrideStore(runtimePaths.home);
     expect(store.projects?.[root]?.codex?.payload?.argv?.join("\n")).toContain(
       path.join(runtimePaths.home, ".agents", "skills", "missing", "SKILL.md")
     );
@@ -446,9 +528,7 @@ describe("skill override delta writes", () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
-    const profile = {
-      enabledSkills: [{ name: "changed", agents: { opencode: true }, targets: ["opencode"] }]
-    } as unknown as ResolvedProfile;
+    const profile = resolvedProfile([skill("changed", { opencode: true }, ["opencode"])]);
 
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", false);
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({ changed: false });
@@ -456,9 +536,7 @@ describe("skill override delta writes", () => {
     await setLocalSkillState(runtimePaths, profile, "opencode", "changed", true);
 
     expect(await readLocalSkillOverrides(runtimePaths, "opencode")).toEqual({});
-    const store = JSON.parse(
-      await readFile(path.join(runtimePaths.home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as { projects?: Record<string, unknown> };
+    const store = await readOverrideStore(runtimePaths.home);
     expect(store.projects).toEqual({});
   });
 });

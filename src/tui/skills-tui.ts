@@ -50,43 +50,43 @@ function optionsForTarget(profile: ResolvedProfile, target: SkillToggleTarget): 
 class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
   saved = false;
   private target: SkillToggleTarget;
+  private readonly targetState: { value: SkillToggleTarget };
   private readonly states: Record<SkillToggleTarget, SkillToggleState>;
   private readonly profile: ResolvedProfile;
-  private readonly outputStream: Writable;
 
   constructor(
     profile: ResolvedProfile,
     states: Record<SkillToggleTarget, SkillToggleState>,
     streams: { input?: Readable; output?: Writable } = {}
   ) {
-    const initialTarget = profile.agents.includes("opencode")
+    const initialTarget: SkillToggleTarget = profile.agents.includes("opencode")
       ? "opencode"
-      : (profile.agents.find((agent): agent is SkillToggleTarget =>
-          targets.includes(agent as SkillToggleTarget)
+      : (profile.agents.find(
+          (agent): agent is SkillToggleTarget =>
+            agent === "opencode" || agent === "claude-code" || agent === "codex"
         ) ?? "opencode");
+    const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
     const promptOptions: MultiSelectOptions<SkillOption> = {
       options,
       output: resolvedOutput,
-      initialValues: options.filter((o) => states[initialTarget][o.value]).map((o) => o.value),
+      initialValues: options.filter((o) => states[targetState.value][o.value]).map((o) => o.value),
       render() {
         const value = this.value ?? [];
-        const prompt = this as unknown as SkillsTogglePrompt;
-
         if (this.state === "cancel") {
           return `${styleText("bold", "Skill toggles")} cancelled`;
         }
 
         if (this.state === "submit") {
           const count = `${value.length}/${this.options.length}`;
-          const title = `Skill toggles (${prompt.target}, ${count} enabled)`;
+          const title = `Skill toggles (${targetState.value}, ${count} enabled)`;
           const saved = styleText("green", "✓ saved");
           return `${styleText("bold", title)} ${saved}`;
         }
 
         const count = `${value.length}/${this.options.length}`;
-        const title = `Skill toggles (${prompt.target}, ${count} enabled)`;
+        const title = `Skill toggles (${targetState.value}, ${count} enabled)`;
         const help = styleText(
           "dim",
           "Space toggle · a all · Tab target · Enter save · q/Esc quit"
@@ -96,7 +96,7 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
           return `${styleText("bold", title)}\n${styleText("dim", "No skills for this target")}\n${help}`;
         }
 
-        const columns = getColumns(prompt.outputStream);
+        const columns = getColumns(resolvedOutput);
         const style = (option: SkillOption, active: boolean) => {
           const checked = value.includes(option.value) ? "◉" : "○";
           const prefix = `${active ? "›" : " "} ${checked} ${option.label}`;
@@ -113,7 +113,7 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
           cursor: this.cursor,
           options: this.options,
           style,
-          output: prompt.outputStream,
+          output: resolvedOutput,
           rowPadding: 2
         });
 
@@ -122,10 +122,10 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
     };
     if (streams.input !== undefined) promptOptions.input = streams.input;
     super(promptOptions);
-    this.outputStream = resolvedOutput;
+    this.target = initialTarget;
+    this.targetState = targetState;
     this.profile = profile;
     this.states = states;
-    this.target = initialTarget;
 
     this.on("key", (char, key) => this.handleKey(char, key));
   }
@@ -159,6 +159,7 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
     this.captureCurrentState();
     const currentIndex = targets.indexOf(this.target);
     this.target = targets[(currentIndex + 1) % targets.length] ?? "opencode";
+    this.targetState.value = this.target;
     this.options = optionsForTarget(this.profile, this.target);
     this.cursor = 0;
     this.value = this.options.filter((o) => this.states[this.target][o.value]).map((o) => o.value);
