@@ -180,10 +180,12 @@ function parseTable(sections: Map<string, string>, title: string): WorkContextPo
   });
 }
 
-export function parseContextMap(content: string): {
+interface ContextMap {
   repositories: WorkContextPointer[];
   context: WorkContextPointer[];
-} {
+}
+
+export function parseContextMap(content: string): ContextMap {
   const sections = markdownSections(content);
   return {
     repositories: parseTable(sections, "Repositories"),

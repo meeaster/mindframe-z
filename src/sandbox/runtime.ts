@@ -691,7 +691,7 @@ export async function resolveSandboxRuntimeInputs(
   // (as basic-auth userinfo) and the MCP broker. Tests resolve without a token.
   const agentToken = options.agentToken ?? "PLACEHOLDER";
   const proxyUrl = `http://${agentToken}:${sandboxVaultName}@host.docker.internal:${agentVaultMitmPort}`;
-  const env: Record<string, string> = {
+  const env = {
     HTTPS_PROXY: proxyUrl,
     HTTP_PROXY: proxyUrl,
     NO_PROXY: noProxy.join(","),
@@ -711,16 +711,14 @@ export async function resolveSandboxRuntimeInputs(
   };
 
   if (credentialMode === "bedrock") {
-    env.CLAUDE_CODE_USE_BEDROCK = "1";
-    env.ANTHROPIC_BEDROCK_BASE_URL = `http://host.docker.internal:${bedrockProxyPort}`;
-    env.AWS_REGION = bedrockRegion;
-    env.AWS_EC2_METADATA_DISABLED = "true";
+    Object.assign(env, {
+      CLAUDE_CODE_USE_BEDROCK: "1",
+      ANTHROPIC_BEDROCK_BASE_URL: `http://host.docker.internal:${bedrockProxyPort}`,
+      AWS_REGION: bedrockRegion,
+      AWS_EC2_METADATA_DISABLED: "true"
+    });
   } else if (credentialMode === "subscription") {
-    // No ANTHROPIC_AUTH_TOKEN: that would put Claude Code in gateway-token mode.
-    // Instead a placeholder `.credentials.json` (seeded into state) keeps it in
-    // real subscription-OAuth mode so it sends its own `anthropic-beta` set and
-    // a Bearer token the broker swaps for the real one.
-    env.CLAUDE_CODE_USE_BEDROCK = "0";
+    Object.assign(env, { CLAUDE_CODE_USE_BEDROCK: "0" });
   }
 
   const mcp = sandboxMcpRuntimeConfig(paths, profile);

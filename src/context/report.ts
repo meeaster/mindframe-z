@@ -234,7 +234,12 @@ function displayPath(value: string, report: ContextReport): string {
   );
 }
 
-function totals(contributors: ContextContributor[]): { tokens: number; unmeasured: number } {
+interface ContextTotals {
+  tokens: number;
+  unmeasured: number;
+}
+
+function totals(contributors: ContextContributor[]): ContextTotals {
   return {
     tokens: contributors.reduce((sum, item) => sum + (item.estimatedTokens ?? 0), 0),
     unmeasured: contributors.filter((item) => item.estimatedTokens === undefined).length

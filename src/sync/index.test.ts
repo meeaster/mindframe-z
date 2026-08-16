@@ -68,25 +68,25 @@ describe("resolveMoves", () => {
 
 describe("setNested", () => {
   it("places a candidate under the container named by its dotted prefix", () => {
-    const doc: Record<string, unknown> = { name: "personal" };
+    const doc = { name: "personal" } satisfies Record<string, unknown>;
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ name: "personal", claude: { settings: { theme: "dark" } } });
   });
 
   it("reuses an existing container instead of clobbering sibling keys", () => {
-    const doc: Record<string, unknown> = { claude: { settings: { model: "sonnet" } } };
+    const doc = { claude: { settings: { model: "sonnet" } } } satisfies Record<string, unknown>;
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ claude: { settings: { model: "sonnet", theme: "dark" } } });
   });
 
   it("replaces a non-object value on the path with a fresh container", () => {
-    const doc: Record<string, unknown> = { claude: "unexpected" };
+    const doc = { claude: "unexpected" } satisfies Record<string, unknown>;
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ claude: { settings: { theme: "dark" } } });
   });
 
   it("does nothing when the prefix is empty", () => {
-    const doc: Record<string, unknown> = { name: "personal" };
+    const doc = { name: "personal" } satisfies Record<string, unknown>;
     setNested(doc, "", "theme", "dark");
     expect(doc).toEqual({ name: "personal" });
   });
@@ -109,5 +109,4 @@ describe("runSync source writes", () => {
     await expect(runSync(paths, profile, "personal")).rejects.toThrow(profilePath);
     expect(await readFile(profilePath, "utf8")).toBe(broken);
   });
-
 });

@@ -14,12 +14,12 @@ function profile(): ResolvedProfile {
   } as unknown as ResolvedProfile;
 }
 
-function states(claude: boolean): Record<"opencode" | "claude-code" | "codex", McpState> {
+function states(claude: boolean) {
   return {
     opencode: { context7: false },
     "claude-code": { context7: claude },
     codex: { context7: false }
-  };
+  } satisfies Record<"opencode" | "claude-code" | "codex", McpState>;
 }
 
 describe("MCP TUI capability validation", () => {

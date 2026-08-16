@@ -113,6 +113,7 @@ function strengthenMcpSchema(schema: Record<string, unknown>): void {
     const requireWhenPresent = (field: string, required: string): JsonSchemaConditional => ({
       if: { required: [field] },
       // JSON Schema's conditional keyword is intentionally named `then`.
+      // oxlint-disable-next-line unicorn/no-thenable
       then: { required: [required] }
     });
     oauth.allOf = [

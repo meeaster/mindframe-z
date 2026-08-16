@@ -14,6 +14,11 @@ import { assertMcpToggleSupported, type ResolvedProfile } from "../core/profile.
 
 export type McpState = Record<string, boolean>;
 
+interface McpTuiResult {
+  saved: boolean;
+  states: Record<AgentName, McpState>;
+}
+
 interface McpOption {
   value: string;
   label: string;
@@ -112,7 +117,7 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
     this.on("key", (char, key) => this.handleKey(char, key));
   }
 
-  get result(): { saved: boolean; states: Record<AgentName, McpState> } {
+  get result(): McpTuiResult {
     this.captureCurrentState();
     return { saved: this.saved, states: this.states };
   }

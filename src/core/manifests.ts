@@ -357,10 +357,6 @@ const threadPullRequestBaseSchema = z
     "must be a safe Git branch name"
   );
 
-const threadPullRequestSchema = z.object({
-  base: threadPullRequestBaseSchema
-});
-
 const threadStoreRootSchema = z
   .string()
   .min(1)

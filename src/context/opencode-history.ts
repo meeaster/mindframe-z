@@ -33,11 +33,11 @@ function tableColumns(db: SqliteDatabase, table: string): Set<string> {
 }
 
 function hasRequiredSchema(db: SqliteDatabase): boolean {
-  const required: Record<string, string[]> = {
+  const required = {
     session: ["id", "parent_id", "directory", "version", "time_updated"],
     message: ["id", "session_id", "time_created", "data"],
     part: ["session_id", "time_created", "data"]
-  };
+  } satisfies Record<string, readonly string[]>;
   return Object.entries(required).every(([table, columns]) => {
     const actual = tableColumns(db, table);
     return columns.every((column) => actual.has(column));

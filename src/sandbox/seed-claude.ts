@@ -44,7 +44,7 @@ export function anthropicServiceAddArgs(): string[] {
  * refreshes the access token itself, so the brokered credential stays valid
  * without re-seeding.
  */
-export function claudeOauthUploadBody(tokens: ClaudeOauthTokens): Record<string, string> {
+export function claudeOauthUploadBody(tokens: ClaudeOauthTokens) {
   return {
     vault: sandboxVaultName,
     key: claudeOauthCredentialKey,

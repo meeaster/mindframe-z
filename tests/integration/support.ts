@@ -215,7 +215,7 @@ export function cli(
   input?: string,
   cwd = projectRoot
 ) {
-  const options: Record<string, unknown> = {
+  const options = {
     cwd,
     env: {
       ...process.env,
@@ -230,7 +230,7 @@ export function cli(
       ...env
     }
   };
-  if (input !== undefined) options.input = input;
+  if (input !== undefined) Object.assign(options, { input });
   return execa(
     process.execPath,
     [

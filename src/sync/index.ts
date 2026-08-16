@@ -25,22 +25,21 @@ interface SyncTarget {
   upstream: boolean;
 }
 
-function ensureRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+interface SyncDocument {
+  [key: string]: unknown;
+}
+
+function ensureRecord(parent: SyncDocument, key: string): SyncDocument {
   const existing = parent[key];
   if (typeof existing === "object" && existing !== null && !Array.isArray(existing)) {
-    return existing as Record<string, unknown>;
+    return existing as SyncDocument;
   }
-  const next: Record<string, unknown> = {};
+  const next: SyncDocument = {};
   parent[key] = next;
   return next;
 }
 
-export function setNested(
-  obj: Record<string, unknown>,
-  prefix: string,
-  key: string,
-  value: unknown
-): void {
+export function setNested(obj: SyncDocument, prefix: string, key: string, value: unknown): void {
   const parts = prefix.split(".").filter(Boolean);
   const leaf = parts.pop();
   if (!leaf) return;
@@ -217,23 +216,22 @@ export async function runSync(
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
-  const [opencodeResult, claudeResult, codexResult, commandCandidates] =
-    await Promise.all([
-      profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
-        ? paths.activeOpenCodeRuntime === "v2"
-          ? syncOpencodeV2(ocp, profile)
-          : syncOpencode(ocp, profile)
-        : Promise.resolve({ candidates: [] }),
-      profile.agents.includes("claude-code")
-        ? syncClaude(clp, profile)
-        : Promise.resolve({ candidates: [] }),
-      profile.agents.includes("codex")
-        ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
-        : Promise.resolve({ candidates: [] }),
-      profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
-        ? syncCommands(paths, profile)
-        : Promise.resolve([])
-    ]);
+  const [opencodeResult, claudeResult, codexResult, commandCandidates] = await Promise.all([
+    profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
+      ? paths.activeOpenCodeRuntime === "v2"
+        ? syncOpencodeV2(ocp, profile)
+        : syncOpencode(ocp, profile)
+      : Promise.resolve({ candidates: [] }),
+    profile.agents.includes("claude-code")
+      ? syncClaude(clp, profile)
+      : Promise.resolve({ candidates: [] }),
+    profile.agents.includes("codex")
+      ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
+      : Promise.resolve({ candidates: [] }),
+    profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
+      ? syncCommands(paths, profile)
+      : Promise.resolve([])
+  ]);
 
   const candidates = [
     ...opencodeResult.candidates,

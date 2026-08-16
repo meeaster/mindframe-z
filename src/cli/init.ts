@@ -192,19 +192,19 @@ References inherited from an upstream home use qualified names like \`<alias>/<n
 Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify the result with \`mfz refs list\` and \`mfz doctor\`.
 `;
 
-const guideTopics: Record<string, string> = {
-  mcp: mcpGuideMarkdown,
-  skills: skillsGuideMarkdown,
-  references: referencesGuideMarkdown,
-  "extra-folders": extraFoldersGuideMarkdown
-};
+const guideTopics = new Map([
+  ["mcp", mcpGuideMarkdown],
+  ["skills", skillsGuideMarkdown],
+  ["references", referencesGuideMarkdown],
+  ["extra-folders", extraFoldersGuideMarkdown]
+]);
 
 export async function guide(topic?: string): Promise<void> {
   if (topic !== undefined) {
-    const content = guideTopics[topic];
+    const content = guideTopics.get(topic);
     if (!content) {
       throw new Error(
-        `Unknown guide topic: ${topic}. Topics: ${Object.keys(guideTopics).join(", ")}`
+        `Unknown guide topic: ${topic}. Topics: ${[...guideTopics.keys()].join(", ")}`
       );
     }
     console.log(content.trimEnd());

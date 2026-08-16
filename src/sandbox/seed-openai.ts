@@ -42,7 +42,7 @@ export function openaiServiceYaml(): string {
   ].join("\n");
 }
 
-export function openaiOauthUploadBody(tokens: OpenaiOauthTokens): Record<string, string> {
+export function openaiOauthUploadBody(tokens: OpenaiOauthTokens) {
   return {
     vault: sandboxVaultName,
     key: openaiOauthKey,

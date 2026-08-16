@@ -22,10 +22,12 @@ import {
   type SandboxLaunchTarget
 } from "./runtime.js";
 
-export function parseSandboxTarget(target: string | undefined): {
+interface ParsedSandboxTarget {
   target: SandboxLaunchTarget | "init";
   args: string[];
-} {
+}
+
+export function parseSandboxTarget(target: string | undefined): ParsedSandboxTarget {
   if (!target || target === "shell") return { target: "shell", args: [] };
   if (target === "cc" || target === "oc" || target === "init") return { target, args: [] };
   throw new Error(`Unknown sandbox command: ${target}`);

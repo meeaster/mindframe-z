@@ -21,7 +21,9 @@ import {
   type SkillToggleTarget
 } from "./skill-config-paths.js";
 
-export type SkillToggleState = Record<string, boolean>;
+export interface SkillToggleState {
+  [skill: string]: boolean;
+}
 type GlobalSkillConfigPaths = Extract<SkillConfigPaths, { scope: "global" }>;
 type RepoSkillConfigPaths = Extract<SkillConfigPaths, { scope: "repo" }>;
 

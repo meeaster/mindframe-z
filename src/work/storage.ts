@@ -93,10 +93,13 @@ function receiptsPath(paths: RuntimePaths, slug: string): string {
   return path.join(unitDir(paths, slug), receiptsName);
 }
 
-export function workAuthoringPaths(
-  paths: RuntimePaths,
-  slug: string
-): { orientation: string; context_map: string; checkpoints: string } {
+interface WorkAuthoringPaths {
+  orientation: string;
+  context_map: string;
+  checkpoints: string;
+}
+
+export function workAuthoringPaths(paths: RuntimePaths, slug: string): WorkAuthoringPaths {
   const dir = unitDir(paths, slug);
   return {
     orientation: path.join(dir, orientationFileName),
