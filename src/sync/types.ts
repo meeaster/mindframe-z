@@ -1,8 +1,31 @@
+import { z } from "zod";
+import { TomlDate } from "smol-toml";
+
+export type SyncScalar = boolean | null | number | string | TomlDate;
+export type SyncValue = SyncScalar | SyncValue[] | SyncDocument;
+export interface SyncDocument {
+  [key: string]: SyncValue;
+}
+
+const syncValueSchema: z.ZodType<SyncValue> = z.lazy(() =>
+  z.union([
+    z.boolean(),
+    z.null(),
+    z.number(),
+    z.string(),
+    z.instanceof(TomlDate),
+    z.array(syncValueSchema),
+    z.record(z.string(), syncValueSchema)
+  ])
+);
+
+export const syncDocumentSchema = z.record(z.string(), syncValueSchema);
+
 export interface SyncCandidate {
   target: string;
   yamlPrefix: string;
   key: string;
-  value: unknown;
+  value: SyncValue;
 }
 
 export interface SyncResult {
@@ -17,7 +40,7 @@ export interface SyncResult {
  * insertion order stay identical across the claude, opencode, and codex paths.
  */
 export function unmanagedCandidates(
-  entries: Record<string, unknown>,
+  entries: SyncDocument,
   target: string,
   yamlPrefix: string,
   managed: ReadonlySet<string>

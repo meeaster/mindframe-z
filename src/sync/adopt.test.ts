@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stringify as stringifyToml } from "smol-toml";
+import { stringify as stringifyToml, TomlDate } from "smol-toml";
 import { beforeAll, describe, expect, it } from "vitest";
 import { resolveProfile, type ResolvedProfile } from "../core/profile.js";
 import type { RuntimePaths } from "../core/paths.js";
@@ -8,6 +8,7 @@ import { makeTempDir, testRuntimePaths, writeFixture } from "../../tests/integra
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
 import { syncOpencode } from "./opencode.js";
+import type { SyncDocument, SyncValue } from "./types.js";
 
 // The `personal` fixture profile manages `claude.settings.includeGitInstructions`
 // and `opencode.config.model`, and declares no codex config or plugins. The sync
@@ -24,7 +25,7 @@ beforeAll(async () => {
   profile = await resolveProfile(paths, "personal");
 });
 
-async function writeJson(dir: string, name: string, value: unknown): Promise<string> {
+async function writeJson(dir: string, name: string, value: SyncValue): Promise<string> {
   const file = path.join(dir, name);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, JSON.stringify(value), "utf8");
@@ -114,7 +115,7 @@ describe("syncOpencode", () => {
 });
 
 describe("syncCodex", () => {
-  async function writeToml(dir: string, name: string, value: Record<string, unknown>) {
+  async function writeToml(dir: string, name: string, value: SyncDocument) {
     const file = path.join(dir, name);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, stringifyToml(value), "utf8");
@@ -148,6 +149,19 @@ describe("syncCodex", () => {
       { target: "codex", yamlPrefix: "codex.config", key: "model", value: "gpt-5-codex" },
       { target: "codex", yamlPrefix: "codex.config", key: "theme", value: "dim" }
     ]);
+  });
+
+  it("preserves unmanaged TOML datetime values", async () => {
+    const dir = await makeTempDir();
+    const snapshotPath = path.join(dir, "snapshot.toml");
+    const localPath = path.join(dir, "local.toml");
+    await writeFile(snapshotPath, "release_at = 1979-05-27T07:32:00Z\n", "utf8");
+    await writeFile(localPath, "", "utf8");
+
+    const { candidates } = await syncCodex(snapshotPath, localPath, profile);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.value).toBeInstanceOf(TomlDate);
   });
 
   it("does not re-surface plugins the profile already declares", async () => {

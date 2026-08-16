@@ -1,12 +1,12 @@
 import { readJsoncObject } from "../core/fs-util.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { unmanagedCandidates, type SyncResult } from "./types.js";
+import { syncDocumentSchema, unmanagedCandidates, type SyncResult } from "./types.js";
 
 export async function syncOpencode(
   configPath: string,
   profile: ResolvedProfile
 ): Promise<SyncResult> {
-  const existing = await readJsoncObject(configPath);
+  const existing = syncDocumentSchema.parse(await readJsoncObject(configPath));
 
   const managedKeys = new Set([
     "$schema",
@@ -24,7 +24,7 @@ export async function syncOpencodeV2(
   configPath: string,
   profile: ResolvedProfile
 ): Promise<SyncResult> {
-  const existing = await readJsoncObject(configPath);
+  const existing = syncDocumentSchema.parse(await readJsoncObject(configPath));
   const managedKeys = new Set([
     "$schema",
     "instructions",

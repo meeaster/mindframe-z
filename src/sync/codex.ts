@@ -3,7 +3,12 @@ import { codexPluginSchema } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { CODEX_DERIVED_KEYS } from "../renderers/codex.js";
-import { unmanagedCandidates, type SyncCandidate, type SyncResult } from "./types.js";
+import {
+  syncDocumentSchema,
+  unmanagedCandidates,
+  type SyncCandidate,
+  type SyncResult
+} from "./types.js";
 
 const codexPluginTableSchema = z.record(z.string(), codexPluginSchema).catch({});
 
@@ -13,8 +18,8 @@ export async function syncCodex(
   profile: ResolvedProfile
 ): Promise<SyncResult> {
   const candidates: SyncCandidate[] = [];
-  const existing = await readTomlObject(snapshotConfigPath);
-  const local = await readTomlObject(localConfigPath);
+  const existing = syncDocumentSchema.parse(await readTomlObject(snapshotConfigPath));
+  const local = syncDocumentSchema.parse(await readTomlObject(localConfigPath));
   const declaredPlugins = new Set(Object.keys(profile.profile.codex.plugins));
   const localPlugins = codexPluginTableSchema.parse(local.plugins);
 

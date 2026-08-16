@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveProfile } from "../core/profile.js";
 import { makeTempDir, testRuntimePaths, writeFixture } from "../../tests/integration/support.js";
 import { parseProfileChoice, resolveMoves, runSync, setNested } from "./index.js";
+import type { SyncDocument } from "./types.js";
 
 describe("parseProfileChoice", () => {
   const profiles = ["base", "personal", "work"];
@@ -68,25 +69,25 @@ describe("resolveMoves", () => {
 
 describe("setNested", () => {
   it("places a candidate under the container named by its dotted prefix", () => {
-    const doc = { name: "personal" } satisfies Record<string, unknown>;
+    const doc: SyncDocument = { name: "personal" };
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ name: "personal", claude: { settings: { theme: "dark" } } });
   });
 
   it("reuses an existing container instead of clobbering sibling keys", () => {
-    const doc = { claude: { settings: { model: "sonnet" } } } satisfies Record<string, unknown>;
+    const doc: SyncDocument = { claude: { settings: { model: "sonnet" } } };
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ claude: { settings: { model: "sonnet", theme: "dark" } } });
   });
 
   it("replaces a non-object value on the path with a fresh container", () => {
-    const doc = { claude: "unexpected" } satisfies Record<string, unknown>;
+    const doc: SyncDocument = { claude: "unexpected" };
     setNested(doc, "claude.settings", "theme", "dark");
     expect(doc).toEqual({ claude: { settings: { theme: "dark" } } });
   });
 
   it("does nothing when the prefix is empty", () => {
-    const doc = { name: "personal" } satisfies Record<string, unknown>;
+    const doc: SyncDocument = { name: "personal" };
     setNested(doc, "", "theme", "dark");
     expect(doc).toEqual({ name: "personal" });
   });
@@ -108,5 +109,22 @@ describe("runSync source writes", () => {
 
     await expect(runSync(paths, profile, "personal")).rejects.toThrow(profilePath);
     expect(await readFile(profilePath, "utf8")).toBe(broken);
+  });
+
+  it("does not overwrite a profile.yml with mixed document shapes", async () => {
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    await writeFixture(root, home);
+    const paths = testRuntimePaths(home, root);
+    const profile = await resolveProfile(paths, "personal");
+    const settingsPath = path.join(paths.configsDir, "personal", "claude", "settings.json");
+    await mkdir(path.dirname(settingsPath), { recursive: true });
+    await writeFile(settingsPath, '{"unmanaged":true}\n', "utf8");
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const mixed = "- name\n- personal\n";
+    await writeFile(profilePath, mixed, "utf8");
+
+    await expect(runSync(paths, profile, "personal")).rejects.toThrow(profilePath);
+    expect(await readFile(profilePath, "utf8")).toBe(mixed);
   });
 });

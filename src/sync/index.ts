@@ -4,14 +4,20 @@ import { stdin as processStdin, stdout as processStdout } from "node:process";
 import path from "node:path";
 import { execa } from "execa";
 import YAML from "yaml";
-import { isPlainObject, readDirEntries, readTextFile } from "../core/fs-util.js";
+import { z } from "zod";
+import { readDirEntries, readTextFile } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
 import { activeOpenCodeSnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { syncOpencode, syncOpencodeV2 } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
-import type { SyncCandidate } from "./types.js";
+import {
+  syncDocumentSchema,
+  type SyncCandidate,
+  type SyncDocument,
+  type SyncValue
+} from "./types.js";
 
 type ProfileChoice =
   | { kind: "profile"; name: string }
@@ -25,21 +31,19 @@ interface SyncTarget {
   upstream: boolean;
 }
 
-interface SyncDocument {
-  [key: string]: unknown;
-}
-
 function ensureRecord(parent: SyncDocument, key: string): SyncDocument {
   const existing = parent[key];
-  if (typeof existing === "object" && existing !== null && !Array.isArray(existing)) {
-    return existing as SyncDocument;
+  const parsed = syncDocumentSchema.safeParse(existing);
+  if (parsed.success) {
+    parent[key] = parsed.data;
+    return parsed.data;
   }
   const next: SyncDocument = {};
   parent[key] = next;
   return next;
 }
 
-export function setNested(obj: SyncDocument, prefix: string, key: string, value: unknown): void {
+export function setNested(obj: SyncDocument, prefix: string, key: string, value: SyncValue): void {
   const parts = prefix.split(".").filter(Boolean);
   const leaf = parts.pop();
   if (!leaf) return;
@@ -59,17 +63,12 @@ export function parseProfileChoice(answer: string, profileNames: readonly string
   return match ? { kind: "profile", name: match } : { kind: "unknown", answer: trimmed };
 }
 
-async function readProfileYaml(
-  root: string,
-  targetProfile: string
-): Promise<Record<string, unknown>> {
+async function readProfileYaml(root: string, targetProfile: string): Promise<SyncDocument> {
   const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
   const content = await readTextFile(yamlPath);
   if (content === undefined) return { name: targetProfile };
   try {
-    const parsed = YAML.parse(content) as unknown;
-    if (!isPlainObject(parsed)) throw new Error("Expected a YAML object");
-    return parsed;
+    return syncDocumentSchema.parse(YAML.parse(content));
   } catch (error) {
     throw new Error(`Invalid profile YAML at ${yamlPath}`, { cause: error });
   }
@@ -78,7 +77,7 @@ async function readProfileYaml(
 async function writeProfileYaml(
   root: string,
   targetProfile: string,
-  doc: Record<string, unknown>
+  doc: SyncDocument
 ): Promise<void> {
   const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
   await writeFile(yamlPath, YAML.stringify(doc, { lineWidth: 120 }), "utf8");
@@ -110,8 +109,8 @@ async function promptUser(
   candidate: SyncCandidate,
   profileNames: string[]
 ): Promise<string | null> {
-  const formatted =
-    typeof candidate.value === "string" ? candidate.value : JSON.stringify(candidate.value);
+  const stringValue = z.string().safeParse(candidate.value);
+  const formatted = stringValue.success ? stringValue.data : JSON.stringify(candidate.value);
   return promptProfileChoice(
     `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}`,
     profileNames,
@@ -147,7 +146,8 @@ async function enableCommandInProfile(root: string, targetProfile: string, comma
   const doc = await readProfileYaml(root, targetProfile);
   const oc = ensureRecord(doc, "opencode");
   if (!Array.isArray(oc.commands)) oc.commands = [];
-  const profileCommands = oc.commands as unknown[];
+  const profileCommands = oc.commands;
+  if (!Array.isArray(profileCommands)) throw new Error("Expected opencode.commands to be an array");
   if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
   await writeProfileYaml(root, targetProfile, doc);
 }
