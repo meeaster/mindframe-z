@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createRuntimePaths, executorConfigPath, executorDataDir } from "../core/paths.js";
 import {
   createExecutorAdapter,
@@ -10,6 +11,7 @@ import {
   redactExecutorError,
   type ExecutorAdapter
 } from "./adapter.js";
+import { executorJsonObjectSchema } from "./contract.js";
 
 const adapters: ExecutorAdapter[] = [];
 const executorInstalled = await execa("executor", ["--version"], { reject: false })
@@ -163,9 +165,13 @@ describe("Executor adapter contract", () => {
         expect(second.baseUrl).toBe(first.baseUrl);
         expect(other.baseUrl).toBe(first.baseUrl);
         expect(other.dataDir).toBe(first.dataDir);
-        const manifest = JSON.parse(
-          await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
-        ) as { scopeDir?: string | null };
+        const manifest = z
+          .object({ scopeDir: z.string().nullable().optional() })
+          .parse(
+            JSON.parse(
+              await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
+            )
+          );
         expect(manifest.scopeDir).toBeNull();
         await Promise.all([first.close(), second.close(), other.close()]);
       });
@@ -269,12 +275,12 @@ describe("Executor adapter contract", () => {
   });
 
   it("encodes API-key placements through the adapter contract without values", async () => {
-    let body: Record<string, unknown> | undefined;
+    let body: z.infer<typeof executorJsonObjectSchema> | undefined;
     const adapter = createExecutorHttpAdapter({
       baseUrl: "http://127.0.0.1:1234",
       token: "loopback-secret",
       fetch: async (_input, init) => {
-        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        body = executorJsonObjectSchema.parse(JSON.parse(String(init?.body)));
         return new Response("{}", { status: 200 });
       }
     });

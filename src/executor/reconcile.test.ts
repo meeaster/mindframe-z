@@ -7,6 +7,7 @@ import { createRuntimePaths, executorDesiredPath, executorManagedPath } from "..
 import type { ResolvedProfile } from "../core/profile.js";
 import type { ExecutorAdapter, ExecutorConnection, ExecutorIntegration } from "./adapter.js";
 import { executorConnectionAddress } from "./contract.js";
+import { executorJsonObjectSchema } from "./contract.js";
 import { reconcileExecutor, readManagedState } from "./reconcile.js";
 
 function profileWithServer(
@@ -27,7 +28,9 @@ function profileWithServer(
     name,
     agents: ["opencode"],
     profile: profileSchema.parse({ name }),
+    // SAFETY: reconciliation only consumes the resolved MCP entries in this fixture.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: reconciliation only consumes the resolved MCP entries in this fixture.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: "/tmp/references",
@@ -99,7 +102,7 @@ function fakeAdapter() {
         kind: "mcp",
         canRemove: true,
         canRefresh: true,
-        config: server.config as unknown as Record<string, unknown>
+        config: executorJsonObjectSchema.parse(server.config)
       });
       mutations.push(`add:${server.slug}`);
     },

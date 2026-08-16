@@ -3,11 +3,13 @@ import { createServer } from "node:net";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import { executorDataDir } from "../core/paths.js";
 import type { ExecutorAuthenticationMethod } from "../core/manifests.js";
 import type { ExecutorDesiredServer } from "./model.js";
 import { createHttpExecutorAdapter } from "./http.js";
 import { executorError } from "./errors.js";
+import type { ExecutorJsonObject } from "./contract.js";
 
 export {
   assertExecutorConnectionIdentifier,
@@ -19,17 +21,13 @@ export {
 
 const requestTimeoutMs = 30_000;
 
-interface ExecutorServerManifest {
-  connection?: { origin?: string; auth?: { token?: string } };
-}
-
 export interface ExecutorIntegration {
   slug: string;
   description: string;
   kind: string;
   canRemove: boolean;
   canRefresh: boolean;
-  config: Record<string, unknown>;
+  config: ExecutorJsonObject;
 }
 
 export interface ExecutorConnection {
@@ -86,7 +84,7 @@ export interface ExecutorAdapter {
   getIntegration(slug: string): Promise<ExecutorIntegration | null>;
   updateIntegration(slug: string, input: { description?: string; name?: string }): Promise<void>;
   addServer(server: ExecutorDesiredServer): Promise<void>;
-  configureServer(slug: string, config: Record<string, unknown>): Promise<void>;
+  configureServer(slug: string, config: ExecutorJsonObject): Promise<void>;
   configureAuth(
     slug: string,
     authenticationTemplate: readonly ExecutorAuthenticationMethod[],
@@ -102,9 +100,16 @@ export interface ExecutorAdapter {
 
 export { redactExecutorError } from "./errors.js";
 
-async function readJson<T>(file: string): Promise<T | undefined> {
+const executorServerManifestSchema = z.object({
+  connection: z
+    .object({ origin: z.string(), auth: z.object({ token: z.string() }).optional() })
+    .optional()
+});
+const executorAuthSchema = z.object({ token: z.string() });
+
+async function readJson<T>(file: string, schema: z.ZodType<T>): Promise<T | undefined> {
   try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
+    return schema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch {
     return undefined;
   }
@@ -122,8 +127,8 @@ async function freePort(): Promise<number> {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => resolve());
   });
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
+  // SAFETY: a listening TCP server returns AddressInfo or null; string is only used for IPC paths.
+  const port = (server.address() as import("node:net").AddressInfo | null)?.port ?? 0;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   if (!port) throw executorError("Unable to allocate a local Executor port");
   return port;
@@ -173,11 +178,10 @@ async function resolveRuntime(
 ): Promise<{ origin: string; token: string; daemon?: ChildProcess }> {
   const manifestPath = path.join(dataDir, "server-control", "server.json");
   const tokenPath = path.join(dataDir, "server-control", "auth.json");
-  const existing = await readJson<ExecutorServerManifest>(manifestPath);
-  const auth = await readJson<{ token?: unknown }>(tokenPath);
+  const existing = await readJson(manifestPath, executorServerManifestSchema);
+  const auth = await readJson(tokenPath, executorAuthSchema);
   const existingOrigin = existing?.connection?.origin;
-  const existingToken =
-    typeof auth?.token === "string" ? auth.token : existing?.connection?.auth?.token;
+  const existingToken = auth?.token ?? existing?.connection?.auth?.token;
   if (existingOrigin && existingToken) {
     try {
       const response = await requestFetch(`${existingOrigin}/api/integrations`, {
@@ -195,14 +199,9 @@ async function resolveRuntime(
   const origin = `http://127.0.0.1:${port}`;
   const daemon = await startDaemon(binary, origin);
   return waitFor(async () => {
-    const tokenRecord = await readJson<{ token?: unknown }>(tokenPath);
-    const manifest = await readJson<ExecutorServerManifest>(manifestPath);
-    const token =
-      typeof tokenRecord?.token === "string"
-        ? tokenRecord.token
-        : typeof manifest?.connection?.auth?.token === "string"
-          ? manifest.connection.auth.token
-          : undefined;
+    const tokenRecord = await readJson(tokenPath, executorAuthSchema);
+    const manifest = await readJson(manifestPath, executorServerManifestSchema);
+    const token = tokenRecord?.token ?? manifest?.connection?.auth?.token;
     const advertised = manifest?.connection?.origin ?? origin;
     if (!token) return undefined;
     try {
@@ -242,14 +241,16 @@ export async function attachExecutorAdapter(options: {
   fetch?: typeof globalThis.fetch;
 }): Promise<ExecutorAdapter | null> {
   const dataDir = executorDataDir();
-  const manifest = await readJson<ExecutorServerManifest>(
-    path.join(dataDir, "server-control", "server.json")
+  const manifest = await readJson(
+    path.join(dataDir, "server-control", "server.json"),
+    executorServerManifestSchema
   );
-  const auth = await readJson<{ token?: unknown }>(
-    path.join(dataDir, "server-control", "auth.json")
+  const auth = await readJson(
+    path.join(dataDir, "server-control", "auth.json"),
+    executorAuthSchema
   );
   const origin = manifest?.connection?.origin;
-  const token = typeof auth?.token === "string" ? auth.token : manifest?.connection?.auth?.token;
+  const token = auth?.token ?? manifest?.connection?.auth?.token;
   if (!origin || !token) return null;
 
   const requestFetch = options.fetch ?? globalThis.fetch;

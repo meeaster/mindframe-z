@@ -16,6 +16,7 @@ import {
   executorConnectionAddress,
   isExecutorConnectionIdentifier
 } from "./contract.js";
+import { executorJsonObjectSchema, type ExecutorJsonObject } from "./contract.js";
 
 const requestTimeoutMs = 30_000;
 
@@ -31,7 +32,7 @@ const integrationSchema = z.object({
   kind: z.string(),
   canRemove: z.boolean(),
   canRefresh: z.boolean(),
-  config: z.record(z.string(), z.unknown())
+  config: executorJsonObjectSchema
 });
 const connectionSchema = z
   .object({
@@ -96,7 +97,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     method: string,
     endpoint: string,
     schema: z.ZodType<T>,
-    body?: unknown
+    body?: ExecutorJsonObject
   ): Promise<T> {
     try {
       const headers = { authorization: `Bearer ${this.token}` };
@@ -181,7 +182,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
     await this.request("POST", "/mcp/servers", z.unknown(), body);
   }
 
-  async configureServer(slug: string, config: Record<string, unknown>): Promise<void> {
+  async configureServer(slug: string, config: ExecutorJsonObject): Promise<void> {
     await this.request("POST", `/mcp/servers/${encodeURIComponent(slug)}/config`, z.unknown(), {
       config
     });
@@ -189,13 +190,11 @@ class HttpExecutorAdapter implements ExecutorAdapter {
 
   async configureAuth(
     slug: string,
-    authenticationTemplate: readonly unknown[],
+    authenticationTemplate: readonly ExecutorAuthenticationMethod[],
     mode: "merge" | "replace"
   ): Promise<void> {
     await this.request("POST", `/mcp/servers/${encodeURIComponent(slug)}/auth`, z.unknown(), {
-      authenticationTemplate: encodeExecutorAuthenticationMethods(
-        authenticationTemplate as readonly ExecutorAuthenticationMethod[]
-      ),
+      authenticationTemplate: encodeExecutorAuthenticationMethods(authenticationTemplate),
       mode
     });
   }

@@ -1,5 +1,10 @@
 import type { ExecutorAuthenticationMethod } from "../core/manifests.js";
 import { executorConnectionNameSchema } from "../core/manifests.js";
+import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
+
+export type ExecutorJsonValue = JsonValue;
+export type ExecutorJsonObject = JsonObject;
+export const executorJsonObjectSchema = jsonObjectSchema;
 
 export type ExecutorOwner = "user" | "org";
 

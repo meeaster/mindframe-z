@@ -15,7 +15,9 @@ function profile(): ResolvedProfile {
       name: "personal",
       mcp: { example: { executor: { enabled: true } } }
     }),
+    // SAFETY: diagnostics only consume the resolved profile fields populated below.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: diagnostics only consume the resolved profile fields populated below.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: "/tmp/references",
@@ -38,7 +40,7 @@ function profile(): ResolvedProfile {
       }
     ],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 

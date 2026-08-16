@@ -12,7 +12,9 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     name: "personal",
     agents: ["opencode"],
     profile: profileSchema.parse({ name: "personal" }),
+    // SAFETY: this fixture only exercises mcpServers; unused resolution metadata is never read.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: this fixture only exercises mcpServers; unused resolution metadata is never read.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: "/tmp/references",
@@ -24,7 +26,7 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     enabledOpenCodeV2Agents: [],
     mcpServers: [server],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 

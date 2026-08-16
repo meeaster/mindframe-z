@@ -5,6 +5,8 @@ import {
   type ExecutorIntegration
 } from "./adapter.js";
 import { executorConnectionHasDurableState, type ExecutorDesiredServer } from "./model.js";
+import type { ExecutorJsonObject } from "./contract.js";
+import { executorJsonObjectSchema, type ExecutorJsonValue } from "./contract.js";
 
 export interface ObservedExecutorIntegration {
   current: ExecutorIntegration | null;
@@ -66,22 +68,20 @@ const dangerousConfigFields = [
   "env"
 ] as const;
 
-function sameJson(left: unknown, right: unknown): boolean {
+function sameJson(
+  left: ExecutorJsonValue | undefined,
+  right: ExecutorJsonValue | undefined
+): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function integrationConfig(integration: ExecutorIntegration): Record<string, unknown> {
+function integrationConfig(integration: ExecutorIntegration): ExecutorJsonObject {
   return integration.config;
 }
 
-function authTemplates(config: Record<string, unknown>): Record<string, unknown>[] {
+function authTemplates(config: ExecutorJsonObject): ExecutorJsonObject[] {
   const templates = config.authenticationTemplate;
-  return Array.isArray(templates)
-    ? templates.filter(
-        (template): template is Record<string, unknown> =>
-          typeof template === "object" && template !== null
-      )
-    : [];
+  return executorJsonObjectSchema.array().safeParse(templates).data ?? [];
 }
 
 function desiredAuthTemplates(
@@ -91,8 +91,8 @@ function desiredAuthTemplates(
 }
 
 function changedConfigurationFields(
-  current: Record<string, unknown>,
-  desired: Record<string, unknown>
+  current: ExecutorJsonObject,
+  desired: ExecutorJsonObject
 ): string[] {
   return dangerousConfigFields.filter((field) => !sameJson(current[field], desired[field]));
 }
@@ -141,19 +141,18 @@ export function classifyExecutorIntegration(
   } = {}
 ): ExecutorLifecycleClassification {
   const current = observed.current;
-  const desiredConfig = desired.config as unknown as Record<string, unknown>;
+  const desiredConfig = executorJsonObjectSchema.parse(desired.config);
   const requireCredentialedConnections = options.requireCredentialedConnections ?? true;
   const allowConnectionRepair = options.allowConnectionRepair ?? false;
   const durable = observed.connections.some(executorConnectionHasDurableState);
   const descriptionChanged = current?.description !== desired.description;
   const currentConfig = current ? integrationConfig(current) : {};
   const changedFields = current ? changedConfigurationFields(currentConfig, desiredConfig) : [];
-  const configurationChanged = current
-    ? !sameJson(
-        { ...currentConfig, authenticationTemplate: undefined },
-        { ...desiredConfig, authenticationTemplate: undefined }
-      )
-    : true;
+  const currentComparable = { ...currentConfig };
+  const desiredComparable = { ...desiredConfig };
+  delete currentComparable.authenticationTemplate;
+  delete desiredComparable.authenticationTemplate;
+  const configurationChanged = current ? !sameJson(currentComparable, desiredComparable) : true;
   const authenticationChanged = current
     ? !sameJson(
         authTemplates(currentConfig),

@@ -20,21 +20,23 @@ export interface ManagedState {
   version: 1;
   profile: string;
   complete: boolean;
-  operation?: {
-    status: "incomplete" | "complete";
-    desiredIntegrations: string[];
-    startedAt: string;
-  };
+  operation?:
+    | {
+        status: "incomplete" | "complete";
+        desiredIntegrations: string[];
+        startedAt: string;
+      }
+    | undefined;
   integrations: Record<
     string,
-    { digest: string; lastReconciledAt: string; connections?: Record<string, string> }
+    { digest: string; lastReconciledAt: string; connections?: Record<string, string> | undefined }
   >;
 }
 
 const managedStateSchema = z.object({
   version: z.literal(1),
   profile: z.string(),
-  complete: z.boolean().optional(),
+  complete: z.boolean().default(false),
   operation: z
     .object({
       status: z.enum(["incomplete", "complete"]),
@@ -83,7 +85,8 @@ export async function readManagedState(
     const parsed = managedStateSchema.parse(
       JSON.parse(await readFile(executorManagedPath(paths, profileName), "utf8"))
     );
-    return { ...parsed, complete: parsed.complete === true } as ManagedState;
+    const { operation, ...state } = parsed;
+    return operation === undefined ? state : { ...state, operation };
   } catch {
     return undefined;
   }
