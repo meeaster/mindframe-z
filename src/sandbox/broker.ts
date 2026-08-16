@@ -63,11 +63,10 @@ export function caFetchArgs(params: BrokerProvisionParams): string[] {
 
 const agentVaultBin = "agent-vault";
 
-function isUnreachableError(error: unknown): boolean {
-  const message =
-    error instanceof Error
-      ? `${error.message}\n${(error as { stderr?: string }).stderr ?? ""}`
-      : "";
+function isUnreachableError(error: Error): boolean {
+  // SAFETY: execa errors extend Error and expose stderr as an optional string.
+  const stderr = (error as Error & { stderr?: string }).stderr ?? "";
+  const message = `${error.message}\n${stderr}`;
   return /could not reach server|ECONNREFUSED|connection refused/i.test(message);
 }
 
@@ -100,7 +99,8 @@ export async function provisionBroker(
       await execa(agentVaultBin, registerArgs(params), { env, input: password });
       break;
     } catch (error) {
-      if (attempt >= attempts || !isUnreachableError(error)) throw error;
+      if (attempt >= attempts || !(error instanceof Error) || !isUnreachableError(error))
+        throw error;
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }

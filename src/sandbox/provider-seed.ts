@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { createRuntimePaths, type RuntimePaths } from "../core/paths.js";
 import { resolveProfile } from "../core/profile.js";
 import {
@@ -16,10 +17,12 @@ export interface SeedOptions {
   readonly profile?: string | undefined;
 }
 
+const ownerSessionSchema = z.object({ token: z.string().min(1).optional() }).passthrough();
+
 export async function readOwnerSessionToken(home: string): Promise<string> {
   const file = path.join(home, ".agent-vault", "session.json");
   try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as { token?: string };
+    const parsed = ownerSessionSchema.parse(JSON.parse(await readFile(file, "utf8")));
     if (parsed.token) return parsed.token;
   } catch {
     // Fall through to the explicit error below.

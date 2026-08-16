@@ -426,19 +426,23 @@ describe("sandbox runtime inputs", () => {
     const runtime = await resolveSandboxRuntimeInputs(paths(), resolved, {
       workspace: "/tmp/project"
     });
-    const opencode = runtime.mcp.opencode as Record<
-      string,
-      { url: string; headers?: Record<string, string> }
-    >;
-    const claude = runtime.mcp.claude as Record<
-      string,
-      { url: string; headers?: Record<string, string> }
-    >;
+    const opencode = runtime.mcp.opencode;
+    const claude = runtime.mcp.claude;
 
-    expect(opencode.jira?.url).toBe("http://127.0.0.1:17301/v1/mcp");
-    expect(opencode.jira?.headers?.Authorization).toBe("PLACEHOLDER");
-    expect(claude.confluence?.url).toBe("http://127.0.0.1:17302/v1/mcp");
-    expect(opencode.datadog?.url).toBe("https://mcp.datadoghq.com/api/unstable/mcp-server/mcp");
+    expect(opencode.jira?.type === "remote" ? opencode.jira.url : undefined).toBe(
+      "http://127.0.0.1:17301/v1/mcp"
+    );
+    expect(
+      opencode.jira?.type === "remote" ? opencode.jira.headers?.Authorization : undefined
+    ).toBe("PLACEHOLDER");
+    expect(
+      claude.confluence?.type === "http" || claude.confluence?.type === "sse"
+        ? claude.confluence.url
+        : undefined
+    ).toBe("http://127.0.0.1:17302/v1/mcp");
+    expect(opencode.datadog?.type === "remote" ? opencode.datadog.url : undefined).toBe(
+      "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp"
+    );
     expect(
       resolved.mcpServers[0]?.server.type === "remote" ? resolved.mcpServers[0].server.url : ""
     ).toBe("https://mcp.atlassian.com/v1/mcp");

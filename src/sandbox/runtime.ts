@@ -1,5 +1,6 @@
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { jsonObjectSchema, type JsonObject } from "../core/json.js";
 import { jsonFileContent } from "../core/fs-util.js";
 import { renderTarget } from "../core/render.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
@@ -57,9 +58,34 @@ export interface SandboxMcpRuntimeConfig {
     readonly basePort: number;
     readonly shims: Record<string, SandboxMcpShimDefinition>;
   };
-  readonly opencode: Record<string, unknown>;
-  readonly claude: Record<string, unknown>;
+  readonly opencode: Record<string, SandboxMcpServer>;
+  readonly claude: Record<string, SandboxMcpServer>;
 }
+
+type SandboxMcpServer =
+  | {
+      readonly type: "remote";
+      readonly url: string;
+      readonly enabled: boolean;
+      readonly headers?: Record<string, string>;
+    }
+  | {
+      readonly type: "local";
+      readonly command: string[];
+      readonly enabled: boolean;
+      readonly env?: Record<string, string>;
+    }
+  | {
+      readonly type: "http" | "sse";
+      readonly url: string;
+      readonly headers?: Record<string, string>;
+    }
+  | {
+      readonly type: "stdio";
+      readonly command: string;
+      readonly args?: string[];
+      readonly env?: Record<string, string>;
+    };
 
 const containerHome = "/home/sandbox";
 const containerMindframeDir = path.posix.join(containerHome, ".mindframe-z");
@@ -133,22 +159,23 @@ function rewriteSandboxPaths(content: string, replacements: readonly [string, st
   return next;
 }
 
+function errnoCode(error: Error): string | undefined {
+  // SAFETY: Node filesystem failures are Errors with an optional string errno code.
+  return (error as Error & { code?: string }).code;
+}
+
 async function readOptional(file: string): Promise<string | undefined> {
   try {
     return await readFile(file, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if (error instanceof Error && errnoCode(error) === "ENOENT") return undefined;
     throw new Error(`Failed to read sandbox input at ${file}`, { cause: error });
   }
 }
 
-function parseSandboxJson(file: string, content: string): Record<string, unknown> {
+function parseSandboxJson(file: string, content: string): JsonObject {
   try {
-    const parsed = JSON.parse(content) as unknown;
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("Expected a JSON object");
-    }
-    return parsed as Record<string, unknown>;
+    return jsonObjectSchema.parse(JSON.parse(content));
   } catch (error) {
     throw new Error(`Invalid generated sandbox JSON at ${file}`, { cause: error });
   }
@@ -158,8 +185,9 @@ async function writeSeed(file: string, content: string): Promise<void> {
   try {
     await writeFile(file, content, { flag: "wx" });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST" && (await lstat(file)).isFile()) return;
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (error instanceof Error && errnoCode(error) === "EEXIST" && (await lstat(file)).isFile())
+      return;
+    if (!(error instanceof Error) || errnoCode(error) !== "EEXIST") {
       throw new Error(`Failed to seed sandbox state at ${file}`, { cause: error });
     }
     throw new Error(`Failed to seed sandbox state at ${file}: existing path is not a file`, {
@@ -592,7 +620,7 @@ function sandboxMcpForTarget(
   profile: ResolvedProfile,
   target: "opencode" | "claude-code",
   shims: Record<string, SandboxMcpShimDefinition>
-): Record<string, unknown> {
+): Record<string, SandboxMcpServer> {
   return Object.fromEntries(
     filterMcpForTarget(profile, target).map((entry) => {
       const shim = shims[entry.name];

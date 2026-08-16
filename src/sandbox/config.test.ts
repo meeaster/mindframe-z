@@ -72,6 +72,18 @@ describe("sandbox config", () => {
     await expect(resolveSandboxCredentialMode(paths, machine())).resolves.toBe("bedrock");
   });
 
+  it("ignores Claude settings whose env value is not a JSON object", async () => {
+    const paths = await testPaths();
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(
+      path.join(paths.claudeDir, "settings.json"),
+      JSON.stringify({ env: ["CLAUDE_CODE_USE_BEDROCK"] }),
+      "utf8"
+    );
+
+    await expect(resolveSandboxCredentialMode(paths, machine())).resolves.toBeUndefined();
+  });
+
   it("defines the machine-local sandbox secrets and CA files", async () => {
     const paths = await testPaths();
 

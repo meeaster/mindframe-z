@@ -20,7 +20,7 @@ import {
   parseJsonText,
   type JsonObject,
   type JsonValue
-} from "./json.js";
+} from "../core/json.js";
 
 interface TranscriptFile {
   path: string;

@@ -4,7 +4,7 @@ import { execa } from "execa";
 import { parseFrontmatter } from "../core/fs-util.js";
 import type { ContextContributor, ContextHarness, ConditionalPathSummary } from "./model.js";
 import { measuredContributor } from "./measurement.js";
-import { jsonObjectSchema, jsonStringArray } from "./json.js";
+import { jsonObjectSchema, jsonStringArray } from "../core/json.js";
 
 export function isPathWithin(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));

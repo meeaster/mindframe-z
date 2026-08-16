@@ -28,7 +28,7 @@ import type {
   ContextMcpMembership,
   HarnessReport
 } from "./model.js";
-import { jsonObjectSchema, jsonString, type JsonObject } from "./json.js";
+import { jsonObjectSchema, jsonString, type JsonObject } from "../core/json.js";
 
 function openCodeMcpLoading(): "per-step" | "unknown" {
   const flag = (name: string): boolean | undefined => {

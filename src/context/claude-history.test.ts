@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RuntimePaths } from "../core/paths.js";
 import { readClaudeHistory } from "./claude-history.js";
-import type { JsonObject } from "./json.js";
+import type { JsonObject } from "../core/json.js";
 
 function paths(home: string): RuntimePaths {
   return {

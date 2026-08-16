@@ -20,7 +20,7 @@ import {
   parseJsonText,
   type JsonObject,
   type JsonValue
-} from "./json.js";
+} from "../core/json.js";
 
 const protocolVersion = "2025-06-18";
 const clientVersion = "mfz-context-probe";

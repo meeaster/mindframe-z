@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import { ownerCliEnv, sandboxVaultName } from "./config.js";
 import {
   ensureBrokerForSeeding,
@@ -22,6 +23,29 @@ export interface OpenaiOauthTokens {
   readonly refreshToken: string;
   readonly accountId: string;
 }
+
+export interface OpenaiAuthEntry {
+  readonly type?: string;
+  readonly access?: string;
+  readonly refresh?: string;
+  readonly accountId?: string;
+  readonly expires?: number;
+}
+
+const openaiAuthSchema = z
+  .object({
+    openai: z
+      .object({
+        type: z.string().optional(),
+        access: z.string().optional(),
+        refresh: z.string().optional(),
+        accountId: z.string().optional(),
+        expires: z.number().optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
 
 /**
  * A `custom` service injecting both the Bearer token (auto-refreshing OAuth
@@ -56,9 +80,9 @@ export function openaiOauthUploadBody(tokens: OpenaiOauthTokens) {
 
 export async function readHostOpenaiOauth(home: string): Promise<OpenaiOauthTokens> {
   const file = path.join(home, ".local", "share", "opencode", "auth.json");
-  let parsed: { openai?: { access?: string; refresh?: string; accountId?: string } };
+  let parsed: z.infer<typeof openaiAuthSchema>;
   try {
-    parsed = JSON.parse(await readFile(file, "utf8"));
+    parsed = openaiAuthSchema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch {
     throw new Error(
       `opencode ChatGPT credential not found at ${file}. Log in to ChatGPT with opencode on the host first.`

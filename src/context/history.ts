@@ -4,7 +4,7 @@ import {
   type ContextHistory,
   type UsageComponents
 } from "./model.js";
-import { jsonNumber, parseJsonObject, type JsonObject, type JsonValue } from "./json.js";
+import { jsonNumber, parseJsonObject, type JsonObject, type JsonValue } from "../core/json.js";
 
 export function numberField(value: JsonValue | undefined): number | undefined {
   return jsonNumber(value);

@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { z } from "zod";
 import type { MachineManifest, SandboxCredentialMode } from "../core/manifests.js";
 import type { RuntimePaths } from "../core/paths.js";
 
@@ -13,6 +14,12 @@ export const sandboxMasterPasswordVar = "AGENT_VAULT_MASTER_PASSWORD";
 export const sandboxAgentTokenVar = "AGENT_VAULT_TOKEN";
 export const sandboxOwnerEmailVar = "AGENT_VAULT_OWNER_EMAIL";
 export const sandboxOwnerPasswordVar = "AGENT_VAULT_OWNER_PASSWORD";
+
+const claudeSettingsSchema = z
+  .object({
+    env: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional()
+  })
+  .passthrough();
 
 export interface SandboxBaseSecrets {
   readonly ownerEmail: string;
@@ -133,9 +140,9 @@ export async function detectSandboxCredentialMode(
   paths: RuntimePaths
 ): Promise<SandboxCredentialMode | undefined> {
   try {
-    const settings = JSON.parse(
-      await readFile(path.join(paths.claudeDir, "settings.json"), "utf8")
-    ) as { env?: Record<string, unknown> };
+    const settings = claudeSettingsSchema.parse(
+      JSON.parse(await readFile(path.join(paths.claudeDir, "settings.json"), "utf8"))
+    );
     const env = settings.env ?? {};
     if (env.CLAUDE_CODE_USE_BEDROCK || env.ANTHROPIC_BEDROCK_BASE_URL) return "bedrock";
   } catch {

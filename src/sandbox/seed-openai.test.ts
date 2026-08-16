@@ -2,13 +2,18 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { openaiOauthUploadBody, openaiServiceYaml, readHostOpenaiOauth } from "./seed-openai.js";
+import {
+  openaiOauthUploadBody,
+  openaiServiceYaml,
+  readHostOpenaiOauth,
+  type OpenaiAuthEntry
+} from "./seed-openai.js";
 
 async function tempHome(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-seed-openai-"));
 }
 
-async function writeOpencodeAuth(home: string, openai: Record<string, unknown>): Promise<void> {
+async function writeOpencodeAuth(home: string, openai: OpenaiAuthEntry): Promise<void> {
   const dir = path.join(home, ".local", "share", "opencode");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "auth.json"), JSON.stringify({ openai }), "utf8");

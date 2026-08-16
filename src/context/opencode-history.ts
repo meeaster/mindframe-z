@@ -11,7 +11,7 @@ import {
   parseJsonObject,
   parseJsonText,
   type JsonObject
-} from "./json.js";
+} from "../core/json.js";
 
 const sessionRowSchema = z.object({
   id: z.string(),
