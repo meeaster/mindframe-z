@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { execa } from "execa";
+import { execa, ExecaError } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import { writeThreadIndex } from "./index.js";
 import { hasRemote, type ResolvedThreadStore } from "./storage.js";
@@ -76,7 +76,7 @@ async function stagedChanges(cwd: string): Promise<boolean> {
     await execa("git", ["diff", "--cached", "--quiet"], { cwd });
     return false;
   } catch (error) {
-    if (typeof error === "object" && error && "exitCode" in error && error.exitCode === 1) {
+    if (error instanceof ExecaError && error.exitCode === 1) {
       return true;
     }
     throw error;

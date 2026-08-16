@@ -426,7 +426,7 @@ function parseTriageOutput(
       continue;
     }
     seen.add(thread);
-    parsed.push({ thread, verdict: match[2]! as "fits" | "no_fit", reason: match[3]! });
+    parsed.push({ thread, verdict: match[2] === "fits" ? "fits" : "no_fit", reason: match[3]! });
   }
   for (const slug of slugs) {
     if (!seen.has(slug)) parsed.push({ line: `${id}: missing verdict for ${slug}` });

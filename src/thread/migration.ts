@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { execa } from "execa";
+import { execa, ExecaError } from "execa";
 import { z } from "zod";
 import { jsonFileContent } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
-import type { ThreadHarness } from "../core/manifests.js";
 import {
   threadManifestSchema,
+  threadRunRecordSchema,
   threadRunsSchema,
   type ThreadManifest,
   type ThreadRuns
@@ -146,7 +146,12 @@ export async function migrateThreadDirectory(
     store: request.storeName,
     created_at: legacy.created_at,
     sessions,
-    excluded: legacy.excluded.map((entry) => (typeof entry === "string" ? { id: entry } : entry)),
+    excluded: legacy.excluded.map<z.infer<typeof threadManifestSchema>["excluded"][number]>(
+      (entry) => {
+        const id = z.string().safeParse(entry);
+        return id.success ? { id: id.data } : legacyExclusionSchema.parse(entry);
+      }
+    ),
     synthesis: legacy.synthesis
   };
   if (legacy.title !== undefined) manifestInput.title = legacy.title;
@@ -251,7 +256,7 @@ export async function publishStoreMigration(args: {
     await execa("git", ["add", "-A", "--", relativeStore], { cwd: checkout });
     const staged = await execa("git", ["diff", "--cached", "--quiet"], { cwd: checkout }).then(
       () => false,
-      (error) => (error as { exitCode?: number }).exitCode === 1
+      (error) => error instanceof ExecaError && error.exitCode === 1
     );
     if (!staged) throw new Error(`Store ${args.storeName} migration produced no changes`);
     await execa("git", ["commit", "-m", `chore(thread): migrate ${args.storeName} store`], {
@@ -305,7 +310,7 @@ async function legacyWatermark(
   if (session.high_water === undefined) return undefined;
   const watermark = await resolveLegacyWatermark(
     paths,
-    { source: session.source as ThreadHarness, id: session.id },
+    { source: session.source, id: session.id },
     session.high_water
   );
   if (watermark === undefined) {
@@ -325,11 +330,10 @@ async function migrateRuns(
   const existing = (await fileExists(file))
     ? JSON.parse(await readFile(file, "utf8"))
     : { runs: [] };
-  const existingRuns = Array.isArray(existing.runs)
-    ? existing.runs.map((run: Record<string, unknown>) =>
-        run.kind === "native" || run.kind === "imported" ? run : { kind: "native", ...run }
-      )
-    : [];
+  const existingRuns = z
+    .object({ runs: z.array(z.union([legacyRunSchema, threadRunRecordSchema])) })
+    .parse(existing)
+    .runs.map((run) => ("kind" in run ? run : { kind: "native", ...run }));
   const imported = embedded.map((run, index) => {
     const importedRun: Extract<ThreadRuns["runs"][number], { kind: "imported" }> = {
       kind: "imported",

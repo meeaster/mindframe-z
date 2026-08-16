@@ -47,5 +47,5 @@ export async function materializeEmbeddedPackageRoot(): Promise<string> {
 
 // True when running from a bun-compiled standalone binary (embedded filesystem).
 export function isCompiledBinary(): boolean {
-  return typeof Bun !== "undefined" && Bun.main.includes("$bunfs");
+  return globalThis.Bun?.main.includes("$bunfs") ?? false;
 }

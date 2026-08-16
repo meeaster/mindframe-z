@@ -2,6 +2,7 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readTextFile } from "../core/fs-util.js";
 import { threadLocksRoot, type RuntimePaths } from "../core/paths.js";
+import { lockRecordSchema } from "./schema.js";
 
 interface LockRecord {
   pid: number;
@@ -23,6 +24,10 @@ async function processIsAlive(pid: number): Promise<boolean> {
   }
 }
 
+function errnoCode(error: Error & { code?: string }): string | undefined {
+  return error.code;
+}
+
 async function readLock(lockFile: string): Promise<LockRecord | undefined> {
   const content = await readTextFile(lockFile);
   if (content === undefined) return undefined;
@@ -33,16 +38,11 @@ async function readLock(lockFile: string): Promise<LockRecord | undefined> {
   } catch (error) {
     throw new Error(`lock file is unreadable: ${lockFile}`, { cause: error });
   }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    typeof (parsed as { pid?: unknown }).pid !== "number" ||
-    typeof (parsed as { command?: unknown }).command !== "string" ||
-    typeof (parsed as { started_at?: unknown }).started_at !== "string"
-  ) {
-    throw new Error(`lock file has invalid metadata: ${lockFile}`);
+  try {
+    return lockRecordSchema.parse(parsed);
+  } catch (error) {
+    throw new Error(`lock file has invalid metadata: ${lockFile}`, { cause: error });
   }
-  return parsed as LockRecord;
 }
 
 async function acquire(lockFile: string, command: string): Promise<void> {
@@ -57,7 +57,7 @@ async function acquire(lockFile: string, command: string): Promise<void> {
     await writeFile(lockFile, JSON.stringify(record) + "\n", { flag: "wx" });
     return;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (!(error instanceof Error) || errnoCode(error) !== "EEXIST") throw error;
   }
 
   const holder = await readLock(lockFile);
@@ -73,12 +73,12 @@ async function acquire(lockFile: string, command: string): Promise<void> {
   try {
     await unlink(lockFile);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!(error instanceof Error) || errnoCode(error) !== "ENOENT") throw error;
   }
   try {
     await writeFile(lockFile, JSON.stringify(record) + "\n", { flag: "wx" });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+    if (error instanceof Error && errnoCode(error) === "EEXIST") {
       throw new Error(
         "another mfz thread command acquired the lock while a stale lock was reclaimed"
       );
@@ -96,8 +96,8 @@ export async function withAdvisoryLock<T>(
   try {
     return await fn();
   } finally {
-    await unlink(lockFile).catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await unlink(lockFile).catch((error) => {
+      if (!(error instanceof Error) || errnoCode(error) !== "ENOENT") throw error;
     });
   }
 }

@@ -277,6 +277,7 @@ export async function listThreads(
     try {
       entries = await readdir(store.path, { withFileTypes: true });
     } catch (error) {
+      // SAFETY: fs access failures expose the documented Node errno field.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new Error(`Thread store path does not exist: ${store.name} (${store.path})`, {
           cause: error

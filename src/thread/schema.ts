@@ -118,3 +118,93 @@ export type ThreadExclusion = z.infer<typeof threadExclusionSchema>;
 export type ThreadRuns = z.infer<typeof threadRunsSchema>;
 export type ThreadRunRecord = z.infer<typeof threadRunRecordSchema>;
 export type ThreadDispatchRun = z.infer<typeof threadDispatchRunSchema>;
+
+const tokenUsageSchema = z
+  .object({
+    input_tokens: z.number().finite().optional(),
+    cache_read_input_tokens: z.number().finite().optional(),
+    cache_creation_input_tokens: z.number().finite().optional(),
+    output_tokens: z.number().finite().optional(),
+    reasoning: z.number().finite().optional()
+  })
+  .passthrough();
+
+const harnessPartSchema = z
+  .object({
+    type: z.string().optional(),
+    text: z.string().optional(),
+    cost: z.number().finite().optional(),
+    tokens: z
+      .object({
+        input: z.number().finite().optional(),
+        output: z.number().finite().optional(),
+        reasoning: z.number().finite().optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
+
+export const harnessEventSchema = z
+  .object({
+    type: z.string().optional(),
+    session_id: z.string().optional(),
+    result: z.string().optional(),
+    error: z
+      .union([
+        z.string(),
+        z
+          .object({
+            name: z.string().optional(),
+            data: z
+              .object({
+                message: z.string().optional(),
+                providerID: z.string().optional(),
+                statusCode: z.number().finite().optional()
+              })
+              .passthrough()
+              .optional()
+          })
+          .passthrough()
+      ])
+      .optional(),
+    subtype: z.string().optional(),
+    error_status: z.number().finite().optional(),
+    total_cost_usd: z.number().finite().nullable().optional(),
+    usage: tokenUsageSchema.optional(),
+    part: harnessPartSchema.optional()
+  })
+  .passthrough();
+
+export type HarnessEvent = z.infer<typeof harnessEventSchema>;
+
+export const lockRecordSchema = z
+  .object({ pid: z.number().int().positive(), command: z.string(), started_at: z.string() })
+  .strict();
+
+export const watermarkClaudeRecordSchema = z
+  .object({
+    type: z.string().optional(),
+    uuid: z.string().optional(),
+    timestamp: z.string().optional()
+  })
+  .passthrough();
+
+export const watermarkExportSchema = z
+  .object({
+    messages: z
+      .array(
+        z
+          .object({
+            info: z
+              .object({
+                id: z.string().optional(),
+                time: z.object({ created: z.number().finite().optional() }).optional()
+              })
+              .optional()
+          })
+          .passthrough()
+      )
+      .optional()
+  })
+  .passthrough();

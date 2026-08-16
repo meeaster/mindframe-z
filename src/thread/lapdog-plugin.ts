@@ -1,5 +1,6 @@
 import process from "node:process";
 import type { Hooks, PluginInput } from "@opencode-ai/plugin";
+import { z } from "zod";
 
 const HOOK_URL = process.env.LAPDOG_URL ? `${process.env.LAPDOG_URL}/claude/hooks` : null;
 
@@ -31,23 +32,32 @@ async function postHook(body: HookBody): Promise<void> {
   }
 }
 
-function textPartText(part: unknown): string {
-  if (
-    typeof part === "object" &&
-    part !== null &&
-    (part as { type?: unknown }).type === "text" &&
-    typeof (part as { text?: unknown }).text === "string"
-  ) {
-    return (part as { text: string }).text;
-  }
-  return "";
-}
+const textPartSchema = z.object({ type: z.literal("text"), text: z.string() }).passthrough();
+const permissionInputSchema = z
+  .object({
+    sessionID: z.string().optional(),
+    tool: z.string().optional(),
+    metadata: z.unknown().optional()
+  })
+  .passthrough();
+const eventSchema = z
+  .object({
+    type: z.string().optional(),
+    properties: z
+      .object({
+        sessionID: z.string().optional(),
+        info: z.object({ id: z.string().optional() }).optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
 
-function permissionFields(input: unknown) {
-  const value = input as { sessionID?: unknown; tool?: unknown; metadata?: unknown };
+function permissionFields(input: z.input<typeof permissionInputSchema>) {
+  const value = permissionInputSchema.parse(input);
   return {
-    sessionID: typeof value.sessionID === "string" ? value.sessionID : "unknown",
-    tool: typeof value.tool === "string" ? value.tool : "unknown",
+    sessionID: value.sessionID ?? "unknown",
+    tool: value.tool ?? "unknown",
     metadata: value.metadata
   };
 }
@@ -70,22 +80,15 @@ const LIFECYCLE_HOOK_NAME = new Map([
   ["session.compacted", "PreCompact"]
 ]);
 
-function sessionIdFromEvent(event: unknown): string {
-  if (typeof event !== "object" || event === null) return "unknown";
-  const properties = (event as { properties?: unknown }).properties;
-  if (typeof properties !== "object" || properties === null) return "unknown";
-  const props = properties as { sessionID?: unknown; info?: { id?: unknown } };
-  if (typeof props.sessionID === "string") return props.sessionID;
-  if (props.info && typeof props.info === "object" && typeof props.info.id === "string") {
-    return props.info.id;
-  }
-  return "unknown";
+function sessionIdFromEvent(event: z.input<typeof eventSchema>): string {
+  const parsed = eventSchema.safeParse(event);
+  if (!parsed.success) return "unknown";
+  return parsed.data.properties?.sessionID ?? parsed.data.properties?.info?.id ?? "unknown";
 }
 
-function eventType(event: unknown): string | undefined {
-  if (typeof event !== "object" || event === null) return undefined;
-  const type = (event as { type?: unknown }).type;
-  return typeof type === "string" ? type : undefined;
+function eventType(event: z.input<typeof eventSchema>): string | undefined {
+  const parsed = eventSchema.safeParse(event);
+  return parsed.success ? parsed.data.type : undefined;
 }
 
 export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> {
@@ -102,7 +105,10 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
     },
 
     "tool.execute.after": async (input, output) => {
-      const metadata = (output.metadata ?? {}) as { error?: unknown };
+      const metadata = z
+        .object({ error: z.unknown().optional() })
+        .passthrough()
+        .parse(output.metadata ?? {});
       const failed = metadata.error !== undefined && metadata.error !== null;
       const hook: HookBody = {
         hook_event_name: failed ? "PostToolUseFailure" : "PostToolUse",
@@ -118,7 +124,12 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
 
     "chat.message": async (input, output) => {
       if (output.message.role !== "user") return;
-      const text = (output.parts ?? []).map(textPartText).join("");
+      const text = (output.parts ?? [])
+        .map((part) => {
+          const parsed = textPartSchema.safeParse(part);
+          return parsed.success ? parsed.data.text : "";
+        })
+        .join("");
       await postHook({
         hook_event_name: "UserPromptSubmit",
         session_id: input.sessionID,

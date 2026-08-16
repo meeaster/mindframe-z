@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 
 // After a Claude Code dispatch, its on-disk transcript is the only faithful
 // source of per-inference LLM/tool/agent spans: the stream-json the runner
@@ -44,12 +45,12 @@ async function readJsonl(file: string): Promise<unknown[]> {
   return entries;
 }
 
+const transcriptEntrySchema = z.object({ cwd: z.string().optional() }).passthrough();
+
 function resolveCwd(entries: unknown[]): string {
   for (const entry of entries) {
-    if (typeof entry === "object" && entry !== null) {
-      const cwd = (entry as Record<string, unknown>).cwd;
-      if (typeof cwd === "string" && cwd) return cwd;
-    }
+    const parsed = transcriptEntrySchema.safeParse(entry);
+    if (parsed.success && parsed.data.cwd) return parsed.data.cwd;
   }
   return "";
 }

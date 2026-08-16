@@ -2,10 +2,11 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { z } from "zod";
 import type { SandboxCredentialMode, ThreadHarness } from "../core/manifests.js";
 import { parseJsonlObjects, pathExists } from "../core/fs-util.js";
 import { opencodeDataHome, type RuntimePaths } from "../core/paths.js";
-import type { ThreadDispatchRun } from "./schema.js";
+import { harnessEventSchema, type HarnessEvent, type ThreadDispatchRun } from "./schema.js";
 import {
   bedrockContainerEnv,
   readBedrockHostSettings,
@@ -200,22 +201,21 @@ export function parseHarnessResult(
   durationMs: number
 ): ParsedHarnessResult {
   // Harnesses can emit non-JSON progress; it stays in rawTrace and is ignored for summaries.
-  const events = parseJsonlObjects(rawTrace);
+  const events = parseJsonlObjects(rawTrace)
+    .map((event) => harnessEventSchema.safeParse(event))
+    .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
   return harness === "claude-code"
     ? parseClaudeResult(events, rawTrace, durationMs)
     : parseOpenCodeResult(events, rawTrace, durationMs);
 }
 
 function parseClaudeResult(
-  events: Record<string, unknown>[],
+  events: HarnessEvent[],
   rawTrace: string,
   durationMs: number
 ): ParsedHarnessResult {
   const result = [...events].reverse().find((event) => event.type === "result");
-  const usage: Record<string, unknown> =
-    typeof result?.usage === "object" && result.usage !== null
-      ? (result.usage as Record<string, unknown>)
-      : {};
+  const usage = result?.usage ?? {};
   const nonCached = numberField(usage.input_tokens) ?? 0;
   const cacheRead = numberField(usage.cache_read_input_tokens) ?? 0;
   const cacheWrite = numberField(usage.cache_creation_input_tokens) ?? 0;
@@ -247,27 +247,19 @@ function parseClaudeResult(
 }
 
 function parseOpenCodeResult(
-  events: Record<string, unknown>[],
+  events: HarnessEvent[],
   rawTrace: string,
   durationMs: number
 ): ParsedHarnessResult {
   const text = events
     .map((event) => {
-      const part = event.part;
-      return typeof part === "object" && part !== null
-        ? textField((part as Record<string, unknown>).text)
-        : "";
+      return textField(event.part?.text);
     })
     .filter(Boolean)
     .join("");
   const stepFinishes = events
     .map((event) => event.part)
-    .filter(
-      (part): part is Record<string, unknown> =>
-        typeof part === "object" &&
-        part !== null &&
-        (part as Record<string, unknown>).type === "step-finish"
-    );
+    .filter((part): part is NonNullable<typeof part> => part?.type === "step-finish");
   const input = sumNullable(stepFinishes.map((part) => tokenField(part, "input"))) ?? 0;
   const output = sumNullable(stepFinishes.map((part) => tokenField(part, "output"))) ?? 0;
   return {
@@ -432,28 +424,39 @@ function extractHarnessError(stdout: string): string | undefined {
   for (const line of stdout.split("\n").reverse()) {
     if (!line.trim()) continue;
     try {
-      const event: unknown = JSON.parse(line);
-      if (typeof event !== "object" || event === null || Array.isArray(event)) continue;
-      const obj = event as Record<string, unknown>;
+      const parsed = harnessEventSchema.safeParse(JSON.parse(line));
+      if (!parsed.success) continue;
+      const obj = parsed.data;
       // Claude Code: result event with error text
-      if (obj.type === "result" && typeof obj.result === "string" && obj.result) return obj.result;
+      if (obj.type === "result" && obj.result) return obj.result;
       if (obj.type === "result" && obj.error) return String(obj.error);
       // Claude Code: API retry exhaustion
       if (obj.type === "system" && obj.subtype === "api_retry" && obj.error) {
         return `API error: ${obj.error}${obj.error_status ? ` (status ${obj.error_status})` : ""}`;
       }
       // OpenCode: error event with NamedError envelope
-      if (obj.type === "error" && typeof obj.error === "object" && obj.error !== null) {
-        const err = obj.error as Record<string, unknown>;
-        const data =
-          typeof err.data === "object" && err.data !== null
-            ? (err.data as Record<string, unknown>)
-            : undefined;
-        const message = typeof data?.message === "string" ? data.message : undefined;
+      const parsedError = z
+        .object({
+          name: z.string().optional(),
+          data: z
+            .object({
+              message: z.string().optional(),
+              providerID: z.string().optional(),
+              statusCode: z.number().finite().optional()
+            })
+            .optional()
+        })
+        .passthrough()
+        .safeParse(obj.error);
+      if (obj.type === "error" && parsedError.success) {
+        const err = parsedError.data;
+        const data = err.data;
+        const message = data?.message;
         if (err.name === "ProviderAuthError") {
-          return `Authentication failed for ${data?.providerID ?? "provider"}: ${message ?? "credentials missing or expired"}`;
+          const provider = data && "providerID" in data ? String(data.providerID) : "provider";
+          return `Authentication failed for ${provider}: ${message ?? "credentials missing or expired"}`;
         }
-        if (err.name === "APIError" && typeof data?.statusCode === "number") {
+        if (err.name === "APIError" && data?.statusCode !== undefined) {
           return `API error (status ${data.statusCode}): ${message ?? "request failed"}`;
         }
         if (message) return message;
@@ -466,12 +469,12 @@ function extractHarnessError(stdout: string): string | undefined {
   return undefined;
 }
 
-function textField(value: unknown): string {
-  return typeof value === "string" ? value : "";
+function textField(value: string | undefined): string {
+  return value ?? "";
 }
 
-function numberField(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function numberField(value: number | null | undefined): number | null {
+  return value ?? null;
 }
 
 function sumNullable(values: Array<number | null>): number | null {
@@ -479,11 +482,11 @@ function sumNullable(values: Array<number | null>): number | null {
   return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : null;
 }
 
-function tokenField(part: Record<string, unknown>, field: string): number | null {
-  const tokens = part.tokens;
-  return typeof tokens === "object" && tokens !== null
-    ? numberField((tokens as Record<string, unknown>)[field])
-    : null;
+function tokenField(
+  part: HarnessEvent["part"],
+  field: "input" | "output" | "reasoning"
+): number | null {
+  return numberField(part?.tokens?.[field]);
 }
 
 export function lapdogDockerArgs(reachable: boolean): string[] {

@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
+import { jsonObjectSchema, jsonString, type JsonObject } from "../core/json.js";
 import type { RuntimePaths } from "../core/paths.js";
 
 // The thread runner reaches Bedrock the same way the operator's interactive
@@ -27,25 +29,27 @@ export interface BedrockHostSettings {
 
 export type BedrockContainerEnv = Record<string, string>;
 
-interface RawClaudeSettings {
-  env?: Record<string, unknown>;
-  awsAuthRefresh?: unknown;
-  otelHeadersHelper?: unknown;
-}
+const rawClaudeSettingsSchema = z
+  .object({
+    env: jsonObjectSchema.optional(),
+    awsAuthRefresh: z.string().optional(),
+    otelHeadersHelper: z.string().optional()
+  })
+  .passthrough();
 
-function stringField(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+function stringField(value: string | undefined): string | undefined {
+  return value && value.length > 0 ? value : undefined;
 }
 
 // OTEL_* / *TELEMETRY* env keys drive Claude Code's exporter and carry no
 // secrets (the endpoint, protocol, and static resource attributes), so they are
 // safe to pass straight through to the container. The per-user identity headers
 // are resolved separately via the helper.
-function extractOtelEnv(env: Record<string, unknown>) {
+function extractOtelEnv(env: JsonObject) {
   const entries: Array<readonly [string, string]> = [];
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith("OTEL_") && !key.includes("TELEMETRY")) continue;
-    const str = stringField(value);
+    const str = stringField(jsonString(value));
     if (str) entries.push([key, str]);
   }
   return Object.fromEntries(entries);
@@ -53,18 +57,18 @@ function extractOtelEnv(env: Record<string, unknown>) {
 
 export async function readBedrockHostSettings(paths: RuntimePaths): Promise<BedrockHostSettings> {
   const settingsPath = path.join(paths.claudeDir, "settings.json");
-  let raw: RawClaudeSettings;
+  let raw: z.infer<typeof rawClaudeSettingsSchema>;
   try {
-    raw = JSON.parse(await readFile(settingsPath, "utf8")) as RawClaudeSettings;
+    raw = rawClaudeSettingsSchema.parse(JSON.parse(await readFile(settingsPath, "utf8")));
   } catch (error) {
     throw new Error(
-      `Bedrock thread dispatch needs Claude settings at ${settingsPath}: ${(error as Error).message}`
+      `Bedrock thread dispatch needs Claude settings at ${settingsPath}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   const env = raw.env ?? {};
   return {
-    awsProfile: stringField(env.AWS_PROFILE) ?? "default",
-    awsRegion: stringField(env.AWS_REGION) ?? BEDROCK_REGION_FALLBACK,
+    awsProfile: stringField(jsonString(env.AWS_PROFILE)) ?? "default",
+    awsRegion: stringField(jsonString(env.AWS_REGION)) ?? BEDROCK_REGION_FALLBACK,
     awsAuthRefresh: stringField(raw.awsAuthRefresh),
     otelEnv: extractOtelEnv(env),
     otelHeadersHelper: stringField(raw.otelHeadersHelper)
@@ -126,12 +130,12 @@ export async function resolveOtelHeaders(
     const { stdout } = await execa(settings.otelHeadersHelper, [], {
       stdio: ["ignore", "pipe", "ignore"]
     });
-    const parsed: unknown = JSON.parse(stdout);
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    const pairs = Object.entries(parsed as Record<string, unknown>)
-      .map(([key, value]) => [key, stringField(value)] as const)
-      .filter((entry): entry is readonly [string, string] => entry[1] !== undefined)
-      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`);
+    const parsed = jsonObjectSchema.safeParse(JSON.parse(stdout));
+    if (!parsed.success) return undefined;
+    const pairs = Object.entries(parsed.data).flatMap(([key, value]) => {
+      const string = jsonString(value);
+      return string === undefined ? [] : [`${key}=${encodeURIComponent(string)}`];
+    });
     return pairs.length > 0 ? pairs.join(",") : undefined;
   } catch {
     // Helper missing, non-JSON, or no cached token: ship telemetry without

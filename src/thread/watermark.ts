@@ -1,11 +1,13 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { openSqlite, type SqliteDatabase } from "../core/sqlite-compat.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { parseJsonlObjects, pathExists, readTextFile } from "../core/fs-util.js";
 import { opencodeDbPath } from "../core/paths.js";
 import type { ThreadHarness } from "../core/manifests.js";
 import { cachedSessionPath } from "../sessions/archive.js";
+import { watermarkClaudeRecordSchema, watermarkExportSchema } from "./schema.js";
 
 // A tail signature of a host session store as of a point in time. TS computes it
 // deterministically, host-side, without dispatching an agent — cheap enough to
@@ -79,12 +81,16 @@ async function readClaudeWatermark(
 // message id and `timestamp` its activity time — mirrors the thread-sessions Claude branch.
 function tailSignatureFromJsonl(content: string): Watermark | undefined {
   let count = 0;
-  let last: { uuid?: string; timestamp?: string } | undefined;
+  let last: { uuid?: string | undefined; timestamp?: string | undefined } | undefined;
   for (const line of content.split("\n")) {
     if (line.trim() === "") continue;
-    let record: { type?: string; uuid?: string; timestamp?: string };
+    let record: {
+      type?: string | undefined;
+      uuid?: string | undefined;
+      timestamp?: string | undefined;
+    };
     try {
-      record = JSON.parse(line) as typeof record;
+      record = watermarkClaudeRecordSchema.parse(JSON.parse(line));
     } catch {
       continue;
     }
@@ -101,9 +107,9 @@ function tailSignatureFromJsonl(content: string): Watermark | undefined {
 // for the OpenCode archived form. Each message's `info.id`/`info.time.created` are
 // the same fields the db-backed reader uses (message.id / message.time_created).
 export function tailSignatureFromExport(content: string): Watermark | undefined {
-  let parsed: { messages?: Array<{ info?: { id?: string; time?: { created?: number } } }> };
+  let parsed: z.infer<typeof watermarkExportSchema>;
   try {
-    parsed = JSON.parse(content) as typeof parsed;
+    parsed = watermarkExportSchema.parse(JSON.parse(content));
   } catch {
     return undefined;
   }
@@ -146,20 +152,19 @@ async function readTranscriptContent(
 
 function claudeBoundary(content: string, cursor: string | number): Watermark | undefined {
   // Legacy record-count cursors count valid JSONL records only.
-  const records = parseJsonlObjects(content) as Array<{
-    type?: string;
-    uuid?: string;
-    timestamp?: string;
-  }>;
+  const records = parseJsonlObjects(content).flatMap((record) => {
+    const parsed = watermarkClaudeRecordSchema.safeParse(record);
+    return parsed.success ? [parsed.data] : [];
+  });
 
-  const boundary =
-    typeof cursor === "number"
-      ? records.slice(0, cursor)
-      : records.filter((record) => {
-          const timestamp = record.timestamp === undefined ? NaN : Date.parse(record.timestamp);
-          const cutoff = Date.parse(cursor);
-          return Number.isFinite(timestamp) && Number.isFinite(cutoff) && timestamp <= cutoff;
-        });
+  const numericCursor = z.number().safeParse(cursor);
+  const boundary = numericCursor.success
+    ? records.slice(0, numericCursor.data)
+    : records.filter((record) => {
+        const timestamp = record.timestamp === undefined ? NaN : Date.parse(record.timestamp);
+        const cutoff = Date.parse(String(cursor));
+        return Number.isFinite(timestamp) && Number.isFinite(cutoff) && timestamp <= cutoff;
+      });
   const messages = boundary.filter(
     (record) =>
       (record.type === "user" || record.type === "assistant") &&
@@ -180,7 +185,8 @@ async function openCodeBoundary(
   id: string,
   cursor: string | number
 ): Promise<Watermark | undefined> {
-  const cutoff = typeof cursor === "number" ? cursor : Date.parse(cursor);
+  const numericCursor = z.number().safeParse(cursor);
+  const cutoff = numericCursor.success ? numericCursor.data : Date.parse(String(cursor));
   if (!Number.isFinite(cutoff)) return undefined;
   const dbPath = opencodeDbPath(paths);
   if (await pathExists(dbPath)) {
@@ -191,7 +197,12 @@ async function openCodeBoundary(
         .prepare(
           "SELECT id, time_created FROM message WHERE session_id = $id AND time_created <= $cutoff ORDER BY time_created ASC, id ASC"
         )
-        .all({ id, cutoff }) as Array<{ id?: string; time_created?: number }>;
+        .all({ id, cutoff })
+        .map((row) =>
+          z
+            .object({ id: z.string().optional(), time_created: z.number().finite().optional() })
+            .parse(row)
+        );
       const last = rows.at(-1);
       if (last?.id !== undefined && last.time_created !== undefined) {
         return {
@@ -212,14 +223,14 @@ async function openCodeBoundary(
   }
 
   const cached = cachedSessionPath(paths, "opencode", id);
-  let parsed: { messages?: Array<{ info?: { id?: string; time?: { created?: number } } }> };
+  let parsed: z.infer<typeof watermarkExportSchema>;
   try {
     // Any unusable export — absent, unreadable, or not JSON — means "no boundary
     // from the cache" here, so the read stays inside this catch rather than
     // propagating the way the other cache reads do.
     const content = await readTextFile(cached);
     if (content === undefined) return undefined;
-    parsed = JSON.parse(content) as typeof parsed;
+    parsed = watermarkExportSchema.parse(JSON.parse(content));
   } catch {
     return undefined;
   }
@@ -271,12 +282,20 @@ async function readOpencodeWatermarkFromDb(
            (SELECT MAX(time_created) FROM message WHERE session_id = $id) AS last_ms
          FROM message WHERE session_id = $id`
       )
-      .get({ id }) as { count: number; last_id: string | null; last_ms: number | null };
-    if (row.count === 0 || row.last_id === null || row.last_ms === null) return undefined;
+      .get({ id });
+    const parsedRow = z
+      .object({
+        count: z.number().int(),
+        last_id: z.string().nullable(),
+        last_ms: z.number().nullable()
+      })
+      .parse(row);
+    if (parsedRow.count === 0 || parsedRow.last_id === null || parsedRow.last_ms === null)
+      return undefined;
     return {
-      message_count: row.count,
-      last_message_id: row.last_id,
-      last_activity_at: new Date(row.last_ms).toISOString()
+      message_count: parsedRow.count,
+      last_message_id: parsedRow.last_id,
+      last_activity_at: new Date(parsedRow.last_ms).toISOString()
     };
   } catch {
     // The opencode message table's shape changes between versions (the thread-sessions

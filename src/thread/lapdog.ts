@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import type { RuntimePaths } from "../core/paths.js";
 
 export const lapdogImageRef = "ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest";
@@ -36,11 +37,14 @@ export async function ensureLapdogNetwork(): Promise<"created" | "exists"> {
   }
 }
 
-interface LapdogContainerInspect {
-  State?: { Running?: boolean };
-  Config?: { Image?: string };
-  NetworkSettings?: { Networks?: Record<string, unknown> };
-}
+const lapdogContainerInspectSchema = z
+  .object({
+    State: z.object({ Running: z.boolean().optional() }).optional(),
+    Config: z.object({ Image: z.string().optional() }).optional(),
+    NetworkSettings: z.object({ Networks: z.record(z.string(), z.unknown()).optional() }).optional()
+  })
+  .passthrough();
+type LapdogContainerInspect = z.infer<typeof lapdogContainerInspectSchema>;
 
 async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefined> {
   try {
@@ -50,9 +54,8 @@ async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefi
       "--format",
       "{{json .}}"
     ]);
-    const parsed: unknown = JSON.parse(result.stdout);
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    return parsed as LapdogContainerInspect;
+    const parsed = lapdogContainerInspectSchema.safeParse(JSON.parse(result.stdout));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }

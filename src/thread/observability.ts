@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { jsonFileContent } from "../core/fs-util.js";
 import {
   threadCliLogPath,
@@ -18,6 +19,19 @@ export interface ThreadRunStatus {
   finished_at?: string | undefined;
   cost_usd: number | null;
 }
+
+const threadRunStatusSchema = z
+  .object({
+    id: z.string(),
+    thread: z.string().optional(),
+    mode: z.string(),
+    pid: z.number().int(),
+    current_step: z.string(),
+    started_at: z.string(),
+    finished_at: z.string().optional(),
+    cost_usd: z.number().nullable()
+  })
+  .strict();
 
 export async function appendThreadCliLog(
   paths: RuntimePaths,
@@ -57,7 +71,7 @@ export async function listRunStatuses(
       if (!entry.isDirectory()) continue;
       const file = path.join(root, entry.name, "status.json");
       try {
-        const status = JSON.parse(await readFile(file, "utf8")) as ThreadRunStatus;
+        const status = threadRunStatusSchema.parse(JSON.parse(await readFile(file, "utf8")));
         statuses.push({
           ...status,
           state: status.finished_at ? "finished" : await pidState(status.pid)
