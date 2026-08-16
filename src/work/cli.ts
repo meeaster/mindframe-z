@@ -31,19 +31,21 @@ function titleFromSlug(slug: string): string {
     .join(" ");
 }
 
-function print(value: unknown, json: boolean, human: string | string[]): void {
-  if (json) console.log(JSON.stringify({ ok: true, ...((value ?? {}) as object) }, null, 2));
-  else for (const line of typeof human === "string" ? [human] : human) console.log(line);
+function print<T extends object>(value: T, json: boolean, human: readonly string[]): void {
+  if (json) {
+    console.log(JSON.stringify({ ok: true, ...value }, null, 2));
+  } else for (const line of human) console.log(line);
 }
 
-async function run<T>(
+async function run<T extends object>(
   options: WorkOptions,
   action: () => Promise<T>,
   display: (value: T) => string | string[]
 ): Promise<void> {
   try {
     const value = await action();
-    print(value, Boolean(options.json), display(value));
+    const human = display(value);
+    print(value, Boolean(options.json), Array.isArray(human) ? human : [human]);
   } catch (error) {
     if (!options.json) throw error;
     console.log(

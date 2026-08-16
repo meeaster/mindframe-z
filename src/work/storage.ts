@@ -53,6 +53,7 @@ const checkpointIndexSchema = z.object({
     })
   )
 });
+const filesystemErrorSchema = z.object({ code: z.string() });
 
 function now(): string {
   return new Date().toISOString();
@@ -108,12 +109,17 @@ export function workAuthoringPaths(paths: RuntimePaths, slug: string): WorkAutho
   };
 }
 
-async function appendJsonl(file: string, value: unknown): Promise<void> {
+function filesystemErrorCode(error: Error): string | undefined {
+  const parsed = filesystemErrorSchema.safeParse(error);
+  return parsed.success ? parsed.data.code : undefined;
+}
+
+async function appendJsonl(file: string, value: WorkReceipt): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await appendFile(file, `${JSON.stringify(value)}\n`, "utf8");
 }
 
-async function readJsonl<T>(file: string, schema: { parse(value: unknown): T }): Promise<T[]> {
+async function readJsonl<T>(file: string, schema: z.ZodType<T>): Promise<T[]> {
   try {
     const content = await readFile(file, "utf8");
     return content
@@ -121,7 +127,7 @@ async function readJsonl<T>(file: string, schema: { parse(value: unknown): T }):
       .filter((line) => line.length > 0)
       .map((line) => schema.parse(JSON.parse(line)));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (error instanceof Error && filesystemErrorCode(error) === "ENOENT") return [];
     throw error;
   }
 }
@@ -132,7 +138,7 @@ async function readBindingIndex(paths: RuntimePaths): Promise<WorkBindingIndex> 
       JSON.parse(await readFile(workBindingsPath(paths), "utf8"))
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+    if (error instanceof Error && filesystemErrorCode(error) === "ENOENT")
       return { schema_version: 1, bindings: {} };
     throw new Error(
       `Failed to read work binding index: ${error instanceof Error ? error.message : String(error)}`
@@ -153,7 +159,11 @@ async function withBindingLock<T>(paths: RuntimePaths, action: () => Promise<T>)
       await mkdir(lock);
       break;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || Date.now() >= deadline) {
+      if (
+        !(error instanceof Error) ||
+        filesystemErrorCode(error) !== "EEXIST" ||
+        Date.now() >= deadline
+      ) {
         throw new Error(`Failed to acquire work binding lock: ${String(error)}`);
       }
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -241,7 +251,7 @@ export async function listWorkUnits(paths: RuntimePaths): Promise<WorkUnit[]> {
       .sort();
     return await Promise.all(slugs.map((slug) => readWorkUnit(paths, slug)));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (error instanceof Error && filesystemErrorCode(error) === "ENOENT") return [];
     throw error;
   }
 }
@@ -501,7 +511,7 @@ export async function validateWorkUnit(
     try {
       await unlink(checkpointsPath(paths, slug));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (!(error instanceof Error) || filesystemErrorCode(error) !== "ENOENT") throw error;
     }
   }
   if (orientationChanged) {

@@ -57,7 +57,7 @@ function listSection(sections: Map<string, string>, title: string): string[] {
   const items = lines.map((line) => line.match(/^\s*[-*]\s+(.+?)\s*$/)?.[1]);
   if (items.some((item) => !item))
     throw new Error(`${title} must contain Markdown bullets or be empty`);
-  return items as string[];
+  return items.filter((item): item is string => item !== undefined);
 }
 
 export function hashAuthoredFile(content: string): string {
