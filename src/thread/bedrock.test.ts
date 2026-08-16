@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { JsonValue } from "../core/json.js";
 import { createRuntimePaths } from "../core/paths.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
@@ -10,7 +11,10 @@ import {
   type BedrockHostSettings
 } from "./bedrock.js";
 
-async function writeClaudeSettings(claudeDir: string, body: unknown): Promise<void> {
+async function writeClaudeSettings(
+  claudeDir: string,
+  body: JsonValue
+): Promise<void> {
   await mkdir(claudeDir, { recursive: true });
   await writeFile(path.join(claudeDir, "settings.json"), JSON.stringify(body), "utf8");
 }

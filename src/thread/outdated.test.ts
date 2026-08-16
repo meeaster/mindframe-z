@@ -81,7 +81,7 @@ function stored(id: string, messageCount: number, lastMessageId: string): Stored
 const logs: string[] = [];
 
 function testProfile(home: string): ResolvedProfile {
-  return {
+  const fixture = {
     profile: {
       thread: {
         stores: [
@@ -89,7 +89,9 @@ function testProfile(home: string): ResolvedProfile {
         ]
       }
     }
-  } as ResolvedProfile;
+  };
+  // SAFETY: listOutdatedThreads only reads the profile.thread store configuration.
+  return fixture as ResolvedProfile;
 }
 
 afterEach(() => {
@@ -194,7 +196,7 @@ describe("listOutdatedThreads", () => {
 
 describe("thread outdated cli", () => {
   function captureConsole(): void {
-    vi.spyOn(console, "log").mockImplementation((value?: unknown) => logs.push(String(value)));
+    vi.spyOn(console, "log").mockImplementation((value?: string) => logs.push(String(value)));
   }
 
   it("prints deterministic four-column TSV and no human output for healthy threads", async () => {

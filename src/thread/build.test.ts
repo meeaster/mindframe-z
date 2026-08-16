@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createRuntimePaths } from "../core/paths.js";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
@@ -22,6 +23,13 @@ async function writeThreadImageFixture(root: string): Promise<void> {
     "utf8"
   );
 }
+
+const settingsSchema = z.object({
+  hooks: z.record(
+    z.string(),
+    z.array(z.object({ hooks: z.array(z.object({ command: z.string(), async: z.boolean() })) }))
+  )
+});
 
 describe("thread tools image build", () => {
   it("hashes the Dockerfile and container OpenCode config", async () => {
@@ -54,7 +62,7 @@ describe("thread tools image build", () => {
     expect(rel).toBe(path.join(threadToolsGeneratedDir, threadToolsClaudeSettingsPath));
 
     const settings = await readFile(path.join(packageRoot, rel), "utf8");
-    const parsed = JSON.parse(settings) as { hooks: Record<string, unknown> };
+    const parsed = settingsSchema.parse(JSON.parse(settings));
     expect(Object.keys(parsed.hooks).sort()).toEqual([
       "Notification",
       "PermissionRequest",
@@ -70,7 +78,7 @@ describe("thread tools image build", () => {
       "UserPromptSubmit"
     ]);
     for (const [event, entry] of Object.entries(parsed.hooks)) {
-      const block = (entry as Array<{ hooks: Array<{ command: string; async: boolean }> }>)[0]!;
+      const block = entry[0]!;
       expect(block.hooks[0]!.command).toContain("${LAPDOG_URL}/claude/hooks");
       // Terminal lifecycle events must run synchronously so the close event
       // reaches lapdog before the `docker run --rm` container is reaped;

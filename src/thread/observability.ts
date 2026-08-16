@@ -20,7 +20,7 @@ export interface ThreadRunStatus {
   cost_usd: number | null;
 }
 
-const threadRunStatusSchema = z
+export const threadRunStatusSchema = z
   .object({
     id: z.string(),
     thread: z.string().optional(),

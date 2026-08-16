@@ -16,7 +16,7 @@ import {
 import { readSweepState, readVerdictLedger, writeSweepState } from "./verdicts.js";
 
 function profile(home: string, quiescenceMinutes = 0): ResolvedProfile {
-  return {
+  const fixture = {
     profile: {
       thread: {
         stores: [
@@ -26,7 +26,9 @@ function profile(home: string, quiescenceMinutes = 0): ResolvedProfile {
         credentials: "subscription"
       }
     }
-  } as ResolvedProfile;
+  };
+  // SAFETY: sweep only reads profile.profile.thread from this focused fixture.
+  return fixture as ResolvedProfile;
 }
 
 function runner(text: string, calls: string[] = []): AgentRunner {

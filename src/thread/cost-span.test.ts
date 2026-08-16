@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decode } from "@msgpack/msgpack";
+import { z } from "zod";
 import {
   buildCostSpanPayload,
   buildMetrics,
@@ -36,6 +37,38 @@ const opencodeBreakdown: TokenBreakdown = {
   cacheWriteInput: 0,
   output: 50
 };
+
+const spanSchema = z
+  .object({
+    name: z.string(),
+    service: z.string(),
+    resource: z.string(),
+    error: z.number(),
+    start: z.number(),
+    duration: z.number(),
+    span_id: z.number(),
+    meta_struct: z.object({ _llmobs: z.instanceof(Uint8Array) })
+  })
+  .passthrough();
+const tracePayloadSchema = z.array(z.array(spanSchema));
+const envelopeSchema = z
+  .object({
+    name: z.string(),
+    session_id: z.string(),
+    parent_id: z.string(),
+    meta: z.object({ model_name: z.string(), model_provider: z.string() }),
+    metrics: z.object({ estimated_total_cost: z.number(), cache_read_input_tokens: z.number() })
+  })
+  .passthrough();
+
+function payloadBytes(payload: Uint8Array | null): Uint8Array {
+  if (!(payload instanceof Uint8Array)) throw new Error("expected an encoded cost span payload");
+  return payload;
+}
+
+function decodeTracePayload(payload: Uint8Array) {
+  return tracePayloadSchema.parse(decode(payload));
+}
 
 describe("modelProvider", () => {
   it("returns anthropic for claude-code regardless of model string", () => {
@@ -114,9 +147,9 @@ describe("buildCostSpanPayload", () => {
       sessionId: "sess-abc"
     });
     expect(payload).toBeInstanceOf(Uint8Array);
-    const bytes = payload as Uint8Array;
+    const bytes = payloadBytes(payload);
 
-    const traces = decode(bytes) as Array<Array<Record<string, unknown>>>;
+    const traces = decodeTracePayload(bytes);
     expect(traces).toHaveLength(1);
     const spans = traces[0]!;
     expect(spans).toHaveLength(1);
@@ -128,16 +161,14 @@ describe("buildCostSpanPayload", () => {
     expect(span.start).toBe(1_700_000_000_000_000_000);
     expect(span.duration).toBe(1_234_000_000);
 
-    const struct = span.meta_struct as Record<string, Uint8Array>;
-    const envelope = decode(struct._llmobs!) as Record<string, unknown>;
+    const envelope = envelopeSchema.parse(decode(span.meta_struct._llmobs));
     expect(envelope.name).toBe("claude-code-request");
     expect(envelope.session_id).toBe("sess-abc");
     expect(envelope.parent_id).toBe("undefined");
-    expect((envelope.meta as Record<string, unknown>).model_name).toBe("claude-sonnet-4-6");
-    expect((envelope.meta as Record<string, unknown>).model_provider).toBe("anthropic");
-    const envMetrics = envelope.metrics as Record<string, number>;
-    expect(envMetrics.estimated_total_cost).toBe(5_400_000);
-    expect(envMetrics.cache_read_input_tokens).toBe(100);
+    expect(envelope.meta.model_name).toBe("claude-sonnet-4-6");
+    expect(envelope.meta.model_provider).toBe("anthropic");
+    expect(envelope.metrics.estimated_total_cost).toBe(5_400_000);
+    expect(envelope.metrics.cache_read_input_tokens).toBe(100);
   });
 
   it("returns null when the breakdown is zero", () => {
@@ -151,8 +182,7 @@ describe("buildCostSpanPayload", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       { ...baseCtx, durationMs: 0 }
     );
-    const bytes = payload as Uint8Array;
-    const traces = decode(bytes) as Array<Array<Record<string, unknown>>>;
+    const traces = decodeTracePayload(payloadBytes(payload));
     const span = traces[0]![0]!;
     expect(span.duration).toBe(1);
   });
@@ -165,9 +195,8 @@ describe("buildCostSpanPayload", () => {
         { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
         { ...baseCtx, startTimeMs: 1_700_000_000_000 + i }
       );
-      const bytes = payload as Uint8Array;
-      const traces = decode(bytes) as Array<Array<Record<string, unknown>>>;
-      ids.add(traces[0]![0]!.span_id as number);
+      const traces = decodeTracePayload(payloadBytes(payload));
+      ids.add(traces[0]![0]!.span_id);
     }
     expect(ids.size).toBe(10);
   });
@@ -187,7 +216,7 @@ describe("emitCostSpan", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       baseCtx
     );
-    await emitCostSpan("http://localhost:8126", payload as Uint8Array);
+    await emitCostSpan("http://localhost:8126", payloadBytes(payload));
 
     expect(calls).toHaveLength(1);
     const [url, init] = calls[0]!;
@@ -215,7 +244,7 @@ describe("emitCostSpan", () => {
       baseCtx
     );
     await expect(
-      emitCostSpan("http://localhost:8126", payload as Uint8Array)
+      emitCostSpan("http://localhost:8126", payloadBytes(payload))
     ).resolves.toBeUndefined();
     vi.unstubAllGlobals();
   });

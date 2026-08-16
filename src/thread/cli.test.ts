@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { makeTempDir } from "../../tests/integration/support.js";
 import { createRuntimePaths, threadRunsRoot } from "../core/paths.js";
 import { writeRunStatus } from "./observability.js";
@@ -120,8 +121,24 @@ async function makeFixtureRoot(): Promise<string> {
 
 const logs: string[] = [];
 
+const storesOutputSchema = z.object({ stores: z.array(z.object({ name: z.string() })) });
+const manifestOutputSchema = z.object({
+  sessions: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string().optional(),
+      synthesizer: z.string().optional(),
+      source: z.string()
+    })
+  )
+});
+const runsOutputSchema = z.object({
+  runs: z.array(z.object({ id: z.string(), thread: z.string(), state: z.string() }))
+});
+const observeOutputSchema = z.object({ reachable: z.boolean(), dashboardUrl: z.string() });
+
 function captureConsole(): void {
-  vi.spyOn(console, "log").mockImplementation((value?: unknown) => {
+  vi.spyOn(console, "log").mockImplementation((value?: string) => {
     logs.push(String(value));
   });
 }
@@ -167,7 +184,7 @@ describe("thread cli", () => {
       json: true
     });
 
-    const parsed = JSON.parse(logs[0]!) as { stores: Array<{ name: string }> };
+    const parsed = storesOutputSchema.parse(JSON.parse(logs[0]!));
     expect(parsed.stores).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "personal" })])
     );
@@ -295,9 +312,9 @@ describe("thread cli", () => {
 
     // The ledger carries TS-owned provenance: title lifted from the H1, synthesizer
     // from the dispatch settings (not the agent).
-    const manifest = JSON.parse(await readFile(path.join(threadDir, "manifest.json"), "utf8")) as {
-      sessions: Array<{ id: string; title?: string; synthesizer?: string; source: string }>;
-    };
+    const manifest = manifestOutputSchema.parse(
+      JSON.parse(await readFile(path.join(threadDir, "manifest.json"), "utf8"))
+    );
     const ledgerA = manifest.sessions.find((s) => s.id === "sess-a");
     expect(ledgerA).toMatchObject({
       source: "claude-code",
@@ -454,9 +471,7 @@ describe("thread cli", () => {
 
     await runThreadRuns({ root, home, profile: "base", json: true });
 
-    const parsed = JSON.parse(logs[0]!) as {
-      runs: Array<{ id: string; thread: string; state: string }>;
-    };
+    const parsed = runsOutputSchema.parse(JSON.parse(logs[0]!));
     // Cross-thread view, newest-first, derived from run folders alone (no thread read).
     expect(parsed.runs.map((run) => run.id)).toEqual(["run-live", "run-dead"]);
     expect(parsed.runs.find((run) => run.id === "run-live")?.state).toBe("running");
@@ -608,7 +623,7 @@ describe("thread observe lifecycle", () => {
         profile: "base",
         json: true
       });
-      const parsed = JSON.parse(logs[0]!) as { reachable: boolean; dashboardUrl: string };
+      const parsed = observeOutputSchema.parse(JSON.parse(logs[0]!));
       expect(parsed.reachable).toBe(false);
       expect(parsed.dashboardUrl).toBe("http://localhost:8080");
     });

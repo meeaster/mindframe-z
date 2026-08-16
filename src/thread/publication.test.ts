@@ -231,7 +231,10 @@ if [ "$2" = "create" ]; then printf '%s\n' 'https://example.test/pull/1'; fi
     }
 
     expect(publicationError).toBeInstanceOf(ThreadPublicationError);
-    const recovery = publicationError as ThreadPublicationError;
+    if (!(publicationError instanceof ThreadPublicationError)) {
+      throw new Error("expected publication recovery metadata");
+    }
+    const recovery = publicationError;
     expect(recovery.pushed).toBe(true);
     const { stdout: localCommit } = await execa("git", ["rev-parse", recovery.branch], {
       cwd: fixture.canonicalDir

@@ -7,6 +7,7 @@ import { archiveCacheRoot, opencodeDbPath, threadRunsRoot } from "../core/paths.
 import type { Archive, MachineManifest } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { makeTempDir } from "../../tests/integration/support.js";
+import { threadRunStatusSchema } from "./observability.js";
 import {
   prepareThreadStore,
   readSessionFile,
@@ -191,7 +192,7 @@ class RecordingRunner implements AgentRunner {
       request.role === "synthesize"
         ? "# Session x — Recorded\n\nbody"
         : request.role === "gather"
-          ? typeof this.gatherText === "function"
+          ? this.gatherText instanceof Function
             ? this.gatherText(request.prompt)
             : this.gatherText
           : "digest content";
@@ -432,12 +433,13 @@ async function refreshedSessions(runtime: RuntimePaths, slug: string): Promise<s
 
 async function latestRunStatus(
   runtime: RuntimePaths
-): Promise<{ current_step: string; finished_at?: string }> {
+): Promise<{ current_step: string; finished_at?: string | undefined }> {
   const runIds = await readdir(threadRunsRoot(runtime));
   const runId = runIds.sort().at(-1)!;
-  return JSON.parse(
-    await readFile(path.join(threadRunsRoot(runtime), runId, "status.json"), "utf8")
-  ) as { current_step: string; finished_at?: string };
+  const status = threadRunStatusSchema.parse(
+    JSON.parse(await readFile(path.join(threadRunsRoot(runtime), runId, "status.json"), "utf8"))
+  );
+  return { current_step: status.current_step, finished_at: status.finished_at };
 }
 
 describe("ingestThread auto-refresh", () => {
