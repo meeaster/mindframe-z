@@ -10,6 +10,7 @@ import {
   validateManifests,
   vendorLockSchema
 } from "./manifests.js";
+import { jsonSchemaNodeSchema } from "./generate-schemas.js";
 
 // Every case builds its own root + home under os.tmpdir() and passes `home`
 // explicitly, so nothing here reads the operator's real ~/.mindframe-z.
@@ -28,6 +29,12 @@ async function writeProfile(root: string, dir: string, yaml: string): Promise<st
   await mkdir(full, { recursive: true });
   await writeFile(path.join(full, "profile.yml"), yaml, "utf8");
   return full;
+}
+
+async function readGeneratedSchema(filename: string) {
+  return jsonSchemaNodeSchema.parse(
+    JSON.parse(await readFile(path.join(process.cwd(), "schemas", filename), "utf8"))
+  );
 }
 
 describe("home manifest schema", () => {
@@ -91,19 +98,9 @@ describe("home manifest schema", () => {
   });
 
   it("publishes the explicit upstream path contract", async () => {
-    const schema = JSON.parse(
-      await readFile(path.join(process.cwd(), "schemas", "mfz_home.schema.json"), "utf8")
-    ) as {
-      properties: {
-        extends: {
-          required: string[];
-          properties: { path: { pattern?: string } };
-        };
-      };
-    };
-
-    expect(schema.properties.extends.required).toContain("path");
-    expect(schema.properties.extends.properties.path.pattern).toBe("^(?:/|~/)");
+    const schema = await readGeneratedSchema("mfz_home.schema.json");
+    expect(schema.properties?.extends?.required).toContain("path");
+    expect(schema.properties?.extends?.properties?.path?.pattern).toBe("^(?:/|~/)");
   });
 });
 
@@ -183,11 +180,7 @@ describe("loadManifests", () => {
     const { root, home } = await tmpHome();
     const dir = await writeProfile(root, "base", "name: base\n");
     const content = '[tools]\njq = "latest"\n\n[hooks]\npostinstall = { task = "check" }\n';
-    await writeFile(
-      path.join(dir, "mise.toml"),
-      content,
-      "utf8"
-    );
+    await writeFile(path.join(dir, "mise.toml"), content, "utf8");
 
     const manifests = await loadManifests(root, home);
     expect(manifests.miseFiles.get("base")).toBe(content);
@@ -218,7 +211,11 @@ describe("loadManifests", () => {
     await mkdir(path.join(dir, "config", "nested"), { recursive: true });
     await writeFile(path.join(dir, "config", "nested", "rc.toml"), "a = 1\n", "utf8");
     await mkdir(path.join(dir, ".config", "systemd", "user"), { recursive: true });
-    await writeFile(path.join(dir, ".config", "systemd", "user", "example.service"), "[Unit]\n", "utf8");
+    await writeFile(
+      path.join(dir, ".config", "systemd", "user", "example.service"),
+      "[Unit]\n",
+      "utf8"
+    );
     await mkdir(path.join(dir, ".config", "mise"), { recursive: true });
     await writeFile(path.join(dir, ".config", "mise", "ignored.toml"), "ignored = true\n", "utf8");
 
@@ -247,48 +244,33 @@ describe("loadManifests", () => {
 
 describe("generated skill schema", () => {
   it("retains transport and ref safety constraints", async () => {
-    const schema = JSON.parse(
-      await readFile(path.join(process.cwd(), "schemas", "skills.schema.json"), "utf8")
-    ) as {
-      properties: {
-        skills: { items: { oneOf: Array<{ properties: Record<string, { pattern?: string }> }> } };
-      };
-    };
-    const vendored = schema.properties.skills.items.oneOf[1];
-    expect(vendored?.properties.repo?.pattern).toContain("@");
-    expect(vendored?.properties.ref?.pattern).toContain("\\s");
+    const schema = await readGeneratedSchema("skills.schema.json");
+    const vendored = schema.properties?.skills?.items?.oneOf?.[1];
+    expect(vendored?.properties?.repo?.pattern).toContain("@");
+    expect(vendored?.properties?.ref?.pattern).toContain("\\s");
   });
 });
 
 describe("generated profile MCP schema", () => {
   it("describes concise and grouped direct authoring constraints", async () => {
-    const schema = JSON.parse(
-      await readFile(path.join(process.cwd(), "schemas", "profile.schema.json"), "utf8")
-    ) as Record<string, unknown>;
-    const properties = schema.properties as Record<string, Record<string, unknown>>;
-    const mcp = properties.mcp!;
-    const entries = mcp.additionalProperties as Record<string, unknown>;
-    const entryProperties = entries.properties as Record<string, Record<string, unknown>>;
-    const agents = entryProperties.agents!;
-    const branches = agents.anyOf as Record<string, unknown>[];
+    const schema = await readGeneratedSchema("profile.schema.json");
+    const entryProperties = jsonSchemaNodeSchema.safeParse(
+      schema.properties?.mcp?.additionalProperties
+    ).data?.properties;
+    const branches = entryProperties?.agents?.anyOf ?? [];
 
     expect(branches[0]!.uniqueItems).toBe(true);
     const grouped = branches[1]!;
     expect(grouped.not).toBeDefined();
-    for (const variant of grouped.anyOf as Record<string, unknown>[]) {
-      const groupedProperties = variant.properties as Record<string, Record<string, unknown>>;
-      const disabledItems = groupedProperties.disabled!.items as Record<string, unknown>;
-      expect(disabledItems.enum).toEqual(["opencode", "opencode-v2", "codex"]);
+    for (const variant of grouped.anyOf ?? []) {
+      const disabledItems = variant.properties?.disabled?.items;
+      expect(disabledItems?.enum).toEqual(["opencode", "opencode-v2", "codex"]);
     }
 
-    const executor = entryProperties.executor!;
-    const connections = (executor.properties as Record<string, Record<string, unknown>>)
-      .connections!;
-    expect(connections.minProperties).toBe(1);
-    expect((connections.additionalProperties as Record<string, unknown>).minLength).toBe(1);
-    expect((connections.propertyNames as Record<string, unknown>).pattern).toBe(
-      "^[a-z][a-z0-9_]*$"
-    );
+    const connections = entryProperties?.executor?.properties?.connections;
+    expect(connections?.minProperties).toBe(1);
+    expect(jsonSchemaNodeSchema.safeParse(connections?.additionalProperties).data?.minLength).toBe(1);
+    expect(connections?.propertyNames?.pattern).toBe("^[a-z][a-z0-9_]*$");
   });
 });
 
@@ -387,35 +369,14 @@ describe("Executor authentication declarations", () => {
       })
     ).toThrow(/must be unique/);
 
-    const schema = JSON.parse(
-      await readFile(path.join(process.cwd(), "schemas", "mcp.schema.json"), "utf8")
-    ) as Record<string, unknown>;
-    const server = (schema.properties as Record<string, unknown>).servers as Record<
-      string,
-      unknown
-    >;
-    const branches = (server.additionalProperties as Record<string, unknown>).anyOf as Record<
-      string,
-      unknown
-    >[];
-    const executor = (branches[0]!.properties as Record<string, unknown>).executor as Record<
-      string,
-      unknown
-    >;
-    expect(executor.properties).toHaveProperty("authentication");
-    const methods = (executor.properties as Record<string, unknown>).authentication as Record<
-      string,
-      unknown
-    >;
-    const authBranches = (methods.items as Record<string, unknown>).anyOf as Record<
-      string,
-      unknown
-    >[];
-    const oauth = authBranches.find(
-      (branch) =>
-        ((branch.properties as Record<string, Record<string, unknown>>).kind?.const ?? null) ===
-        "oauth2"
-    );
+    const schema = await readGeneratedSchema("mcp.schema.json");
+    const branches =
+      jsonSchemaNodeSchema.safeParse(schema.properties?.servers?.additionalProperties).data?.anyOf ??
+      [];
+    const executor = branches[0]?.properties?.executor;
+    expect(executor?.properties).toHaveProperty("authentication");
+    const authBranches = executor?.properties?.authentication?.items?.anyOf ?? [];
+    const oauth = authBranches.find((branch) => branch.properties?.kind?.const === "oauth2");
     expect(oauth?.allOf).toHaveLength(2);
   });
 });
