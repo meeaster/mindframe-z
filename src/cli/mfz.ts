@@ -3,9 +3,10 @@ import { mkdir, readFile } from "node:fs/promises";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import YAML from "yaml";
+import { z } from "zod";
 import { pathExists } from "../core/fs-util.js";
 import { generateSchemas } from "../core/generate-schemas.js";
-import { eachUpstream, validateManifests } from "../core/manifests.js";
+import { eachUpstream, machineSchema, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
 import {
   activeOpenCodeSnapshotDir,
@@ -218,13 +219,17 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   if (process.env.MFZ_REFERENCES_DIR) return false;
   try {
-    const parsed = YAML.parse(await readFile(machineConfigPath(home), "utf8")) as unknown;
-    if (parsed && typeof parsed === "object" && "references_dir" in parsed) return false;
+    const parsed = machineSchema.safeParse(
+      YAML.parse(await readFile(machineConfigPath(home), "utf8"))
+    );
+    if (parsed.success && parsed.data.references_dir) return false;
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.
   }
   return pathExists(path.join(home, "references"));
 }
+
+const errorCodeSchema = z.object({ code: z.string() });
 
 async function schemas(options: { root?: string | undefined }): Promise<void> {
   for (const file of await generateSchemas(options.root)) console.log(`wrote\t${file}`);
@@ -283,6 +288,25 @@ function parseHistoryDays(value: string): number {
     throw new Error(`Invalid history window: ${value}; expected a positive whole number of days`);
   }
   return days;
+}
+
+function parseApplyAgent(value: string): ApplyAgent {
+  if (
+    value === "all" ||
+    value === "opencode" ||
+    value === "opencode-v2" ||
+    value === "claude-code" ||
+    value === "codex" ||
+    value === "pi"
+  ) {
+    return value;
+  }
+  throw new Error(`Unknown apply agent: ${value}`);
+}
+
+function parseInfraTarget(value: string): InfraTarget | "all" {
+  if (value === "all" || value === "mise" || value === "dotfiles") return value;
+  throw new Error(`Unknown apply target: ${value}`);
 }
 
 async function contextReport(options: {
@@ -361,8 +385,8 @@ async function opencodeSmoke(options: {
     });
     console.log(result.stdout);
   } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code === "ENOENT") {
+    const parsedError = errorCodeSchema.safeParse(error);
+    if (parsedError.success && parsedError.data.code === "ENOENT") {
       console.log(`${binary} not found; skipped smoke check`);
       return;
     }
@@ -404,8 +428,8 @@ async function opencodeV2Smoke(options: {
     });
     console.log(result.stdout);
   } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code === "ENOENT") {
+    const parsedError = errorCodeSchema.safeParse(error);
+    if (parsedError.success && parsedError.data.code === "ENOENT") {
       binaryFound = false;
       console.log("opencode2 not found; skipped smoke check");
       return;
@@ -491,15 +515,20 @@ program
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option("--agent <agent>", "opencode, opencode-v2, claude-code, codex, pi, or all", "all")
-  .option("--target <target>", "mise, dotfiles, or all", "all")
+  .option(
+    "--agent <agent>",
+    "opencode, opencode-v2, claude-code, codex, pi, or all",
+    parseApplyAgent,
+    "all"
+  )
+  .option("--target <target>", "mise, dotfiles, or all", parseInfraTarget, "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
   .action(async (options) =>
     applyConfig({
       ...program.opts(),
-      agent: options.agent as ApplyAgent,
-      target: options.target as InfraTarget | "all",
+      agent: options.agent,
+      target: options.target,
       dryRun: options.dryRun,
       noLink: !options.link
     })
@@ -948,7 +977,23 @@ const skills = program
     await runSkillsTui(paths, profile);
   });
 
-const skillTargets = ["opencode", "opencode-v2", "claude-code", "codex"] as const;
+function isAgentName(target: string): target is AgentName {
+  return (
+    target === "opencode" ||
+    target === "opencode-v2" ||
+    target === "claude-code" ||
+    target === "codex" ||
+    target === "pi"
+  );
+}
+
+function isMcpToggleAgent(target: string): target is AgentName {
+  return isAgentName(target) && target !== "opencode-v2" && target !== "pi";
+}
+
+function isMcpStatusAgent(target: string): target is AgentName {
+  return isAgentName(target);
+}
 
 function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget | undefined {
   if (!target) return undefined;
@@ -961,8 +1006,24 @@ function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget |
 
 function parseSkillRenderTarget(target: string | undefined): SkillTarget | undefined {
   if (!target) return undefined;
-  if (skillTargets.includes(target as (typeof skillTargets)[number])) return target as SkillTarget;
+  if (
+    target === "opencode" ||
+    target === "opencode-v2" ||
+    target === "claude-code" ||
+    target === "codex"
+  ) {
+    return target;
+  }
   throw new Error(`Unknown skill target: ${target}`);
+}
+
+function isSkillTarget(target: string): target is SkillTarget {
+  return (
+    target === "opencode" ||
+    target === "opencode-v2" ||
+    target === "claude-code" ||
+    target === "codex"
+  );
 }
 
 function parseSkillAgentOption(agent: string | undefined): SkillTarget | undefined {
@@ -1031,10 +1092,7 @@ skills
       program.opts().profile,
       requestedAgent ? { evaluateAgents: [requestedAgent] } : undefined
     );
-    const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(
-      (target): target is SkillTarget =>
-        skillTargets.includes(target as (typeof skillTargets)[number])
-    );
+    const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(isSkillTarget);
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: targets,
       dryRun: options.dryRun ?? false
@@ -1186,7 +1244,7 @@ async function setMcpEnabled(
   }
   const targets = requestedAgent
     ? [requestedAgent]
-    : (Object.keys(server.agents).filter((target) => target !== "opencode-v2") as AgentName[]);
+    : Object.keys(server.agents).filter(isMcpToggleAgent);
   if (targets.length === 0) {
     throw new Error("OpenCode V2 project MCP toggles are not supported");
   }
@@ -1219,7 +1277,7 @@ async function printMcpStatus(): Promise<void> {
       console.log(`${server.name}\tshared\texecutor`);
     }
     if (!server.agents) continue;
-    for (const target of Object.keys(server.agents) as AgentName[]) {
+    for (const target of Object.keys(server.agents).filter(isMcpStatusAgent)) {
       const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
       const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};
       const marker = server.name in overrides ? "\toverridden" : "";

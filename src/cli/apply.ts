@@ -2,6 +2,7 @@ import * as readline from "node:readline/promises";
 import path from "node:path";
 import { unlink } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
+import { z } from "zod";
 import {
   executorPlanSummary,
   hasManagedExecutorState,
@@ -135,9 +136,7 @@ async function applyRenderedTarget(
   if (result.cliPlugins) {
     const exists = await pathExists(result.cliPlugins.path);
     const registry = await readJsonObject(result.cliPlugins.registryPath);
-    const previousEntries = Array.isArray(registry.entries)
-      ? registry.entries.filter((entry): entry is string => typeof entry === "string")
-      : [];
+    const previousEntries = z.array(z.string()).safeParse(registry.entries).data ?? [];
     if (exists || result.cliPlugins.entries.length > 0) {
       const cli = await readJsonObject(result.cliPlugins.path);
       const merged = mergeOpenCodeV2CliPlugins(
