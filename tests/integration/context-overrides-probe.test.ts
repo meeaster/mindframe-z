@@ -2,8 +2,12 @@ import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises
 import { createServer } from "node:http";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { cli, makeTempDir, setupIntegrationFixture } from "./support.js";
+
+const JsonRpcRequest = z.object({ id: z.number().optional(), method: z.string().optional() });
+const Address = z.object({ port: z.number() });
 
 async function configureLocalProbe(root: string, script: string): Promise<void> {
   await appendFile(
@@ -198,7 +202,9 @@ describe("context overrides and MCP probes", () => {
     );
     expect(probeResult.stdout).toContain(`Context | personal | ${inspectedDirectory}`);
     expect(probeResult.stdout).not.toContain("MCP probes");
-    expect(probeResult.stdout).toContain("MCP servers (1 enabled; 1 disabled)");
+    expect(probeResult.stdout).toContain(
+      "MCP schema inventory (1 enabled; 1 disabled | loading unknown; excluded from Per request)"
+    );
     expect(probeResult.stdout).toContain(
       "probe-server  enabled | 1 tool | schemas 139 chars (~35); instructions 26 chars (~7)"
     );
@@ -240,10 +246,7 @@ describe("context overrides and MCP probes", () => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-          id?: number;
-          method?: string;
-        };
+        const body = JsonRpcRequest.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         methods.push(body.method ?? "");
         if (body.method === "notifications/initialized") {
           response.statusCode = 204;
@@ -281,12 +284,16 @@ describe("context overrides and MCP probes", () => {
       server.listen(0, "127.0.0.1", resolve);
     });
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("HTTP fixture did not bind");
+    const addressInfo = Address.safeParse(address);
+    if (!addressInfo.success) throw new Error("HTTP fixture did not bind");
     const catalogPath = path.join(root, "catalog", "mcp.yml");
     const catalog = await readFile(catalogPath, "utf8");
     await writeFile(
       catalogPath,
-      catalog.replace("https://mcp.context7.com/mcp", `http://127.0.0.1:${address.port}/mcp`),
+      catalog.replace(
+        "https://mcp.context7.com/mcp",
+        `http://127.0.0.1:${addressInfo.data.port}/mcp`
+      ),
       "utf8"
     );
 
@@ -331,12 +338,16 @@ describe("context overrides and MCP probes", () => {
       server.listen(0, "127.0.0.1", resolve);
     });
     const address = server.address();
-    if (!address || typeof address === "string") throw new Error("HTTP fixture did not bind");
+    const addressInfo = Address.safeParse(address);
+    if (!addressInfo.success) throw new Error("HTTP fixture did not bind");
     const catalogPath = path.join(fixture.root, "catalog", "mcp.yml");
     const catalog = await readFile(catalogPath, "utf8");
     await writeFile(
       catalogPath,
-      catalog.replace("https://mcp.context7.com/mcp", `http://127.0.0.1:${address.port}/mcp`),
+      catalog.replace(
+        "https://mcp.context7.com/mcp",
+        `http://127.0.0.1:${addressInfo.data.port}/mcp`
+      ),
       "utf8"
     );
     try {
@@ -349,7 +360,6 @@ describe("context overrides and MCP probes", () => {
         undefined,
         fixture.root
       );
-      expect(result.stdout).toContain("MCP servers (1 enabled)");
       expect(result.stdout).toContain(
         "MCP schema inventory (1 enabled; 1 disabled | loading unknown; excluded from Per request)"
       );

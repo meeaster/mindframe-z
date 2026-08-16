@@ -1,8 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "smol-toml";
+import { z } from "zod";
 import { beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, parseToml, setupIntegrationFixture } from "./support.js";
+
+const CodexConfig = z.object({
+  default_permissions: z.string().optional(),
+  permissions: z.object({ mfz: z.object({ filesystem: z.record(z.string(), z.string()) }) })
+});
 
 // Codex has no per-path "ask" filesystem level, so the renderer collapses each
 // extra folder's mfz read/edit pair into one of deny/read/write. The apply suite
@@ -59,12 +64,10 @@ describe("codex extra-folder permission translation", () => {
   it("maps denied folders to deny and ask-editable folders to read", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
-    const config = parse(
+    const config = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as {
-      default_permissions?: string;
-      permissions: { mfz: { filesystem: Record<string, string> } };
-    };
+    );
 
     // A generated permission profile is only named when filesystem rules exist.
     expect(config.default_permissions).toBe("mfz");

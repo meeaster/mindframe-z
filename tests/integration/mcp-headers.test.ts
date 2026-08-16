@@ -1,8 +1,29 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "smol-toml";
+import { z } from "zod";
 import { beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, parseJson, parseToml, setupIntegrationFixture } from "./support.js";
+
+const OpenCodeConfig = z.object({
+  mcp: z.record(z.string(), z.object({ headers: z.record(z.string(), z.string()).optional() }))
+});
+const ClaudeMcp = z
+  .object({
+    exa: z.object({ type: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) })
+  })
+  .passthrough();
+const CodexConfig = z.object({
+  mcp_servers: z
+    .object({
+      exa: z.object({
+        url: z.string(),
+        enabled: z.boolean(),
+        http_headers: z.record(z.string(), z.string()),
+        env_http_headers: z.record(z.string(), z.string())
+      })
+    })
+    .passthrough()
+});
 
 // The `{env:NAME}` catalog token has one meaning and three renderings: OpenCode
 // resolves the token itself, Claude wants `${NAME}`, and Codex wants the bare
@@ -60,9 +81,10 @@ describe("mcp remote header rendering", () => {
   });
 
   it("passes the env token through to OpenCode verbatim", async () => {
-    const config = JSON.parse(
+    const config = parseJson(
+      OpenCodeConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { mcp: Record<string, { headers?: Record<string, string> }> };
+    );
 
     expect(config.mcp.exa?.headers).toEqual({
       "x-api-key": "{env:EXA_API_KEY}",
@@ -71,9 +93,10 @@ describe("mcp remote header rendering", () => {
   });
 
   it("rewrites the env token to shell expansion for Claude", async () => {
-    const mcp = JSON.parse(
+    const mcp = parseJson(
+      ClaudeMcp,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
-    ) as Record<string, { type?: string; url?: string; headers?: Record<string, string> }>;
+    );
 
     expect(mcp.exa).toEqual({
       type: "http",
@@ -86,9 +109,10 @@ describe("mcp remote header rendering", () => {
   });
 
   it("splits literal and env headers into separate Codex tables", async () => {
-    const config = parse(
+    const config = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as { mcp_servers: Record<string, unknown> };
+    );
 
     expect(config.mcp_servers.exa).toEqual({
       url: "https://mcp.exa.invalid/mcp",

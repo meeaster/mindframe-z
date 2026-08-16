@@ -1,7 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
+
+const ClaudePermissions = z.object({
+  permissions: z.object({ allow: z.array(z.string()), deny: z.array(z.string()) })
+});
 
 describe("refs integration", () => {
   let root: string;
@@ -27,10 +32,10 @@ describe("refs integration", () => {
     );
     expect(opencode).toContain(`${refsAbs}/**`);
 
-    const settings = JSON.parse(
+    const perms = parseJson(
+      ClaudePermissions,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
-    const perms = settings.permissions as { allow?: string[]; deny?: string[] };
+    ).permissions;
     expect(perms.allow).toContain(`Read(/${refsAbs}/**)`);
     expect(perms.deny).toContain(`Edit(/${refsAbs}/**)`);
   });

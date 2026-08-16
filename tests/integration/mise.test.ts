@@ -1,7 +1,10 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
+
+const Ownership = z.object({ targets: z.record(z.string(), z.object({}).passthrough()) });
 
 describe("mise integration", () => {
   let root: string;
@@ -20,19 +23,29 @@ describe("mise integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
     expect(result.stdout).toContain("rendered");
 
-    const ownership = JSON.parse(
-      await readFile(path.join(home, ".mindframe-z", "configs", "personal", ".mfz-owned.json"), "utf8")
-    ) as { targets: Record<string, unknown> };
+    const ownership = parseJson(
+      Ownership,
+      await readFile(
+        path.join(home, ".mindframe-z", "configs", "personal", ".mfz-owned.json"),
+        "utf8"
+      )
+    );
     expect(ownership.targets).toHaveProperty("mise");
-    await expect(access(path.join(home, ".config", "mise", ".mfz-owned.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      access(path.join(home, ".config", "mise", ".mfz-owned.json"))
+    ).rejects.toMatchObject({ code: "ENOENT" });
 
     const mise = await readFile(configsPath(home, "personal", "mise", "10-base.toml"), "utf8");
     expect(mise).toContain('jq = "latest"');
     expect(mise).toContain('node = "24"');
     expect(mise).toContain("[settings]");
     expect(mise).toContain('minimum_release_age = "3d"');
-    await expect(access(path.join(home, ".config", "mise", "conf.d", "10-base.toml"))).resolves.toBeUndefined();
-    await expect(access(path.join(home, ".config", "mise", "10-base.toml"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      access(path.join(home, ".config", "mise", "conf.d", "10-base.toml"))
+    ).resolves.toBeUndefined();
+    await expect(access(path.join(home, ".config", "mise", "10-base.toml"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
   });
 
   it("keeps each layer as an exact native fragment", async () => {
@@ -66,8 +79,13 @@ describe("mise integration", () => {
     await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
     const base = await readFile(configsPath(home, "personal", "mise", "10-base.toml"), "utf8");
-    const personal = await readFile(configsPath(home, "personal", "mise", "20-personal.toml"), "utf8");
-    expect(base).toBe('[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n');
+    const personal = await readFile(
+      configsPath(home, "personal", "mise", "20-personal.toml"),
+      "utf8"
+    );
+    expect(base).toBe(
+      '[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n'
+    );
     expect(personal).toBe('[bootstrap.packages]\n"apt:jq" = "latest"\n');
   });
 
@@ -81,8 +99,15 @@ describe("mise integration", () => {
     await mkdir(path.dirname(task), { recursive: true });
     await writeFile(task, '[check]\ndescription = "Check the tree"\nrun = "true"\n', "utf8");
     await cli("mfz", root, home, ["apply", "--target", "mise"]);
-    expect(await readFile(configsPath(home, "personal", "mise", "tasks", "personal", "check.toml"), "utf8")).toContain("Check the tree");
-    expect(await readFile(path.join(home, ".config", "mise", "tasks", "personal", "check.toml"), "utf8")).toContain("run = \"true\"");
+    expect(
+      await readFile(
+        configsPath(home, "personal", "mise", "tasks", "personal", "check.toml"),
+        "utf8"
+      )
+    ).toContain("Check the tree");
+    expect(
+      await readFile(path.join(home, ".config", "mise", "tasks", "personal", "check.toml"), "utf8")
+    ).toContain('run = "true"');
   });
 
   it("does not promote Mise edits through sync", async () => {

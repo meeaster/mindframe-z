@@ -1,7 +1,10 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
+
+const PluginConfig = z.object({ plugin: z.array(z.string()) });
 
 describe("opencode commands integration", () => {
   let root: string;
@@ -111,9 +114,10 @@ describe("opencode commands integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    const config = JSON.parse(
+    const config = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { plugin: string[] };
+    );
     expect(config.plugin).toEqual([
       `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "server", "index.mts")}`
     ]);
@@ -162,12 +166,14 @@ describe("opencode commands integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const pluginDirUrl = `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "combined")}`;
-    const config = JSON.parse(
+    const config = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { plugin: string[] };
-    const tui = JSON.parse(
+    );
+    const tui = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
-    ) as { plugin: string[] };
+    );
 
     expect(config.plugin).toEqual([pluginDirUrl]);
     expect(tui.plugin).toEqual([pluginDirUrl]);
@@ -212,9 +218,10 @@ describe("opencode commands integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    const config = JSON.parse(
+    const config = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { plugin: string[] };
+    );
     expect(config.plugin).toEqual([
       `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "single.mjs")}`
     ]);
@@ -249,9 +256,10 @@ describe("opencode commands integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const managedPlugins = path.join(home, ".config", "opencode", "plugins", "mindframe-z");
-    const config = JSON.parse(
+    const config = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { plugin: string[] };
+    );
     expect([...config.plugin].sort()).toEqual(
       [
         `file://${path.join(managedPlugins, "bundled", "index.ts")}`,
@@ -263,9 +271,10 @@ describe("opencode commands integration", () => {
       "export default {}\n"
     );
 
-    const tui = JSON.parse(
+    const tui = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
-    ) as { plugin: string[] };
+    );
     expect(tui.plugin).toEqual([]);
   });
 
@@ -279,9 +288,10 @@ describe("opencode commands integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    const config = JSON.parse(
+    const config = parseJson(
+      PluginConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { plugin: string[] };
+    );
     expect(config.plugin).toEqual([]);
   });
 

@@ -219,10 +219,10 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   if (process.env.MFZ_REFERENCES_DIR) return false;
   try {
-    const parsed = machineSchema.safeParse(
-      YAML.parse(await readFile(machineConfigPath(home), "utf8"))
-    );
-    if (parsed.success && parsed.data.references_dir) return false;
+    const source = YAML.parse(await readFile(machineConfigPath(home), "utf8"));
+    const parsed = machineSchema.safeParse(source);
+    const declared = z.object({ references_dir: z.string().optional() }).safeParse(source);
+    if (parsed.success && declared.success && declared.data.references_dir) return false;
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.
   }

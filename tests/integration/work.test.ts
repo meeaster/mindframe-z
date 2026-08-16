@@ -1,10 +1,50 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, parseJson, setupIntegrationFixture } from "./support.js";
 
-function json(stdout: string): Record<string, any> {
-  return JSON.parse(stdout) as Record<string, any>;
+const WorkJson = z
+  .object({
+    ok: z.boolean().optional(),
+    unit: z
+      .union([
+        z.string(),
+        z.object({
+          phase_history: z.array(z.object({ phase: z.string() })),
+          slug: z.string().optional(),
+          phase: z.string().optional()
+        })
+      ])
+      .optional(),
+    files: z.object({ orientation: z.string() }).optional(),
+    status: z
+      .object({
+        valid: z.boolean(),
+        synchronized: z.boolean(),
+        orientation: z.object({ state: z.string() }),
+        context_map: z.object({ state: z.string() })
+      })
+      .optional(),
+    context: z
+      .object({
+        bound: z.boolean(),
+        session: z.object({ source: z.string(), id: z.string() }).optional(),
+        freshness: z.string().optional(),
+        unit: z.object({ slug: z.string(), phase: z.string() }).optional(),
+        pending_orientation: z.union([z.object({ revision: z.number() }), z.null()]).optional()
+      })
+      .optional(),
+    error: z.object({ message: z.string() }).optional(),
+    checkpoints: z.array(z.object({}).passthrough()).optional(),
+    receipts: z
+      .array(z.object({ reminder: z.string(), orientation: z.string(), outcome: z.string() }))
+      .optional()
+  })
+  .passthrough();
+
+function json(stdout: string) {
+  return parseJson(WorkJson, stdout);
 }
 
 async function authorWorkUnit(
@@ -78,7 +118,7 @@ describe("work commands", () => {
       "passive-thread",
       "--json"
     ]);
-    expect(json(create.stdout).files.orientation).toMatch(/orientation\.md$/);
+    expect(json(create.stdout).files?.orientation).toMatch(/orientation\.md$/);
     const instructions = await cli("mfz", root, home, ["work", "instructions", "update", "alpha"]);
     expect(instructions.stdout).toContain("Required orientation sections:");
     const checkpointInstructions = await cli("mfz", root, home, [
@@ -177,7 +217,10 @@ describe("work commands", () => {
       "--json"
     ]);
     expect(
-      json(reversed.stdout).unit.phase_history.map((entry: { phase: string }) => entry.phase)
+      z
+        .object({ phase_history: z.array(z.object({ phase: z.string() })) })
+        .parse(json(reversed.stdout).unit)
+        .phase_history.map((entry) => entry.phase)
     ).toEqual(["design", "implement", "design"]);
 
     const checkpointDirectory = path.join(
@@ -214,7 +257,9 @@ Completed compaction summary.
       "opencode:session-a",
       "--json"
     ]);
-    expect(json(context.stdout).context.unit.slug).toBe("beta");
+    expect(z.object({ slug: z.string() }).parse(json(context.stdout).context?.unit).slug).toBe(
+      "beta"
+    );
   }, 30_000);
 
   it("records exact delivery receipts and makes successful delivery fresh", async () => {
@@ -246,7 +291,7 @@ Completed compaction summary.
     ]);
 
     const receipts = await cli("mfz", root, home, ["work", "receipts", "receipt-unit", "--json"]);
-    expect(json(receipts.stdout).receipts[0]).toMatchObject({
+    expect(json(receipts.stdout).receipts?.[0]).toMatchObject({
       reminder: "Exact compact reminder.",
       orientation: "Exact orientation.",
       outcome: "delivered"

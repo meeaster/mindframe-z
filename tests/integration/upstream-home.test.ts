@@ -1,8 +1,11 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { cli, configsPath, makeTempDir, writeFixture } from "./support.js";
+import { cli, configsPath, makeTempDir, parseJson, writeFixture } from "./support.js";
+
+const OpenCodeConfig = z.object({ small_model: z.string().optional() }).passthrough();
 
 async function git(root: string, args: string[]) {
   return execa("git", args, { cwd: root });
@@ -213,7 +216,7 @@ describe("upstream home integration", () => {
 
     await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
     const opencodePath = configsPath(home, "work", "opencode", "opencode.jsonc");
-    const opencode = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    const opencode = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     opencode.small_model = "test/upstream-small";
     await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
 

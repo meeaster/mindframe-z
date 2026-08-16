@@ -1,8 +1,21 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { z } from "zod";
 import { beforeEach, describe, expect, it } from "vitest";
-import { cli, setupIntegrationFixture } from "./support.js";
+import { cli, parseJson, setupIntegrationFixture } from "./support.js";
+
+const Overrides = z.object({
+  projects: z
+    .record(
+      z.string(),
+      z.object({
+        opencode: z.object({ mcp: z.record(z.string(), z.boolean()) }).optional(),
+        codex: z.object({ mcp: z.record(z.string(), z.boolean()) }).optional()
+      })
+    )
+    .optional()
+});
 
 describe("mcp toggle integration", () => {
   let root: string;
@@ -24,11 +37,10 @@ describe("mcp toggle integration", () => {
       root
     );
 
-    const store = JSON.parse(
+    const store = parseJson(
+      Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as {
-      projects?: Record<string, { opencode?: { mcp?: Record<string, boolean> } }>;
-    };
+    );
     expect(store.projects?.[root]?.opencode?.mcp).toEqual({ context7: false });
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
@@ -64,11 +76,10 @@ describe("mcp toggle integration", () => {
       root
     );
 
-    const store = JSON.parse(
+    const store = parseJson(
+      Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
-    ) as {
-      projects?: Record<string, { codex?: { mcp?: Record<string, boolean> } }>;
-    };
+    );
     expect(store.projects?.[root]?.codex?.mcp).toEqual({ context7: false });
   });
 

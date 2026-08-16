@@ -3,9 +3,19 @@ import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { execa } from "execa";
+import { parse } from "smol-toml";
+import { z } from "zod";
 import type { RuntimePaths } from "../../src/core/paths.js";
 
 export const projectRoot = path.resolve(import.meta.dirname, "../..");
+
+export function parseJson<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
+  return schema.parse(JSON.parse(source));
+}
+
+export function parseToml<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
+  return schema.parse(parse(source));
+}
 
 export async function makeTempDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "mindframe-z-test-"));
@@ -227,6 +237,7 @@ export function cli(
       CODEX_HOME: path.join(home, ".codex"),
       PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
       EXECUTOR_DATA_DIR: path.join(home, ".executor"),
+      MFZ_REFERENCES_DIR: undefined,
       ...env
     }
   };
