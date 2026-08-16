@@ -11,8 +11,119 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
+import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+
+const JsonObject = z.object({}).passthrough();
+const McpEntry = z
+  .object({
+    type: z.string().optional(),
+    url: z.string().optional(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    env: z.record(z.string(), z.string()).optional()
+  })
+  .passthrough();
+const McpMap = z.record(z.string(), McpEntry);
+const OpenCodeConfig = z
+  .object({
+    model: z.string().optional(),
+    small_model: z.string().optional(),
+    plugin: z.unknown().optional(),
+    skills: z.array(z.string()).optional(),
+    mcp: McpMap.optional(),
+    permission: z
+      .object({
+        bash: z.record(z.string(), z.string()).optional(),
+        edit: z.record(z.string(), z.string()).optional(),
+        external_directory: z.record(z.string(), z.string()).optional(),
+        skill: z.record(z.string(), z.string()).optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
+const OpenCodeMcpConfig = OpenCodeConfig.extend({
+  mcp: z.object({ servers: McpMap }).passthrough()
+});
+const OpenCodePermissionConfig = OpenCodeConfig.extend({
+  permission: z
+    .object({
+      bash: z.record(z.string(), z.string()),
+      edit: z.record(z.string(), z.string()),
+      external_directory: z.record(z.string(), z.string()).optional()
+    })
+    .passthrough()
+});
+const OpenCodeFolderConfig = OpenCodeConfig.extend({
+  permission: z
+    .object({
+      external_directory: z.record(z.string(), z.string()),
+      edit: z.record(z.string(), z.string())
+    })
+    .passthrough()
+});
+const ClaudeSettings = z
+  .object({
+    model: z.string().optional(),
+    includeGitInstructions: z.boolean().optional(),
+    additionalDirectories: z.array(z.string()).optional(),
+    permissions: z
+      .object({ allow: z.array(z.string()).optional(), deny: z.array(z.string()).optional() })
+      .passthrough()
+      .optional(),
+    env: z.record(z.string(), z.string()).optional()
+  })
+  .passthrough();
+const ClaudeJson = z
+  .object({
+    installMethod: z.string().optional(),
+    mcpServers: McpMap.optional(),
+    projects: z.record(z.string(), JsonObject).optional()
+  })
+  .passthrough();
+const CodexConfig = z
+  .object({
+    model: z.string().optional(),
+    plugins: z.record(z.string(), JsonObject).optional(),
+    mcp_servers: z.record(z.string(), JsonObject).optional(),
+    default_permissions: z.string().optional(),
+    permissions: JsonObject.optional(),
+    skills: z
+      .object({ config: z.array(z.object({ path: z.string(), enabled: z.boolean() })).optional() })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
+const CodexSecuredConfig = CodexConfig.extend({
+  mcp_servers: z.object({ secured: JsonObject }).passthrough()
+});
+const ClaudeSecuredMcp = z
+  .object({ secured: z.object({ headers: z.record(z.string(), z.string()) }).passthrough() })
+  .passthrough();
+const PiSettings = z
+  .object({
+    theme: z.string().optional(),
+    defaultProvider: z.string().optional(),
+    defaultModel: z.string().optional(),
+    subagents: JsonObject.optional()
+  })
+  .passthrough();
+const SmokeCapture = z.object({
+  argv: z.array(z.string()),
+  cwd: z.string(),
+  env: z.record(z.string(), z.string())
+});
+
+function parseJson<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
+  return schema.parse(JSON.parse(source));
+}
+
+function parseToml<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
+  return schema.parse(parse(source));
+}
 
 describe("apply integration", () => {
   let root: string;
@@ -65,9 +176,10 @@ describe("apply integration", () => {
     const claude = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
     expect(claude).toContain("@" + configsPath(home, "personal", "AGENTS.md"));
 
-    const claudeMcp = JSON.parse(
+    const claudeMcp = parseJson(
+      McpMap,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(claudeMcp).toMatchObject({
       context7: { type: "http", url: "https://mcp.context7.com/mcp" },
       "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
@@ -85,9 +197,10 @@ describe("apply integration", () => {
     );
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
 
-    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
-      mcpServers?: Record<string, unknown>;
-    };
+    const localClaudeJson = parseJson(
+      ClaudeJson,
+      await readFile(path.join(home, ".claude.json"), "utf8")
+    );
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
   });
 
@@ -124,8 +237,8 @@ describe("apply integration", () => {
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
     const configPath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
-    const config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
-    const mcp = config.mcp as { servers: Record<string, Record<string, unknown>> };
+    const config = parseJson(OpenCodeMcpConfig, await readFile(configPath, "utf8"));
+    const mcp = config.mcp;
 
     expect(result.stderr).not.toContain("OpenCode V1 plugins omitted from OpenCode V2 render");
     expect(config.model).toBe("v2/test-model");
@@ -176,9 +289,7 @@ describe("apply integration", () => {
       .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
       .replace(
         "claude:\n",
-        ["opencode_v2:", "  tui_plugins:", "    - session-cost-tui", "", "claude:", ""].join(
-          "\n"
-        )
+        ["opencode_v2:", "  tui_plugins:", "    - session-cost-tui", "", "claude:", ""].join("\n")
       );
     await writeFile(profilePath, profile, "utf8");
     const cliPath = path.join(home, ".config", "opencode", "cli.json");
@@ -249,11 +360,7 @@ describe("apply integration", () => {
       XDG_STATE_HOME: path.join(home, "v1", "state"),
       XDG_CACHE_HOME: path.join(home, "v1", "cache")
     });
-    const captures = JSON.parse(await readFile(capturePath, "utf8")) as Array<{
-      argv: string[];
-      cwd: string;
-      env: Record<string, string>;
-    }>;
+    const captures = z.array(SmokeCapture).parse(JSON.parse(await readFile(capturePath, "utf8")));
     const capture = captures[0]!;
     const isolated = path.join(home, ".mindframe-z-opencode-v2-smoke");
 
@@ -433,9 +540,7 @@ describe("apply integration", () => {
       configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
-    const config = JSON.parse(opencode) as {
-      permission: { external_directory: Record<string, string>; edit: Record<string, string> };
-    };
+    const config = parseJson(OpenCodeFolderConfig, opencode);
     expect(config.permission.external_directory[`${workPath}/**`]).toBe("allow");
     expect(config.permission.external_directory[`${home}/code/restricted/**`]).toBe("deny");
     expect(config.permission.edit[`${home}/code/restricted/**`]).toBe("deny");
@@ -458,13 +563,14 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
 
-    const settings = JSON.parse(
+    const settings = parseJson(
+      ClaudeSettings,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(settings).toHaveProperty("permissions");
     expect(settings).toHaveProperty("additionalDirectories");
     expect(settings.additionalDirectories).toContain(codePath);
-    expect((settings.permissions as { allow?: string[] }).allow).toContain(`Read(/${codePath}/**)`);
+    expect(settings.permissions?.allow).toContain(`Read(/${codePath}/**)`);
   });
 
   it("renders Codex config and guidance without writing local files in no-link mode", async () => {
@@ -511,9 +617,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
-    const config = parse(
+    const config = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(config.model).toBe("test/codex");
     expect(config.plugins).toEqual({
       "github@openai-curated": { enabled: true, toggleable: false },
@@ -555,9 +662,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
 
-    const config = parse(
+    const config = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(config).not.toHaveProperty("plugins");
   });
 
@@ -592,9 +700,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "pi", "--no-link"]);
 
-    const snapshot = JSON.parse(
+    const snapshot = parseJson(
+      PiSettings,
       await readFile(configsPath(home, "personal", "pi", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(snapshot).toMatchObject({
       theme: "dark",
       defaultProvider: "openai-codex",
@@ -645,9 +754,10 @@ describe("apply integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--agent", "pi"]);
 
     expect(result.stdout).toContain("wrote local");
-    const localSettings = JSON.parse(
+    const localSettings = parseJson(
+      PiSettings,
       await readFile(path.join(home, ".pi", "agent", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(localSettings).toMatchObject({
       theme: "dark",
       keep: true,
@@ -657,19 +767,21 @@ describe("apply integration", () => {
     expect(await readFile(path.join(home, ".pi", "agent", "AGENTS.md"), "utf8")).toContain(
       "# Test Agents"
     );
-    const localSubagentConfig = JSON.parse(
+    const localSubagentConfig = parseJson(
+      z.object({ keepLocal: z.boolean(), toolDescriptionMode: z.string() }),
       await readFile(
         path.join(home, ".pi", "agent", "extensions", "subagent", "config.json"),
         "utf8"
       )
-    ) as Record<string, unknown>;
+    );
     expect(localSubagentConfig).toEqual({ keepLocal: true, toolDescriptionMode: "compact" });
-    const snapshotSubagentConfig = JSON.parse(
+    const snapshotSubagentConfig = parseJson(
+      z.object({ toolDescriptionMode: z.string() }),
       await readFile(
         configsPath(home, "personal", "pi", "extensions", "subagent", "config.json"),
         "utf8"
       )
-    ) as Record<string, unknown>;
+    );
     expect(snapshotSubagentConfig).toEqual({ toolDescriptionMode: "compact" });
   });
 
@@ -693,9 +805,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "codex"]);
 
-    const localConfig = parse(
+    const localConfig = parseToml(
+      CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(localConfig.user_key).toBe("kept");
     expect(localConfig.model).toBe("test/codex");
     expect(await exists(path.join(home, ".codex", "AGENTS.override.md"))).toBe(false);
@@ -731,9 +844,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "codex"]);
 
-    const localConfig = parse(
+    const localConfig = parseToml(
+      CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(localConfig.user_key).toBe("kept");
     expect(localConfig.model).toBe("test/codex");
     expect(localConfig.plugins).toEqual({ "github@openai-curated": { enabled: true } });
@@ -761,9 +875,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "codex"]);
 
-    const localConfig = parse(
+    const localConfig = parseToml(
+      CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(localConfig).not.toHaveProperty("plugins");
   });
 
@@ -915,9 +1030,7 @@ describe("apply integration", () => {
       configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
-    const config = JSON.parse(opencode) as {
-      permission: { bash: Record<string, string>; edit: Record<string, string> };
-    };
+    const config = parseJson(OpenCodePermissionConfig, opencode);
     expect(config.permission.bash["rm *"]).toBe("deny");
     expect(config.permission.edit[`${path.join(home, ".mindframe-z", "references")}/**`]).toBe(
       "deny"
@@ -928,7 +1041,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const opencodePath = configsPath(home, "personal", "opencode", "opencode.jsonc");
-    const opencode = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    const opencode = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     opencode.small_model = "test/small-model";
     await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
 
@@ -944,7 +1057,7 @@ describe("apply integration", () => {
     expect(profileYaml).toContain("small_model: test/small-model");
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
-    const rerendered = JSON.parse(await readFile(opencodePath, "utf8")) as Record<string, unknown>;
+    const rerendered = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     expect(rerendered.small_model).toBe("test/small-model");
   });
 
@@ -990,9 +1103,10 @@ describe("apply integration", () => {
     expect(result.stdout).toContain("wrote local");
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
 
-    const localSettings = JSON.parse(
+    const localSettings = parseJson(
+      ClaudeSettings,
       await readFile(path.join(home, ".claude", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(localSettings).toMatchObject({
       includeGitInstructions: true,
       model: "sonnet",
@@ -1004,9 +1118,10 @@ describe("apply integration", () => {
       }
     });
 
-    const snapshot = JSON.parse(
+    const snapshot = parseJson(
+      ClaudeSettings,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(snapshot).toEqual({
       includeGitInstructions: true,
       permissions: {
@@ -1089,11 +1204,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
-    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
-      installMethod?: string;
-      mcpServers?: Record<string, unknown>;
-      projects?: Record<string, unknown>;
-    };
+    const localClaudeJson = parseJson(
+      ClaudeJson,
+      await readFile(path.join(home, ".claude.json"), "utf8")
+    );
     expect(localClaudeJson.installMethod).toBe("native");
     expect(localClaudeJson.projects).toBeDefined();
     expect(localClaudeJson.mcpServers).toEqual({
@@ -1117,9 +1231,10 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
-    const localClaudeJson = JSON.parse(await readFile(path.join(home, ".claude.json"), "utf8")) as {
-      mcpServers?: Record<string, unknown>;
-    };
+    const localClaudeJson = parseJson(
+      ClaudeJson,
+      await readFile(path.join(home, ".claude.json"), "utf8")
+    );
     expect(localClaudeJson.mcpServers).toMatchObject({
       executor: { type: "stdio", command: "executor" },
       manual: { type: "http", url: "https://manual.invalid" }
@@ -1211,25 +1326,28 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
     // OpenCode passes the {env:NAME} reference through untouched.
-    const opencode = JSON.parse(
+    const opencode = parseJson(
+      OpenCodeConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { mcp: Record<string, unknown> };
+    );
     expect(opencode.mcp).toMatchObject({
       exa: { headers: { Authorization: "{env:EXA_API_KEY}", "X-Client": "literal-value" } }
     });
 
     // Claude rewrites the reference to shell-style ${NAME} interpolation.
-    const claudeMcp = JSON.parse(
+    const claudeMcp = parseJson(
+      McpMap,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
-    ) as Record<string, unknown>;
+    );
     expect(claudeMcp).toMatchObject({
       exa: { headers: { Authorization: "${EXA_API_KEY}", "X-Client": "literal-value" } }
     });
 
     // Codex splits literal headers from env-referenced ones into distinct tables.
-    const codex = parse(
+    const codex = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as { mcp_servers: Record<string, unknown> };
+    );
     expect(codex.mcp_servers).toMatchObject({
       exa: {
         env_http_headers: { Authorization: "EXA_API_KEY" },
@@ -1289,18 +1407,20 @@ describe("apply integration", () => {
 
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
-    const codexConfig = parse(
+    const codexConfig = parseToml(
+      CodexSecuredConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as { mcp_servers: { secured: Record<string, unknown> } };
+    );
     // Codex keeps the env-ref name in env_http_headers and only literals in http_headers.
     expect(codexConfig.mcp_servers.secured.env_http_headers).toEqual({
       Authorization: "SECURED_TOKEN"
     });
     expect(codexConfig.mcp_servers.secured.http_headers).toEqual({ "X-Client": "literal-value" });
 
-    const claudeMcp = JSON.parse(
+    const claudeMcp = parseJson(
+      ClaudeSecuredMcp,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
-    ) as { secured: { headers: Record<string, string> } };
+    );
     // Claude rewrites the env-ref into ${NAME} while passing literals through verbatim.
     expect(claudeMcp.secured.headers).toEqual({
       Authorization: "${SECURED_TOKEN}",
@@ -1410,13 +1530,15 @@ describe("apply integration", () => {
     );
     await cli("mfz", root, home, ["apply", "--agent", "all"]);
 
-    const opencode = JSON.parse(
+    const opencode = parseJson(
+      OpenCodeConfig,
       await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ) as { permission?: { skill?: Record<string, string> } };
+    );
     expect(opencode.permission?.skill?.["local-skill"]).toBe("allow");
-    const codex = parse(
+    const codex = parseToml(
+      CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
-    ) as { skills?: { config?: Array<{ path: string; enabled: boolean }> } };
+    );
     expect(codex.skills?.config).toContainEqual({
       path: path.join(home, ".agents", "skills", "local-skill", "SKILL.md"),
       enabled: false
