@@ -25,6 +25,8 @@ export interface BedrockHostSettings {
   readonly otelHeadersHelper: string | undefined;
 }
 
+export type BedrockContainerEnv = Record<string, string>;
+
 interface RawClaudeSettings {
   env?: Record<string, unknown>;
   awsAuthRefresh?: unknown;
@@ -39,14 +41,14 @@ function stringField(value: unknown): string | undefined {
 // secrets (the endpoint, protocol, and static resource attributes), so they are
 // safe to pass straight through to the container. The per-user identity headers
 // are resolved separately via the helper.
-function extractOtelEnv(env: Record<string, unknown>): Record<string, string> {
-  const otel: Record<string, string> = {};
+function extractOtelEnv(env: Record<string, unknown>) {
+  const entries: Array<readonly [string, string]> = [];
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith("OTEL_") && !key.includes("TELEMETRY")) continue;
     const str = stringField(value);
-    if (str) otel[key] = str;
+    if (str) entries.push([key, str]);
   }
-  return otel;
+  return Object.fromEntries(entries);
 }
 
 export async function readBedrockHostSettings(paths: RuntimePaths): Promise<BedrockHostSettings> {
@@ -144,19 +146,20 @@ export async function resolveOtelHeaders(
 // so company usage monitoring sees thread dispatches too.
 export async function bedrockContainerEnv(
   settings: BedrockHostSettings
-): Promise<Record<string, string>> {
-  const env: Record<string, string> = {
-    CLAUDE_CODE_USE_BEDROCK: "1",
-    AWS_REGION: settings.awsRegion,
-    AWS_PROFILE: settings.awsProfile,
-    // The credential file is mounted at this dir; the agent never gets static keys.
-    AWS_SHARED_CREDENTIALS_FILE: "/home/sandbox/.aws/credentials",
-    AWS_EC2_METADATA_DISABLED: "true",
-    ...settings.otelEnv
-  };
+): Promise<BedrockContainerEnv> {
+  const env = Object.assign(
+    {
+      CLAUDE_CODE_USE_BEDROCK: "1",
+      AWS_REGION: settings.awsRegion,
+      AWS_PROFILE: settings.awsProfile,
+      // The credential file is mounted at this dir; the agent never gets static keys.
+      AWS_SHARED_CREDENTIALS_FILE: "/home/sandbox/.aws/credentials",
+      AWS_EC2_METADATA_DISABLED: "true"
+    },
+    settings.otelEnv
+  );
   const headers = await resolveOtelHeaders(settings);
-  if (headers) env.OTEL_EXPORTER_OTLP_HEADERS = headers;
-  return env;
+  return headers ? { ...env, OTEL_EXPORTER_OTLP_HEADERS: headers } : env;
 }
 
 function extractProfileSection(contents: string, header: string): string | undefined {

@@ -43,11 +43,7 @@ function textPartText(part: unknown): string {
   return "";
 }
 
-function permissionFields(input: unknown): {
-  sessionID: string;
-  tool: string;
-  metadata: unknown;
-} {
+function permissionFields(input: unknown) {
   const value = input as { sessionID?: unknown; tool?: unknown; metadata?: unknown };
   return {
     sessionID: typeof value.sessionID === "string" ? value.sessionID : "unknown",
@@ -65,17 +61,14 @@ const LIFECYCLE_EVENTS = new Set([
   "session.compacted"
 ]);
 
-const LIFECYCLE_HOOK_NAME: Record<
-  string,
-  "SessionStart" | "SessionEnd" | "Stop" | "Notification" | "PreCompact"
-> = {
-  "session.created": "SessionStart",
-  "session.updated": "Notification",
-  "session.deleted": "SessionEnd",
-  "session.idle": "Stop",
-  "session.status": "Notification",
-  "session.compacted": "PreCompact"
-};
+const LIFECYCLE_HOOK_NAME = new Map([
+  ["session.created", "SessionStart"],
+  ["session.updated", "Notification"],
+  ["session.deleted", "SessionEnd"],
+  ["session.idle", "Stop"],
+  ["session.status", "Notification"],
+  ["session.compacted", "PreCompact"]
+]);
 
 function sessionIdFromEvent(event: unknown): string {
   if (typeof event !== "object" || event === null) return "unknown";
@@ -154,7 +147,7 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
     event: async (input) => {
       const type = eventType(input.event);
       if (!type || !LIFECYCLE_EVENTS.has(type)) return;
-      const hookEvent = LIFECYCLE_HOOK_NAME[type];
+      const hookEvent = LIFECYCLE_HOOK_NAME.get(type);
       if (!hookEvent) return;
       await postHook({
         hook_event_name: hookEvent,

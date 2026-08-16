@@ -220,14 +220,14 @@ describe("thread cli", () => {
 
     // Each session's synthesized file carries one Decision; sess-b is timestamped
     // earlier than sess-a so the log can prove it sorts by timestamp, not id order.
-    const timestamps: Record<string, string> = {
-      "sess-a": "2026-01-02 09:00",
-      "sess-b": "2026-01-01 08:00"
-    };
+    const timestamps = new Map([
+      ["sess-a", "2026-01-02 09:00"],
+      ["sess-b", "2026-01-01 08:00"]
+    ]);
     // Each session file is H1 + sections (no frontmatter). TS lifts the title from
     // the H1 and stamps synthesizer from the resolved synthesize ID.
     const synthFile = (id: string) =>
-      `# Session ${id} — Title ${id}\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [${timestamps[id]}] **Choice for ${id}** that wins. (${id} · turn 1)\n`;
+      `# Session ${id} — Title ${id}\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [${timestamps.get(id)}] **Choice for ${id}** that wins. (${id} · turn 1)\n`;
 
     const calls: { role: string; prompt: string; skills: readonly string[] }[] = [];
     const runner: AgentRunner = {

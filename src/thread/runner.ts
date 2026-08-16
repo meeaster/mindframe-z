@@ -154,11 +154,7 @@ export class DockerAgentRunner implements AgentRunner {
   }
 }
 
-export function buildHarnessCommand(request: AgentRunRequest): {
-  tool: "claude" | "opencode";
-  args: string[];
-  env: Record<string, string>;
-} {
+export function buildHarnessCommand(request: AgentRunRequest) {
   if (request.harness === "claude-code") {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", request.model];
     if (request.effort) args.push("--effort", request.effort);

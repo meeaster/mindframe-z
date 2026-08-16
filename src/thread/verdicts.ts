@@ -41,11 +41,16 @@ export type VerdictRow = z.infer<typeof verdictRowSchema>;
 export type VerdictLedger = z.infer<typeof verdictLedgerSchema>;
 export type SweepState = z.infer<typeof sweepStateSchema>;
 
+export interface ParsedSourceQualifiedId {
+  source: ThreadHarness;
+  bareId: string;
+}
+
 export function sourceQualifiedId(source: ThreadHarness, bareId: string): string {
   return `${source}:${bareId}`;
 }
 
-export function parseSourceQualifiedId(id: string): { source: ThreadHarness; bareId: string } {
+export function parseSourceQualifiedId(id: string): ParsedSourceQualifiedId {
   const colon = id.indexOf(":");
   const source = id.slice(0, colon);
   const bareId = id.slice(colon + 1);
