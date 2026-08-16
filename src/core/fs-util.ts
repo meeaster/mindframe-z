@@ -4,7 +4,35 @@ import path from "node:path";
 import { parse as parseJsonc, printParseErrorCode, type ParseError } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 import { jsonObjectSchema, type JsonObject } from "./json.js";
+
+const tomlValueSchema: z.ZodType = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.bigint(),
+    z.boolean(),
+    z.instanceof(Date),
+    z.array(tomlValueSchema),
+    z.record(z.string(), tomlValueSchema)
+  ])
+);
+const tomlObjectSchema = z.record(z.string(), tomlValueSchema);
+type TomlObject = z.infer<typeof tomlObjectSchema>;
+const frontmatterValueSchema: z.ZodType = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.date(),
+    z.array(frontmatterValueSchema),
+    z.record(z.string(), frontmatterValueSchema)
+  ])
+);
+const frontmatterObjectSchema = z.record(z.string(), frontmatterValueSchema);
+type FrontmatterObject = z.infer<typeof frontmatterObjectSchema>;
 
 /**
  * Report whether a path is reachable on disk. This is the canonical async
@@ -35,6 +63,7 @@ export async function readDirEntries(directory: string): Promise<Dirent[]> {
   try {
     return await readdir(directory, { withFileTypes: true });
   } catch (error) {
+    // SAFETY: Node's filesystem promise rejects with an ErrnoException carrying code.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
@@ -53,6 +82,7 @@ export async function readTextFile(file: string): Promise<string | undefined> {
   try {
     return await readFile(file, "utf8");
   } catch (error) {
+    // SAFETY: Node's filesystem promise rejects with an ErrnoException carrying code.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
@@ -76,13 +106,13 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
  * line, and a bare array all read as "not a record" wherever the scan happens
  * instead of failing the whole read. Records keep their file order.
  */
-export function parseJsonlObjects(content: string): Record<string, unknown>[] {
-  const records: Record<string, unknown>[] = [];
+export function parseJsonlObjects(content: string): JsonObject[] {
+  const records: JsonObject[] = [];
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
     try {
-      const parsed: unknown = JSON.parse(line);
-      if (isPlainObject(parsed)) records.push(parsed);
+      const parsed = jsonObjectSchema.safeParse(JSON.parse(line));
+      if (parsed.success) records.push(parsed.data);
     } catch {
       // A truncated or non-JSON line is not a record; keep scanning the rest.
     }
@@ -90,24 +120,23 @@ export function parseJsonlObjects(content: string): Record<string, unknown>[] {
   return records;
 }
 
-async function readObjectFile(
+async function readObjectFile<T>(
   file: string,
   format: string,
-  parse: (content: string) => unknown
-): Promise<Record<string, unknown>> {
+  parse: (content: string) => T,
+  schema: z.ZodType<T>
+): Promise<T> {
   let content: string;
   try {
     content = await readFile(file, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    // SAFETY: Node's filesystem promise rejects with an ErrnoException carrying code.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return schema.parse({});
     throw new Error(`Failed to read ${format} object at ${file}`, { cause: error });
   }
 
   try {
-    const parsed = parse(content);
-    if (!isPlainObject(parsed))
-      throw new Error(`Expected a plain object, received ${typeof parsed}`);
-    return parsed;
+    return schema.parse(parse(content));
   } catch (error) {
     throw new Error(`Failed to parse ${format} object at ${file}`, { cause: error });
   }
@@ -116,33 +145,38 @@ async function readObjectFile(
 /** Read an optional JSON object. Only a missing file defaults to an empty object. */
 export async function readJsonObject(filePath: string): Promise<JsonObject> {
   return jsonObjectSchema.parse(
-    await readObjectFile(filePath, "JSON", (content) => JSON.parse(content) as unknown)
+    await readObjectFile(filePath, "JSON", (content) => JSON.parse(content), jsonObjectSchema)
   );
 }
 
 /** Read an optional JSONC object. Only a missing file defaults to an empty object. */
-export async function readJsoncObject(filePath: string): Promise<Record<string, unknown>> {
-  return readObjectFile(filePath, "JSONC", (content) => {
-    const errors: ParseError[] = [];
-    const parsed = parseJsonc(content, errors, { allowTrailingComma: true }) as unknown;
-    if (errors.length > 0) {
-      throw new Error(errors.map((error) => printParseErrorCode(error.error)).join(", "));
-    }
-    return parsed;
-  });
+export async function readJsoncObject(filePath: string): Promise<JsonObject> {
+  return readObjectFile(
+    filePath,
+    "JSONC",
+    (content) => {
+      const errors: ParseError[] = [];
+      const parsed = parseJsonc(content, errors, { allowTrailingComma: true });
+      if (errors.length > 0) {
+        throw new Error(errors.map((error) => printParseErrorCode(error.error)).join(", "));
+      }
+      return jsonObjectSchema.parse(parsed);
+    },
+    jsonObjectSchema
+  );
 }
 
 /** Parse TOML text into a plain object, defaulting to an empty object when the
  * content is not a table. The TOML counterpart to {@link readJsonObject}'s
  * parse step. */
-export function parseTomlObject(content: string): Record<string, unknown> {
-  const parsed = parseToml(content) as unknown;
-  return isPlainObject(parsed) ? parsed : {};
+export function parseTomlObject(content: string): TomlObject {
+  const parsed = parseToml(content);
+  return tomlObjectSchema.parse(parsed);
 }
 
 /** Read an optional TOML object. Only a missing file defaults to an empty object. */
-export async function readTomlObject(file: string): Promise<Record<string, unknown>> {
-  return readObjectFile(file, "TOML", parseTomlObject);
+export async function readTomlObject(file: string): Promise<TomlObject> {
+  return readObjectFile(file, "TOML", parseTomlObject, tomlObjectSchema);
 }
 
 /**
@@ -154,12 +188,12 @@ export async function readTomlObject(file: string): Promise<Record<string, unkno
  * Malformed YAML inside a well-delimited block still throws; callers that treat
  * an unreadable file as absent catch that themselves.
  */
-export function parseFrontmatter(content: string): Record<string, unknown> {
+export function parseFrontmatter(content: string): FrontmatterObject {
   if (!content.startsWith("---")) return {};
   const end = content.indexOf("\n---", 3);
   if (end < 0) return {};
-  const parsed = parseYaml(content.slice(3, end)) as unknown;
-  return isPlainObject(parsed) ? parsed : {};
+  const parsed = frontmatterObjectSchema.safeParse(parseYaml(content.slice(3, end)));
+  return parsed.success ? parsed.data : {};
 }
 
 /**
@@ -173,7 +207,7 @@ export function parseFrontmatter(content: string): Record<string, unknown> {
  * are deliberately compact, such as the single-line thread lock entry, are
  * serialized at their own call site instead.
  */
-export function jsonFileContent(value: unknown): string {
+export function jsonFileContent<T>(value: T): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
@@ -202,7 +236,7 @@ export async function writeTextFile(file: string, content: string): Promise<void
  * or interrupted `mfz` run either sees the previous file or the complete new
  * one, never a half-written record.
  */
-export async function writeJsonFileAtomic(file: string, value: unknown): Promise<void> {
+export async function writeJsonFileAtomic<T>(file: string, value: T): Promise<void> {
   const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   await writeTextFile(temp, jsonFileContent(value));
   await rename(temp, file);

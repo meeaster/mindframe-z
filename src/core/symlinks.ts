@@ -30,6 +30,7 @@ export async function verifyLink(plan: LinkPlan): Promise<LinkStatus> {
       resolvedTarget: resolved
     };
   } catch (error) {
+    // SAFETY: lstat/readlink reject with an ErrnoException carrying the filesystem error code.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { ...plan, state: "missing", detail: "missing" };
     }

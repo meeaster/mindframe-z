@@ -415,6 +415,13 @@ describe("readTomlObject", () => {
     expect(await readTomlObject(file)).toEqual({ settings: { minimum_release_age: "3d" } });
   });
 
+  it("preserves TOML datetime values", async () => {
+    const parsed = parseTomlObject("created_at = 2026-08-15T12:30:00Z\n");
+
+    expect(parsed.created_at).toBeInstanceOf(Date);
+    expect(parsed.created_at).toEqual(new Date("2026-08-15T12:30:00Z"));
+  });
+
   it("defaults to an empty object when the file is missing", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
     expect(await readTomlObject(path.join(dir, "absent.toml"))).toEqual({});

@@ -34,6 +34,7 @@ async function acquireLock(lockPath: string): Promise<() => Promise<void>> {
       await mkdir(lockPath);
       return () => rm(lockPath, { recursive: true, force: true });
     } catch (error) {
+      // SAFETY: mkdir rejects with an ErrnoException carrying the filesystem error code.
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for upstream checkout lock: ${lockPath}`);

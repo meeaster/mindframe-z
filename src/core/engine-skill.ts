@@ -132,6 +132,7 @@ async function writeTrustedFile(file: string, content: string): Promise<void> {
       throw new Error(`Engine skill path is not a regular file: ${file}`);
     }
   } catch (error) {
+    // SAFETY: lstat rejects with an ErrnoException carrying the filesystem error code.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   await writeFile(file, content, "utf8");
