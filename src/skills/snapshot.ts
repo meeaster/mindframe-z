@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { z } from "zod";
 import {
   materializeEngineSkill,
   materializeReviewSkill,
@@ -29,6 +30,34 @@ import { digestSkillFiles, readSkillFiles, validateSkillRecords } from "./vendor
 import { assertNoSymlinkAncestors } from "./tree.js";
 
 type SkillTarget = Exclude<AgentName, "pi">;
+
+const snapshotManifestSchema = z
+  .object({
+    version: z.literal(1),
+    profile: z.string(),
+    skills: z.array(
+      z
+        .object({
+          name: z.string(),
+          source: z.enum(["local", "vendored", "engine"]),
+          digest: z.string(),
+          targets: z.array(z.enum(["opencode", "opencode-v2", "claude-code", "codex"])),
+          repository: z.string().optional(),
+          ref: z.string().optional(),
+          subtree: z.string().optional(),
+          commit: z.string().optional(),
+          sourceRoot: z.string(),
+          sourcePath: z.string()
+        })
+        .strict()
+    )
+  })
+  .strict();
+
+function errorCode(error: Error): string | undefined {
+  // SAFETY: Node filesystem failures expose their stable errno code on Error objects.
+  return (error as NodeJS.ErrnoException).code;
+}
 
 interface SnapshotSkill {
   name: string;
@@ -119,7 +148,7 @@ async function assertLinkDirectory(directory: string): Promise<void> {
       throw new Error(`Skill link directory is not a real directory: ${directory}`);
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
   }
 }
 
@@ -136,7 +165,7 @@ async function linkStatus(
     const target = await readlink(linkPath);
     return { state: "symlink", target, resolved: path.resolve(path.dirname(linkPath), target) };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { state: "missing" };
+    if (error instanceof Error && errorCode(error) === "ENOENT") return { state: "missing" };
     throw error;
   }
 }
@@ -383,9 +412,9 @@ async function snapshotMatches(
   checkLinks: boolean
 ): Promise<boolean> {
   try {
-    const existing = YAML.parse(
-      await readFile(snapshotManifestPath(snapshot), "utf8")
-    ) as SnapshotManifest;
+    const existing = snapshotManifestSchema.parse(
+      YAML.parse(await readFile(snapshotManifestPath(snapshot), "utf8"))
+    );
     if (JSON.stringify(existing) !== JSON.stringify(manifest)) return false;
     for (const skill of manifest.skills) {
       const files = await readSkillFiles(path.join(snapshot, skill.name));
@@ -393,7 +422,7 @@ async function snapshotMatches(
     }
     return !checkLinks || (await linksMatch(paths, links, directories));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if (error instanceof Error && errorCode(error) === "ENOENT") return false;
     throw error;
   }
 }
@@ -524,7 +553,7 @@ async function syncSkillSnapshotGroup(
     try {
       await rename(snapshot, backup);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
     }
     await rename(temporary, snapshot);
     if (options.link !== false) await reconcileLinks(paths, prepared.links, directories);

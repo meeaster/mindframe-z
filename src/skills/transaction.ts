@@ -1,21 +1,28 @@
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { z } from "zod";
 
-interface TransactionItem {
-  destination: string;
-  temporary: string;
-  backup: string;
-  recursive: boolean;
-  hadDestination: boolean;
-  oldMoved: boolean;
-  newMoved: boolean;
-}
+const transactionItemSchema = z
+  .object({
+    destination: z.string(),
+    temporary: z.string(),
+    backup: z.string(),
+    recursive: z.boolean(),
+    hadDestination: z.boolean(),
+    oldMoved: z.boolean(),
+    newMoved: z.boolean()
+  })
+  .strict();
+const transactionJournalSchema = z
+  .object({ version: z.literal(1), committed: z.boolean(), items: z.array(transactionItemSchema) })
+  .strict();
+type TransactionItem = z.infer<typeof transactionItemSchema>;
+type TransactionJournal = z.infer<typeof transactionJournalSchema>;
 
-interface TransactionJournal {
-  version: 1;
-  committed: boolean;
-  items: TransactionItem[];
+function errorCode(error: Error): string | undefined {
+  // SAFETY: Node filesystem failures expose their stable errno code on Error objects.
+  return (error as NodeJS.ErrnoException).code;
 }
 
 const transactionName = ".mfz-vendor-promotion.yml";
@@ -27,19 +34,8 @@ function pathWithin(root: string, value: string): boolean {
 }
 
 function validateJournal(root: string, journal: TransactionJournal): void {
-  if (
-    journal.version !== 1 ||
-    typeof journal.committed !== "boolean" ||
-    !Array.isArray(journal.items)
-  ) {
-    throw new Error(`Invalid vendored promotion journal: ${journalPath(root)}`);
-  }
   for (const item of journal.items) {
     if (
-      !item ||
-      typeof item.destination !== "string" ||
-      typeof item.temporary !== "string" ||
-      typeof item.backup !== "string" ||
       !path.isAbsolute(item.destination) ||
       !path.isAbsolute(item.temporary) ||
       !path.isAbsolute(item.backup) ||
@@ -71,7 +67,7 @@ async function exists(file: string): Promise<boolean> {
     await lstat(file);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if (error instanceof Error && errorCode(error) === "ENOENT") return false;
     throw error;
   }
 }
@@ -108,9 +104,9 @@ async function restore(journal: TransactionJournal, root: string): Promise<void>
 export async function recoverVendoredPromotion(root: string): Promise<void> {
   let journal: TransactionJournal;
   try {
-    journal = YAML.parse(await readFile(journalPath(root), "utf8")) as TransactionJournal;
+    journal = transactionJournalSchema.parse(YAML.parse(await readFile(journalPath(root), "utf8")));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (error instanceof Error && errorCode(error) === "ENOENT") return;
     throw new Error(
       `Invalid vendored promotion journal: ${error instanceof Error ? error.message : String(error)}`
     );
@@ -132,7 +128,7 @@ export async function commitVendoredPromotion(
   try {
     await mkdir(lockPath(root));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+    if (error instanceof Error && errorCode(error) === "EEXIST") {
       throw new Error(`Another vendored promotion is active for ${root}`);
     }
     throw error;
@@ -159,7 +155,7 @@ export async function commitVendoredPromotion(
         await rename(item.destination, item.backup);
         item.oldMoved = true;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
       }
       await writeJournal(root, journal);
       await rename(item.temporary, item.destination);

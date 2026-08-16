@@ -182,7 +182,7 @@ describe("skill CLI integration", () => {
       outsideRepo
     );
 
-    await cli("mfz", root, home, ["apply", "--target", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     const globalConfigPath = path.join(home, ".config", "opencode", "opencode.jsonc");
     const updated = JSON.parse(await readFile(globalConfigPath, "utf8")) as {
       permission?: { skill?: Record<string, string> };

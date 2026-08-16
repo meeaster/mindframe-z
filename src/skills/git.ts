@@ -18,6 +18,11 @@ import { skillCacheRoot, type RuntimePaths } from "../core/paths.js";
 const execFile = promisify(execFileCallback);
 const fullCommitPattern = /^[0-9a-f]{40}$/;
 
+function errorCode(error: Error): string | undefined {
+  // SAFETY: Node filesystem failures expose their stable errno code on Error objects.
+  return (error as NodeJS.ErrnoException).code;
+}
+
 export function normalizedRepository(value: string): string {
   if (value.trim() !== value || /\s/u.test(value)) {
     throw new Error(`Repository must not contain whitespace: ${value}`);
@@ -109,7 +114,7 @@ async function cacheIsSafe(cache: string): Promise<boolean> {
   try {
     stat = await lstat(cache);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    if (error instanceof Error && errorCode(error) === "ENOENT") return true;
     if (error instanceof Error && error.message.startsWith("Unsafe Git cache path:")) throw error;
     return false;
   }
@@ -123,7 +128,7 @@ async function cacheIsSafe(cache: string): Promise<boolean> {
     const config = await readFile(path.join(cache, "config"), "utf8");
     return safeCacheConfig(config);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if (error instanceof Error && errorCode(error) === "ENOENT") return false;
     if (error instanceof Error && error.message.startsWith("Unsafe Git cache path:")) throw error;
     return false;
   }

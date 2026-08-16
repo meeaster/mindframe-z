@@ -2,9 +2,17 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { z } from "zod";
 
 export const MAX_SKILL_FILES = 4096;
 export const MAX_SKILL_BYTES = 32 * 1024 * 1024;
+const skillFrontmatterSchema = z.object({ name: z.string(), description: z.string() }).loose();
+const frontmatterMappingSchema = z.object({}).loose();
+
+function isErrno(error: Error, code: string): boolean {
+  // SAFETY: Node filesystem failures expose their stable errno code on Error objects.
+  return (error as NodeJS.ErrnoException).code === code;
+}
 
 export interface SkillFileRecord {
   path: string;
@@ -104,7 +112,7 @@ export async function assertNoSymlinkAncestors(boundary: string, target: string)
     if ((await lstat(root)).isSymbolicLink())
       throw new Error(`Managed path contains a symbolic link: ${root}`);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (error instanceof Error && isErrno(error, "ENOENT")) return;
     throw error;
   }
   let current = root;
@@ -115,7 +123,7 @@ export async function assertNoSymlinkAncestors(boundary: string, target: string)
       if (stat.isSymbolicLink())
         throw new Error(`Managed path contains a symbolic link: ${current}`);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      if (error instanceof Error && isErrno(error, "ENOENT")) return;
       throw error;
     }
   }
@@ -194,14 +202,12 @@ export function parseSkillFrontmatter(bytes: Buffer, name: string): void {
   if (!raw.startsWith("---\n")) throw new Error(`${name} must start with YAML frontmatter`);
   const end = raw.indexOf("\n---", 4);
   if (end < 0) throw new Error(`${name} has unterminated YAML frontmatter`);
-  const frontmatter = YAML.parse(raw.slice(4, end));
-  if (!frontmatter || typeof frontmatter !== "object" || Array.isArray(frontmatter)) {
+  const parsed = YAML.parse(raw.slice(4, end));
+  if (!frontmatterMappingSchema.safeParse(parsed).success) {
     throw new Error(`${name} frontmatter must be a mapping`);
   }
-  const fields = frontmatter as Record<string, unknown>;
-  if (typeof fields.name !== "string" || typeof fields.description !== "string") {
-    throw new Error(`${name} frontmatter requires string name and description`);
-  }
+  const result = skillFrontmatterSchema.safeParse(parsed);
+  if (!result.success) throw new Error(`${name} frontmatter requires string name and description`);
 }
 
 export function validateSkillRecords(files: readonly SkillFileRecord[]): void {

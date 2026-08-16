@@ -80,11 +80,22 @@ const candidateInventorySchema = z
 const candidateFindingSchema = z
   .object({ path: z.string().min(1), kind: z.string().min(1), detail: z.string() })
   .strict();
+const legacyCatalogSchema = z.looseObject({ skills: z.array(z.unknown()) });
+const legacySkillInputSchema = z.looseObject({
+  name: z.string(),
+  source: z.string(),
+  repo: z.string(),
+  ref: z.string().optional(),
+  subtree: z.string().optional(),
+  skill: z.string().optional(),
+  description: z.string().optional()
+});
+type CatalogDocument = z.infer<typeof legacyCatalogSchema>;
 
 interface CatalogEntryResolution {
   entry: Extract<SkillEntry, { source: "vendored" }>;
   migrated: boolean;
-  document?: Record<string, unknown>;
+  document?: CatalogDocument;
 }
 
 interface PromotionTarget {
@@ -98,6 +109,11 @@ function safeGitRevision(value: string): boolean {
   return !value.startsWith("-") && [...value].every((character) => character.charCodeAt(0) > 32);
 }
 
+function errorCode(error: Error): string | undefined {
+  // SAFETY: Node filesystem failures expose their stable errno code on Error objects.
+  return (error as NodeJS.ErrnoException).code;
+}
+
 async function activeHomeRoots(
   root: string,
   machineHome: string,
@@ -108,9 +124,7 @@ async function activeHomeRoots(
   seen.add(resolvedRoot);
   const roots = [resolvedRoot];
   try {
-    const parsed = YAML.parse(await readFile(path.join(resolvedRoot, "mfz_home.yml"), "utf8")) as {
-      extends?: unknown;
-    };
+    const parsed = YAML.parse(await readFile(path.join(resolvedRoot, "mfz_home.yml"), "utf8"));
     const extension = homeManifestSchema.parse(parsed).extends;
     if (!extension) return roots;
     const upstream = path.resolve(expandHome(extension.path, machineHome));
@@ -204,7 +218,7 @@ export async function validateVendoredSkills(root: string): Promise<string[]> {
         (name) => `${name}: vendor lock entry has no vendored catalog declaration`
       );
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if (error instanceof Error && errorCode(error) === "ENOENT") return [];
       return [`${vendorLockPath(root)}: ${error instanceof Error ? error.message : String(error)}`];
     }
   }
@@ -353,14 +367,14 @@ export async function stageVendoredSkill(
   try {
     oldFiles = await readSkillFiles(oldPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
     // A first import has no old subtree to diff.
   }
   let oldLock: VendorLockEntry | undefined;
   try {
     oldLock = (await readVendorLock(sourceRoot)).skills[entry.name];
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
     // The candidate still carries enough provenance to be reviewed before first promotion.
   }
   if (oldLock && digestSkillFiles(oldFiles) !== oldLock.digest) {
@@ -404,8 +418,23 @@ export async function stageVendoredSkill(
   }
 }
 
-function parseCandidateProvenance(value: unknown): CandidateProvenance {
-  return candidateProvenanceSchema.parse(value) as CandidateProvenance;
+function candidateProvenance(
+  parsed: z.infer<typeof candidateProvenanceSchema>
+): CandidateProvenance {
+  const provenance: CandidateProvenance = {
+    candidateId: parsed.candidateId,
+    name: parsed.name,
+    repository: parsed.repository,
+    ref: parsed.ref,
+    subtree: parsed.subtree,
+    commit: parsed.commit,
+    digest: parsed.digest,
+    sourceRoot: parsed.sourceRoot,
+    artifacts: parsed.artifacts
+  };
+  if (parsed.oldCommit !== undefined) provenance.oldCommit = parsed.oldCommit;
+  if (parsed.oldDigest !== undefined) provenance.oldDigest = parsed.oldDigest;
+  return provenance;
 }
 
 export async function readCandidate(paths: RuntimePaths, id: string): Promise<SkillCandidate> {
@@ -420,8 +449,10 @@ export async function readCandidate(paths: RuntimePaths, id: string): Promise<Sk
     }
     return readFile(file);
   };
-  const provenance = parseCandidateProvenance(
-    YAML.parse((await readEvidence("provenance.yml")).toString("utf8"))
+  const provenance = candidateProvenance(
+    candidateProvenanceSchema.parse(
+      YAML.parse((await readEvidence("provenance.yml")).toString("utf8"))
+    )
   );
   if (provenance.candidateId !== id)
     throw new Error("Candidate identity does not match provenance");
@@ -513,7 +544,7 @@ async function resolveCatalogEntry(
   candidate: CandidateProvenance
 ): Promise<CatalogEntryResolution> {
   const catalogPath = path.join(root, "catalog", "skills.yml");
-  const raw = YAML.parse(await readFile(catalogPath, "utf8")) as unknown;
+  const raw = YAML.parse(await readFile(catalogPath, "utf8"));
   try {
     const manifests = skillsManifestSchema.parse(raw);
     const entry = manifests.skills.find(
@@ -523,39 +554,32 @@ async function resolveCatalogEntry(
     if (!entry) throw new Error(`Candidate skill is not a vendored declaration: ${candidate.name}`);
     return { entry, migrated: false };
   } catch (error) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw error;
-    const document = raw as Record<string, unknown>;
+    const documentResult = legacyCatalogSchema.safeParse(raw);
+    if (!documentResult.success) throw error;
+    const document = documentResult.data;
     const skills = document.skills;
-    if (!Array.isArray(skills)) throw error;
-    const index = skills.findIndex(
-      (skill) =>
-        skill &&
-        typeof skill === "object" &&
-        !Array.isArray(skill) &&
-        (skill as Record<string, unknown>).name === candidate.name &&
-        (skill as Record<string, unknown>).source === "git"
+    const legacySkills = skills.map((skill) => legacySkillInputSchema.safeParse(skill));
+    const index = legacySkills.findIndex(
+      (skill) => skill.success && skill.data.name === candidate.name && skill.data.source === "git"
     );
     if (index < 0) {
-      const existing = skills.find(
-        (skill) =>
-          skill &&
-          typeof skill === "object" &&
-          !Array.isArray(skill) &&
-          (skill as Record<string, unknown>).name === candidate.name
+      const existing = legacySkills.find(
+        (skill) => skill.success && skill.data.name === candidate.name
       );
       if (!existing) throw error;
-      const entry = skillSchema.parse(existing);
+      const entry = skillSchema.parse(existing.data);
       if (entry.source !== "vendored") throw error;
       return { entry, migrated: false };
     }
-    const legacy = skills[index] as Record<string, unknown>;
+    const legacy = legacySkills[index];
+    if (!legacy?.success) throw error;
     const entry = skillSchema.parse({
       name: candidate.name,
       source: "vendored",
-      repo: legacy.repo,
+      repo: legacy.data.repo,
       ref: candidate.ref,
       subtree: candidate.subtree,
-      description: typeof legacy.description === "string" ? legacy.description : ""
+      description: legacy.data.description ?? ""
     });
     if (entry.source !== "vendored")
       throw new Error("Legacy migration produced a non-vendored entry");
@@ -589,7 +613,7 @@ async function locatePromotionTarget(
     try {
       lock = await parseVendorLock(root);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") continue;
+      if (!(error instanceof Error) || errorCode(error) !== "ENOENT") continue;
       lock = { skills: {} };
     }
     const current = lock.skills[entry.name];
@@ -610,7 +634,7 @@ async function locatePromotionTarget(
     try {
       oldFiles = await readSkillFiles(source);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
     }
     if (current && digestSkillFiles(oldFiles) !== current.digest) {
       throw new Error(`Vendored skill ${entry.name} source does not match its vendor lock`);
@@ -763,25 +787,20 @@ export async function readLegacyGitSkills(
   const entries: LegacySkillEntry[] = [];
   for (const sourceRoot of await activeHomeRoots(root, machineHome)) {
     try {
-      const parsed = YAML.parse(
-        await readFile(path.join(sourceRoot, "catalog", "skills.yml"), "utf8")
-      ) as unknown;
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
-      const skills = (parsed as Record<string, unknown>).skills;
-      if (!Array.isArray(skills)) continue;
-      for (const raw of skills) {
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-        const item = raw as Record<string, unknown>;
-        if (item.source !== "git" || typeof item.name !== "string" || typeof item.repo !== "string")
-          continue;
+      const parsed = legacyCatalogSchema.safeParse(
+        YAML.parse(await readFile(path.join(sourceRoot, "catalog", "skills.yml"), "utf8"))
+      );
+      if (!parsed.success) continue;
+      for (const raw of parsed.data.skills) {
+        const item = legacySkillInputSchema.safeParse(raw);
+        if (!item.success || item.data.source !== "git") continue;
         entries.push({
-          name: item.name,
+          name: item.data.name,
           source: "vendored",
-          repo: item.repo,
-          ref: typeof item.ref === "string" ? item.ref : "main",
-          subtree:
-            typeof item.subtree === "string" ? item.subtree : `skills/${item.skill ?? item.name}`,
-          description: typeof item.description === "string" ? item.description : "",
+          repo: item.data.repo,
+          ref: item.data.ref ?? "main",
+          subtree: item.data.subtree ?? `skills/${item.data.skill ?? item.data.name}`,
+          description: item.data.description ?? "",
           sourceRoot
         });
       }
