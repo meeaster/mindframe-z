@@ -1,6 +1,6 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { execa } from "execa";
+import { execa, ExecaError } from "execa";
 import { writeTextFile } from "../core/fs-util.js";
 import type { ReferenceEntry } from "../core/manifests.js";
 import {
@@ -12,6 +12,7 @@ import {
 import type { ResolvedProfile } from "../core/profile.js";
 
 type RunGit = (file: string, args: readonly string[], options: { stdio: "pipe" }) => Promise<void>;
+type GitError = ExecaError<{ stdio: "pipe" }>;
 
 async function runGitCommand(
   file: string,
@@ -60,20 +61,22 @@ export async function syncReference(
   if (!ref) throw new Error(`Unknown reference: ${name}`);
   const destination = referencePath(profile, ref);
   await mkdir(profile.referencesDir, { recursive: true });
+  let destinationExists = true;
   try {
     await access(destination);
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+    destinationExists = false;
+  }
+  if (destinationExists) {
     await updateReference(destination, ref.ref, runGit);
     return `updated ${name} at ${destination}`;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      const cloneArgs = ["clone"];
-      if (ref.ref) cloneArgs.push("--branch", ref.ref);
-      cloneArgs.push(ref.url, destination);
-      await runGit("git", cloneArgs, { stdio: "pipe" });
-      return `cloned ${name} to ${destination}`;
-    }
-    throw error;
   }
+  const cloneArgs = ["clone"];
+  if (ref.ref) cloneArgs.push("--branch", ref.ref);
+  cloneArgs.push(ref.url, destination);
+  await runGit("git", cloneArgs, { stdio: "pipe" });
+  return `cloned ${name} to ${destination}`;
 }
 
 async function updateReference(
@@ -91,7 +94,7 @@ async function updateReference(
   try {
     await pullReference(destination, runGit);
   } catch (error) {
-    if (!isStaleRemoteRefError(error)) throw error;
+    if (!(error instanceof ExecaError) || !isStaleRemoteRefError(error)) throw error;
     await runGit("git", ["-C", destination, "remote", "prune", "origin"], { stdio: "pipe" });
     await pullReference(destination, runGit);
   }
@@ -101,12 +104,10 @@ async function pullReference(destination: string, runGit: RunGit): Promise<void>
   await runGit("git", ["-C", destination, "pull", "--ff-only"], { stdio: "pipe" });
 }
 
-export function isStaleRemoteRefError(error: unknown): boolean {
-  const stderr = typeof error === "object" && error && "stderr" in error ? error.stderr : undefined;
+export function isStaleRemoteRefError(error: GitError): boolean {
   return (
-    typeof stderr === "string" &&
-    stderr.includes("some local refs could not be updated") &&
-    stderr.includes("git remote prune origin")
+    (error.stderr ?? "").includes("some local refs could not be updated") &&
+    (error.stderr ?? "").includes("git remote prune origin")
   );
 }
 
