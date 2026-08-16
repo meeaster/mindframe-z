@@ -19,6 +19,7 @@ import { openCodeExecutorEntry } from "./executor.js";
 import { requiresExecutorBridge } from "../core/profile.js";
 import { jsonFileContent, readDirEntries } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
+import { jsonObjectSchema } from "../core/json.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -26,6 +27,16 @@ import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
 interface OpenCodeRenderOptions {
   readonly skillOverrides?: Record<string, boolean>;
 }
+
+type OpenCodeMcpEntry =
+  | { type: "remote"; url: string; enabled: boolean; headers?: Record<string, string> }
+  | {
+      type: "local";
+      command: string[];
+      enabled: boolean;
+      env?: Record<string, string>;
+      timeout?: number;
+    };
 
 async function copyDirContents(
   src: string,
@@ -196,24 +207,26 @@ export async function renderOpenCode(
     profile.enabledAgents
   );
   const instructions = [path.join(configsProfile, "AGENTS.md"), referenceIndexPath(paths)];
-  const mcp: Record<string, unknown> = Object.fromEntries(
+  const mcp: Record<string, OpenCodeMcpEntry> = Object.fromEntries(
     filterMcpForTarget(profile, "opencode").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
         const entry = { type: "remote", url: server.url, enabled };
         if (server.headers) Object.assign(entry, { headers: server.headers });
-        return [name, entry];
+        return [name, entry] as const;
       }
-      const entry = {
+      const entry: Extract<OpenCodeMcpEntry, { type: "local" }> = {
         type: "local",
         command: server.command.map((part) => expandHome(part, paths.home)),
         enabled
       };
       if (server.env) Object.assign(entry, { env: server.env });
-      return [name, entry];
+      return [name, entry] as const;
     })
   );
-  if (requiresExecutorBridge(profile, "opencode"))
-    mcp[executorBridgeName] = openCodeExecutorEntry(profile);
+  if (requiresExecutorBridge(profile, "opencode")) {
+    const executor = openCodeExecutorEntry(profile);
+    mcp[executorBridgeName] = { ...executor, type: "local" };
+  }
   const extraFolders = profile.extraFolders;
   const externalDirectory: Record<string, string> = {};
   const edit: Record<string, string> = {};
@@ -238,9 +251,9 @@ export async function renderOpenCode(
   }
 
   const folderPermission = { external_directory: externalDirectory, edit };
-  const machinePermission = profile.manifests.machine.opencode.permission as
-    | Record<string, unknown>
-    | undefined;
+  const machinePermission = jsonObjectSchema.safeParse(
+    profile.manifests.machine.opencode.permission
+  ).data;
   const mergedPerms = machinePermission
     ? deepMerge(folderPermission, machinePermission)
     : folderPermission;
@@ -249,9 +262,9 @@ export async function renderOpenCode(
     instructions.push(extraFoldersIndexPath(paths));
   }
 
-  const profilePermission = profile.profile.opencode.config.permission as
-    | Record<string, unknown>
-    | undefined;
+  const profilePermission = jsonObjectSchema.safeParse(
+    profile.profile.opencode.config.permission
+  ).data;
   const permission = profilePermission ? deepMerge(profilePermission, mergedPerms) : mergedPerms;
   const config = { ...profile.profile.opencode.config };
   if (permission) Object.assign(config, { permission });

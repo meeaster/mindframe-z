@@ -402,7 +402,10 @@ function normalizeProfile(
   };
 }
 
-export function deepMerge(base: DeepMergeObject, child: DeepMergeObject): DeepMergeObject {
+export function deepMerge(
+  base: DeepMergeObject,
+  child: DeepMergeObject
+): DeepMergeObject {
   const result = { ...base };
   for (const [key, value] of Object.entries(child)) {
     const existing = result[key];
@@ -435,19 +438,28 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     mcp: mergeMcpConfigs(base.mcp, child.mcp),
     executor: deepMerge(base.executor ?? {}, child.executor ?? {}) as ProfileManifest["executor"],
     opencode: {
-      config: deepMerge(base.opencode.config, child.opencode.config),
+      config: deepMerge(
+        base.opencode.config,
+        child.opencode.config
+      ) as ProfileManifest["opencode"]["config"],
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
-      tui: deepMerge(base.opencode.tui, child.opencode.tui),
+      tui: deepMerge(base.opencode.tui, child.opencode.tui) as ProfileManifest["opencode"]["tui"],
       tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
       delegate_general: child.opencode.delegate_general ?? base.opencode.delegate_general
     },
     opencode_v2: {
-      config: deepMerge(base.opencode_v2.config, child.opencode_v2.config),
+      config: deepMerge(
+        base.opencode_v2.config,
+        child.opencode_v2.config
+      ) as ProfileManifest["opencode_v2"]["config"],
       dependencies: { ...base.opencode_v2.dependencies, ...child.opencode_v2.dependencies },
-      cli: deepMerge(base.opencode_v2.cli, child.opencode_v2.cli),
+      cli: deepMerge(
+        base.opencode_v2.cli,
+        child.opencode_v2.cli
+      ) as ProfileManifest["opencode_v2"]["cli"],
       global_instructions:
         child.opencode_v2.global_instructions ?? base.opencode_v2.global_instructions,
       plugins: dedupe([...base.opencode_v2.plugins, ...child.opencode_v2.plugins]),
@@ -457,15 +469,21 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     },
     claude: deepMerge(base.claude, child.claude) as ProfileManifest["claude"],
     codex: {
-      config: deepMerge(base.codex.config, child.codex.config),
+      config: deepMerge(
+        base.codex.config,
+        child.codex.config
+      ) as ProfileManifest["codex"]["config"],
       plugins: deepMerge(
         base.codex.plugins,
         child.codex.plugins
       ) as ProfileManifest["codex"]["plugins"]
     },
     pi: {
-      settings: deepMerge(base.pi.settings, child.pi.settings),
-      subagent_config: deepMerge(base.pi.subagent_config, child.pi.subagent_config)
+      settings: deepMerge(base.pi.settings, child.pi.settings) as ProfileManifest["pi"]["settings"],
+      subagent_config: deepMerge(
+        base.pi.subagent_config,
+        child.pi.subagent_config
+      ) as ProfileManifest["pi"]["subagent_config"]
     },
     thread: {
       stores: (() => {

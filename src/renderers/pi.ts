@@ -3,9 +3,10 @@ import { profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import { deepMerge, type ResolvedProfile } from "../core/profile.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
+import type { JsonObject } from "../core/json.js";
 import { renderInlinedAgents } from "./agents-doc.js";
 
-function hasKeys(value: Record<string, unknown>): boolean {
+function hasKeys(value: JsonObject): boolean {
   return Object.keys(value).length > 0;
 }
 

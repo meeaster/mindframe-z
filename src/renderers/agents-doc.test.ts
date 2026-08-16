@@ -18,7 +18,9 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     name: "personal",
     agents: ["codex"],
     profile: profileSchema.parse({ name: "personal" }),
+    // SAFETY: renderInlinedAgents only reads the explicitly populated profile fields in these tests.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: renderInlinedAgents only reads the explicitly populated profile fields in these tests.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: "/tmp/references",

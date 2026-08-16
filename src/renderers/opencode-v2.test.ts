@@ -5,6 +5,7 @@ import { profileSchema } from "../core/manifests.js";
 import { createRuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { renderTarget } from "../core/render.js";
+import type { JsonObject } from "../core/json.js";
 import { mergeOpenCodeV2CliPlugins, renderOpenCodeV2 } from "./opencode-v2.js";
 
 function profile(home: string): ResolvedProfile {
@@ -34,7 +35,9 @@ function profile(home: string): ResolvedProfile {
     name: "personal",
     agents: ["opencode-v2"],
     profile: manifest,
+    // SAFETY: this fixture exercises only renderer fields and never reads manifest/source metadata.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: this fixture supplies the plugin source map separately in the relevant test.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: path.join(home, "references"),
@@ -68,16 +71,15 @@ function profile(home: string): ResolvedProfile {
       }
     ],
     extraFolders: manifest.extra_folders,
-    miseLayers: [],
+    miseLayers: []
   };
 }
 
-function renderedConfig(
-  result: Awaited<ReturnType<typeof renderOpenCodeV2>>
-): Record<string, unknown> {
+function renderedConfig(result: Awaited<ReturnType<typeof renderOpenCodeV2>>): JsonObject {
   const file = result.files.find((entry) => entry.path.endsWith("opencode-v2/opencode.jsonc"));
   if (!file) throw new Error("OpenCode V2 config was not rendered");
-  return JSON.parse(file.content) as Record<string, unknown>;
+  // SAFETY: the renderer serializes this file from a JSON object.
+  return JSON.parse(file.content) as JsonObject;
 }
 
 describe("OpenCode V2 renderer", () => {
@@ -95,6 +97,7 @@ describe("OpenCode V2 renderer", () => {
     const result = await renderOpenCodeV2(paths, {
       ...profile(home),
       enabledOpenCodeV2TuiPlugins: ["example"],
+      // SAFETY: only the plugin map is read by collectPluginFiles in this test.
       sources: { plugins: new Map([["example", { root }]]) } as ResolvedProfile["sources"]
     });
 
@@ -139,7 +142,8 @@ describe("OpenCode V2 renderer", () => {
     try {
       const result = await renderOpenCodeV2(paths, profile(home));
       const config = renderedConfig(result);
-      const mcp = config.mcp as { servers: Record<string, Record<string, unknown>> };
+      // SAFETY: nativeMcp always renders the config.mcp object with a servers map.
+      const mcp = config.mcp as { servers: JsonObject };
 
       expect(config).toMatchObject({
         $schema: "https://opencode.ai/config.json",

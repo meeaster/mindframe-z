@@ -21,16 +21,19 @@ import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
 import { collectPluginFiles } from "./opencode.js";
 import { openCodeV2ExecutorEntry } from "./executor.js";
+import type { JsonObject } from "../core/json.js";
+import { z } from "zod";
 
 export function mergeOpenCodeV2CliPlugins(
-  cli: Record<string, unknown>,
+  cli: JsonObject,
   managedEntries: readonly string[],
   previouslyManagedEntries: readonly string[]
 ) {
   const plugins = Array.isArray(cli.plugins) ? cli.plugins : [];
-  const preserved = plugins.filter(
-    (entry) => typeof entry !== "string" || !previouslyManagedEntries.includes(entry)
-  );
+  const preserved = plugins.filter((entry) => {
+    const stringEntry = z.string().safeParse(entry);
+    return !stringEntry.success || !previouslyManagedEntries.includes(stringEntry.data);
+  });
   const nextPlugins = [...preserved, ...managedEntries];
 
   if (plugins.length === 0 && managedEntries.length === 0 && !Array.isArray(cli.plugins))

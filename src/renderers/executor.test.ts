@@ -14,7 +14,9 @@ function profile(): ResolvedProfile {
     name: "personal",
     agents: ["opencode", "claude-code", "codex"],
     profile: profileSchema.parse({ name: "personal", executor: { timeout_ms: 45_000 } }),
+    // SAFETY: executor entry rendering only reads profile executor settings.
     manifests: {} as ResolvedProfile["manifests"],
+    // SAFETY: executor entry rendering only reads profile executor settings.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
     referencesDir: "/tmp/references",
@@ -26,7 +28,7 @@ function profile(): ResolvedProfile {
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 

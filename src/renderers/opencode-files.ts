@@ -24,6 +24,7 @@ export async function collectOpenCodeMarkdownFiles(
         content = await readFile(filePath, "utf8");
         break;
       } catch (error) {
+        // SAFETY: ENOENT is the only missing-file case; all other filesystem errors must propagate.
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }

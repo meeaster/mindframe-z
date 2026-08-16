@@ -1,4 +1,5 @@
 import path from "node:path";
+import { z } from "zod";
 import type { RuntimePaths } from "../core/paths.js";
 import {
   expandHome,
@@ -16,6 +17,7 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
+import { jsonObjectSchema, type JsonObject } from "../core/json.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { claudeExecutorEntry } from "./executor.js";
 
@@ -25,13 +27,18 @@ function claudePermissionPattern(absPath: string): string {
 }
 
 function mergeClaudePermissions(
-  existing: unknown,
+  existing: JsonObject["permissions"],
   generated: Record<string, string[]>
-): Record<string, unknown> {
-  const merged = isPlainObject(existing) ? { ...existing } : {};
+): JsonObject {
+  const merged = jsonObjectSchema.safeParse(existing).data ?? {};
 
   for (const key of ["allow", "deny"] as const) {
-    const current = Array.isArray(merged[key]) ? (merged[key] as string[]) : [];
+    const current = Array.isArray(merged[key])
+      ? merged[key].filter((value): value is string => {
+          const result = z.string().safeParse(value);
+          return result.success;
+        })
+      : [];
     merged[key] = [...new Set([...current, ...(generated[key] ?? [])])];
   }
 
@@ -52,7 +59,7 @@ function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], ho
     if (server.server.headers) {
       Object.assign(entry, {
         headers: Object.fromEntries(
-          Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v as string)])
+          Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v)])
         )
       });
     }
@@ -67,14 +74,12 @@ function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], ho
 }
 
 function mergeClaudeMcp(
-  existingClaudeJson: Record<string, unknown>,
-  managedMcp: Record<string, unknown>,
+  existingClaudeJson: JsonObject,
+  managedMcp: JsonObject,
   managedServerNames: Set<string>
 ) {
   const existingMcpServersRaw = existingClaudeJson.mcpServers;
-  const existingMcpServers = isPlainObject(existingMcpServersRaw)
-    ? { ...existingMcpServersRaw }
-    : {};
+  const existingMcpServers = jsonObjectSchema.safeParse(existingMcpServersRaw).data ?? {};
 
   for (const serverName of managedServerNames) {
     delete existingMcpServers[serverName];
@@ -151,31 +156,38 @@ export async function renderClaude(
   const permissions: Record<string, string[]> = {};
   if (allowPermissions.length > 0) permissions.allow = allowPermissions;
   if (denyPermissions.length > 0) permissions.deny = denyPermissions;
-  const { permissions: machinePermissions, ...machineClaudeRest } = profile.manifests.machine
-    .claude as Record<string, unknown> & { permissions?: Record<string, string[]> };
+  const { permissions: machinePermissions, ...machineClaudeRest } =
+    profile.manifests.machine.claude;
   const profileSettings = { ...profile.profile.claude.settings };
   if (profile.profile.claude.model) profileSettings.model = profile.profile.claude.model;
-  const settings: Record<string, unknown> = deepMerge(profileSettings, machineClaudeRest);
+  const settings = jsonObjectSchema.parse(deepMerge(profileSettings, machineClaudeRest));
   settings.permissions = mergeClaudePermissions(
-    mergeClaudePermissions(settings.permissions, permissions),
-    machinePermissions ?? {}
+    mergeClaudePermissions(
+      jsonObjectSchema.safeParse(settings.permissions).data ?? {},
+      permissions
+    ),
+    z.record(z.string(), z.array(z.string())).safeParse(machinePermissions).data ?? {}
   );
   if (additionalDirectories.length > 0) {
     settings.additionalDirectories = additionalDirectories;
   }
-  const managedClaudeMcp: Record<string, unknown> = Object.fromEntries(
-    filterMcpForTarget(profile, "claude-code").map((server) => [
-      server.name,
-      renderClaudeMcpServer(server, paths.home)
-    ])
+  const managedClaudeMcp = jsonObjectSchema.parse(
+    Object.fromEntries(
+      filterMcpForTarget(profile, "claude-code").map((server) => [
+        server.name,
+        renderClaudeMcpServer(server, paths.home)
+      ])
+    )
   );
   if (requiresExecutorBridge(profile, "claude-code"))
     managedClaudeMcp[executorBridgeName] = claudeExecutorEntry(profile);
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
-  const existingClaudeJson = await readJsonObject(localClaudeJsonPath);
-  const existingExecutor = isPlainObject(existingClaudeJson.mcpServers)
-    ? existingClaudeJson.mcpServers[executorBridgeName]
+  const existingClaudeJson = jsonObjectSchema.parse(await readJsonObject(localClaudeJsonPath));
+  const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data;
+  const existingExecutor = existingMcpServers?.[executorBridgeName];
+  const existingExecutorEnv = isPlainObject(existingExecutor)
+    ? jsonObjectSchema.safeParse(existingExecutor.env).data
     : undefined;
   const hasGeneratedExecutor =
     isPlainObject(existingExecutor) &&
@@ -183,9 +195,8 @@ export async function renderClaude(
     existingExecutor.command === "executor" &&
     Array.isArray(existingExecutor.args) &&
     ((existingExecutor.args.includes("--scope") &&
-      typeof existingExecutor.env === "object" &&
-      existingExecutor.env !== null &&
-      "EXECUTOR_DATA_DIR" in existingExecutor.env) ||
+      existingExecutorEnv !== undefined &&
+      "EXECUTOR_DATA_DIR" in existingExecutorEnv) ||
       (existingExecutor.args[0] === "mcp" && existingExecutor.args.includes("--elicitation-mode")));
   const managedClaudeServerNames = new Set([
     ...profile.mcpServers.map((server) => server.name),

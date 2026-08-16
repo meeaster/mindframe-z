@@ -45,6 +45,7 @@ export async function renderMise(
         try {
           entries = await readdir(dir, { withFileTypes: true });
         } catch (error) {
+          // SAFETY: ENOENT means the optional task directory is absent; other errors are real failures.
           if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
           throw error;
         }

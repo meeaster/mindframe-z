@@ -3,7 +3,7 @@ import { z } from "zod";
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export type JsonObject = { [key: string]: JsonValue };
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.null(),
     z.boolean(),

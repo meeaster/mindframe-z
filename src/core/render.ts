@@ -15,6 +15,7 @@ import { renderOpenCodeV2 } from "../renderers/opencode-v2.js";
 import { renderPi } from "../renderers/pi.js";
 import type { LinkPlan } from "./symlinks.js";
 import { readSkillOverridesFile } from "./skill-overrides.js";
+import type { JsonObject } from "./json.js";
 
 export interface RenderedFile {
   path: string;
@@ -31,7 +32,7 @@ export interface RenderResult {
     path: string;
     entries: string[];
     registryPath: string;
-    settings?: Record<string, unknown>;
+    settings?: JsonObject;
   };
   links: LinkPlan[];
   staleFiles?: string[];

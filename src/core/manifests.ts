@@ -3,6 +3,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import { pathExists, readDirEntries, readTomlObject } from "./fs-util.js";
+import { jsonObjectSchema, jsonValueSchema } from "./json.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
@@ -475,10 +476,10 @@ const exactVersionSchema = z
   );
 
 const opencodeConfigSchema = z.object({
-  config: z.record(z.string(), z.unknown()).default({}),
+  config: jsonObjectSchema.default({}),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   plugins: z.array(z.string()).default([]),
-  tui: z.record(z.string(), z.unknown()).default({}),
+  tui: jsonObjectSchema.default({}),
   tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([]),
@@ -486,9 +487,9 @@ const opencodeConfigSchema = z.object({
 });
 
 const opencodeV2ConfigSchema = z.object({
-  config: z.record(z.string(), z.unknown()).default({}),
+  config: jsonObjectSchema.default({}),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
-  cli: z.record(z.string(), z.unknown()).default({}),
+  cli: jsonObjectSchema.default({}),
   global_instructions: z.boolean().optional(),
   plugins: z.array(z.string()).default([]),
   tui_plugins: z.array(z.string()).default([]),
@@ -502,13 +503,13 @@ export const codexPluginSchema = z.object({
 });
 
 const codexConfigSchema = z.object({
-  config: z.record(z.string(), z.unknown()).default({}),
+  config: jsonObjectSchema.default({}),
   plugins: z.record(z.string(), codexPluginSchema).default({})
 });
 
 const piConfigSchema = z.object({
-  settings: z.record(z.string(), z.unknown()).default({}),
-  subagent_config: z.record(z.string(), z.unknown()).default({})
+  settings: jsonObjectSchema.default({}),
+  subagent_config: jsonObjectSchema.default({})
 });
 
 export const profileSchema = z
@@ -592,9 +593,9 @@ export const machineSchema = z.object({
   archives: z.array(archiveSchema).default([]),
   opencode: z
     .object({ runtime: z.enum(["v1", "v2"]).optional() })
-    .catchall(z.unknown())
+    .catchall(jsonValueSchema)
     .default({ runtime: "v1" }),
-  claude: z.record(z.string(), z.unknown()).default({})
+  claude: jsonObjectSchema.default({})
 });
 
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;

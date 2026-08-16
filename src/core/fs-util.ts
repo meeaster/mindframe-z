@@ -4,6 +4,7 @@ import path from "node:path";
 import { parse as parseJsonc, printParseErrorCode, type ParseError } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { parse as parseYaml } from "yaml";
+import { jsonObjectSchema, type JsonObject } from "./json.js";
 
 /**
  * Report whether a path is reachable on disk. This is the canonical async
@@ -113,8 +114,10 @@ async function readObjectFile(
 }
 
 /** Read an optional JSON object. Only a missing file defaults to an empty object. */
-export async function readJsonObject(filePath: string): Promise<Record<string, unknown>> {
-  return readObjectFile(filePath, "JSON", (content) => JSON.parse(content) as unknown);
+export async function readJsonObject(filePath: string): Promise<JsonObject> {
+  return jsonObjectSchema.parse(
+    await readObjectFile(filePath, "JSON", (content) => JSON.parse(content) as unknown)
+  );
 }
 
 /** Read an optional JSONC object. Only a missing file defaults to an empty object. */
