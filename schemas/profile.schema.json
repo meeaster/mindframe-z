@@ -60,7 +60,6 @@
               "type": "string",
               "enum": [
                 "opencode",
-                "opencode-v2",
                 "claude-code",
                 "codex",
                 "pi"
@@ -95,7 +94,6 @@
                   "type": "string",
                   "enum": [
                     "opencode",
-                    "opencode-v2",
                     "claude-code",
                     "codex"
                   ]
@@ -114,7 +112,6 @@
                           "type": "string",
                           "enum": [
                             "opencode",
-                            "opencode-v2",
                             "claude-code",
                             "codex"
                           ]
@@ -128,7 +125,6 @@
                           "type": "string",
                           "enum": [
                             "opencode",
-                            "opencode-v2",
                             "codex"
                           ]
                         },
@@ -150,7 +146,6 @@
                           "type": "string",
                           "enum": [
                             "opencode",
-                            "opencode-v2",
                             "claude-code",
                             "codex"
                           ]
@@ -164,7 +159,6 @@
                           "type": "string",
                           "enum": [
                             "opencode",
-                            "opencode-v2",
                             "codex"
                           ]
                         },

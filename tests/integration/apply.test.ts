@@ -214,10 +214,7 @@ describe("apply integration", () => {
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
       .replace("    - config-marker", "    - missing-v1-plugin")
-      .replace(
-        "  context7:\n    agents: [opencode, claude-code]",
-        "  context7:\n    agents: [opencode-v2]"
-      )
+      .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
       .replace(
         "claude:\n",
         [
@@ -287,6 +284,7 @@ describe("apply integration", () => {
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode, claude-code]", "agents: [opencode-v2]")
+      .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
       .replace(
         "claude:\n",
         ["opencode_v2:", "  tui_plugins:", "    - session-cost-tui", "", "claude:", ""].join("\n")

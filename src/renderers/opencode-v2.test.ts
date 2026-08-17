@@ -57,7 +57,7 @@ function profile(home: string): ResolvedProfile {
           url: "https://example.test/mcp",
           headers: { Authorization: "Bearer ${TOKEN}" }
         },
-        agents: { "opencode-v2": true }
+        agents: { opencode: true }
       },
       {
         name: "local",
@@ -67,7 +67,7 @@ function profile(home: string): ResolvedProfile {
           command: ["helper", "--serve"],
           env: { MODE: "test" }
         },
-        agents: { "opencode-v2": false }
+        agents: { opencode: false }
       }
     ],
     extraFolders: manifest.extra_folders,

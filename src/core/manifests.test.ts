@@ -264,7 +264,7 @@ describe("generated profile MCP schema", () => {
     expect(grouped.not).toBeDefined();
     for (const variant of grouped.anyOf ?? []) {
       const disabledItems = variant.properties?.disabled?.items;
-      expect(disabledItems?.enum).toEqual(["opencode", "opencode-v2", "codex"]);
+      expect(disabledItems?.enum).toEqual(["opencode", "codex"]);
     }
 
     const connections = entryProperties?.executor?.properties?.connections;

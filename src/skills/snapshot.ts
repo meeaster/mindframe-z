@@ -283,11 +283,15 @@ async function linksMatch(
 }
 
 function desiredTargets(skill: ResolvedSkill, selected: readonly SkillTarget[]): SkillTarget[] {
-  return selected.filter((target) => skill.targets.includes(target));
+  return selected.filter((target) =>
+    skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
+  );
 }
 
 function engineTargets(profile: ResolvedProfile, selected: readonly SkillTarget[]): SkillTarget[] {
-  return selected.filter((target) => profile.agents.includes(target));
+  return selected.filter((target) =>
+    profile.agents.includes(target === "opencode-v2" ? "opencode" : target)
+  );
 }
 
 export async function renderSkillSnapshot(
@@ -433,7 +437,11 @@ function selectedSkillNames(
 ): Set<string> {
   const names = new Set(
     profile.enabledSkills
-      .filter((skill) => renderTargets.some((target) => skill.targets.includes(target)))
+      .filter((skill) =>
+        renderTargets.some((target) =>
+          skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
+        )
+      )
       .map((skill) => skill.name)
   );
   if (!profile.manifests.skills.some((skill) => skill.name === engineSkillName))
@@ -453,7 +461,9 @@ function selectedLinkPlans(
   for (const name of selectedSkillNames(profile, renderTargets)) {
     const declared = profile.enabledSkills.find((skill) => skill.name === name);
     const targets = declared
-      ? selectedTargets.filter((target) => declared.targets.includes(target))
+      ? selectedTargets.filter((target) =>
+          declared.targets.includes(target === "opencode-v2" ? "opencode" : target)
+        )
       : selectedTargets.filter((target) => renderTargets.includes(target));
     for (const target of targets) {
       const directory =
@@ -483,7 +493,11 @@ async function syncSkillSnapshotGroup(
   const directories = linkDirectories(paths, selectedTargets);
   if (options.dryRun) {
     for (const skill of profile.enabledSkills) {
-      if (renderTargets.some((target) => skill.targets.includes(target))) {
+      if (
+        renderTargets.some((target) =>
+          skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
+        )
+      ) {
         const files = await readSkillFiles(sourcePath(skill));
         validateSkillRecords(files);
       }

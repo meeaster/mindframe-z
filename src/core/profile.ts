@@ -577,6 +577,16 @@ interface ResolvedSkillConfig {
   targets: ToolTargetName[];
 }
 
+function capabilityAgent(agent: AgentName): AgentName {
+  return agent === "opencode-v2" ? "opencode" : agent;
+}
+
+function directCapabilityAgent(agent: AgentName): "opencode" | "claude-code" | "codex" | undefined {
+  if (agent === "pi") return undefined;
+  if (agent === "opencode-v2") return "opencode";
+  return agent;
+}
+
 async function resolveEnabledSkills(
   profileName: string,
   build: ProfileBuild,
@@ -638,7 +648,10 @@ function resolveMcpServers(
         executorConfig !== undefined &&
         (config.agents === undefined
           ? evaluateAgents.some((agent) => agent !== "pi")
-          : evaluateAgents.some((agent) => agent !== "pi" && config.agents?.[agent] !== undefined));
+          : evaluateAgents.some((agent) => {
+              const target = directCapabilityAgent(agent);
+              return target !== undefined && config.agents?.[target] !== undefined;
+            }));
       if (executorConfig && executorRelevant) {
         validateExecutorMcpServer(serverName, server);
         const executor = {
@@ -724,9 +737,8 @@ export async function resolveProfile(
   const { profile, sources } = profileBuild;
   const agents = profile.agents;
   if (includeOpenCodeV2) assertOpenCodeV2ConfigOwned(profile);
-  const skillAgents = options.evaluateAgents
-    ? [...new Set([...agents, ...options.evaluateAgents])]
-    : agents;
+  const capabilityAgents = [...new Set(evaluateAgents.map(capabilityAgent))];
+  const skillCapabilityAgents = [...new Set([...agents, ...evaluateAgents].map(capabilityAgent))];
 
   const instructionFiles = profile.instructions.map((file) => {
     const sourceHome = sources.instructions.get(file) ?? manifests;
@@ -742,7 +754,12 @@ export async function resolveProfile(
     if (!ref) throw new Error(`Profile ${name} references unknown reference: ${refName}`);
     return ref;
   });
-  const enabledSkills = await resolveEnabledSkills(name, profileBuild, manifests, skillAgents);
+  const enabledSkills = await resolveEnabledSkills(
+    name,
+    profileBuild,
+    manifests,
+    skillCapabilityAgents
+  );
   const enabledCommands = includeOpenCode ? dedupe(profile.opencode.commands) : [];
   const enabledAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
   const enabledOpenCodeV2Commands = includeOpenCodeV2 ? dedupe(profile.opencode_v2.commands) : [];
@@ -751,7 +768,7 @@ export async function resolveProfile(
   const enabledOpenCodeV2TuiPlugins = includeOpenCodeV2
     ? dedupe(profile.opencode_v2.tui_plugins)
     : [];
-  const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
+  const mcpServers = resolveMcpServers(name, profileBuild, manifests, capabilityAgents);
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
@@ -788,10 +805,11 @@ export function filterMcpForTarget(
   profile: ResolvedProfile,
   target: ToolTargetName
 ): TargetedMcpServer[] {
+  const capabilityTarget = capabilityAgent(target);
   return profile.mcpServers.flatMap((entry): TargetedMcpServer[] => {
     const agents = entry.agents;
-    if (!agents || agents[target] === undefined) return [];
-    return [{ ...entry, agents, enabled: agents[target] }];
+    if (!agents || agents[capabilityTarget] === undefined) return [];
+    return [{ ...entry, agents, enabled: agents[capabilityTarget] }];
   });
 }
 
@@ -799,10 +817,12 @@ export function executorMcpServers(
   profile: ResolvedProfile,
   targets: readonly AgentName[] = profile.agents
 ): ResolvedMcpServer[] {
+  const capabilityTargets = targets.map(capabilityAgent);
   return profile.mcpServers.filter(
     (entry) =>
       entry.executor !== undefined &&
-      (entry.agents === undefined || targets.some((target) => entry.agents?.[target] !== undefined))
+      (entry.agents === undefined ||
+        capabilityTargets.some((target) => entry.agents?.[target] !== undefined))
   );
 }
 

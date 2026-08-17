@@ -9,12 +9,13 @@ import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
 export const agentSchema = z.enum(["opencode", "opencode-v2", "claude-code", "codex", "pi"]);
 const targetSchema = agentSchema;
+const capabilityAgentSchema = agentSchema.exclude(["opencode-v2"]);
 const agentsMapSchema = z
-  .partialRecord(agentSchema, z.boolean())
+  .partialRecord(capabilityAgentSchema, z.boolean())
   .refine((agents) => Object.keys(agents).length > 0, {
     message: "agents must contain at least one harness"
   });
-const mcpAgentSchema = z.enum(["opencode", "opencode-v2", "claude-code", "codex"]);
+const mcpAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const mcpDisabledAgentSchema = mcpAgentSchema.exclude(["claude-code"]);
 type McpAgentName = z.infer<typeof mcpAgentSchema>;
 type NormalizedMcpAgents = Partial<Record<McpAgentName, boolean>>;

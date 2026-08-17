@@ -210,8 +210,15 @@ export async function applyConfig(
         : { evaluateAgents: [options.agent] }
   );
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
-  if (includeActiveV2 && !selectedAgents.includes("opencode-v2"))
-    selectedAgents.push("opencode-v2");
+  if (rendersAgents && options.agent === "all") {
+    const activeOpenCode = paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode";
+    const inactiveOpenCode = activeOpenCode === "opencode" ? "opencode-v2" : "opencode";
+    if (selectedAgents.includes(activeOpenCode) || selectedAgents.includes(inactiveOpenCode)) {
+      const index = selectedAgents.indexOf(inactiveOpenCode);
+      if (index >= 0) selectedAgents.splice(index, 1);
+      if (!selectedAgents.includes(activeOpenCode)) selectedAgents.push(activeOpenCode);
+    }
+  }
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
   const selectedExecutorTarget = selectedAgents.some((target) => target !== "pi");
