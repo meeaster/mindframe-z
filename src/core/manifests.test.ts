@@ -269,7 +269,9 @@ describe("generated profile MCP schema", () => {
 
     const connections = entryProperties?.executor?.properties?.connections;
     expect(connections?.minProperties).toBe(1);
-    expect(jsonSchemaNodeSchema.safeParse(connections?.additionalProperties).data?.minLength).toBe(1);
+    expect(jsonSchemaNodeSchema.safeParse(connections?.additionalProperties).data?.minLength).toBe(
+      1
+    );
     expect(connections?.propertyNames?.pattern).toBe("^[a-z][a-z0-9_]*$");
   });
 });
@@ -371,8 +373,8 @@ describe("Executor authentication declarations", () => {
 
     const schema = await readGeneratedSchema("mcp.schema.json");
     const branches =
-      jsonSchemaNodeSchema.safeParse(schema.properties?.servers?.additionalProperties).data?.anyOf ??
-      [];
+      jsonSchemaNodeSchema.safeParse(schema.properties?.servers?.additionalProperties).data
+        ?.anyOf ?? [];
     const executor = branches[0]?.properties?.executor;
     expect(executor?.properties).toHaveProperty("authentication");
     const authBranches = executor?.properties?.authentication?.items?.anyOf ?? [];

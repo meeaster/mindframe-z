@@ -11,10 +11,7 @@ import {
   type BedrockHostSettings
 } from "./bedrock.js";
 
-async function writeClaudeSettings(
-  claudeDir: string,
-  body: JsonValue
-): Promise<void> {
+async function writeClaudeSettings(claudeDir: string, body: JsonValue): Promise<void> {
   await mkdir(claudeDir, { recursive: true });
   await writeFile(path.join(claudeDir, "settings.json"), JSON.stringify(body), "utf8");
 }

@@ -156,8 +156,14 @@ export async function sandboxImageBuildPlan(
     miseRender.files
       .filter((file) => file.path.includes(`${path.sep}mise${path.sep}`))
       .map((file) => {
-        const relative = path.relative(path.join(paths.configsDir, profile.name, "mise"), file.path);
-        return [relative.startsWith("tasks/") ? relative : path.join("conf.d", relative), file.content];
+        const relative = path.relative(
+          path.join(paths.configsDir, profile.name, "mise"),
+          file.path
+        );
+        return [
+          relative.startsWith("tasks/") ? relative : path.join("conf.d", relative),
+          file.content
+        ];
       })
   );
   const inputs: SandboxImageBuildInputs = {

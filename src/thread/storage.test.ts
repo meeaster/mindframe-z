@@ -133,7 +133,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
     extraFolders: [],
-    miseLayers: [],
+    miseLayers: []
   };
 }
 
