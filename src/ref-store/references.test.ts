@@ -59,6 +59,86 @@ describe("syncReference", () => {
 });
 
 describe("syncReferences", () => {
+  it("starts all references concurrently and returns messages in manifest order", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-refs-state-test-"));
+    const profile = makeProfile(path.join(home, "references"));
+    profile.enabledReferences = [
+      { name: "first", url: "https://example.invalid/first.git", description: "First" },
+      { name: "second", url: "https://example.invalid/second.git", description: "Second" }
+    ];
+    const paths = createRuntimePaths({ home });
+    const started: string[] = [];
+    const deferred = new Map<
+      string,
+      { resolve: (message: string) => void; promise: Promise<string> }
+    >();
+    for (const name of ["first", "second"]) {
+      let resolve!: (message: string) => void;
+      const promise = new Promise<string>((res) => {
+        resolve = res;
+      });
+      deferred.set(name, { resolve, promise });
+    }
+
+    const syncing = syncReferences(paths, profile, async (_profile, name) => {
+      started.push(name);
+      return deferred.get(name)!.promise;
+    });
+
+    await Promise.resolve();
+    expect(started).toEqual(["first", "second"]);
+    deferred.get("second")!.resolve("synced second");
+    deferred.get("first")!.resolve("synced first");
+
+    await expect(syncing).resolves.toEqual(["synced first", "synced second"]);
+  });
+
+  it("waits for all failures, without cleanup or state mutation", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-refs-state-test-"));
+    const referencesDir = path.join(home, "references");
+    const paths = createRuntimePaths({ home });
+    await mkdir(path.dirname(referenceStatePath(paths)), { recursive: true });
+    await writeFile(
+      referenceStatePath(paths),
+      JSON.stringify({ version: 1, profiles: { test: ["old-ref"] } }),
+      "utf8"
+    );
+    await mkdir(path.join(referencesDir, "old-ref"), { recursive: true });
+    const profile = makeProfile(referencesDir);
+    profile.enabledReferences = [
+      { name: "first", url: "https://example.invalid/first.git", description: "First" },
+      { name: "second", url: "https://example.invalid/second.git", description: "Second" }
+    ];
+    const started: string[] = [];
+    let finishSecond!: () => void;
+    const secondFinished = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+
+    const syncing = syncReferences(paths, profile, async (_profile, name) => {
+      started.push(name);
+      if (name === "first") throw new Error("first failed");
+      await secondFinished;
+      return "synced second";
+    });
+
+    await Promise.resolve();
+    expect(started).toEqual(["first", "second"]);
+    let settled = false;
+    void syncing.catch(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    finishSecond();
+
+    await expect(syncing).rejects.toThrow("first failed");
+    await expect(access(path.join(referencesDir, "old-ref"))).resolves.toBeUndefined();
+    await expect(readFile(referenceStatePath(paths), "utf8")).resolves.toBe(
+      JSON.stringify({ version: 1, profiles: { test: ["old-ref"] } })
+    );
+  });
+
   it("removes only references owned by the previous snapshot", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-refs-state-test-"));
     const referencesDir = path.join(home, "references");

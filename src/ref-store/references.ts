@@ -74,8 +74,11 @@ export async function syncReferences(
   sync: (profile: ResolvedProfile, name: string) => Promise<string> = syncReference
 ): Promise<string[]> {
   const names = profile.enabledReferences.map((ref) => ref.name);
-  const messages: string[] = [];
-  for (const name of names) messages.push(await sync(profile, name));
+  const results = await Promise.allSettled(names.map((name) => sync(profile, name)));
+  const messages = results.map((result) => {
+    if (result.status === "rejected") throw result.reason;
+    return result.value;
+  });
 
   const previous = await readReferenceState(paths);
   const profiles = Object.fromEntries(
