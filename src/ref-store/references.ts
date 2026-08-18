@@ -1,11 +1,13 @@
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { execa, ExecaError } from "execa";
-import { writeTextFile } from "../core/fs-util.js";
+import { writeJsonFileAtomic, writeTextFile } from "../core/fs-util.js";
+import { z } from "zod";
 import type { ReferenceEntry } from "../core/manifests.js";
 import {
   expandHome,
   extraFoldersIndexPath,
+  referenceStatePath,
   referenceIndexPath,
   type RuntimePaths
 } from "../core/paths.js";
@@ -13,6 +15,12 @@ import type { ResolvedProfile } from "../core/profile.js";
 
 type RunGit = (file: string, args: readonly string[], options: { stdio: "pipe" }) => Promise<void>;
 type GitError = ExecaError<{ stdio: "pipe" }>;
+
+const referenceStateSchema = z.object({
+  version: z.literal(1),
+  profiles: z.record(z.string(), z.array(z.string()))
+});
+type ReferenceState = z.infer<typeof referenceStateSchema>;
 
 async function runGitCommand(
   file: string,
@@ -48,6 +56,47 @@ export async function writeReferenceIndex(
   const indexPath = referenceIndexPath(paths);
   await writeTextFile(indexPath, content);
   return indexPath;
+}
+
+async function readReferenceState(paths: RuntimePaths): Promise<ReferenceState> {
+  try {
+    return referenceStateSchema.parse(
+      JSON.parse(await readFile(referenceStatePath(paths), "utf8"))
+    );
+  } catch {
+    return { version: 1, profiles: {} };
+  }
+}
+
+export async function syncReferences(
+  paths: RuntimePaths,
+  profile: ResolvedProfile,
+  sync: (profile: ResolvedProfile, name: string) => Promise<string> = syncReference
+): Promise<string[]> {
+  const names = profile.enabledReferences.map((ref) => ref.name);
+  const messages: string[] = [];
+  for (const name of names) messages.push(await sync(profile, name));
+
+  const previous = await readReferenceState(paths);
+  const profiles = Object.fromEntries(
+    Object.entries(previous.profiles).filter(([profileName]) => profileName !== profile.name)
+  );
+  profiles[profile.name] = names;
+  const retained = new Set(Object.values(profiles).flat());
+  const managed = new Set(Object.values(previous.profiles).flat());
+  for (const name of managed) {
+    if (retained.has(name) || !isSafeReferenceName(name)) continue;
+    const destination = path.join(profile.referencesDir, name);
+    await rm(destination, { force: true, recursive: true });
+    messages.push(`removed ${name} at ${destination}`);
+  }
+
+  await writeJsonFileAtomic(referenceStatePath(paths), { version: 1, profiles });
+  return messages;
+}
+
+function isSafeReferenceName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && path.basename(name) === name;
 }
 
 export async function syncReference(

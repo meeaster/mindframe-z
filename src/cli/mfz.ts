@@ -32,7 +32,12 @@ import {
 } from "../core/override-store.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
-import { referenceRows, syncReference, writeReferenceIndex } from "../ref-store/references.js";
+import {
+  referenceRows,
+  syncReference,
+  syncReferences,
+  writeReferenceIndex
+} from "../ref-store/references.js";
 import {
   candidateReviewInvocation,
   checkVendoredSkill,
@@ -1346,8 +1351,11 @@ refs
   .action(async (name) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    const names = name ? [name] : profile.enabledReferences.map((ref) => ref.name);
-    for (const refName of names) console.log(await syncReference(profile, refName));
+    if (name) {
+      console.log(await syncReference(profile, name));
+      return;
+    }
+    for (const message of await syncReferences(paths, profile)) console.log(message);
   });
 
 refs

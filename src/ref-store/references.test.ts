@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ExecaError } from "execa";
 import { describe, expect, it } from "vitest";
+import { createRuntimePaths, referenceStatePath } from "../core/paths.js";
 import { machineSchema, profileSchema, type LoadedManifests } from "../core/manifests.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { isStaleRemoteRefError, syncReference } from "./references.js";
+import { isStaleRemoteRefError, syncReference, syncReferences } from "./references.js";
 
 describe("syncReference", () => {
   it("prunes origin and retries once when git reports stale remote refs", async () => {
@@ -54,6 +55,51 @@ describe("syncReference", () => {
         { stdio: "pipe" }
       ]
     ]);
+  });
+});
+
+describe("syncReferences", () => {
+  it("removes only references owned by the previous snapshot", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-refs-state-test-"));
+    const referencesDir = path.join(home, "references");
+    await mkdir(path.join(referencesDir, "old-ref"), { recursive: true });
+    await mkdir(path.join(referencesDir, "shared-ref"), { recursive: true });
+    await mkdir(path.join(referencesDir, "manual-ref"), { recursive: true });
+    await mkdir(path.dirname(referenceStatePath(createRuntimePaths({ home }))), {
+      recursive: true
+    });
+    await writeFile(
+      referenceStatePath(createRuntimePaths({ home })),
+      JSON.stringify({ version: 1, profiles: { test: ["old-ref"], other: ["shared-ref"] } }),
+      "utf8"
+    );
+
+    const profile = makeProfile(referencesDir);
+    profile.enabledReferences = [
+      { name: "new-ref", url: "https://example.invalid/new-ref.git", description: "New" },
+      { name: "shared-ref", url: "https://example.invalid/shared-ref.git", description: "Shared" }
+    ];
+    const paths = createRuntimePaths({ home });
+
+    await expect(
+      syncReferences(paths, profile, async (_profile, name) => `synced ${name}`)
+    ).resolves.toEqual([
+      "synced new-ref",
+      "synced shared-ref",
+      `removed old-ref at ${path.join(referencesDir, "old-ref")}`
+    ]);
+
+    await expect(readFile(path.join(referencesDir, "old-ref"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(access(path.join(referencesDir, "shared-ref"))).resolves.toBeUndefined();
+    await expect(access(path.join(referencesDir, "manual-ref"))).resolves.toBeUndefined();
+    await expect(
+      readFile(referenceStatePath(paths), "utf8").then((content) => JSON.parse(content))
+    ).resolves.toEqual({
+      version: 1,
+      profiles: { test: ["new-ref", "shared-ref"], other: ["shared-ref"] }
+    });
   });
 });
 
