@@ -58,6 +58,176 @@ Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`dis
 Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
 `;
 
+const cronGuideMarkdown = `# Scheduled OpenCode Jobs Guide
+
+Use this guide before adding or changing a recurring \`opencode2 run\` job. Users may call these cron jobs. On this system, use an \`mfz\`-managed systemd user timer rather than \`crontab\`. Do not add a scheduler library, generic job schema, or wrapper CLI for this pattern.
+
+## Choose a session policy
+
+Choose the smallest policy that fits the job:
+
+| Need | Policy | Where the task runs | \`opencode2 run\` flags |
+| --- | --- | --- | --- |
+| Independent run with fresh context | New direct session | New Build root | Omit \`--session\` and \`--continue\` |
+| One cumulative conversation | Persistent direct session | Existing Build root | \`--session <id>\` |
+| One visible thread with isolated work per run | Persistent root plus worker | Fresh child below an existing Build root | \`--session <id>\` on the root, then delegate once |
+| Independent copy of a useful baseline | Forked session | New root copied from the baseline | \`--session <id> --fork\` |
+
+Use a new direct session for independent checks that do not need a stable visible thread. Use a persistent direct session only when prior results help the next run. Use a persistent root plus a worker when the top-level session should stay stable but each run needs fresh working context, bounded fan-out, or large evidence collection. A direct policy means the Build root performs the task from the prompt without delegating first.
+
+New sessions and forks are durable top-level sessions, so they appear in normal session lists. Choose the service's working directory deliberately because OpenCode scopes those lists by location. Worker children are also durable, but normal root-only lists hide them because they have a parent session.
+
+Never use \`--continue\` in a scheduled service. It selects whichever root session happens to be latest for the location. A fixed \`--session\` ID is deterministic, but deleting that session makes the job fail. Do not target one persistent session from multiple services; separate services can submit competing prompts even though each individual oneshot service prevents its own overlap.
+
+## Add the job files
+
+Keep each direct job in three source files:
+
+~~~text
+profiles/<profile>/.config/
+├── opencode/jobs/<job>.md
+└── systemd/user/
+    ├── <job>.service
+    └── <job>.timer
+~~~
+
+For a persistent root plus a worker, use two prompt files. The root prompt delegates. The task prompt contains the complete work and output contract.
+
+~~~text
+profiles/<profile>/.config/opencode/jobs/<job>.md
+profiles/<profile>/.config/opencode/jobs/<job>-task.md
+~~~
+
+## Write the service and timer
+
+Use a oneshot service. Set an absolute working directory, a complete non-interactive \`PATH\`, and the prompt file as standard input.
+
+~~~ini
+[Unit]
+Description=Run <job description>
+
+[Service]
+Type=oneshot
+WorkingDirectory=/absolute/project/or/reference/path
+Environment=HOME=%h
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:%h/.opencode/bin:/usr/local/bin:/usr/bin:/bin
+StandardInput=file:%h/.config/opencode/jobs/<job>.md
+ExecStart=%h/.opencode/bin/opencode2 run --auto --model <provider/model#variant> --agent build
+~~~
+
+Add \`--session <id>\` for either persistent policy. Add \`--fork\` only for the fork policy. Use Build with \`--auto\` by default. Keep read-only, mutation, approval, and external-side-effect guardrails in the prompt; \`--auto\` approves requests that agent policy does not explicitly deny. Add a job-specific agent only when repeated use proves that the job needs a stable custom system prompt or tighter tool policy.
+
+Use a calendar timer with missed-run catch-up:
+
+~~~ini
+[Unit]
+Description=Schedule <job description>
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+~~~
+
+\`Persistent=true\` runs one catch-up activation after a missed calendar event; it does not replay every missed occurrence. Starting an already active oneshot service does not create a second concurrent instance. If different services can touch the same mutable state, serialize them or give each service isolated state.
+
+This machine keeps WSL running, so no Windows scheduler or keepalive process is needed. If the user manager must survive logout or WSL restarts, inspect \`loginctl show-user "$USER" -p Linger\` and enable lingering deliberately. Treat the OpenCode transcript as durable report history. The systemd journal is operational output and may be volatile unless the machine configures persistent journaling.
+
+## Write a bounded prompt
+
+Derive the work window from the schedule when the task can be stateless; do not add a state file merely to remember the previous run. Name authoritative data sources, allowed temporary writes, prohibited mutations, and the exact human-facing output. Keep large inventories, raw diffs, tool transcripts, and child reports out of a persistent root. Optimize anything returned to that root for the human who reads the durable thread.
+
+For evidence-heavy jobs, write temporary data under \`/tmp/opencode\` and remove it before returning. Gather and partition the evidence before fan-out. Give each child a complete batch manifest and a response cap. Ask the worker for one bounded synthesis rather than returning every item it inspected.
+
+When the prompt already contains the complete workflow, tell the root, worker, and review children not to load skills. Load a skill only when the scheduled task needs behavior that the prompt does not provide; loaded skill text becomes part of that session's context.
+
+## Use a scheduled worker
+
+Keep a generic scheduled worker body-free so OpenCode uses its normal system prompt. Leave its model unset when it should inherit the model and variant selected by the root service.
+
+~~~markdown
+---
+description: Runs one isolated scheduled job and may delegate bounded discovery to explore and research agents.
+mode: subagent
+permission:
+  todowrite: deny
+  task:
+    "*": deny
+    explore: allow
+    research: allow
+  delegate_general: deny
+---
+~~~
+
+Enable the agent and nested depth in the home profile:
+
+~~~yaml
+opencode_v2:
+  config:
+    experimental:
+      subagent_depth: 2
+  agents:
+    - scheduled-worker
+~~~
+
+Profile inheritance may require retaining the profile's other enabled agents in the \`agents\` list. Depth \`2\` permits \`root -> worker -> child\`; it does not grant delegation. Deny delegation on custom subagents by default. On \`worker\` and \`scheduled-worker\`, deny every child before allowing only \`explore\` and \`research\`. Use a separate read-only specialist when a child needs shell or authenticated service access that those agents do not have.
+
+Keep the root prompt short. Pass one complete task prompt to one fresh worker, then emit only the worker's bounded human report without a preface or second synthesis. Let the worker gather and materialize shared evidence before it fans independent packets out to children. Raw work remains in durable child sessions, which do not appear in the normal top-level session list.
+
+## Select models and manage context
+
+Set the root model with \`--model provider/model#variant\`. A model-free child inherits the parent's model and variant. A configured child model overrides the parent.
+
+Do not use \`OPENCODE_CONFIG_CONTENT\` as per-run agent configuration when \`opencode2 run\` connects to the shared service. The shared server reads that configuration when it starts. The CLI environment attached to a managed-service session is shell environment, not a new location configuration.
+
+OpenCode compacts long sessions automatically. Compaction preserves the durable transcript but replaces old model-visible context with a lossy summary and recent tail. Start with automatic compaction. Add a compact-before-run wrapper only after repeated runs show stale-context behavior or insufficient headroom.
+
+Compaction is checked before a model request, not during a running model request or tool. In a worker, the risky boundary is after child results return and before synthesis. Bound fan-in before that boundary: materialize large evidence outside the root, divide it into independent batches, cap every child response, and keep the final human report short. A persistent root otherwise stores both the worker tool result and the final answer.
+
+There is no \`opencode2 run --compact-first\` flag. If repeated runs justify explicit root compaction, a wrapper must submit compaction, wait for the session to become idle, verify that compaction succeeded, and only then run the scheduled prompt:
+
+~~~sh
+opencode2 api post /api/session/<id>/compact --data '{}'
+opencode2 api post /api/session/<id>/wait
+opencode2 run --session <id> ...
+~~~
+
+Do not add that wrapper preemptively. It adds a model call and still retains a lossy summary plus recent context rather than producing a blank session.
+
+## Create and activate a persistent session
+
+Create a persistent root once and record its exact ID in the service. The session location must match the service working directory.
+
+~~~sh
+opencode2 api v2.session.create --data '{"title":"Scheduled: <job>","agent":"build","model":{"providerID":"<provider>","id":"<model>","variant":"<variant>"},"location":{"directory":"<absolute-directory>"}}'
+~~~
+
+Apply and activate the job:
+
+~~~sh
+mfz apply
+systemd-analyze --user verify ~/.config/systemd/user/<job>.service ~/.config/systemd/user/<job>.timer
+systemctl --user daemon-reload
+systemctl --user enable --now <job>.timer
+systemctl --user start <job>.service
+~~~
+
+Inspect the result:
+
+~~~sh
+systemctl --user status <job>.service
+systemctl --user list-timers <job>.timer --all
+journalctl --user -u <job>.service --since today
+loginctl show-user "$USER" -p Linger
+~~~
+
+For a persistent root plus worker, inspect the effective runtime rather than trusting source YAML alone: confirm the worker has no configured model or body, the root delegates exactly once, child models inherit the requested variant, delegation stops at the intended depth, and child results stay bounded. Use a disposable top-level test session when exercising a large prompt so verification does not pollute the production root.
+
+Done when the manual service run succeeds, the next timer occurrence is correct in the local timezone, the intended session policy is visible in OpenCode, child models and permissions match the design, temporary state is gone, and no prohibited mutation occurred.
+`;
+
 const guideMarkdown = `# mindframe-z Home Guide
 
 A home is a git repository with \`mfz_home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
@@ -78,9 +248,12 @@ MCP catalog entries define connection details; profiles select direct per-harnes
 
 Profiles and machine config may declare \`extra_folders\`, which grant host-directory access and contribute to the agent-visible cross-repository capability map. Before granting a folder or changing its description, run \`mfz guide extra-folders\`.
 
+Recurring OpenCode jobs use \`mfz\`-managed systemd user timers. Before adding or changing one, run \`mfz guide cron\`.
+
 Topic guides:
 
 - \`mfz guide mcp\` - add or change direct MCP servers, Executor routing, or Executor authentication.
+- \`mfz guide cron\` - add or change a recurring OpenCode job.
 - \`mfz guide skills\` - add or change local or vendored skills.
 - \`mfz guide references\` - add or change read-only reference repositories.
 - \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
@@ -193,6 +366,7 @@ Rendered indexes mark reference clones as read-only. Agents may inspect them but
 `;
 
 const guideTopics = new Map([
+  ["cron", cronGuideMarkdown],
   ["mcp", mcpGuideMarkdown],
   ["skills", skillsGuideMarkdown],
   ["references", referencesGuideMarkdown],

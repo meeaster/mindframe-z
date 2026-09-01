@@ -21,6 +21,7 @@ describe("ensureHomeGuidance", () => {
     const agents = await readFile(path.join(home, "AGENTS.md"), "utf8");
     expect(agents).toContain("mfz:home-guidance:begin");
     expect(agents).toContain("mfz guide skills");
+    expect(agents).toContain("mfz guide cron");
     expect(await readFile(path.join(home, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
     expect(await ensureHomeGuidance(home)).toBe("ok");
     expect(await hasHomeGuidance(home)).toBe(true);
@@ -73,7 +74,9 @@ describe("materializeEngineSkill", () => {
     );
     expect(skillMd).toContain("name: mindframe-z");
     expect(skillMd).toContain("description:");
+    expect(skillMd).toContain("recurring OpenCode jobs");
     expect(skillMd).toContain("mfz guide");
+    expect(skillMd).toContain("mfz guide cron");
   });
 
   it("materializes the immutable hostile-evidence review skill", async () => {

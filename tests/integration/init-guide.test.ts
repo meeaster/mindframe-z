@@ -35,10 +35,23 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("# mindframe-z Home Guide");
     expect(result.stdout).toContain("catalog/references.yml");
     expect(result.stdout).toContain("mfz guide mcp");
+    expect(result.stdout).toContain("mfz guide cron");
     expect(result.stdout).toContain("mfz guide skills");
     expect(result.stdout).toContain("mfz guide references");
     expect(result.stdout).toContain("mfz guide extra-folders");
     expect(result.stdout).not.toContain("Declare Executor authentication structure");
+  });
+
+  it("prints the scheduled OpenCode jobs topic guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "cron"]);
+    expect(result.stdout).toContain("# Scheduled OpenCode Jobs Guide");
+    expect(result.stdout).toContain("Persistent root plus worker");
+    expect(result.stdout).toContain("Never use `--continue`");
+    expect(result.stdout).toContain("New sessions and forks are durable top-level sessions");
+    expect(result.stdout).toContain("OPENCODE_CONFIG_CONTENT");
+    expect(result.stdout).toContain("There is no `opencode2 run --compact-first` flag");
+    expect(result.stdout).toContain("systemctl --user enable --now");
   });
 
   it("prints the MCP topic guide", async () => {

@@ -15,12 +15,13 @@ export const skillUpdateReviewName = "skill-update-review";
 
 const engineSkillMarkdown = `---
 name: mindframe-z
-description: Operate the mfz CLI or change mindframe-z configuration — any request naming mfz or mindframe-z, its homes, profiles, skills, or machine config, from any directory.
+description: Operate the mfz CLI or change mindframe-z configuration — requests naming mfz or mindframe-z, its homes, profiles, skills, machine config, or recurring OpenCode jobs, from any directory.
 ---
 
 mindframe-z renders AI tool configuration from a home repo onto this machine.
 Run \`mfz guide\` for home layout and editing conventions, and \`mfz guide skills\`
-before adding or changing skills; \`mfz --help\` lists commands. For normal machine
+before adding or changing skills. Run \`mfz guide cron\` before adding or changing a
+scheduled OpenCode job. \`mfz --help\` lists commands. For normal machine
 changes, edit home source files and run plain \`mfz apply\`; it follows the active home
 and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and
 \`--profile\` for isolated tests with an explicit test home. Never edit rendered output
@@ -149,6 +150,7 @@ managed by \`mfz apply\` and rewritten on every run.
 - Before configuring anything here (profiles, catalog entries, skills, MCP,
   instructions, dotfiles), run \`mfz guide\`; before adding or changing skills,
   run \`mfz guide skills\`.
+- Before adding or changing a recurring OpenCode job, run \`mfz guide cron\`.
 - Edit source files in this repo, then run plain \`mfz apply\`; it follows the active home and profile from \`~/.mindframe-z/config.yml\`.
 - Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated test commands with an explicit test home.
 - Never edit rendered output (\`~/.mindframe-z/configs/\` or globally linked
