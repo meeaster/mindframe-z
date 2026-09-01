@@ -20,6 +20,14 @@ import { requiresExecutorBridge } from "../core/profile.js";
 import { jsonFileContent, readDirEntries } from "../core/fs-util.js";
 import type { RenderResult } from "../core/render.js";
 import { jsonObjectSchema } from "../core/json.js";
+import { z } from "zod";
+
+const localPackageSchema = z.object({
+  exports: z.union([
+    z.string().transform((entry) => new Map([[".", entry]])),
+    z.record(z.string(), z.string()).transform((entries) => new Map(Object.entries(entries)))
+  ])
+});
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -65,7 +73,8 @@ export async function collectPluginFiles(
   pluginNames: readonly string[],
   directoryEntry = true,
   discover = true,
-  version: "v1" | "v2" = "v1"
+  version: "v1" | "v2" = "v1",
+  packageExport?: "." | "./tui"
 ): Promise<{ files: RenderResult["files"]; entries: string[] }> {
   let names: string[];
   if (pluginNames.length > 0) {
@@ -97,11 +106,16 @@ export async function collectPluginFiles(
     const sourceDir = path.join(rootByName(name), "opencode", "plugins");
     const legacyDir = path.join(sourceDir, name);
     let dirPath = path.join(sourceDir, name, version);
-    if (version === "v1") {
+    let rootPackage = false;
+    if (version === "v1" || version === "v2") {
       try {
-        if (!(await stat(dirPath)).isDirectory()) dirPath = legacyDir;
+        if (!(await stat(dirPath)).isDirectory()) {
+          dirPath = legacyDir;
+          rootPackage = true;
+        }
       } catch {
         dirPath = legacyDir;
+        rootPackage = true;
       }
     }
     let isDir = false;
@@ -113,32 +127,37 @@ export async function collectPluginFiles(
     }
 
     if (isDir) {
-      await copyDirContents(dirPath, path.join(pluginsDir, name), files);
-      if (directoryEntry) {
-        try {
-          await stat(path.join(dirPath, "package.json"));
-          entries.push(`file://${path.join(pluginsDir, name)}`);
-          continue;
-        } catch {
-          // Legacy local directory plugins use an index module.
-        }
-        const entry = await sourceExtensions.reduce<Promise<string | undefined>>(
-          async (found, ext) => {
-            if (await found) return found;
-            try {
-              await stat(path.join(dirPath, `index${ext}`));
-              return `index${ext}`;
-            } catch {
-              return undefined;
-            }
-          },
-          Promise.resolve(undefined)
-        );
-        if (!entry) throw new Error(`Unknown OpenCode plugin: ${name} (missing index module)`);
-        entries.push(`file://${path.join(pluginsDir, name, entry)}`);
-      } else {
-        entries.push(`file://${path.join(pluginsDir, name)}`);
+      if (!directoryEntry) {
+        entries.push(`file://${dirPath}`);
+        continue;
       }
+      await copyDirContents(dirPath, path.join(pluginsDir, name), files);
+      try {
+        const manifest = localPackageSchema.parse(
+          JSON.parse(await readFile(path.join(dirPath, "package.json"), "utf8"))
+        );
+        const exported = packageExport ? manifest.exports.get(packageExport) : undefined;
+        entries.push(
+          `file://${path.join(packageExport && rootPackage ? dirPath : path.join(pluginsDir, name), exported ?? "")}`
+        );
+        continue;
+      } catch {
+        // Legacy local directory plugins use an index module.
+      }
+      const entry = await sourceExtensions.reduce<Promise<string | undefined>>(
+        async (found, ext) => {
+          if (await found) return found;
+          try {
+            await stat(path.join(dirPath, `index${ext}`));
+            return `index${ext}`;
+          } catch {
+            return undefined;
+          }
+        },
+        Promise.resolve(undefined)
+      );
+      if (!entry) throw new Error(`Unknown OpenCode plugin: ${name} (missing index module)`);
+      entries.push(`file://${path.join(pluginsDir, name, entry)}`);
       continue;
     }
 

@@ -2,7 +2,6 @@ import * as readline from "node:readline/promises";
 import path from "node:path";
 import { unlink } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
-import { z } from "zod";
 import {
   executorPlanSummary,
   hasManagedExecutorState,
@@ -41,7 +40,10 @@ import {
   writeJsonFileAtomic,
   writeTextFile
 } from "../core/fs-util.js";
-import { mergeOpenCodeV2CliPlugins } from "../renderers/opencode-v2.js";
+import {
+  mergeOpenCodeV2CliPlugins,
+  parseOpenCodeV2PluginEntries
+} from "../renderers/opencode-v2.js";
 import {
   readActiveProfile,
   readOwnership,
@@ -136,7 +138,7 @@ async function applyRenderedTarget(
   if (result.cliPlugins) {
     const exists = await pathExists(result.cliPlugins.path);
     const registry = await readJsonObject(result.cliPlugins.registryPath);
-    const previousEntries = z.array(z.string()).safeParse(registry.entries).data ?? [];
+    const previousEntries = parseOpenCodeV2PluginEntries(registry.entries);
     if (exists || result.cliPlugins.entries.length > 0) {
       const cli = await readJsonObject(result.cliPlugins.path);
       const merged = mergeOpenCodeV2CliPlugins(

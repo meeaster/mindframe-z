@@ -79,6 +79,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
         dependencies: {},
         cli: {},
         plugins: [],
+        plugin_options: {},
         tui_plugins: [],
         commands: [],
         agents: []

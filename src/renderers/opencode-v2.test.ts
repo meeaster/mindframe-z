@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { profileSchema } from "../core/manifests.js";
 import { createRuntimePaths } from "../core/paths.js";
@@ -114,6 +114,49 @@ describe("OpenCode V2 renderer", () => {
     );
     expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
     expect(result.links.some((link) => link.linkPath.endsWith("node_modules"))).toBe(false);
+  });
+
+  it("renders the same configured options for server and TUI plugin assets", async () => {
+    const home = "/tmp/mfz-opencode-v2-plugin-options";
+    const root = "/tmp/mfz-opencode-v2-plugin-options-source";
+    const source = path.join(root, "opencode", "plugins", "work-ledger");
+    await rm(root, { recursive: true, force: true });
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, "index.ts"), "export default {}\n");
+    await writeFile(
+      path.join(source, "package.json"),
+      '{"type":"module","exports":{".":"./index.ts","./tui":"./tui/index.tsx"}}\n'
+    );
+
+    const paths = createRuntimePaths({ root, home });
+    paths.activeOpenCodeRuntime = "v2";
+    const resolved = profile(home);
+    resolved.profile.opencode_v2.plugin_options = {
+      "work-ledger": { root: "~/workspace/knowledge/personal-knowledge/ledgers" }
+    };
+    const result = await renderOpenCodeV2(paths, {
+      ...resolved,
+      enabledOpenCodeV2Plugins: ["work-ledger"],
+      enabledOpenCodeV2TuiPlugins: ["work-ledger"],
+      // SAFETY: collectPluginFiles reads only the root field from this renderer fixture.
+      sources: {
+        plugins: new Map([["work-ledger", { root }]])
+      } as ResolvedProfile["sources"]
+    });
+    const options = { root: "~/workspace/knowledge/personal-knowledge/ledgers" };
+
+    expect(renderedConfig(result).plugins).toEqual([
+      {
+        package: `file://${source}`,
+        options
+      }
+    ]);
+    expect(result.cliPlugins?.entries).toEqual([
+      {
+        package: `file://${path.join(source, "tui", "index.tsx")}`,
+        options
+      }
+    ]);
   });
 
   it("links active V2 runtime dependencies from the profile", async () => {
@@ -300,6 +343,20 @@ describe("OpenCode V2 renderer", () => {
         userOwnedPath,
         managed
       ]
+    });
+  });
+
+  it("replaces managed object entries when options change and preserves user entries", () => {
+    const packageUrl = "file:///tmp/mfz/plugins/tui/work-ledger";
+    const previous = { package: packageUrl, options: { root: "/old" } };
+    const next = { package: packageUrl, options: { root: "/new" } };
+    const user = { package: "npm:user-plugin", options: { enabled: false } };
+
+    expect(mergeOpenCodeV2CliPlugins({ plugins: [previous, user] }, [next], [previous])).toEqual({
+      plugins: [user, next]
+    });
+    expect(mergeOpenCodeV2CliPlugins({ plugins: [previous, user] }, [], [previous])).toEqual({
+      plugins: [user]
     });
   });
 

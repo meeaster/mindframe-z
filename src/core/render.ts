@@ -17,6 +17,8 @@ import type { LinkPlan } from "./symlinks.js";
 import { readSkillOverridesFile } from "./skill-overrides.js";
 import type { JsonObject } from "./json.js";
 
+export type OpenCodeV2PluginEntry = string | { package: string; options: JsonObject };
+
 export interface RenderedFile {
   path: string;
   content: string;
@@ -30,7 +32,7 @@ export interface RenderResult {
   localStaleFiles?: string[];
   cliPlugins?: {
     path: string;
-    entries: string[];
+    entries: OpenCodeV2PluginEntry[];
     registryPath: string;
     settings?: JsonObject;
   };

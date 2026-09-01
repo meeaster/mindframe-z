@@ -287,7 +287,17 @@ describe("apply integration", () => {
       .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
       .replace(
         "claude:\n",
-        ["opencode_v2:", "  tui_plugins:", "    - session-cost-tui", "", "claude:", ""].join("\n")
+        [
+          "opencode_v2:",
+          "  plugin_options:",
+          "    session-cost-tui:",
+          "      mode: compact",
+          "  tui_plugins:",
+          "    - session-cost-tui",
+          "",
+          "claude:",
+          ""
+        ].join("\n")
       );
     await writeFile(profilePath, profile, "utf8");
     const cliPath = path.join(home, ".config", "opencode", "cli.json");
@@ -303,7 +313,8 @@ describe("apply integration", () => {
     );
 
     const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
-    const managed = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui")}`;
+    const managedPackage = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui", "index.tsx")}`;
+    const managed = { package: managedPackage, options: { mode: "compact" } };
     expect(applied.stdout).toContain(`merged\t${cliPath} plugins`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
@@ -315,6 +326,18 @@ describe("apply integration", () => {
       )
     ).toEqual({ version: 1, entries: [managed] });
     expect((await lstat(cliPath)).isSymbolicLink()).toBe(false);
+
+    await writeFile(profilePath, profile.replace("mode: compact", "mode: detailed"), "utf8");
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
+      theme: "dark",
+      plugins: [
+        "npm:other",
+        { path: "file:///user/plugin" },
+        userPlugin,
+        { package: managedPackage, options: { mode: "detailed" } }
+      ]
+    });
 
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),

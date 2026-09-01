@@ -106,6 +106,8 @@ An old direct map with every value `true` becomes a concise list. A map with `fa
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
+OpenCode V2 profiles may define `opencode_v2.plugin_options` by plugin asset name. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
+
 ## Sync
 
 `mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged harness keys back into profiles. Mise is intentionally excluded: native Mise commands own unmanaged user edits. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.

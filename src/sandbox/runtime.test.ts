@@ -73,6 +73,7 @@ function profile(
         dependencies: {},
         cli: {},
         plugins: [],
+        plugin_options: {},
         tui_plugins: [],
         commands: [],
         agents: []

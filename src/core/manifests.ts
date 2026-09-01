@@ -493,6 +493,7 @@ const opencodeV2ConfigSchema = z.object({
   cli: jsonObjectSchema.default({}),
   global_instructions: z.boolean().optional(),
   plugins: z.array(z.string()).default([]),
+  plugin_options: z.record(z.string().min(1), jsonObjectSchema).default({}),
   tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([])
@@ -545,6 +546,7 @@ export const profileSchema = z
       dependencies: {},
       cli: {},
       plugins: [],
+      plugin_options: {},
       tui_plugins: [],
       commands: [],
       agents: []

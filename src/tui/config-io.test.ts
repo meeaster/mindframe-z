@@ -66,6 +66,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
         dependencies: {},
         cli: {},
         plugins: [],
+        plugin_options: {},
         tui_plugins: [],
         commands: [],
         agents: []

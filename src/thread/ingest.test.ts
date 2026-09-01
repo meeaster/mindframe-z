@@ -83,6 +83,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
         dependencies: {},
         cli: {},
         plugins: [],
+        plugin_options: {},
         tui_plugins: [],
         commands: [],
         agents: []

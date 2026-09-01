@@ -16,23 +16,24 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
-import type { RenderResult } from "../core/render.js";
+import type { OpenCodeV2PluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
 import { collectPluginFiles } from "./opencode.js";
 import { openCodeV2ExecutorEntry } from "./executor.js";
-import type { JsonObject } from "../core/json.js";
+import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
 import { z } from "zod";
 
 export function mergeOpenCodeV2CliPlugins(
   cli: JsonObject,
-  managedEntries: readonly string[],
-  previouslyManagedEntries: readonly string[]
+  managedEntries: readonly OpenCodeV2PluginEntry[],
+  previouslyManagedEntries: readonly OpenCodeV2PluginEntry[]
 ) {
   const plugins = Array.isArray(cli.plugins) ? cli.plugins : [];
+  const previousPackages = previouslyManagedEntries.map(pluginPackage);
   const preserved = plugins.filter((entry) => {
-    const stringEntry = z.string().safeParse(entry);
-    return !stringEntry.success || !previouslyManagedEntries.includes(stringEntry.data);
+    const parsed = pluginEntrySchema.safeParse(entry);
+    return !parsed.success || !previousPackages.includes(pluginPackage(parsed.data));
   });
   const nextPlugins = [...preserved, ...managedEntries];
 
@@ -43,6 +44,46 @@ export function mergeOpenCodeV2CliPlugins(
     return withoutPlugins;
   }
   return { ...cli, plugins: nextPlugins };
+}
+
+const pluginObjectEntrySchema = z.object({ package: z.string(), options: jsonObjectSchema });
+const pluginEntrySchema: z.ZodType<OpenCodeV2PluginEntry> = z.union([
+  z.string(),
+  pluginObjectEntrySchema
+]);
+
+export function parseOpenCodeV2PluginEntries(
+  value: JsonValue | undefined
+): OpenCodeV2PluginEntry[] {
+  const parsed = z.array(pluginEntrySchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+function pluginPackage(entry: OpenCodeV2PluginEntry): string {
+  const parsed = z.string().safeParse(entry);
+  return parsed.success ? parsed.data : pluginObjectEntrySchema.parse(entry).package;
+}
+
+function configurePluginEntries(
+  entries: readonly string[],
+  pluginsPath: string,
+  optionsByName: JsonObject
+): OpenCodeV2PluginEntry[] {
+  const prefix = `file://${pluginsPath}${path.sep}`;
+  return entries.map((entry) => {
+    const managedName = entry.startsWith(prefix)
+      ? entry
+          .slice(prefix.length)
+          .split(path.sep)[0]!
+          .replace(/\.[cm]?[jt]sx?$/, "")
+      : Object.keys(optionsByName).find((name) => {
+          const packagePath = `${path.sep}opencode${path.sep}plugins${path.sep}${name}`;
+          return entry.endsWith(packagePath) || entry.includes(`${packagePath}${path.sep}`);
+        });
+    if (!managedName) return entry;
+    const options = jsonObjectSchema.safeParse(optionsByName[managedName]);
+    return options.success ? { package: entry, options: options.data } : entry;
+  });
 }
 
 interface NativePermissionRule {
@@ -143,7 +184,7 @@ export async function renderOpenCodeV2(
     (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
     pluginsPath,
     profile.enabledOpenCodeV2Plugins ?? [],
-    true,
+    false,
     false,
     "v2"
   );
@@ -154,7 +195,8 @@ export async function renderOpenCodeV2(
     profile.enabledOpenCodeV2TuiPlugins ?? [],
     true,
     false,
-    "v2"
+    "v2",
+    "./tui"
   );
 
   const commandFiles = await collectOpenCodeMarkdownFiles(
@@ -169,13 +211,24 @@ export async function renderOpenCodeV2(
     "agents",
     profile.enabledOpenCodeV2Agents
   );
+  const pluginOptions = profile.profile.opencode_v2.plugin_options;
+  const serverPluginEntries = configurePluginEntries(
+    pluginResult.entries,
+    pluginsPath,
+    pluginOptions
+  );
+  const tuiPluginEntries = configurePluginEntries(
+    tuiPluginResult.entries,
+    tuiPluginsPath,
+    pluginOptions
+  );
   const config = {
     ...profile.profile.opencode_v2.config,
     $schema: "https://opencode.ai/config.json",
     instructions,
     mcp: nativeMcp(profile, paths)
   };
-  if (pluginResult.entries.length > 0) Object.assign(config, { plugins: pluginResult.entries });
+  if (serverPluginEntries.length > 0) Object.assign(config, { plugins: serverPluginEntries });
   Object.assign(config, {
     skills: [skillsPath],
     permissions: nativePermissions(paths, profile)
@@ -285,7 +338,7 @@ export async function renderOpenCodeV2(
   if (paths.activeOpenCodeRuntime === "v2") {
     result.cliPlugins = {
       path: path.join(paths.opencodeConfigDir, "cli.json"),
-      entries: tuiPluginResult.entries,
+      entries: tuiPluginEntries,
       registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
       settings: profile.profile.opencode_v2.cli
     };

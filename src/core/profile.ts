@@ -465,6 +465,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       global_instructions:
         child.opencode_v2.global_instructions ?? base.opencode_v2.global_instructions,
       plugins: dedupe([...base.opencode_v2.plugins, ...child.opencode_v2.plugins]),
+      plugin_options: deepMerge(base.opencode_v2.plugin_options, child.opencode_v2.plugin_options),
       tui_plugins: dedupe([...base.opencode_v2.tui_plugins, ...child.opencode_v2.tui_plugins]),
       commands: dedupe([...base.opencode_v2.commands, ...child.opencode_v2.commands]),
       agents: dedupe([...base.opencode_v2.agents, ...child.opencode_v2.agents])

@@ -399,6 +399,7 @@
         "dependencies": {},
         "cli": {},
         "plugins": [],
+        "plugin_options": {},
         "tui_plugins": [],
         "commands": [],
         "agents": []
@@ -433,6 +434,17 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "plugin_options": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
           }
         },
         "tui_plugins": {

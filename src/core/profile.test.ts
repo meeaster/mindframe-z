@@ -472,6 +472,28 @@ describe("mergeProfiles OpenCode TUI", () => {
   });
 });
 
+describe("mergeProfiles OpenCode V2 plugin options", () => {
+  it("deep-merges options with child values taking precedence", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      opencode_v2: {
+        plugin_options: { ledger: { root: "/base", display: { compact: false } } }
+      }
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      opencode_v2: {
+        plugin_options: { ledger: { root: "/child", display: { label: "Work" } } }
+      }
+    });
+
+    expect(mergeProfiles(base, child).opencode_v2.plugin_options).toEqual({
+      ledger: { root: "/child", display: { compact: false, label: "Work" } }
+    });
+  });
+});
+
 describe("mergeProfiles OpenCode dependencies", () => {
   it("merges dependencies with child versions taking precedence", () => {
     const base = profileSchema.parse({
