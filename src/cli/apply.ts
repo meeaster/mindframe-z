@@ -31,6 +31,7 @@ import {
 } from "../core/git-config.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
 import { writeExtraFoldersIndex, writeReferenceIndex } from "../ref-store/references.js";
+import { writeCapabilityIndexes } from "../ref-store/capabilities.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import {
@@ -198,35 +199,19 @@ export async function applyConfig(
 ): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const rendersAgents = options.target === "all";
-  const includeActiveV2 =
-    rendersAgents && options.agent === "all" && paths.activeOpenCodeRuntime === "v2";
   const profile = await resolveProfile(
     paths,
     options.profile,
     !rendersAgents
       ? { evaluateAgents: [] }
       : options.agent === "all"
-        ? includeActiveV2
-          ? { evaluateAgents: ["opencode-v2"] }
-          : undefined
+        ? undefined
         : { evaluateAgents: [options.agent] }
   );
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
-  if (rendersAgents && options.agent === "all") {
-    const activeOpenCode = paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode";
-    const inactiveOpenCode = activeOpenCode === "opencode" ? "opencode-v2" : "opencode";
-    if (selectedAgents.includes(activeOpenCode) || selectedAgents.includes(inactiveOpenCode)) {
-      const index = selectedAgents.indexOf(inactiveOpenCode);
-      if (index >= 0) selectedAgents.splice(index, 1);
-      if (!selectedAgents.includes(activeOpenCode)) selectedAgents.push(activeOpenCode);
-    }
-  }
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
   const selectedExecutorTarget = selectedAgents.some((target) => target !== "pi");
-  const selectedLegacyExecutorTarget = selectedAgents.some(
-    (target) => target !== "pi" && target !== "opencode-v2"
-  );
   const reconcile = dependencies.reconcileExecutor ?? reconcileExecutor;
   const render = dependencies.renderTarget ?? renderTarget;
   const usePrompts = !options.dryRun && !options.noLink;
@@ -240,7 +225,7 @@ export async function applyConfig(
     const executorPlan =
       selectedExecutorTarget &&
       (requiresExecutorReconciliation(profile, selectedAgents) ||
-        (selectedLegacyExecutorTarget && (await hasManagedExecutorState(paths, profile.name))))
+        (await hasManagedExecutorState(paths, profile.name)))
         ? await reconcile(paths, profile, {
             dryRun: options.dryRun ?? false,
             interactive: Boolean(processStdin.isTTY)
@@ -251,6 +236,7 @@ export async function applyConfig(
       if (rendersAgents) {
         await writeReferenceIndex(paths, profile);
         await writeExtraFoldersIndex(paths, profile);
+        await writeCapabilityIndexes(paths, profile);
         await renderAllPayloads(paths, profile);
       }
     }
@@ -289,10 +275,7 @@ export async function applyConfig(
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: selectedAgents.filter(
         (target): target is SkillTarget =>
-          target === "opencode" ||
-          target === "opencode-v2" ||
-          target === "claude-code" ||
-          target === "codex"
+          target === "opencode-v2" || target === "claude-code" || target === "codex"
       ),
       dryRun: options.dryRun ?? false,
       link: !options.noLink

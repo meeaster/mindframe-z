@@ -9,17 +9,8 @@ import {
   requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
-import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
-import {
-  effectiveProjectState,
-  projectOverrides,
-  readOverrideStore,
-  type OverrideStore
-} from "../core/override-store.js";
-import {
-  evaluateOpenCodeSkillPermission,
-  readSkillOverridesFile
-} from "../core/skill-overrides.js";
+import { type RuntimePaths } from "../core/paths.js";
+import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import { analyzeRepository } from "./repository.js";
 import { measuredContributor, unknownContributor } from "./measurement.js";
 import type {
@@ -62,8 +53,8 @@ async function readSkillFile(
   harness: ContextHarness
 ): Promise<SkillFile | undefined> {
   const targetRoot =
-    harness === "opencode"
-      ? path.join(paths.home, ".agents", "skills")
+    harness === "opencode-v2"
+      ? path.join(paths.opencodeConfigDir, "skills")
       : path.join(paths.claudeDir, "skills");
   const skillName = skill.source === "local" ? (skill.skill ?? skill.name) : skill.name;
   const candidates = [
@@ -101,9 +92,7 @@ function indexContributor(
 async function skillContributors(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  harness: ContextHarness,
-  projectRoot: string | undefined,
-  overrideStore: OverrideStore
+  harness: ContextHarness
 ): Promise<{
   contributors: ContextContributor[];
   notes: string[];
@@ -112,31 +101,8 @@ async function skillContributors(
   const contributors: ContextContributor[] = [];
   const notes: string[] = [];
   const visibleSkillNames: string[] = [];
-  const globalOverrides =
-    harness === "opencode"
-      ? await readSkillOverridesFile(globalSkillStatePath(paths, "opencode"))
-      : {};
-  const projectOverridesForHarness =
-    harness === "opencode" && projectRoot
-      ? projectOverrides(overrideStore, projectRoot, "opencode", "skills")
-      : {};
-  const machinePermission = profile.manifests.machine.opencode.permission;
-  for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(harness))) {
-    if (harness === "opencode") {
-      const permission = evaluateOpenCodeSkillPermission(
-        skill.name,
-        profile.profile.opencode.config.permission,
-        globalOverrides,
-        projectOverridesForHarness,
-        machinePermission
-      );
-      if (permission.effect === "deny") {
-        notes.push(
-          `OpenCode skill ${skill.name} excluded from model availability by the effective ${permission.source} permission override`
-        );
-        continue;
-      }
-    }
+  const capability = harness === "opencode-v2" ? "opencode" : harness;
+  for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(capability))) {
     visibleSkillNames.push(skill.name);
     const file = await readSkillFile(paths, skill, harness);
     const source = file?.path ?? path.join(skill.sourceRoot, "skills");
@@ -206,9 +172,7 @@ export async function analyzeHarnessStatic(
 ): Promise<HarnessReport> {
   const contributors: ContextContributor[] = [];
   const scopeNotes = [
-    harness === "opencode"
-      ? "scope: profile instructions and indexes, model-visible skills after effective overrides, enabled MCP exposure, and repository instructions; excludes built-ins, plugins, bundled skills, and unmanaged extensions"
-      : "scope: profile instructions and indexes, enabled skills and MCP exposure, and repository instructions; excludes built-ins, plugins, bundled skills, and unmanaged extensions"
+    "scope: profile instructions and indexes, enabled skills and MCP exposure, and repository instructions; excludes built-ins, plugins, bundled skills, and unmanaged extensions"
   ];
 
   for (const instruction of profile.instructionFiles) {
@@ -257,10 +221,10 @@ export async function analyzeHarnessStatic(
   }
 
   const overrideStore = await readOverrideStore(paths.home);
-  const skills = await skillContributors(paths, profile, harness, projectRoot, overrideStore);
+  const skills = await skillContributors(paths, profile, harness);
   contributors.push(...skills.contributors);
   scopeNotes.push(...skills.notes);
-  const mcpLoading = harness === "opencode" ? openCodeMcpLoading() : claudeMcpLoading();
+  const mcpLoading = harness === "opencode-v2" ? openCodeMcpLoading() : claudeMcpLoading();
   const effectiveMcp = effectiveProjectState(overrideStore, projectRoot, profile, harness, "mcp");
   const mcpServers: ContextMcpMembership[] = filterMcpForTarget(profile, harness).map(
     ({ name }) => ({

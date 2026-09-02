@@ -19,7 +19,6 @@ async function tmpPaths(): Promise<RuntimePaths> {
     workUnitsRoot: path.join(root, "home", ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(root, "home", ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(root, "opencode"),
-    opencodeV2ConfigDir: path.join(root, "opencode-v2"),
     claudeDir: path.join(root, "claude"),
     codexDir: path.join(root, "codex"),
     piDir: path.join(root, "pi", "agent"),
@@ -48,7 +47,10 @@ function profile(codexDefault: boolean): ResolvedProfile {
 // turned on. That pins both directions of each boolean encoding. `mcpDefault`
 // is per-target because only the flip each harness actually supports is worth
 // pinning — Claude Code rejects disabling an MCP server (assertMcpToggleSupported).
-function harnessProfile(target: AgentName, mcpDefault: boolean): ResolvedProfile {
+function harnessProfile(
+  target: Exclude<AgentName, "opencode-v2" | "pi">,
+  mcpDefault: boolean
+): ResolvedProfile {
   // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
   const result: Partial<ResolvedProfile> = {
     mcpServers: [
@@ -132,31 +134,6 @@ describe("override store", () => {
     expect((await readOverrideStore(paths.home)).projects).toEqual({});
   });
 
-  // The opencode wrapper rendered by src/renderers/dotfiles.ts feeds this object
-  // straight into OPENCODE_CONFIG_CONTENT, so the key names are a wire contract
-  // with opencode's own config schema rather than an internal detail.
-  it("encodes opencode project overrides as an opencode config payload", async () => {
-    const paths = await tmpPaths();
-    const projectRoot = path.join(paths.root, "repo");
-    const opencode = harnessProfile("opencode", true);
-
-    await writeProjectOverrideDelta(paths, opencode, projectRoot, "opencode", "mcp", {
-      jira: false
-    });
-    await writeProjectOverrideDelta(paths, opencode, projectRoot, "opencode", "skills", {
-      "pr-writer": false,
-      dataviz: true
-    });
-
-    const section = (await readOverrideStore(paths.home)).projects[projectRoot]?.opencode;
-    expect(section?.payload?.config).toEqual({
-      mcp: { jira: { enabled: false } },
-      permission: { skill: { "pr-writer": "deny", dataviz: "allow" } }
-    });
-    expect(section?.payload?.argv).toBeUndefined();
-    expect(section?.payload?.settings).toBeUndefined();
-  });
-
   // The claude wrapper passes this object to `claude --settings`, so it must stay
   // shaped like a Claude Code settings file and must not leak MCP overrides,
   // which Claude Code does not read from that flag.
@@ -187,26 +164,19 @@ describe("override store", () => {
     await expect(
       writeProjectOverrideDelta(
         paths,
-        harnessProfile("opencode", true),
+        harnessProfile("codex", true),
         projectRoot,
-        "opencode",
+        "codex",
         "skills",
         {
           "not-a-skill": true
         }
       )
-    ).rejects.toThrow("Skill not-a-skill is not available for opencode");
+    ).rejects.toThrow("Skill not-a-skill is not available for codex");
     await expect(
-      writeProjectOverrideDelta(
-        paths,
-        harnessProfile("opencode", true),
-        projectRoot,
-        "opencode",
-        "mcp",
-        {
-          "not-a-server": true
-        }
-      )
-    ).rejects.toThrow("MCP server not-a-server is not available for opencode");
+      writeProjectOverrideDelta(paths, harnessProfile("codex", true), projectRoot, "codex", "mcp", {
+        "not-a-server": true
+      })
+    ).rejects.toThrow("MCP server not-a-server is not available for codex");
   });
 });

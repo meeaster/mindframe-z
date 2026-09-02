@@ -3,13 +3,13 @@ import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import { pathExists, readDirEntries, readTomlObject } from "./fs-util.js";
-import { jsonObjectSchema, jsonValueSchema } from "./json.js";
+import { jsonObjectSchema } from "./json.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
-export const agentSchema = z.enum(["opencode", "opencode-v2", "claude-code", "codex", "pi"]);
+export const agentSchema = z.enum(["opencode-v2", "claude-code", "codex", "pi"]);
 const targetSchema = agentSchema;
-const capabilityAgentSchema = agentSchema.exclude(["opencode-v2"]);
+const capabilityAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
 const agentsMapSchema = z
   .partialRecord(capabilityAgentSchema, z.boolean())
   .refine((agents) => Object.keys(agents).length > 0, {
@@ -103,11 +103,23 @@ const profileSkillConfigSchema = z
   })
   .strict();
 
+const capabilityGroupNameSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z][a-z0-9-]*$/, "must be lowercase kebab-case");
+
+const capabilityMetadataSchema = {
+  group: capabilityGroupNameSchema.optional(),
+  summary: z.string().min(1).optional(),
+  signals: z.array(z.string().min(1)).min(1).optional()
+};
+
 export const referenceSchema = z.object({
   name: z.string().min(1),
   url: z.string().min(1),
   ref: z.string().min(1).optional(),
-  description: z.string().default("")
+  description: z.string().default(""),
+  ...capabilityMetadataSchema
 });
 
 export const refsManifestSchema = z.object({
@@ -321,7 +333,29 @@ export const extraFolderSchema = z.object({
   // reader can reopen it. Optional: many extra folders (mounts, config dirs) have no upstream.
   url: z.string().optional(),
   read: z.enum(["allow", "ask", "deny"]).default("allow"),
-  edit: z.enum(["allow", "ask", "deny"]).default("allow")
+  edit: z.enum(["allow", "ask", "deny"]).default("allow"),
+  ...capabilityMetadataSchema
+});
+
+const capabilityGroupSchema = z
+  .object({
+    name: capabilityGroupNameSchema,
+    title: z.string().min(1).optional(),
+    summary: z.string().min(1)
+  })
+  .strict();
+const capabilityGroupsSchema = z.array(capabilityGroupSchema).superRefine((groups, context) => {
+  const seen = new Set<string>();
+  for (const [index, group] of groups.entries()) {
+    if (seen.has(group.name)) {
+      context.addIssue({
+        code: "custom",
+        message: `duplicate capability group name: ${group.name}`,
+        path: [index, "name"]
+      });
+    }
+    seen.add(group.name);
+  }
 });
 
 const delegateGeneralModelSchema = z.object({
@@ -476,17 +510,6 @@ const exactVersionSchema = z
     "must be an exact semantic version"
   );
 
-const opencodeConfigSchema = z.object({
-  config: jsonObjectSchema.default({}),
-  dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
-  plugins: z.array(z.string()).default([]),
-  tui: jsonObjectSchema.default({}),
-  tui_plugins: z.array(z.string()).default([]),
-  commands: z.array(z.string()).default([]),
-  agents: z.array(z.string()).default([]),
-  delegate_general: delegateGeneralSchema.optional()
-});
-
 const opencodeV2ConfigSchema = z.object({
   config: jsonObjectSchema.default({}),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
@@ -514,13 +537,41 @@ const piConfigSchema = z.object({
   subagent_config: jsonObjectSchema.default({})
 });
 
+const instructionReferenceSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9-]*$/, "must be lowercase kebab-case"),
+    path: z.string().min(1),
+    description: z.string().min(1)
+  })
+  .strict();
+const instructionReferencesSchema = z
+  .array(instructionReferenceSchema)
+  .superRefine((references, context) => {
+    const seen = new Set<string>();
+    for (const [index, reference] of references.entries()) {
+      if (seen.has(reference.name)) {
+        context.addIssue({
+          code: "custom",
+          message: `duplicate instruction reference name: ${reference.name}`,
+          path: [index, "name"]
+        });
+      }
+      seen.add(reference.name);
+    }
+  });
+
 export const profileSchema = z
   .object({
     name: z.string().min(1),
     extends: z.string().optional(),
     description: z.string().default(""),
-    agents: z.array(agentSchema).default(["opencode", "claude-code", "codex"]),
+    agents: z.array(agentSchema).default(["opencode-v2", "claude-code", "codex"]),
     instructions: z.array(z.string()).default([]),
+    instruction_references: instructionReferencesSchema.default([]),
+    capability_groups: capabilityGroupsSchema.default([]),
     references: z.array(z.string()).default([]),
     skills: z.record(z.string(), profileSkillConfigSchema.optional()).default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
@@ -532,15 +583,6 @@ export const profileSchema = z
       })
       .strict()
       .optional(),
-    opencode: opencodeConfigSchema.default({
-      config: {},
-      dependencies: {},
-      plugins: [],
-      tui: {},
-      tui_plugins: [],
-      commands: [],
-      agents: []
-    }),
     opencode_v2: opencodeV2ConfigSchema.default({
       config: {},
       dependencies: {},
@@ -594,10 +636,6 @@ export const machineSchema = z.object({
     })
     .default({}),
   archives: z.array(archiveSchema).default([]),
-  opencode: z
-    .object({ runtime: z.enum(["v1", "v2"]).optional() })
-    .catchall(jsonValueSchema)
-    .default({ runtime: "v1" }),
   claude: jsonObjectSchema.default({})
 });
 
@@ -607,7 +645,7 @@ export type SkillEntry = z.infer<typeof skillSchema>;
 export type VendorLock = z.infer<typeof vendorLockSchema>;
 export type VendorLockEntry = z.infer<typeof vendorLockEntrySchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
-export type ProfileAgentDefaults = Partial<Record<ToolTargetName, boolean>>;
+export type ProfileAgentDefaults = Partial<Record<CapabilityAgentName, boolean>>;
 export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;
 export type McpServer = z.infer<typeof mcpServerSchema>;
 export type ExecutorAuthenticationMethod = NonNullable<
@@ -615,6 +653,8 @@ export type ExecutorAuthenticationMethod = NonNullable<
 >;
 export type ExecutorConnectionMap = z.infer<typeof executorConnectionMapSchema>;
 export type ProfileManifest = z.infer<typeof profileSchema>;
+export type InstructionReference = z.infer<typeof instructionReferenceSchema>;
+export type CapabilityGroup = z.infer<typeof capabilityGroupSchema>;
 export type MachineManifest = z.infer<typeof machineSchema>;
 export type HomeManifest = z.infer<typeof homeManifestSchema>;
 export type Archive = z.infer<typeof archiveSchema>;
@@ -622,6 +662,7 @@ export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
 export type ThreadStore = z.infer<typeof threadStoreSchema>;
 export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
 export type ThreadHarness = z.infer<typeof threadHarnessSchema>;
+export type CapabilityAgentName = z.infer<typeof capabilityAgentSchema>;
 
 export interface LoadedManifests {
   homeManifest: HomeManifest;

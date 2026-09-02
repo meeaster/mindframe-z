@@ -44,6 +44,19 @@ async function acquireLock(lockPath: string): Promise<() => Promise<void>> {
   }
 }
 
+export async function withUpstreamHomeLock<T>(
+  upstreamRoot: string,
+  action: () => Promise<T>
+): Promise<T> {
+  await mkdir(path.dirname(upstreamRoot), { recursive: true });
+  const releaseLock = await acquireLock(`${upstreamRoot}.lock`);
+  try {
+    return await action();
+  } finally {
+    await releaseLock();
+  }
+}
+
 export async function resolveUpstreamHomeRoot(options: {
   home: string;
   alias: string;
@@ -51,9 +64,7 @@ export async function resolveUpstreamHomeRoot(options: {
   path: string;
 }): Promise<string> {
   const upstreamRoot = path.resolve(expandHome(options.path, options.home));
-  await mkdir(path.dirname(upstreamRoot), { recursive: true });
-  const releaseLock = await acquireLock(`${upstreamRoot}.lock`);
-  try {
+  return withUpstreamHomeLock(upstreamRoot, async () => {
     if (!(await pathExists(upstreamRoot))) {
       await execa("git", ["clone", options.repo, upstreamRoot]);
       return upstreamRoot;
@@ -80,7 +91,5 @@ export async function resolveUpstreamHomeRoot(options: {
       );
     }
     return upstreamRoot;
-  } finally {
-    await releaseLock();
-  }
+  });
 }

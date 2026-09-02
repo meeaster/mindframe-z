@@ -1,8 +1,8 @@
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   expandHome,
   extraFoldersIndexPath,
-  opencodeV1SnapshotDir,
   opencodeV2SkillSnapshotDir,
   profileConfigsDir,
   referenceIndexPath,
@@ -19,10 +19,80 @@ import { jsonFileContent } from "../core/fs-util.js";
 import type { OpenCodeV2PluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
-import { collectPluginFiles } from "./opencode.js";
 import { openCodeV2ExecutorEntry } from "./executor.js";
 import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
 import { z } from "zod";
+
+async function copyDirContents(
+  src: string,
+  dest: string,
+  files: RenderResult["files"]
+): Promise<void> {
+  for (const entry of await readdir(src, { withFileTypes: true })) {
+    if (entry.name === "node_modules") continue;
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirContents(srcPath, destPath, files);
+    } else if (entry.isFile() && !/\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
+      files.push({ path: destPath, content: await readFile(srcPath, "utf8") });
+    }
+  }
+}
+
+async function collectPluginFiles(
+  rootByName: (name: string) => string,
+  pluginsDir: string,
+  pluginNames: readonly string[],
+  directoryEntry: boolean
+): Promise<{ files: RenderResult["files"]; entries: string[] }> {
+  const files: RenderResult["files"] = [];
+  const entries: string[] = [];
+  const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
+  for (const name of pluginNames) {
+    const sourceDir = path.join(rootByName(name), "opencode", "plugins");
+    const versionDir = path.join(sourceDir, name, "v2");
+    const legacyDir = path.join(sourceDir, name);
+    let dirPath = versionDir;
+    try {
+      if (!(await stat(dirPath)).isDirectory()) dirPath = legacyDir;
+    } catch {
+      dirPath = legacyDir;
+    }
+
+    let isDir = false;
+    try {
+      isDir = (await stat(dirPath)).isDirectory();
+    } catch {
+      // Missing plugin directories are reported by the entry fallback below.
+    }
+    if (isDir) {
+      if (!directoryEntry) {
+        entries.push(`file://${dirPath}`);
+        continue;
+      }
+      await copyDirContents(dirPath, path.join(pluginsDir, name), files);
+      entries.push(`file://${path.join(pluginsDir, name)}`);
+      continue;
+    }
+
+    for (const ext of sourceExtensions) {
+      const filePath = path.join(sourceDir, `${name}${ext}`);
+      let content: string;
+      try {
+        content = await readFile(filePath, "utf8");
+      } catch {
+        continue;
+      }
+      const destRel = `${name}${ext}`;
+      files.push({ path: path.join(pluginsDir, destRel), content });
+      entries.push(`file://${path.join(pluginsDir, destRel)}`);
+      break;
+    }
+  }
+  return { files, entries };
+}
 
 export function mergeOpenCodeV2CliPlugins(
   cli: JsonObject,
@@ -180,23 +250,16 @@ export async function renderOpenCodeV2(
     instructions.push(extraFoldersIndexPath(paths));
 
   const pluginResult = await collectPluginFiles(
-    paths.root,
     (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
     pluginsPath,
     profile.enabledOpenCodeV2Plugins ?? [],
-    false,
-    false,
-    "v2"
+    false
   );
   const tuiPluginResult = await collectPluginFiles(
-    paths.root,
     (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
     tuiPluginsPath,
     profile.enabledOpenCodeV2TuiPlugins ?? [],
-    true,
-    false,
-    "v2",
-    "./tui"
+    true
   );
 
   const commandFiles = await collectOpenCodeMarkdownFiles(
@@ -247,37 +310,34 @@ export async function renderOpenCodeV2(
         ]
       : [])
   ];
-  const links: RenderResult["links"] =
-    paths.activeOpenCodeRuntime === "v2"
+  const links: RenderResult["links"] = [
+    ...(useGlobalInstructions
       ? [
-          ...(useGlobalInstructions
-            ? [
-                {
-                  linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
-                  targetPath: path.join(configsProfile, "AGENTS.md")
-                }
-              ]
-            : []),
           {
-            linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
-            targetPath: configPath
-          },
-          ...(hasDependencies
-            ? [
-                {
-                  linkPath: path.join(paths.opencodeConfigDir, "package.json"),
-                  targetPath: packagePath
-                }
-              ]
-            : []),
-          { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
-          { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
-          {
-            linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
-            targetPath: tuiPluginsPath
+            linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
+            targetPath: path.join(configsProfile, "AGENTS.md")
           }
         ]
-      : [];
+      : []),
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
+      targetPath: configPath
+    },
+    ...(hasDependencies
+      ? [
+          {
+            linkPath: path.join(paths.opencodeConfigDir, "package.json"),
+            targetPath: packagePath
+          }
+        ]
+      : []),
+    { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
+    { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
+      targetPath: tuiPluginsPath
+    }
+  ];
 
   const result: RenderResult = {
     files,
@@ -303,45 +363,43 @@ export async function renderOpenCodeV2(
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "tui.json"),
-        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "tui.json")
+        targetPath: path.join(configsOpenCodeV2, "tui.json")
       },
       ...(!hasDependencies
         ? [
             {
               linkPath: path.join(paths.opencodeConfigDir, "package.json"),
-              targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "package.json")
+              targetPath: path.join(configsOpenCodeV2, "package.json")
             }
           ]
         : []),
       {
         linkPath: path.join(paths.opencodeConfigDir, "delegate-general.json"),
-        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "delegate-general.json")
+        targetPath: path.join(configsOpenCodeV2, "delegate-general.json")
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "commands"),
-        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "commands")
+        targetPath: commandsPath
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "agents"),
-        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "agents")
+        targetPath: agentsPath
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "node_modules"),
-        targetPath: path.join(opencodeV1SnapshotDir(paths, profile.name), "node_modules")
+        targetPath: path.join(configsOpenCodeV2, "node_modules")
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "plugins"),
-        targetPath: path.join(paths.configsDir, profile.name, "opencode-v1", "plugins")
+        targetPath: pluginsPath
       }
     ]
   };
-  if (paths.activeOpenCodeRuntime === "v2") {
-    result.cliPlugins = {
-      path: path.join(paths.opencodeConfigDir, "cli.json"),
-      entries: tuiPluginEntries,
-      registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
-      settings: profile.profile.opencode_v2.cli
-    };
-  }
+  result.cliPlugins = {
+    path: path.join(paths.opencodeConfigDir, "cli.json"),
+    entries: tuiPluginEntries,
+    registryPath: path.join(paths.home, ".mindframe-z", "opencode-v2-cli-plugins.json"),
+    settings: profile.profile.opencode_v2.cli
+  };
   return result;
 }

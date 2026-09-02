@@ -87,6 +87,83 @@ describe("deepMerge", () => {
   });
 });
 
+describe("mergeProfiles instruction references", () => {
+  it("inherits references and lets a child replace one by name", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      instruction_references: [
+        {
+          name: "browser",
+          path: "instructions/BROWSER.md",
+          description: "For browser work"
+        },
+        {
+          name: "knowledge",
+          path: "instructions/KNOWLEDGE.md",
+          description: "For personal knowledge"
+        }
+      ]
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      instruction_references: [
+        {
+          name: "browser",
+          path: "instructions/WORK-BROWSER.md",
+          description: "For managed browser work"
+        }
+      ]
+    });
+
+    expect(mergeProfiles(base, child).instruction_references).toEqual([
+      {
+        name: "browser",
+        path: "instructions/WORK-BROWSER.md",
+        description: "For managed browser work"
+      },
+      {
+        name: "knowledge",
+        path: "instructions/KNOWLEDGE.md",
+        description: "For personal knowledge"
+      }
+    ]);
+  });
+
+  it("rejects duplicate names in one profile", () => {
+    expect(() =>
+      profileSchema.parse({
+        name: "personal",
+        instruction_references: [
+          { name: "browser", path: "instructions/A.md", description: "First" },
+          { name: "browser", path: "instructions/B.md", description: "Second" }
+        ]
+      })
+    ).toThrow("duplicate instruction reference name: browser");
+  });
+});
+
+describe("mergeProfiles capability groups", () => {
+  it("inherits groups and lets a child replace a summary by name", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      capability_groups: [
+        { name: "agent-tooling", summary: "Agent tools." },
+        { name: "knowledge", summary: "Knowledge stores." }
+      ]
+    });
+    const child = profileSchema.parse({
+      name: "child",
+      capability_groups: [{ name: "agent-tooling", summary: "Agent tooling sources." }]
+    });
+
+    expect(mergeProfiles(base, child).capability_groups).toEqual([
+      { name: "agent-tooling", summary: "Agent tooling sources." },
+      { name: "knowledge", summary: "Knowledge stores." }
+    ]);
+  });
+});
+
 describe("mergeProfiles thread defaults", () => {
   // Regression for the default-before-inheritance trap: `session_sources` used to
   // carry an auto-filled default on every parsed profile, so a child that omitted
@@ -450,28 +527,6 @@ describe("mergeProfiles codex plugins", () => {
   });
 });
 
-describe("mergeProfiles OpenCode TUI", () => {
-  it("merges TUI configuration and deduplicates TUI plugins", () => {
-    const base = profileSchema.parse({
-      name: "base",
-      opencode: {
-        tui: { leader_timeout: 1000, attention: { enabled: true } },
-        tui_plugins: ["context", "todo"]
-      }
-    });
-    const child = profileSchema.parse({
-      name: "child",
-      extends: "base",
-      opencode: { tui: { attention: { sound: false } }, tui_plugins: ["todo", "advisor"] }
-    });
-
-    expect(mergeProfiles(base, child).opencode).toMatchObject({
-      tui: { leader_timeout: 1000, attention: { enabled: true, sound: false } },
-      tui_plugins: ["context", "todo", "advisor"]
-    });
-  });
-});
-
 describe("mergeProfiles OpenCode V2 plugin options", () => {
   it("deep-merges options with child values taking precedence", () => {
     const base = profileSchema.parse({
@@ -494,64 +549,48 @@ describe("mergeProfiles OpenCode V2 plugin options", () => {
   });
 });
 
-describe("mergeProfiles OpenCode dependencies", () => {
-  it("merges dependencies with child versions taking precedence", () => {
-    const base = profileSchema.parse({
-      name: "base",
-      opencode: { dependencies: { "@acme/base": "1.2.3", shared: "1.0.0" } }
-    });
-    const child = profileSchema.parse({
-      name: "child",
-      extends: "base",
-      opencode: { dependencies: { "@acme/child": "2.3.4", shared: "2.0.0" } }
-    });
-
-    expect(mergeProfiles(base, child).opencode.dependencies).toEqual({
-      "@acme/base": "1.2.3",
-      "@acme/child": "2.3.4",
-      shared: "2.0.0"
-    });
-  });
-
-  it("rejects dependency ranges and tags", () => {
-    for (const version of ["^1.2.3", "latest"]) {
-      expect(() =>
-        profileSchema.parse({ name: "personal", opencode: { dependencies: { example: version } } })
-      ).toThrow("must be an exact semantic version");
-    }
-  });
-});
-
-describe("Delegate General model catalog", () => {
-  it("accepts exact model IDs with their required reasoning levels", () => {
-    const profile = profileSchema.parse({
-      name: "personal",
-      opencode: {
-        delegate_general: {
-          models: [
-            {
-              id: "openai/gpt-5.6-sol",
-              variants: ["none", "low", "medium", "high", "xhigh"],
-              description: "Larger model for difficult reasoning."
-            }
-          ]
-        }
-      }
-    });
-
-    expect(profile.opencode.delegate_general).toEqual({
-      models: [
-        {
-          id: "openai/gpt-5.6-sol",
-          variants: ["none", "low", "medium", "high", "xhigh"],
-          description: "Larger model for difficult reasoning."
-        }
-      ]
-    });
-  });
-});
-
 describe("home inheritance", () => {
+  it("resolves inherited instruction references from their source home", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));
+    const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-machine-home-"));
+    await writeHome(parent);
+    const sourcePath = path.join(parent, "instructions", "BROWSER.md");
+    await writeFile(sourcePath, "# Browser\n", "utf8");
+    await writeFile(
+      path.join(parent, "profiles", "base", "profile.yml"),
+      [
+        "name: base",
+        "instruction_references:",
+        "  - name: browser",
+        "    path: instructions/BROWSER.md",
+        "    description: Browser automation",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeHome(child, {
+      extends: { name: "personal", repo: "not-a-git-clone-source", path: parent }
+    });
+    await mkdir(path.join(child, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(child, "profiles", "work", "profile.yml"),
+      ["name: work", "extends: personal/base", ""].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root: child, home }), "work");
+
+    expect(resolved.instructionReferences).toEqual([
+      {
+        name: "browser",
+        path: "instructions/BROWSER.md",
+        sourcePath,
+        description: "Browser automation"
+      }
+    ]);
+  });
+
   it("resolves a qualified upstream profile from an existing non-Git path", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));
     const child = await mkdtemp(path.join(os.tmpdir(), "mfz-child-home-"));
@@ -706,7 +745,7 @@ describe("home inheritance", () => {
       path.join(root, "profiles", "work", "profile.yml"),
       [
         "name: work",
-        "agents: [opencode, claude-code, codex]",
+        "agents: [opencode-v2, claude-code, codex]",
         "skills:",
         "  selective-skill:",
         "    agents: { opencode: true, claude-code: false, codex: false }",

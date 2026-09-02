@@ -12,18 +12,17 @@ import {
 function profile(): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode", "claude-code", "codex"],
+    agents: ["opencode-v2", "claude-code", "codex"],
     profile: profileSchema.parse({ name: "personal", executor: { timeout_ms: 45_000 } }),
     // SAFETY: executor entry rendering only reads profile executor settings.
     manifests: {} as ResolvedProfile["manifests"],
     // SAFETY: executor entry rendering only reads profile executor settings.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],

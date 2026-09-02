@@ -26,18 +26,17 @@ function profileWithServer(
   if (authentication) server.executor = { authentication };
   return {
     name,
-    agents: ["opencode"],
+    agents: ["opencode-v2"],
     profile: profileSchema.parse({ name }),
     // SAFETY: reconciliation only consumes the resolved MCP entries in this fixture.
     manifests: {} as ResolvedProfile["manifests"],
     // SAFETY: reconciliation only consumes the resolved MCP entries in this fixture.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [

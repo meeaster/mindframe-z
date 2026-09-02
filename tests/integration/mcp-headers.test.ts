@@ -5,7 +5,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, parseJson, parseToml, setupIntegrationFixture } from "./support.js";
 
 const OpenCodeConfig = z.object({
-  mcp: z.record(z.string(), z.object({ headers: z.record(z.string(), z.string()).optional() }))
+  mcp: z.object({
+    servers: z.record(
+      z.string(),
+      z.object({ headers: z.record(z.string(), z.string()).optional() })
+    )
+  })
 });
 const ClaudeMcp = z
   .object({
@@ -66,7 +71,7 @@ describe("mcp remote header rendering", () => {
       path.join(root, "profiles", "personal", "profile.yml"),
       [
         "name: personal",
-        "agents: [opencode, claude-code, codex]",
+        "agents: [opencode-v2, claude-code, codex]",
         "instructions:",
         "  - instructions/AGENTS.md",
         "mcp:",
@@ -83,10 +88,10 @@ describe("mcp remote header rendering", () => {
   it("passes the env token through to OpenCode verbatim", async () => {
     const config = parseJson(
       OpenCodeConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
 
-    expect(config.mcp.exa?.headers).toEqual({
+    expect(config.mcp.servers.exa?.headers).toEqual({
       "x-api-key": "{env:EXA_API_KEY}",
       "x-client": "mindframe-z"
     });

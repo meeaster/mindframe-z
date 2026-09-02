@@ -25,7 +25,7 @@ interface McpOption {
   hint: string;
 }
 
-const targets = ["opencode", "claude-code", "codex"] as const;
+const targets = ["claude-code", "codex"] as const;
 
 export function validateMcpTuiStates(
   profile: ResolvedProfile,
@@ -39,7 +39,7 @@ export function validateMcpTuiStates(
   }
 }
 
-function optionsForTarget(profile: ResolvedProfile, target: AgentName): McpOption[] {
+function optionsForTarget(profile: ResolvedProfile, target: (typeof targets)[number]): McpOption[] {
   return profile.mcpServers
     .filter((server) => server.agents !== undefined && server.agents[target] !== undefined)
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -62,9 +62,8 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
     states: Record<(typeof targets)[number], McpState>,
     streams: { input?: Readable; output?: Writable } = {}
   ) {
-    const initialTarget = profile.agents.includes("opencode")
-      ? "opencode"
-      : (targets.find((target) => profile.agents.includes(target)) ?? "opencode");
+    const initialTarget =
+      targets.find((target) => profile.agents.includes(target)) ?? "claude-code";
     const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const output = streams.output ?? process.stderr;
@@ -145,7 +144,7 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
   private switchTarget(): void {
     this.captureCurrentState();
     const currentIndex = targets.indexOf(this.target);
-    this.target = targets[(currentIndex + 1) % targets.length] ?? "opencode";
+    this.target = targets[(currentIndex + 1) % targets.length] ?? "claude-code";
     this.targetState.value = this.target;
     this.options = optionsForTarget(this.profile, this.target);
     this.cursor = 0;
@@ -161,13 +160,10 @@ export async function runMcpTui(
   const projectRoot = await findProjectRoot();
   if (!projectRoot) throw new Error("mfz mcp tui must be run inside a git repository");
   if (!targets.some((target) => profile.agents.includes(target))) {
-    throw new Error(
-      "MCP toggles are only supported for V1 harnesses; OpenCode V2 is not supported"
-    );
+    throw new Error("MCP toggles are only supported for Claude Code and Codex");
   }
   const store = await readOverrideStore(paths.home);
   const initialStates = {
-    opencode: effectiveProjectState(store, projectRoot, profile, "opencode", "mcp"),
     "claude-code": effectiveProjectState(store, projectRoot, profile, "claude-code", "mcp"),
     codex: effectiveProjectState(store, projectRoot, profile, "codex", "mcp")
   } satisfies Record<(typeof targets)[number], McpState>;

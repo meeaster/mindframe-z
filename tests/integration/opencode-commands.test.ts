@@ -4,7 +4,8 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
 
-const PluginConfig = z.object({ plugin: z.array(z.string()) });
+const PluginConfig = z.object({ plugins: z.array(z.unknown()).optional() });
+const CliConfig = z.object({ plugins: z.array(z.unknown()).optional() });
 
 describe("opencode commands integration", () => {
   let root: string;
@@ -22,9 +23,14 @@ describe("opencode commands integration", () => {
   it("throws when a profile references a missing command file", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "opencode:", "  commands:", "    - missing-cmd", ""].join(
-        "\n"
-      ),
+      [
+        "name: personal",
+        "extends: base",
+        "opencode_v2:",
+        "  commands:",
+        "    - missing-cmd",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
@@ -41,22 +47,22 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
         "  agents:",
         "    - garden",
         ""
       ].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode", "agents", "garden.md"), "utf8")
+      readFile(configsPath(home, "personal", "opencode-v2", "agents", "garden.md"), "utf8")
     ).resolves.toBe("# Garden agent\n");
   });
 
-  it("renders configured OpenCode TUI plugins into tui.json", async () => {
+  it("renders configured OpenCode TUI plugins into cli.json", async () => {
     await mkdir(path.join(root, "opencode", "plugins", "status"), { recursive: true });
     await writeFile(
       path.join(root, "opencode", "plugins", "status", "index.tsx"),
@@ -68,8 +74,8 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
         "  tui:",
         "    leader_timeout: 2000",
         "  tui_plugins:",
@@ -78,17 +84,17 @@ describe("opencode commands integration", () => {
       ].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
 
     await expect(
       readFile(
-        path.join(home, ".config", "opencode", "plugins", "mindframe-z", "status", "index.tsx"),
+        path.join(home, ".config", "opencode", "plugins", "tui", "status", "index.tsx"),
         "utf8"
       )
     ).resolves.toBe("export default {}\n");
     await expect(
-      readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
-    ).resolves.toContain('"plugin": [\n    "file://');
+      readFile(path.join(home, ".config", "opencode", "cli.json"), "utf8")
+    ).resolves.toContain('"plugins": [\n    "file://');
   });
 
   it("renders a directory server plugin at its index module URL", async () => {
@@ -103,8 +109,8 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
         "  plugins:",
         "    - server",
         ""
@@ -112,15 +118,13 @@ describe("opencode commands integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     const config = parseJson(
       PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
-    expect(config.plugin).toEqual([
-      `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "server", "index.mts")}`
-    ]);
+    expect(config.plugins).toEqual([`file://${path.join(root, "opencode", "plugins", "server")}`]);
   });
 
   it("renders a package directory for both server and TUI entrypoints", async () => {
@@ -142,8 +146,8 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
         "  plugins:",
         "    - combined",
         "  tui_plugins:",
@@ -153,39 +157,50 @@ describe("opencode commands integration", () => {
       "utf8"
     );
     const stalePlugin = path.join(
-      home,
-      ".config",
-      "opencode",
-      "plugins",
-      "mindframe-z",
+      configsPath(home, "personal", "opencode-v2", "plugins"),
       "legacy.ts"
     );
     await mkdir(path.dirname(stalePlugin), { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
 
-    const pluginDirUrl = `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "combined")}`;
     const config = parseJson(
       PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
     const tui = parseJson(
-      PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+      CliConfig,
+      await readFile(path.join(home, ".config", "opencode", "cli.json"), "utf8")
     );
 
-    expect(config.plugin).toEqual([pluginDirUrl]);
-    expect(tui.plugin).toEqual([pluginDirUrl]);
+    expect(config.plugins).toEqual([
+      `file://${path.join(root, "opencode", "plugins", "combined")}`
+    ]);
+    expect(tui.plugins).toEqual([
+      `file://${path.join(
+        home,
+        ".mindframe-z",
+        "configs",
+        "personal",
+        "opencode-v2",
+        "plugins",
+        "tui",
+        "combined",
+        "tui.tsx"
+      )}`
+    ]);
     expect(
       JSON.parse(
         await readFile(
           path.join(
             home,
-            ".config",
-            "opencode",
+            ".mindframe-z",
+            "configs",
+            "personal",
+            "opencode-v2",
             "plugins",
-            "mindframe-z",
+            "tui",
             "combined",
             "package.json"
           ),
@@ -207,8 +222,8 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
         "  plugins:",
         "    - single",
         ""
@@ -216,18 +231,18 @@ describe("opencode commands integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     const config = parseJson(
       PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
-    expect(config.plugin).toEqual([
-      `file://${path.join(home, ".config", "opencode", "plugins", "mindframe-z", "single.mjs")}`
+    expect(config.plugins).toEqual([
+      `file://${path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "plugins", "single.mjs")}`
     ]);
   });
 
-  it("discovers server plugins when the profile declares none and never discovers TUI plugins", async () => {
+  it("does not discover unconfigured server or TUI plugins", async () => {
     await writeFile(
       path.join(root, "opencode", "plugins", "discovered.mjs"),
       "export default {}\n",
@@ -244,62 +259,51 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
-        "opencode:",
-        "  tui:",
-        "    leader_timeout: 2000",
+        "agents: [opencode-v2]",
+        "opencode_v2:",
+        "  cli:",
+        "    theme: dark",
         ""
       ].join("\n"),
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
 
-    const managedPlugins = path.join(home, ".config", "opencode", "plugins", "mindframe-z");
     const config = parseJson(
       PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
-    expect([...config.plugin].sort()).toEqual(
-      [
-        `file://${path.join(managedPlugins, "bundled", "index.ts")}`,
-        `file://${path.join(managedPlugins, "config-marker.ts")}`,
-        `file://${path.join(managedPlugins, "discovered.mjs")}`
-      ].sort()
-    );
-    await expect(readFile(path.join(managedPlugins, "bundled", "index.ts"), "utf8")).resolves.toBe(
-      "export default {}\n"
-    );
-
-    const tui = parseJson(
-      PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
-    );
-    expect(tui.plugin).toEqual([]);
+    expect(config.plugins).toBeUndefined();
+    await expect(
+      readFile(path.join(home, ".config", "opencode", "cli.json"), "utf8")
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
   });
 
   it("discovers no server plugins when the plugins directory is absent", async () => {
     await rm(path.join(root, "opencode", "plugins"), { recursive: true });
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
+      ["name: personal", "extends: base", "agents: [opencode-v2]", ""].join("\n"),
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     const config = parseJson(
       PluginConfig,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
-    expect(config.plugin).toEqual([]);
+    expect(config.plugins).toBeUndefined();
   });
 
-  it("does not render tui.json without TUI configuration", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+  it("does not render cli.json without TUI configuration", async () => {
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode", "tui.json"), "utf8")
+      readFile(path.join(home, ".config", "opencode", "cli.json"), "utf8")
     ).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -308,9 +312,14 @@ describe("opencode commands integration", () => {
   it("throws when a profile references a missing agent file", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "opencode:", "  agents:", "    - missing-agent", ""].join(
-        "\n"
-      ),
+      [
+        "name: personal",
+        "extends: base",
+        "opencode_v2:",
+        "  agents:",
+        "    - missing-agent",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
@@ -327,7 +336,9 @@ describe("opencode commands integration", () => {
     );
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),
-      ["name: base", "opencode:", "  commands:", "    - base-cmd", "    - test-cmd", ""].join("\n"),
+      ["name: base", "opencode_v2:", "  commands:", "    - base-cmd", "    - test-cmd", ""].join(
+        "\n"
+      ),
       "utf8"
     );
 
@@ -345,7 +356,7 @@ describe("opencode commands integration", () => {
       [
         "name: personal",
         "extends: base",
-        "opencode:",
+        "opencode_v2:",
         "  commands:",
         "    - packaged-cmd",
         ""
@@ -353,14 +364,22 @@ describe("opencode commands integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode", "commands", "packaged-cmd.md"), "utf8")
+      readFile(configsPath(home, "personal", "opencode-v2", "commands", "packaged-cmd.md"), "utf8")
     ).resolves.toBe("Packaged command.\n");
     await expect(
       readFile(
-        configsPath(home, "personal", "opencode", "commands", "packaged-cmd", "meta", "VISION.md"),
+        configsPath(
+          home,
+          "personal",
+          "opencode-v2",
+          "commands",
+          "packaged-cmd",
+          "meta",
+          "VISION.md"
+        ),
         "utf8"
       )
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -375,7 +394,9 @@ describe("opencode commands integration", () => {
 
     const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
     expect(syncResult.stdout).toContain("Unmanaged command: new-cmd");
-    expect(syncResult.stdout).toContain("Updated personal/profile.yml: opencode.commands.new-cmd");
+    expect(syncResult.stdout).toContain(
+      "Updated personal/profile.yml: opencode_v2.commands.new-cmd"
+    );
 
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),

@@ -29,7 +29,7 @@ async function createUpstreamRemote(): Promise<{ source: string; remote: string;
   await writeFixture(source);
   await writeFile(
     path.join(source, "profiles", "base", "profile.yml"),
-    ["name: base", "agents: [opencode]", "instructions:", "  - instructions/AGENTS.md", ""].join(
+    ["name: base", "agents: [opencode-v2]", "instructions:", "  - instructions/AGENTS.md", ""].join(
       "\n"
     ),
     "utf8"
@@ -61,7 +61,7 @@ async function createChildHome(
   await mkdir(path.join(child, "profiles", "work"), { recursive: true });
   await writeFile(
     path.join(child, "profiles", "work", "profile.yml"),
-    ["name: work", "extends: personal/base", "agents: [opencode]", ""].join("\n"),
+    ["name: work", "extends: personal/base", "agents: [opencode-v2]", ""].join("\n"),
     "utf8"
   );
   await writeFile(
@@ -83,7 +83,7 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
     await expect(readFile(path.join(checkout, ".git", "config"), "utf8")).resolves.toContain(
       upstream.remote
     );
@@ -96,7 +96,7 @@ describe("upstream home integration", () => {
     await commitAll(upstream.source, "update guidance");
     await git(upstream.source, ["push"]);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     await expect(readFile(configsPath(home, "work", "AGENTS.md"), "utf8")).resolves.toContain(
       "# Updated Agents"
@@ -109,7 +109,7 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
     await writeFile(
       path.join(upstream.source, "instructions", "AGENTS.md"),
       "# Concurrent Update\n",
@@ -137,7 +137,7 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
     await writeFile(path.join(checkout, "dirty.txt"), "local edit\n", "utf8");
     await writeFile(
       path.join(upstream.source, "instructions", "AGENTS.md"),
@@ -147,7 +147,7 @@ describe("upstream home integration", () => {
     await commitAll(upstream.source, "remote update");
     await git(upstream.source, ["push"]);
 
-    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     expect(result.stderr).toContain("upstream home personal is dirty; skipping git pull");
     await expect(readFile(configsPath(home, "work", "AGENTS.md"), "utf8")).resolves.not.toContain(
@@ -161,7 +161,7 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     // Commit a local change so the checkout is ahead of upstream but has a clean tree,
     // isolating the ahead branch from the dirty branch checked first.
@@ -178,7 +178,7 @@ describe("upstream home integration", () => {
     await commitAll(upstream.source, "remote update");
     await git(upstream.source, ["push"]);
 
-    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     expect(result.stderr).toContain(
       "upstream home personal has unpushed commits; skipping git pull"
@@ -194,10 +194,10 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
     await git(checkout, ["remote", "set-url", "origin", "file:///missing/mfz-upstream-home"]);
 
-    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    const result = await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     expect(result.stderr).toContain(
       "upstream home personal could not update; using existing checkout"
@@ -214,8 +214,8 @@ describe("upstream home integration", () => {
     const child = await createChildHome(home, upstream.repo, checkout);
     await rm(path.join(child, "opencode", "commands"), { recursive: true, force: true });
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
-    const opencodePath = configsPath(home, "work", "opencode", "opencode.jsonc");
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    const opencodePath = configsPath(home, "work", "opencode-v2", "opencode.jsonc");
     const opencode = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     opencode.small_model = "test/upstream-small";
     await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
@@ -223,7 +223,7 @@ describe("upstream home integration", () => {
     const result = await cli("mfz", child, home, ["sync"], {}, "personal/base\n");
 
     expect(result.stdout).toContain(
-      "Updated personal/base/profile.yml: opencode.config.small_model"
+      "Updated personal/base/profile.yml: opencode_v2.config.small_model"
     );
     expect(result.stdout).toContain("Written to upstream home personal/base — uncommitted");
     await expect(
@@ -237,7 +237,7 @@ describe("upstream home integration", () => {
     const checkout = configuredUpstream(home);
     const child = await createChildHome(home, upstream.repo, checkout);
 
-    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", child, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
     await git(checkout, ["config", "user.email", "test@example.com"]);
     await git(checkout, ["config", "user.name", "Test User"]);
     await writeFile(path.join(checkout, "ahead.txt"), "ahead\n", "utf8");

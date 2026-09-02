@@ -5,24 +5,17 @@ import { validateMcpTuiStates, type McpState } from "./mcp-tui.js";
 function profile(): ResolvedProfile {
   return {
     name: "test",
-    agents: ["opencode", "claude-code", "codex"],
+    agents: ["opencode-v2", "claude-code", "codex"],
     profile: {
       name: "test",
       description: "",
-      agents: ["opencode", "claude-code", "codex"],
+      agents: ["opencode-v2", "claude-code", "codex"],
       instructions: [],
+      instruction_references: [],
+      capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode: {
-        config: {},
-        dependencies: {},
-        plugins: [],
-        tui: {},
-        tui_plugins: [],
-        commands: [],
-        agents: []
-      },
       opencode_v2: {
         config: {},
         dependencies: {},
@@ -57,7 +50,6 @@ function profile(): ResolvedProfile {
         thread: { stores: [] },
         work: {},
         archives: [],
-        opencode: {},
         claude: {}
       }
     },
@@ -71,11 +63,10 @@ function profile(): ResolvedProfile {
       agents: new Map()
     },
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     enabledOpenCodeV2Plugins: [],
@@ -94,10 +85,9 @@ function profile(): ResolvedProfile {
 
 function states(claude: boolean) {
   return {
-    opencode: { context7: false },
     "claude-code": { context7: claude },
     codex: { context7: false }
-  } satisfies Record<"opencode" | "claude-code" | "codex", McpState>;
+  } satisfies Record<"claude-code" | "codex", McpState>;
 }
 
 describe("MCP TUI capability validation", () => {

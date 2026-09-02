@@ -1,6 +1,5 @@
 # Machine-local AI config. Place this at ~/.mindframe-z/config.yml.
-# Overrides the profile selection, references directory, and machine-specific
-# OpenCode overrides for this machine.
+# Overrides the profile selection and references directory for this machine.
 # This file is not checked into the repo — it's per-machine config.
 profile: personal
 home_path: ~/code/mindframe-z
@@ -43,12 +42,3 @@ references_dir: ~/.mindframe-z/references
 #     description: Archived projects for reference — source patterns and past architecture decisions
 #     read: deny
 #     edit: deny
-
-# opencode:
-#   runtime: v1 # or v2; selects the complete snapshot linked to ~/.config/opencode
-#   permission:
-#     websearch: allow
-#     external_directory:
-#       /home/mark/work/**: allow
-#     edit:
-#       /home/mark/references/**: deny

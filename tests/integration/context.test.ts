@@ -10,7 +10,7 @@ describe("context command", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       {},
       undefined,
       root
@@ -26,7 +26,7 @@ describe("context command", () => {
     const { root, home } = await setupIntegrationFixture();
     const result = await cli("mfz", root, home, ["context"], {}, undefined, root);
 
-    expect(result.stdout).toContain("opencode");
+    expect(result.stdout).toContain("opencode-v2");
     expect(result.stdout).toContain("claude-code");
   });
 
@@ -43,7 +43,7 @@ describe("context command", () => {
     await writeFile(
       profilePath,
       profile.replace(
-        "opencode:\n",
+        "opencode_v2:\n",
         [
           "  datadog:",
           "    executor:",
@@ -51,7 +51,7 @@ describe("context command", () => {
           "      connections:",
           "        publicsafety: oauth",
           "        tylertech: oauth",
-          "opencode:",
+          "opencode_v2:",
           ""
         ].join("\n")
       ),
@@ -62,7 +62,7 @@ describe("context command", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       {},
       undefined,
       root
@@ -120,7 +120,7 @@ describe("context command", () => {
         "mfz",
         root,
         home,
-        ["--profile", "claude-only", "context", "--agent", "opencode"],
+        ["--profile", "claude-only", "context", "--agent", "opencode-v2"],
         {},
         undefined,
         root

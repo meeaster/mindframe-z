@@ -31,7 +31,6 @@ function paths(home: string): RuntimePaths {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
-    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -52,7 +51,6 @@ function machine(): MachineManifest {
     thread: { stores: [] },
     work: {},
     archives: [],
-    opencode: {},
     claude: {}
   };
 }
@@ -66,18 +64,11 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       description: "Test profile",
       agents: ["claude-code"],
       instructions: [],
+      instruction_references: [],
+      capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode: {
-        config: {},
-        dependencies: {},
-        plugins: [],
-        tui: {},
-        tui_plugins: [],
-        commands: [],
-        agents: []
-      },
       opencode_v2: {
         config: {},
         dependencies: {},
@@ -125,11 +116,10 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       agents: new Map()
     },
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],

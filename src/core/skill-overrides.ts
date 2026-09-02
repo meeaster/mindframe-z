@@ -5,14 +5,7 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { z } from "zod";
 import { jsonFileContent, writeTextFile } from "./fs-util.js";
 
-export type SkillOverrideTarget = "opencode" | "claude-code" | "codex";
-
-export type OpenCodePermissionEffect = "allow" | "ask" | "deny";
-
-export interface OpenCodeSkillPermission {
-  effect: OpenCodePermissionEffect;
-  source: "profile" | "machine" | "global" | "project" | "default";
-}
+export type SkillOverrideTarget = "claude-code" | "codex";
 
 export interface SkillOverrideContext {
   readonly skillNames?: ReadonlySet<string>;
@@ -47,7 +40,6 @@ const configValueSchema: z.ZodType<ConfigValue> = z.lazy(() =>
 );
 const configObjectSchema: z.ZodType<ConfigObject> = z.record(z.string(), configValueSchema);
 const codexEntrySchema = z.object({ path: z.string(), enabled: z.boolean() });
-const permissionEffectSchema = z.enum(["allow", "ask", "deny"]);
 
 type SkillCodec = {
   readonly format: "json" | "jsonc" | "toml";
@@ -145,81 +137,6 @@ function stringRecord(value: ConfigValue | undefined): SkillEntries {
   return result;
 }
 
-function wildcardMatches(input: string, pattern: string): boolean {
-  const normalized = input.replaceAll("\\", "/");
-  let escaped = pattern
-    .replaceAll("\\", "/")
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*")
-    .replace(/\?/g, ".");
-  if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?";
-  return new RegExp(`^${escaped}$`, process.platform === "win32" ? "si" : "s").test(normalized);
-}
-
-function permissionEntries(
-  value: ConfigValue | undefined
-): Array<[string, OpenCodePermissionEffect]> {
-  const parsed = configValueSchema.safeParse(value);
-  if (!parsed.success) return [];
-  const parsedValue = parsed.data;
-  const stringValue = z.string().safeParse(parsedValue);
-  if (stringValue.success) {
-    return isOpenCodePermissionEffect(stringValue.data) ? [["*", stringValue.data]] : [];
-  }
-  if (!isMergeObject(parsedValue)) return [];
-  return Object.entries(parsedValue).flatMap(([pattern, effect]) =>
-    isOpenCodePermissionEffect(effect) ? [[pattern, effect]] : []
-  );
-}
-
-function isOpenCodePermissionEffect(
-  value: ConfigValue | undefined
-): value is OpenCodePermissionEffect {
-  return permissionEffectSchema.safeParse(value).success;
-}
-
-export function evaluateOpenCodeSkillPermission(
-  skillName: string,
-  profilePermission: ConfigValue | undefined,
-  globalOverrides: Record<string, boolean>,
-  projectOverrides: Record<string, boolean>,
-  machinePermission?: ConfigValue
-): OpenCodeSkillPermission {
-  const rules: Array<
-    readonly [string, OpenCodePermissionEffect, OpenCodeSkillPermission["source"]]
-  > = [];
-  const upsert = (
-    entries: Array<[string, OpenCodePermissionEffect]>,
-    source: OpenCodeSkillPermission["source"]
-  ) => {
-    for (const [pattern, effect] of entries) {
-      const index = rules.findIndex(([existing]) => existing === pattern);
-      const rule = [pattern, effect, source] as const;
-      if (index < 0) rules.push(rule);
-      else rules[index] = rule;
-    }
-  };
-
-  upsert(permissionEntries(record(profilePermission).skill), "profile");
-  upsert(permissionEntries(record(machinePermission).skill), "machine");
-  upsert(
-    Object.entries(globalOverrides).map(([name, enabled]) => [name, enabled ? "allow" : "deny"]),
-    "global"
-  );
-  upsert(
-    Object.entries(projectOverrides).map(([name, enabled]) => [name, enabled ? "allow" : "deny"]),
-    "project"
-  );
-
-  for (let index = rules.length - 1; index >= 0; index -= 1) {
-    const rule = rules[index];
-    if (rule && wildcardMatches(skillName, rule[0])) {
-      return { effect: rule[1], source: rule[2] };
-    }
-  }
-  return { effect: "ask", source: "default" };
-}
-
 function record(value: ConfigValue | undefined): ConfigObject {
   const parsed = configValueSchema.safeParse(value);
   return parsed.success && isMergeObject(parsed.data) ? parsed.data : {};
@@ -234,16 +151,6 @@ function isString(value: ConfigValue | undefined): value is string {
 }
 
 const codecs = {
-  opencode: {
-    format: "jsonc",
-    read: (data) => stringRecord(record(data.permission).skill),
-    write: (data, entries) => ({
-      ...data,
-      permission: { ...record(data.permission), skill: entries }
-    }),
-    encode: (enabled) => (enabled ? "allow" : "deny"),
-    decode: (value) => value !== "deny"
-  },
   "claude-code": {
     format: "json",
     read: (data) => stringRecord(data.skillOverrides),

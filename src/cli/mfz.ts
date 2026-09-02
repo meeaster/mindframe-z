@@ -9,7 +9,6 @@ import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, machineSchema, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests } from "../core/manifests.js";
 import {
-  activeOpenCodeSnapshotDir,
   createRuntimePaths,
   infraTargetList,
   machineConfigPath,
@@ -24,6 +23,7 @@ import {
 } from "../core/profile.js";
 import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
 import { findProjectRoot } from "../core/git-root.js";
+import { withUpstreamHomeLock } from "../core/upstream-clones.js";
 import {
   effectiveProjectState,
   projectOverrides,
@@ -36,8 +36,10 @@ import {
   referenceRows,
   syncReference,
   syncReferences,
+  writeExtraFoldersIndex,
   writeReferenceIndex
 } from "../ref-store/references.js";
+import { writeCapabilityIndexes } from "../ref-store/capabilities.js";
 import {
   candidateReviewInvocation,
   checkVendoredSkill,
@@ -119,7 +121,6 @@ async function doctor(options: {
   console.log(`home\t${paths.home}`);
   console.log(`configs\t${paths.configsDir}`);
   console.log(`opencode config dir\t${paths.opencodeConfigDir}`);
-  console.log(`opencode v2 config dir\t${paths.opencodeV2ConfigDir}`);
   console.log(`claude dir\t${paths.claudeDir}`);
   console.log(`codex dir\t${paths.codexDir}`);
   console.log(`pi dir\t${paths.piDir}`);
@@ -203,22 +204,24 @@ async function gitStdout(cwd: string, args: string[]): Promise<string | null> {
 }
 
 async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]> {
-  const label = upstream.aliasPath.join("/");
-  const lines: string[] = [];
-  const dirty = (await gitStdout(upstream.root, ["status", "--porcelain"]))?.trim();
-  if (dirty) lines.push(`upstream:dirty\t${label}\t${upstream.root}`);
+  return withUpstreamHomeLock(upstream.root, async () => {
+    const label = upstream.aliasPath.join("/");
+    const lines: string[] = [];
+    const dirty = (await gitStdout(upstream.root, ["status", "--porcelain"]))?.trim();
+    if (dirty) lines.push(`upstream:dirty\t${label}\t${upstream.root}`);
 
-  const ahead = Number(
-    (await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0"
-  );
-  if (ahead > 0) lines.push(`upstream:ahead\t${label}\t${ahead} commit(s) unpushed`);
+    const ahead = Number(
+      (await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0"
+    );
+    if (ahead > 0) lines.push(`upstream:ahead\t${label}\t${ahead} commit(s) unpushed`);
 
-  await gitStdout(upstream.root, ["fetch", "--quiet"]);
-  const behind = Number(
-    (await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0"
-  );
-  if (behind > 0) lines.push(`upstream:stale\t${label}\t${behind} commit(s) behind`);
-  return lines;
+    await gitStdout(upstream.root, ["fetch", "--quiet"]);
+    const behind = Number(
+      (await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0"
+    );
+    if (behind > 0) lines.push(`upstream:stale\t${label}\t${behind} commit(s) behind`);
+    return lines;
+  });
 }
 
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
@@ -256,7 +259,6 @@ async function statusFn(options: {
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
   );
   console.log(`skills\t${profile.enabledSkills.map((skill) => skill.name).join(", ") || "none"}`);
-  console.log(`commands\t${profile.enabledCommands.join(", ") || "none"}`);
   console.log(`opencode-v2 commands\t${profile.enabledOpenCodeV2Commands.join(", ") || "none"}`);
   console.log(`mcp\t${profile.mcpServers.map(formatMcpStatus).join(", ") || "none"}`);
 }
@@ -280,8 +282,8 @@ function formatMcpStatus(server: ResolvedMcpServer): string {
 }
 
 function parseContextAgent(agent: string): ContextHarness {
-  if (agent === "opencode" || agent === "claude-code") return agent;
-  throw new Error(`Unknown context agent: ${agent}; expected opencode or claude-code`);
+  if (agent === "opencode-v2" || agent === "claude-code") return agent;
+  throw new Error(`Unknown context agent: ${agent}; expected opencode-v2 or claude-code`);
 }
 
 function parseHistoryDays(value: string): number {
@@ -298,7 +300,6 @@ function parseHistoryDays(value: string): number {
 function parseApplyAgent(value: string): ApplyAgent {
   if (
     value === "all" ||
-    value === "opencode" ||
     value === "opencode-v2" ||
     value === "claude-code" ||
     value === "codex" ||
@@ -323,7 +324,7 @@ async function contextReport(options: {
 }) {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile, {
-    evaluateAgents: ["opencode", "claude-code"]
+    evaluateAgents: ["opencode-v2", "claude-code"]
   });
   const report = await buildContextReport(paths, profile, {
     agent: options.agent,
@@ -345,7 +346,7 @@ async function contextHistoryReport(options: {
   }
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile, {
-    evaluateAgents: ["opencode", "claude-code"]
+    evaluateAgents: ["opencode-v2", "claude-code"]
   });
   console.log(
     formatContextHistoryReport(
@@ -359,44 +360,7 @@ async function opencodeSmoke(options: {
   home?: string | undefined;
   profile?: string | undefined;
 }): Promise<void> {
-  const paths = createRuntimePaths({ root: options.root, home: options.home });
-  const runtime = paths.activeOpenCodeRuntime ?? "v1";
-  const agent = runtime === "v2" ? "opencode-v2" : "opencode";
-  const binary = runtime === "v2" ? "opencode2" : "opencode";
-  const profile = await resolveProfile(paths, options.profile, { evaluateAgents: [agent] });
-  await applyConfig({ ...options, agent, target: "all", noLink: true });
-  const isolated = `${paths.home}/.mindframe-z-opencode-${runtime}-smoke`;
-  await mkdir(isolated, { recursive: true });
-  const configsOpencode = activeOpenCodeSnapshotDir(paths, profile.name);
-  const env = {
-    ...process.env,
-    OPENCODE_CONFIG_DIR: configsOpencode,
-    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
-    XDG_CONFIG_HOME: `${isolated}/config`,
-    XDG_DATA_HOME: `${isolated}/data`,
-    XDG_CACHE_HOME: `${isolated}/cache`,
-    XDG_STATE_HOME: `${isolated}/state`
-  };
-  if (runtime === "v2") {
-    Object.assign(env, {
-      OPENCODE_TEST_HOME: paths.home,
-      OPENCODE_DB: path.join(isolated, "data", "opencode-v2.db")
-    });
-  }
-  try {
-    const result = await execa(binary, ["debug", "config"], {
-      cwd: paths.root,
-      env
-    });
-    console.log(result.stdout);
-  } catch (error) {
-    const parsedError = errorCodeSchema.safeParse(error);
-    if (parsedError.success && parsedError.data.code === "ENOENT") {
-      console.log(`${binary} not found; skipped smoke check`);
-      return;
-    }
-    throw error;
-  }
+  await opencodeV2Smoke(options);
 }
 
 async function opencodeV2Smoke(options: {
@@ -472,7 +436,7 @@ program
 const context = program
   .command("context")
   .description("Report current agent context contributors")
-  .option("--agent <agent>", "opencode or claude-code", parseContextAgent)
+  .option("--agent <agent>", "opencode-v2 or claude-code", parseContextAgent)
   .option("--probe-mcp", "sequentially measure every effectively enabled MCP server")
   .action(async (options) => contextReport({ ...program.opts(), ...options }));
 
@@ -502,7 +466,7 @@ program
   .option("--clone <repo>", "clone an existing home repository")
   .option("--point <path>", "point machine config at an existing home")
   .option("--name <name>", "clone destination name under ~/.mindframe-z/homes")
-  .option("--agents <agents>", "comma-separated starter agents", "opencode,claude-code,codex")
+  .option("--agents <agents>", "comma-separated starter agents", "opencode-v2,claude-code,codex")
   .action(async (options) => initHome({ ...program.opts(), ...options }));
 
 program
@@ -512,7 +476,7 @@ program
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile, {
-      evaluateAgents: ["opencode", "claude-code", "codex"]
+      evaluateAgents: ["opencode-v2", "claude-code", "codex"]
     });
     await runSync(paths, profile, options.profile);
   });
@@ -520,12 +484,7 @@ program
 program
   .command("apply")
   .description("Render runtime files and safely link tool globals")
-  .option(
-    "--agent <agent>",
-    "opencode, opencode-v2, claude-code, codex, pi, or all",
-    parseApplyAgent,
-    "all"
-  )
+  .option("--agent <agent>", "opencode-v2, claude-code, codex, pi, or all", parseApplyAgent, "all")
   .option("--target <target>", "mise, dotfiles, or all", parseInfraTarget, "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
@@ -984,16 +943,12 @@ const skills = program
 
 function isAgentName(target: string): target is AgentName {
   return (
-    target === "opencode" ||
-    target === "opencode-v2" ||
-    target === "claude-code" ||
-    target === "codex" ||
-    target === "pi"
+    target === "opencode-v2" || target === "claude-code" || target === "codex" || target === "pi"
   );
 }
 
-function isMcpToggleAgent(target: string): target is AgentName {
-  return isAgentName(target) && target !== "opencode-v2" && target !== "pi";
+function isMcpToggleAgent(target: string): target is "claude-code" | "codex" {
+  return target === "claude-code" || target === "codex";
 }
 
 function isMcpStatusAgent(target: string): target is AgentName {
@@ -1002,7 +957,7 @@ function isMcpStatusAgent(target: string): target is AgentName {
 
 function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget | undefined {
   if (!target) return undefined;
-  if (target === "opencode" || target === "claude-code" || target === "codex") return target;
+  if (target === "claude-code" || target === "codex") return target;
   if (target === "opencode-v2") {
     throw new Error("OpenCode V2 skill toggles are not supported");
   }
@@ -1011,24 +966,14 @@ function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget |
 
 function parseSkillRenderTarget(target: string | undefined): SkillTarget | undefined {
   if (!target) return undefined;
-  if (
-    target === "opencode" ||
-    target === "opencode-v2" ||
-    target === "claude-code" ||
-    target === "codex"
-  ) {
+  if (target === "opencode-v2" || target === "claude-code" || target === "codex") {
     return target;
   }
   throw new Error(`Unknown skill target: ${target}`);
 }
 
 function isSkillTarget(target: string): target is SkillTarget {
-  return (
-    target === "opencode" ||
-    target === "opencode-v2" ||
-    target === "claude-code" ||
-    target === "codex"
-  );
+  return target === "opencode-v2" || target === "claude-code" || target === "codex";
 }
 
 function parseSkillAgentOption(agent: string | undefined): SkillTarget | undefined {
@@ -1048,12 +993,9 @@ async function setSkillEnabled(
   if (!skill.toggleable) throw new Error(`Skill "${name}" is not toggleable`);
   const requestedTarget = parseSkillToggleTarget(options.target);
   const targets = (requestedTarget ? [requestedTarget] : skill.targets).filter(
-    (target): target is SkillToggleTarget =>
-      target === "opencode" || target === "claude-code" || target === "codex"
+    (target): target is SkillToggleTarget => target === "claude-code" || target === "codex"
   );
-  if (targets.length === 0 && skill.targets.includes("opencode-v2")) {
-    throw new Error("OpenCode V2 skill toggles are not supported");
-  }
+  if (targets.length === 0) throw new Error("OpenCode V2 skill toggles are not supported");
   for (const target of targets) {
     await setLocalSkillState(paths, profile, target, name, enabled);
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
@@ -1064,14 +1006,14 @@ skills
   .command("enable")
   .description("Enable a skill for this project")
   .argument("<name>", "skill name")
-  .option("--target <target>", "opencode, claude-code, or codex")
+  .option("--target <target>", "claude-code or codex")
   .action(async (name, options) => setSkillEnabled(name, true, options));
 
 skills
   .command("disable")
   .description("Disable a skill for this project")
   .argument("<name>", "skill name")
-  .option("--target <target>", "opencode, claude-code, or codex")
+  .option("--target <target>", "claude-code or codex")
   .action(async (name, options) => setSkillEnabled(name, false, options));
 
 skills
@@ -1087,7 +1029,7 @@ skills
 skills
   .command("sync")
   .description("Render the profile skill snapshot and reconcile owned harness links")
-  .option("--agent <agent>", "opencode, opencode-v2, claude-code, or codex")
+  .option("--agent <agent>", "opencode-v2, claude-code, or codex")
   .option("--dry-run", "print the snapshot and link plan without changing state")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
@@ -1215,13 +1157,7 @@ skills
 
 function parseAgentOption(agent: string | undefined): AgentName | undefined {
   if (!agent) return undefined;
-  if (
-    agent === "opencode" ||
-    agent === "opencode-v2" ||
-    agent === "claude-code" ||
-    agent === "codex" ||
-    agent === "pi"
-  )
+  if (agent === "opencode-v2" || agent === "claude-code" || agent === "codex" || agent === "pi")
     return agent;
   throw new Error(`Unknown agent: ${agent}`);
 }
@@ -1299,14 +1235,14 @@ mcp
   .command("enable")
   .description("Enable an MCP server for this project")
   .argument("<name>", "MCP server name")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
+  .option("--agent <agent>", "opencode-v2, claude-code, or codex")
   .action(async (name, options) => setMcpEnabled(name, true, options));
 
 mcp
   .command("disable")
   .description("Disable an MCP server for this project")
   .argument("<name>", "MCP server name")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
+  .option("--agent <agent>", "opencode-v2, claude-code, or codex")
   .action(async (name, options) => setMcpEnabled(name, false, options));
 
 mcp
@@ -1360,11 +1296,14 @@ refs
 
 refs
   .command("index")
-  .description("Generate the runtime reference index")
+  .description("Generate runtime reference and capability indexes")
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
     console.log(await writeReferenceIndex(paths, profile));
+    const folders = await writeExtraFoldersIndex(paths, profile);
+    if (folders) console.log(folders);
+    for (const file of await writeCapabilityIndexes(paths, profile)) console.log(file);
   });
 
 refs

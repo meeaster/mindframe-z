@@ -66,13 +66,13 @@ type SandboxMcpServer =
   | {
       readonly type: "remote";
       readonly url: string;
-      readonly enabled: boolean;
+      readonly disabled: boolean;
       readonly headers?: Record<string, string>;
     }
   | {
       readonly type: "local";
       readonly command: string[];
-      readonly enabled: boolean;
+      readonly disabled: boolean;
       readonly env?: Record<string, string>;
     }
   | {
@@ -289,7 +289,7 @@ async function writeSandboxRuntimeConfig(
           path.posix.join(containerMindframeDir, "references.md")
         ]
       };
-  opencodeConfig.mcp = mcp.opencode;
+  opencodeConfig.mcp = { servers: mcp.opencode };
   await writeFile(
     path.join(runtimeDir, "opencode", "opencode.jsonc"),
     jsonFileContent(opencodeConfig),
@@ -538,7 +538,7 @@ function serviceDefinitions(
 }
 
 function launchCommand(target: SandboxLaunchTarget, args: readonly string[]): string[] {
-  const command = target === "cc" ? ["claude"] : target === "oc" ? ["opencode"] : ["zsh"];
+  const command = target === "cc" ? ["claude"] : target === "oc" ? ["opencode2"] : ["zsh"];
   return [...command, ...args];
 }
 
@@ -610,7 +610,7 @@ function sandboxMcpRuntimeConfig(
 
   return {
     broker: { basePort: mcpShimBasePort, shims },
-    opencode: sandboxMcpForTarget(paths, profile, "opencode", shims),
+    opencode: sandboxMcpForTarget(paths, profile, "opencode-v2", shims),
     claude: sandboxMcpForTarget(paths, profile, "claude-code", shims)
   };
 }
@@ -618,7 +618,7 @@ function sandboxMcpRuntimeConfig(
 function sandboxMcpForTarget(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  target: "opencode" | "claude-code",
+  target: "opencode-v2" | "claude-code",
   shims: Record<string, SandboxMcpShimDefinition>
 ): Record<string, SandboxMcpServer> {
   return Object.fromEntries(
@@ -627,8 +627,8 @@ function sandboxMcpForTarget(
       const headers = sandboxMcpHeaders(entry.server.headers, Boolean(shim));
       if (entry.server.type === "remote") {
         const url = shim ? localMcpShimUrl(shim.port, entry.server.url) : entry.server.url;
-        if (target === "opencode") {
-          const server = { type: "remote" as const, url, enabled: entry.enabled };
+        if (target === "opencode-v2") {
+          const server = { type: "remote" as const, url, disabled: !entry.enabled };
           if (headers) Object.assign(server, { headers });
           return [entry.name, server];
         }
@@ -640,11 +640,11 @@ function sandboxMcpForTarget(
         return [entry.name, server];
       }
 
-      if (target === "opencode") {
+      if (target === "opencode-v2") {
         const server = {
           type: "local" as const,
           command: entry.server.command.map((part) => expandHome(part, paths.home)),
-          enabled: entry.enabled
+          disabled: !entry.enabled
         };
         if (entry.server.env) Object.assign(server, { env: entry.server.env });
         return [entry.name, server];

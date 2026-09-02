@@ -2,7 +2,7 @@ import path from "node:path";
 import { findProjectRoot } from "../core/git-root.js";
 import { globalSkillStatePath, type RuntimePaths } from "../core/paths.js";
 
-export type SkillToggleTarget = "opencode" | "claude-code" | "codex";
+export type SkillToggleTarget = "claude-code" | "codex";
 
 export type SkillConfigPaths =
   | {
@@ -26,12 +26,10 @@ export async function resolveSkillConfigPaths(
 ): Promise<SkillConfigPaths> {
   const repoRoot = await findProjectRoot(cwd);
   const global = {
-    opencode: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
     "claude-code": path.join(paths.claudeDir, "settings.json"),
     codex: path.join(paths.codexDir, "config.toml")
   };
   const state = {
-    opencode: globalSkillStatePath(paths, "opencode"),
     "claude-code": globalSkillStatePath(paths, "claude-code"),
     codex: globalSkillStatePath(paths, "codex")
   };

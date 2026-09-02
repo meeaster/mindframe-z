@@ -1,6 +1,6 @@
 # Agent CLI Configuration Map
 
-This note maps Claude Code, OpenCode, and Codex configuration surfaces to the
+This note maps Claude Code, OpenCode V2, and Codex configuration surfaces to the
 mindframe-z manifest and renderer model.
 
 Sources:
@@ -25,7 +25,7 @@ Sources:
   - src/core/profile.ts
   - src/core/render.ts
   - src/renderers/claude.ts
-  - src/renderers/opencode.ts
+  - src/renderers/opencode-v2.ts
 
 ## Current mfz Model
 
@@ -41,7 +41,7 @@ Existing agent renderers are gated by `profile.agents`:
 
 | Agent | Rendered output | Runtime behavior |
 | --- | --- | --- |
-| OpenCode | configs/<profile>/opencode/opencode.jsonc plus commands, agents, plugins | Symlinked into ~/.config/opencode. Global skill state is overlaid during apply. |
+| OpenCode V2 | configs/<profile>/opencode-v2/opencode.jsonc plus commands, agents, plugins | Symlinked into ~/.config/opencode. The global CLI file owns TUI plugin entries. |
 | Claude Code | configs/<profile>/claude/CLAUDE.md, settings.json, mcp.json | CLAUDE.md is symlinked. settings.json and ~/.claude.json#mcpServers are merged into local user files. |
 | Codex | configs/<profile>/codex/AGENTS.md, config.toml | AGENTS.md is copied into $CODEX_HOME. config.toml is merged into local user config. |
 
@@ -80,7 +80,7 @@ mfz currently handles the portable parts:
 | Hooks | Pass-through via `claude.settings.hooks`. | No reusable hook source file model. |
 | Plugins | Not first-class. | Could support plugin source directories later. |
 
-### OpenCode
+### OpenCode V2
 
 Relevant code-backed locations from the local reference clone:
 
@@ -92,26 +92,26 @@ Relevant code-backed locations from the local reference clone:
 | Commands | command/**/*.md or commands/**/*.md | Markdown frontmatter plus body template. |
 | Agents | agent/**/*.md, agents/**/*.md, mode/*.md, modes/*.md | Markdown frontmatter plus body prompt. |
 | Plugins | plugin/*.{ts,js}, plugins/*.{ts,js}, or `plugin` config entries | Local file plugin specs are resolved relative to declaring config file. |
-| MCP | `mcp` config object | Local servers use `type: "local"` with command array; remote servers use `type: "remote"` with URL and headers. |
-| Permissions | `permission` config | Supports `ask`, `allow`, and `deny` for keys such as read, edit, bash, external_directory, skill, webfetch, websearch, lsp. |
+| MCP | `mcp.servers` config object | Local servers use `type: "local"` with command array; remote servers use `type: "remote"` with URL and headers. `enabled` is represented as `disabled`. |
+| Permissions | `permissions` config array | Ordered rules use `action`, `resource`, and `effect` for `allow`, `ask`, or `deny`. |
 | Instructions | `instructions` config array | OpenCode concatenates instruction arrays across config layers. |
 | References | `references` or deprecated `reference` | Named git or local directory references with description and hidden flag. |
-| Skills | `skills.paths` and `skills.urls` | Additional skill folder paths or well-known skill URLs. |
+| Skills | `skills` config array | The managed profile skill snapshot is one entry in the ordered path list. |
 | Providers/models | `provider`, `model`, `small_model`, agent model fields | Model identifiers are provider/model strings. |
 
 mfz currently maps OpenCode well:
 
-| OpenCode feature | Current mfz mapping | Gap |
+| OpenCode V2 feature | Current mfz mapping | Gap |
 | --- | --- | --- |
-| Config file | `opencode.config` renders into `opencode.jsonc`. | None for generic config pass-through. |
+| Config file | `opencode_v2.config` renders into `opencode.jsonc`. | Generated fields such as MCP, permissions, skills, instructions, and plugins are owned by the renderer. |
 | Global runtime location | Symlink to ~/.config/opencode/opencode.jsonc. | Works, but direct symlink means non-mfz edits happen in rendered output. |
 | Instructions | Generated `instructions` points to AGENTS and machine indexes. | None. |
-| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `mcp`. | mfz uses `env`; OpenCode schema currently calls local env `environment`. Renderer should verify compatibility before widening. |
-| Permissions | `opencode.config.permission`, machine `opencode.permission`, references, and extra folders merge into `permission`. | Permission merge order should remain explicit because OpenCode preserves object order for precedence-sensitive rules. |
-| Commands | Source files under `opencode/commands`, selected by `opencode.commands`. | OpenCode now scans both `command` and `commands`; mfz uses `commands`. |
-| Agents | Source files under `opencode/agents`, selected by `opencode.agents`. | OpenCode also supports `agent` singular and `mode(s)`. |
-| Plugins | Source files under `opencode/plugins`, selected by `opencode.plugins`. | mfz copies plugin files but does not model external package plugin specs separately. |
-| Skills | `mfz skills` controls `permission.skill`; profile declares skill catalog. | mfz does not render OpenCode `skills.paths` or `skills.urls`. |
+| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `mcp.servers`. | Direct native entries use V2 `disabled` and `environment` fields; Executor routes remain shared inventory. |
+| Permissions | `opencode_v2.config` pass-through plus generated references, extra-folder, and secret rules. | Generated permissions are ordered native V2 rules. |
+| Commands | Source files under `opencode/commands`, selected by `opencode_v2.commands`. | mfz renders the managed `commands` directory. |
+| Agents | Source files under `opencode/agents`, selected by `opencode_v2.agents`. | mfz renders the managed `agents` directory. |
+| Plugins | Source files under `opencode/plugins`, selected by `opencode_v2.plugins` and `tui_plugins`. | Server plugins are linked from `opencode.jsonc`; TUI plugins are merged into global `cli.json`. |
+| Skills | Profile skill catalog rendered to one managed `skills` snapshot path. | Project/global skill toggles remain unsupported for OpenCode V2. |
 | References | `shared/refs.yml` is rendered into machine index and read permission, not OpenCode `references`. | Could render OpenCode native `references`, but current index approach is tool-neutral. |
 
 ### Codex
@@ -152,9 +152,9 @@ Codex has an mfz renderer:
 
 ## Cross-Tool Feature Matrix
 
-| mfz concept | Claude Code | OpenCode | Codex |
+| mfz concept | Claude Code | OpenCode V2 | Codex |
 | --- | --- | --- | --- |
-| Agent target | `claude-code` | `opencode` | `codex` |
+| Agent target | `claude-code` | `opencode-v2` | `codex` |
 | Primary config format | JSON | JSON/JSONC | TOML |
 | Global config path | ~/.claude/settings.json plus ~/.claude.json | ~/.config/opencode/opencode.jsonc | ~/.codex/config.toml |
 | Project config path | .claude/settings.json, .claude/settings.local.json, .mcp.json | opencode.jsonc/json, .opencode/ | .codex/config.toml |
@@ -167,7 +167,7 @@ Codex has an mfz renderer:
 | Commands | Merged into skills; legacy .claude/commands supported | command(s) markdown files | Deprecated prompts; prefer skills |
 | Subagents | Markdown in .claude/agents or ~/.claude/agents | agent(s)/mode(s) markdown files | TOML in .codex/agents or ~/.codex/agents |
 | Plugins | Marketplace/local plugins | TS/JS plugin files or config specs | Plugin directory/config, marketplace |
-| Noninteractive runner | `claude -p --output-format stream-json` | `opencode run --format json` | `codex exec --json` |
+| Noninteractive runner | `claude -p --output-format stream-json` | `opencode2 run --format json` | `codex exec --json` |
 
 ## Implemented Codex MVP
 

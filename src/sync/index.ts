@@ -7,9 +7,9 @@ import YAML from "yaml";
 import { z } from "zod";
 import { readDirEntries, readTextFile } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
-import { activeOpenCodeSnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import { opencodeV2SnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { syncOpencode, syncOpencodeV2 } from "./opencode.js";
+import { syncOpencodeV2 } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
 import {
@@ -128,7 +128,7 @@ async function syncCommands(
 ): Promise<UnknownCommand[]> {
   const entries = await readDirEntries(path.join(paths.root, "opencode", "commands"));
 
-  const enabled = new Set(profile.enabledCommands);
+  const enabled = new Set(profile.enabledOpenCodeV2Commands);
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .map((entry) => ({ name: entry.name.slice(0, -3) }))
@@ -144,10 +144,11 @@ async function promptCommandUser(
 
 async function enableCommandInProfile(root: string, targetProfile: string, commandName: string) {
   const doc = await readProfileYaml(root, targetProfile);
-  const oc = ensureRecord(doc, "opencode");
+  const oc = ensureRecord(doc, "opencode_v2");
   if (!Array.isArray(oc.commands)) oc.commands = [];
   const profileCommands = oc.commands;
-  if (!Array.isArray(profileCommands)) throw new Error("Expected opencode.commands to be an array");
+  if (!Array.isArray(profileCommands))
+    throw new Error("Expected opencode_v2.commands to be an array");
   if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
   await writeProfileYaml(root, targetProfile, doc);
 }
@@ -212,15 +213,13 @@ export async function runSync(
 ): Promise<void> {
   const configsProfile = profileConfigsDir(paths, profile.name);
 
-  const ocp = path.join(activeOpenCodeSnapshotDir(paths, profile.name), "opencode.jsonc");
+  const ocp = path.join(opencodeV2SnapshotDir(paths, profile.name), "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
   const [opencodeResult, claudeResult, codexResult, commandCandidates] = await Promise.all([
-    profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
-      ? paths.activeOpenCodeRuntime === "v2"
-        ? syncOpencodeV2(ocp, profile)
-        : syncOpencode(ocp, profile)
+    profile.agents.includes("opencode-v2")
+      ? syncOpencodeV2(ocp, profile)
       : Promise.resolve({ candidates: [] }),
     profile.agents.includes("claude-code")
       ? syncClaude(clp, profile)
@@ -228,9 +227,7 @@ export async function runSync(
     profile.agents.includes("codex")
       ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
       : Promise.resolve({ candidates: [] }),
-    profile.agents.includes(paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode")
-      ? syncCommands(paths, profile)
-      : Promise.resolve([])
+    profile.agents.includes("opencode-v2") ? syncCommands(paths, profile) : Promise.resolve([])
   ]);
 
   const candidates = [
@@ -259,7 +256,7 @@ export async function runSync(
   for (const { item: command, targetProfile } of commandMoves) {
     const target = targetByLabel.get(targetProfile)!;
     await enableCommandInProfile(target.root, target.profile, command.name);
-    console.log(`  Updated ${target.label}/profile.yml: opencode.commands.${command.name}`);
+    console.log(`  Updated ${target.label}/profile.yml: opencode_v2.commands.${command.name}`);
     if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 

@@ -16,15 +16,6 @@ function profile(home: string): ResolvedProfile {
     extra_folders: [
       { path: path.join(home, "extra"), description: "Extra", read: "ask", edit: "deny" }
     ],
-    opencode: {
-      dependencies: { helper: "1.2.3" },
-      plugins: ["missing-v1-plugin"],
-      tui: { leader_timeout: 1000 },
-      tui_plugins: ["missing-v1-tui-plugin"],
-      delegate_general: {
-        models: [{ id: "test/model", variants: ["low"] }]
-      }
-    },
     opencode_v2: {
       config: { model: "v2/model" },
       cli: { theme: "dark" },
@@ -40,11 +31,10 @@ function profile(home: string): ResolvedProfile {
     // SAFETY: this fixture supplies the plugin source map separately in the relevant test.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: path.join(home, "references"),
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [
@@ -93,7 +83,6 @@ describe("OpenCode V2 renderer", () => {
     await writeFile(path.join(source, "node_modules", "helper", "index.js"), "export default {}\n");
 
     const paths = createRuntimePaths({ root, home });
-    paths.activeOpenCodeRuntime = "v2";
     const result = await renderOpenCodeV2(paths, {
       ...profile(home),
       enabledOpenCodeV2TuiPlugins: ["example"],
@@ -129,7 +118,6 @@ describe("OpenCode V2 renderer", () => {
     );
 
     const paths = createRuntimePaths({ root, home });
-    paths.activeOpenCodeRuntime = "v2";
     const resolved = profile(home);
     resolved.profile.opencode_v2.plugin_options = {
       "work-ledger": { root: "~/workspace/knowledge/personal-knowledge/ledgers" }
@@ -153,7 +141,7 @@ describe("OpenCode V2 renderer", () => {
     ]);
     expect(result.cliPlugins?.entries).toEqual([
       {
-        package: `file://${path.join(source, "tui", "index.tsx")}`,
+        package: `file://${path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "plugins", "tui", "work-ledger")}`,
         options
       }
     ]);
@@ -162,7 +150,6 @@ describe("OpenCode V2 renderer", () => {
   it("links active V2 runtime dependencies from the profile", async () => {
     const home = "/tmp/mfz-opencode-v2-runtime-dependencies";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
-    paths.activeOpenCodeRuntime = "v2";
     const resolved = profile(home);
     resolved.profile.opencode_v2.dependencies = { "@opencode-ai/plugin": "0.0.0-next-17403" };
 
@@ -179,7 +166,6 @@ describe("OpenCode V2 renderer", () => {
   it("renders native MCP, permissions, CLI, and isolated paths without reading V1 plugins", async () => {
     const home = "/tmp/mfz-opencode-v2-renderer";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
-    paths.activeOpenCodeRuntime = "v2";
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     try {
@@ -280,7 +266,6 @@ describe("OpenCode V2 renderer", () => {
   it("renders indexes into the globally discovered V2 AGENTS file", async () => {
     const home = "/tmp/mfz-opencode-v2-global-instructions";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
-    paths.activeOpenCodeRuntime = "v2";
     const result = await renderTarget(paths, profile(home), "opencode-v2");
     const agents = result.files.find((entry) => entry.path.endsWith("personal/AGENTS.md"));
 
@@ -290,6 +275,52 @@ describe("OpenCode V2 renderer", () => {
       linkPath: path.join(paths.opencodeConfigDir, "AGENTS.md"),
       targetPath: path.join(paths.configsDir, "personal", "AGENTS.md")
     });
+  });
+
+  it("copies on-demand instructions and advertises their rendered path", async () => {
+    const root = "/tmp/mfz-opencode-v2-instruction-references-root";
+    const home = "/tmp/mfz-opencode-v2-instruction-references-home";
+    await rm(root, { recursive: true, force: true });
+    await mkdir(path.join(root, "instructions"), { recursive: true });
+    const sourcePath = path.join(root, "instructions", "BROWSER.md");
+    await writeFile(sourcePath, "# Browser\n\nUse the managed profile.\n");
+    const paths = createRuntimePaths({ root, home });
+    const stalePath = path.join(
+      home,
+      ".mindframe-z",
+      "configs",
+      "personal",
+      "instruction-references",
+      "stale.md"
+    );
+    await mkdir(path.dirname(stalePath), { recursive: true });
+    await writeFile(stalePath, "stale\n");
+    const resolved = profile(home);
+    resolved.instructionReferences = [
+      {
+        name: "browser",
+        path: "instructions/BROWSER.md",
+        sourcePath,
+        description: "For browser automation"
+      }
+    ];
+
+    const result = await renderTarget(paths, resolved, "opencode-v2");
+    const agents = result.files.find((entry) => entry.path.endsWith("personal/AGENTS.md"));
+    const reference = result.files.find((entry) =>
+      entry.path.endsWith("instruction-references/browser.md")
+    );
+
+    expect(agents?.content).toContain("## On-Demand Instructions");
+    expect(agents?.content).toContain(reference?.path);
+    expect(reference?.content).toBe("# Browser\n\nUse the managed profile.\n");
+    expect(result.staleFiles).toContain(stalePath);
+    if (!reference) throw new Error("expected rendered instruction reference");
+
+    await mkdir(path.dirname(reference.path), { recursive: true });
+    await writeFile(reference.path, reference.content);
+    const dotfiles = await renderTarget(paths, resolved, "dotfiles");
+    expect(dotfiles.staleFiles).not.toContain(reference.path);
   });
 
   it("rejects V2 config ownership collisions", async () => {
@@ -308,8 +339,7 @@ describe("OpenCode V2 renderer", () => {
     resolved.enabledOpenCodeV2TuiPlugins = ["advisor"];
     const result = await renderOpenCodeV2(
       {
-        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" }),
-        activeOpenCodeRuntime: "v2"
+        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
       },
       resolved
     );
@@ -365,8 +395,7 @@ describe("OpenCode V2 renderer", () => {
     resolved.profile.opencode_v2.cli = { theme: { name: "dracula" } };
     const result = await renderOpenCodeV2(
       {
-        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" }),
-        activeOpenCodeRuntime: "v2"
+        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
       },
       resolved
     );

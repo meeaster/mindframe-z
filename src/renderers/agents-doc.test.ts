@@ -23,11 +23,10 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     // SAFETY: renderInlinedAgents only reads the explicitly populated profile fields in these tests.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
@@ -119,5 +118,29 @@ describe("renderInlinedAgents", () => {
     );
 
     expect(rendered).toBe("# Agents\n");
+  });
+
+  it("advertises on-demand instruction references without inlining their bodies", async () => {
+    const { home } = await setupHome();
+    const paths = createRuntimePaths({ home });
+    await writeFile(referenceIndexPath(paths), "# Enabled References\n", "utf8");
+
+    const rendered = await renderInlinedAgents(
+      paths,
+      profile({
+        instructionReferences: [
+          {
+            name: "browser",
+            path: "instructions/BROWSER.md",
+            sourcePath: "/source/BROWSER.md",
+            description: "For browser automation"
+          }
+        ]
+      })
+    );
+
+    expect(rendered).toContain("## On-Demand Instructions");
+    expect(rendered).toContain("instruction-references/browser.md");
+    expect(rendered).not.toContain("managed browser profile");
   });
 });

@@ -5,10 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
 
 const OpenCodePermissions = z.object({
-  permission: z.object({
-    external_directory: z.record(z.string(), z.string()),
-    edit: z.record(z.string(), z.string())
-  })
+  permissions: z.array(
+    z.object({
+      action: z.string(),
+      resource: z.string(),
+      effect: z.enum(["allow", "ask", "deny"])
+    })
+  )
 });
 const ClaudePermissions = z.object({ permissions: z.object({ deny: z.array(z.string()) }) });
 
@@ -44,8 +47,8 @@ describe("dotfiles integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
 
     const fragmentPath = path.join(home, ".mindframe-z", "gitconfig");
     const fragment = await readFile(fragmentPath, "utf8");
@@ -64,7 +67,7 @@ describe("dotfiles integration", () => {
   });
 
   it("omits git identity fields when machine identity is absent", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
 
     const fragment = await readFile(path.join(home, ".mindframe-z", "gitconfig"), "utf8");
     expect(fragment).not.toContain("[user]");
@@ -107,16 +110,28 @@ describe("dotfiles integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
 
     const config = parseJson(
       OpenCodePermissions,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
-    const secretsPattern = path.join(home, ".mindframe-z", "secrets", "**");
-    expect(config.permission.external_directory[secretsPattern]).toBe("deny");
-    expect(config.permission.edit[secretsPattern]).toBe("deny");
-    expect(config.permission.edit[path.join(home, ".zshrc")]).toBeUndefined();
+    const secretsBoundary = path.join(home, ".mindframe-z", "secrets", "*");
+    expect(config.permissions).toContainEqual({
+      action: "external_directory",
+      resource: secretsBoundary,
+      effect: "deny"
+    });
+    expect(config.permissions).toContainEqual({
+      action: "edit",
+      resource: secretsBoundary,
+      effect: "deny"
+    });
+    expect(config.permissions).not.toContainEqual({
+      action: "edit",
+      resource: path.join(home, ".zshrc"),
+      effect: expect.any(String)
+    });
   });
 
   it("denies managed zsh secrets in Claude settings", async () => {

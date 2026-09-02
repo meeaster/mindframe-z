@@ -1,6 +1,6 @@
 import type { AgentName } from "../core/paths.js";
 
-export type ContextHarness = Extract<AgentName, "opencode" | "claude-code">;
+export type ContextHarness = Extract<AgentName, "opencode-v2" | "claude-code">;
 export type LoadingClass =
   | "startup"
   | "per-step"

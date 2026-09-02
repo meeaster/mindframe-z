@@ -10,7 +10,7 @@ import { executorDiagnosticLines, inspectExecutor } from "./diagnostic.js";
 function profile(): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode"],
+    agents: ["opencode-v2"],
     profile: profileSchema.parse({
       name: "personal",
       mcp: { example: { executor: { enabled: true } } }
@@ -20,11 +20,10 @@ function profile(): ResolvedProfile {
     // SAFETY: diagnostics only consume the resolved profile fields populated below.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [

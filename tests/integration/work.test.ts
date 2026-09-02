@@ -181,7 +181,7 @@ describe("work commands", () => {
       unit: { slug: "alpha", phase: "design" },
       pending_orientation: { revision: 1 }
     });
-  }, 30_000);
+  }, 60_000);
 
   it("requires switch to replace bindings, retains checkpoints, and reports failed JSON operations", async () => {
     const { root, home } = await setupIntegrationFixture();

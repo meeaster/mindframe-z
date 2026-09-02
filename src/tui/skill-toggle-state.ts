@@ -122,13 +122,6 @@ export async function writeChangedSkillOverridesForTargets(
     paths,
     configPaths,
     profile,
-    "opencode",
-    states.opencode
-  );
-  await writeChangedSkillOverridesForConfigPaths(
-    paths,
-    configPaths,
-    profile,
     "claude-code",
     states["claude-code"]
   );

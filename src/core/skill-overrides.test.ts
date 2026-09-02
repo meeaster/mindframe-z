@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 import { makeTempDir } from "../../tests/integration/support.js";
 import {
   mergeSkillOverrides,
-  mergeSkillOverridesIntoFile,
-  evaluateOpenCodeSkillPermission,
   readSkillOverrides,
   readSkillOverridesFile,
   readSkillOverridesFromFile,
@@ -15,14 +13,6 @@ import {
 } from "./skill-overrides.js";
 
 describe("skill override codec decoding", () => {
-  it("decodes opencode allow/deny and treats unknown values as enabled", () => {
-    expect(
-      readSkillOverrides("opencode", {
-        permission: { skill: { on: "allow", off: "deny", other: "ask" } }
-      })
-    ).toEqual({ on: true, off: false, other: true });
-  });
-
   it("decodes claude-code on/off and treats unknown values as enabled", () => {
     expect(
       readSkillOverrides("claude-code", {
@@ -32,13 +22,10 @@ describe("skill override codec decoding", () => {
   });
 
   it("returns an empty map when the target section is absent", () => {
-    expect(readSkillOverrides("opencode", {})).toEqual({});
     expect(readSkillOverrides("claude-code", {})).toEqual({});
   });
 
   it("returns an empty map when a hand-edited config holds the wrong shape", () => {
-    expect(readSkillOverrides("opencode", { permission: "deny" })).toEqual({});
-    expect(readSkillOverrides("opencode", { permission: { skill: ["deny"] } })).toEqual({});
     expect(readSkillOverrides("claude-code", { skillOverrides: "off" })).toEqual({});
     expect(readSkillOverrides("codex", { skills: "off" })).toEqual({});
     expect(readSkillOverrides("codex", { skills: { config: "off" } })).toEqual({});
@@ -51,112 +38,26 @@ describe("skill override codec decoding", () => {
   });
 });
 
-describe("OpenCode skill permission evaluation", () => {
-  it("uses the last matching wildcard rule", () => {
-    expect(
-      evaluateOpenCodeSkillPermission(
-        "local-skill",
-        { skill: { "*": "deny", "local-*": "allow", "local-skill": "deny" } },
-        {},
-        {}
-      )
-    ).toEqual({ effect: "deny", source: "profile" });
-  });
-
-  it("layers global and project overrides after profile rules", () => {
-    expect(
-      evaluateOpenCodeSkillPermission(
-        "local-skill",
-        { skill: { "*": "deny" } },
-        { "local-skill": true },
-        { "local-skill": false }
-      )
-    ).toEqual({ effect: "deny", source: "project" });
-    expect(
-      evaluateOpenCodeSkillPermission(
-        "other-skill",
-        { skill: { "*": "deny" } },
-        { "other-skill": true },
-        {}
-      )
-    ).toEqual({ effect: "allow", source: "global" });
-  });
-
-  it("defaults unmatched skills to ask", () => {
-    expect(evaluateOpenCodeSkillPermission("local-skill", {}, {}, {})).toEqual({
-      effect: "ask",
-      source: "default"
-    });
-  });
-
-  it("preserves rendered object-key order when an override replaces an existing rule", () => {
-    expect(
-      evaluateOpenCodeSkillPermission(
-        "local-skill",
-        { skill: { "local-skill": "deny", "*": "allow" } },
-        { "local-skill": false },
-        {}
-      )
-    ).toEqual({ effect: "allow", source: "profile" });
-  });
-
-  it("reads a bare string permission as a wildcard rule", () => {
-    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: "deny" }, {}, {})).toEqual({
-      effect: "deny",
-      source: "profile"
-    });
-    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: "sometimes" }, {}, {})).toEqual({
-      effect: "ask",
-      source: "default"
-    });
-  });
-
-  it("ignores profile and machine permissions that are not objects", () => {
-    expect(evaluateOpenCodeSkillPermission("local-skill", "deny", {}, {}, ["deny"])).toEqual({
-      effect: "ask",
-      source: "default"
-    });
-    expect(evaluateOpenCodeSkillPermission("local-skill", { skill: ["deny"] }, {}, {})).toEqual({
-      effect: "ask",
-      source: "default"
-    });
-  });
-
-  it("preserves machine permission provenance", () => {
-    expect(
-      evaluateOpenCodeSkillPermission(
-        "local-skill",
-        { skill: { "*": "allow" } },
-        {},
-        {},
-        { skill: { "local-skill": "deny" } }
-      )
-    ).toEqual({ effect: "deny", source: "machine" });
-  });
-});
-
 describe("skill override merge vs replace", () => {
   it("merge preserves untouched skills and sibling config; replace drops unlisted skills", () => {
     const config = {
       instructions: ["/tmp/AGENTS.md"],
-      permission: { bash: { "*": "ask" }, skill: { keep: "allow" } }
+      skillOverrides: { keep: "on" }
     };
 
-    // SAFETY: The fixture supplies the fields asserted below and the codec preserves them.
-    const merged = mergeSkillOverrides("opencode", config, { added: false }) as {
+    // SAFETY: the Claude codec preserves the fixture's instructions and writes skillOverrides.
+    const merged = mergeSkillOverrides("claude-code", config, { added: false }) as {
       instructions: string[];
-      permission: { bash: Record<string, string>; skill: Record<string, string> };
+      skillOverrides: Record<string, string>;
     };
     expect(merged.instructions).toEqual(["/tmp/AGENTS.md"]);
-    expect(merged.permission.bash).toEqual({ "*": "ask" });
-    expect(merged.permission.skill).toEqual({ keep: "allow", added: "deny" });
+    expect(merged.skillOverrides).toEqual({ keep: "on", added: "off" });
 
-    // SAFETY: The fixture supplies the fields asserted below and the codec preserves them.
-    const replaced = replaceSkillOverrides("opencode", config, { added: false }) as {
-      permission: { bash: Record<string, string>; skill: Record<string, string> };
+    // SAFETY: the Claude codec writes the asserted skillOverrides object.
+    const replaced = replaceSkillOverrides("claude-code", config, { added: false }) as {
+      skillOverrides: Record<string, string>;
     };
-    expect(replaced.permission.bash).toEqual({ "*": "ask" });
-    expect(replaced.permission.skill).toEqual({ added: "deny" });
+    expect(replaced.skillOverrides).toEqual({ added: "off" });
   });
 
   it("encodes claude-code toggles under skillOverrides", () => {
@@ -175,25 +76,6 @@ describe("skill override merge vs replace", () => {
 });
 
 describe("skill override file round-trips", () => {
-  it("merges opencode toggles into an existing jsonc config, keeping prior skills", async () => {
-    const dir = await makeTempDir();
-    const file = path.join(dir, "opencode.jsonc");
-    await writeFile(
-      file,
-      ["{", "  // keep this comment", '  "permission": { "skill": { "keep": "allow" } }', "}"].join(
-        "\n"
-      ),
-      "utf8"
-    );
-
-    await mergeSkillOverridesIntoFile("opencode", file, { added: false });
-
-    expect(await readSkillOverridesFromFile("opencode", file)).toEqual({
-      keep: true,
-      added: false
-    });
-  });
-
   it("replaces claude-code toggles in a plain json file", async () => {
     const dir = await makeTempDir();
     const file = path.join(dir, "settings.json");

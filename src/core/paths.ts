@@ -4,20 +4,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
-import { machineSchema } from "./manifests.js";
+import { machineSchema, type CapabilityAgentName } from "./manifests.js";
 import { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
 export { expandHome, machineConfigPath, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
 
-export type AgentName = "opencode" | "opencode-v2" | "claude-code" | "codex" | "pi";
-export type ToolTarget =
-  | "opencode"
-  | "opencode-v2"
-  | "claude-code"
-  | "codex"
-  | "pi"
-  | "mise"
-  | "dotfiles";
+export type AgentName = "opencode-v2" | "claude-code" | "codex" | "pi";
+export type ToolTarget = "opencode-v2" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
 export type InfraTarget = "mise" | "dotfiles";
 export type ApplyAgent = AgentName | "all";
 
@@ -28,8 +21,6 @@ export interface RuntimePaths {
   workUnitsRoot: string;
   configsDir: string;
   opencodeConfigDir: string;
-  opencodeV2ConfigDir: string;
-  activeOpenCodeRuntime?: "v1" | "v2";
   claudeDir: string;
   codexDir: string;
   piDir: string;
@@ -41,7 +32,6 @@ export interface PathOptions {
   home?: string | undefined;
   workUnitsRoot?: string | undefined;
   opencodeConfigDir?: string | undefined;
-  opencodeV2ConfigDir?: string | undefined;
   claudeDir?: string | undefined;
   codexDir?: string | undefined;
   piDir?: string | undefined;
@@ -86,7 +76,6 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   const root = resolveRoot(options.root, home);
   const workRoot = path.join(mindframeZDir(home), "work", "v1");
   const configuredWorkUnitsRoot = options.workUnitsRoot ?? machineConfig(home)?.work.units_root;
-  const activeOpenCodeRuntime = machineConfig(home)?.opencode.runtime ?? "v1";
   return {
     root,
     home,
@@ -103,15 +92,6 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
         home
       )
     ),
-    opencodeV2ConfigDir: path.resolve(
-      expandHome(
-        options.opencodeV2ConfigDir ??
-          process.env.OPENCODE_V2_CONFIG_DIR ??
-          path.join(home, ".config", "opencode-v2"),
-        home
-      )
-    ),
-    activeOpenCodeRuntime,
     claudeDir: path.resolve(
       expandHome(
         options.claudeDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude"),
@@ -141,18 +121,12 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
-export function opencodeV1SnapshotDir(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "opencode-v1");
-}
-
 export function opencodeV2SnapshotDir(paths: RuntimePaths, profileName: string): string {
   return path.join(profileConfigsDir(paths, profileName), "opencode-v2");
 }
 
 export function activeOpenCodeSnapshotDir(paths: RuntimePaths, profileName: string): string {
-  return paths.activeOpenCodeRuntime === "v2"
-    ? opencodeV2SnapshotDir(paths, profileName)
-    : opencodeV1SnapshotDir(paths, profileName);
+  return opencodeV2SnapshotDir(paths, profileName);
 }
 
 export function executorDataDir(): string {
@@ -195,7 +169,7 @@ export function vendorLockPath(root: string): string {
   return path.join(root, "skills", "vendor.lock.yml");
 }
 
-export function globalSkillStatePath(paths: RuntimePaths, target: AgentName): string {
+export function globalSkillStatePath(paths: RuntimePaths, target: CapabilityAgentName): string {
   return path.join(mindframeZDir(paths.home), "skill-overrides", `${target}.json`);
 }
 
@@ -216,6 +190,18 @@ export function referenceStatePath(paths: RuntimePaths): string {
 // Companion index of extra folder grants; only embedded when the profile grants any.
 export function extraFoldersIndexPath(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "extra_folders.md");
+}
+
+export function capabilitiesDir(paths: RuntimePaths): string {
+  return path.join(mindframeZDir(paths.home), "capabilities");
+}
+
+export function capabilityIndexPath(paths: RuntimePaths): string {
+  return path.join(capabilitiesDir(paths), "index.md");
+}
+
+export function capabilityGroupPath(paths: RuntimePaths, group: string): string {
+  return path.join(capabilitiesDir(paths), `${group}.md`);
 }
 
 export function workStoreRoot(paths: RuntimePaths): string {

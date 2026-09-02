@@ -7,7 +7,6 @@ import {
   executorBridgeName,
   filterMcpForTarget,
   requiresExecutorBridge,
-  skillRuntimeDefaults,
   type ResolvedProfile
 } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
@@ -118,7 +117,11 @@ export async function renderCodex(
   };
   if (hasPlugins) Object.assign(generatedConfig, { plugins });
   const config = deepMerge(profile.profile.codex.config, generatedConfig);
-  const skillDefaults = skillRuntimeDefaults(profile, "codex");
+  const skillDefaults = Object.fromEntries(
+    profile.enabledSkills
+      .filter((skill) => skill.targets.includes("codex"))
+      .map((skill) => [skill.name, skill.agents.codex === true])
+  );
   const skillPaths = Object.fromEntries(
     Object.keys(skillDefaults).map((name) => [
       name,

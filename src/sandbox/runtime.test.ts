@@ -14,8 +14,7 @@ function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
     workRoot: path.join(home, ".mindframe-z", "work", "v1"),
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode"),
-    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
+    opencodeConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -44,30 +43,22 @@ function profile(
     thread: { stores: [] },
     work: {},
     archives: [],
-    opencode: {},
     claude: {}
   };
 
   return {
     name: "personal",
-    agents: ["opencode", "claude-code"],
+    agents: ["opencode-v2", "claude-code"],
     profile: {
       name: "personal",
       description: "Test profile",
-      agents: ["opencode", "claude-code"],
+      agents: ["opencode-v2", "claude-code"],
       instructions: [],
+      instruction_references: [],
+      capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode: {
-        config: {},
-        dependencies: {},
-        plugins: [],
-        tui: {},
-        tui_plugins: [],
-        commands: [],
-        agents: []
-      },
       opencode_v2: {
         config: {},
         dependencies: {},
@@ -110,13 +101,12 @@ function profile(
       agents: new Map()
     },
     instructionFiles: options.root ? [path.join(options.root, "instructions", "AGENTS.md")] : [],
+    instructionReferences: [],
     referencesDir: path.join(options.home ?? "/tmp", ".mindframe-z", "references"),
     enabledReferences: [
       { name: "local-ref", url: "https://example.invalid/ref.git", description: "Local ref." }
     ],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],
@@ -166,7 +156,7 @@ describe("sandbox runtime inputs", () => {
     const configPath = path.join(
       runtimePaths.configsDir,
       "personal",
-      "opencode-v1",
+      "opencode-v2",
       "opencode.jsonc"
     );
     await mkdir(path.dirname(configPath), { recursive: true });
@@ -186,7 +176,7 @@ describe("sandbox runtime inputs", () => {
     const configPath = path.join(
       runtimePaths.configsDir,
       "personal",
-      "opencode-v1",
+      "opencode-v2",
       "opencode.jsonc"
     );
     await mkdir(configPath, { recursive: true });
@@ -369,7 +359,7 @@ describe("sandbox runtime inputs", () => {
     expect(runtime.dockerRunArgs).toContain("--rm");
     expect(runtime.dockerRunArgs).toContain("--mount");
     expect(runtime.dockerRunArgs).toContain("NO_PROXY=localhost,127.0.0.1,host.docker.internal");
-    expect(runtime.dockerRunArgs.slice(-3)).toEqual(["opencode", "run", "ok"]);
+    expect(runtime.dockerRunArgs.slice(-3)).toEqual(["opencode2", "run", "ok"]);
     expect(runtime.dockerRunArgs.join("\n")).not.toContain("/home/mark");
   });
 

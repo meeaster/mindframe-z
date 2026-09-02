@@ -7,11 +7,11 @@ import type { RuntimePaths } from "../core/paths.js";
 import { makeTempDir, testRuntimePaths, writeFixture } from "../../tests/integration/support.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
-import { syncOpencode } from "./opencode.js";
+import { syncOpencodeV2 } from "./opencode.js";
 import type { SyncDocument, SyncValue } from "./types.js";
 
 // The `personal` fixture profile manages `claude.settings.includeGitInstructions`
-// and `opencode.config.model`, and declares no codex config or plugins. The sync
+// and `opencode_v2.config.model`, and declares no codex config or plugins. The sync
 // detectors below turn *unmanaged* local keys into adoption candidates, so these
 // tests assert that managed/derived keys stay silent while stray keys surface.
 let paths: RuntimePaths;
@@ -69,7 +69,7 @@ describe("syncClaude", () => {
   });
 });
 
-describe("syncOpencode", () => {
+describe("syncOpencodeV2", () => {
   it("ignores derived and managed keys while tolerating jsonc comments", async () => {
     const dir = await makeTempDir();
     const file = path.join(dir, "opencode.jsonc");
@@ -88,13 +88,13 @@ describe("syncOpencode", () => {
       "utf8"
     );
 
-    const { candidates } = await syncOpencode(file, profile);
+    const { candidates } = await syncOpencodeV2(file, profile);
 
     expect(candidates).toEqual([
-      { target: "opencode", yamlPrefix: "opencode.config", key: "theme", value: "dim" },
+      { target: "opencode-v2", yamlPrefix: "opencode_v2.config", key: "theme", value: "dim" },
       {
-        target: "opencode",
-        yamlPrefix: "opencode.config",
+        target: "opencode-v2",
+        yamlPrefix: "opencode_v2.config",
         key: "keybinds",
         value: { leader: "ctrl+x" }
       }
@@ -103,14 +103,14 @@ describe("syncOpencode", () => {
 
   it("returns no candidates when the config file is missing", async () => {
     const dir = await makeTempDir();
-    const { candidates } = await syncOpencode(path.join(dir, "absent.jsonc"), profile);
+    const { candidates } = await syncOpencodeV2(path.join(dir, "absent.jsonc"), profile);
     expect(candidates).toEqual([]);
   });
 
   it("rejects a config file that is not a JSON object", async () => {
     const dir = await makeTempDir();
     const file = await writeJson(dir, "opencode.jsonc", ["theme", "dim"]);
-    await expect(syncOpencode(file, profile)).rejects.toThrow(file);
+    await expect(syncOpencodeV2(file, profile)).rejects.toThrow(file);
   });
 });
 

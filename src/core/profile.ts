@@ -8,8 +8,10 @@ import {
   type McpServer,
   type ProfileMcpConfig,
   type ProfileAgentDefaults,
+  type CapabilityAgentName,
   type ProfileManifest,
-  type ToolTargetName,
+  type InstructionReference,
+  type CapabilityGroup,
   type ReferenceEntry,
   type SkillEntry,
   type ExtraFolder
@@ -21,10 +23,8 @@ type CatalogKind = "reference" | "skill" | "mcp" | "profile";
 type SourceKind =
   | CatalogKind
   | "instruction"
-  | "opencode plugin"
-  | "opencode TUI plugin"
-  | "opencode command"
-  | "opencode agent"
+  | "opencode-v2 plugin"
+  | "opencode-v2 TUI plugin"
   | "opencode-v2 command"
   | "opencode-v2 agent";
 
@@ -96,7 +96,7 @@ export function validateExecutorMcpServer(name: string, server: McpServer): void
 export interface ResolvedMcpServer {
   name: string;
   server: McpServer;
-  agents?: ProfileAgentDefaults;
+  agents?: Partial<Record<CapabilityAgentName, boolean>>;
   executor?: {
     connections: Record<string, string>;
   };
@@ -105,7 +105,7 @@ export interface ResolvedMcpServer {
 export type ResolvedSkill = SkillEntry & {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
-  targets: ToolTargetName[];
+  targets: CapabilityAgentName[];
   sourceRoot: string;
   vendor?: {
     repository: string;
@@ -117,7 +117,7 @@ export type ResolvedSkill = SkillEntry & {
 };
 
 export type TargetedMcpServer = ResolvedMcpServer & {
-  agents: ProfileAgentDefaults;
+  agents: Partial<Record<CapabilityAgentName, boolean>>;
   enabled: boolean;
 };
 
@@ -128,11 +128,10 @@ export interface ResolvedProfile {
   manifests: LoadedManifests;
   sources: ProfileSources;
   instructionFiles: string[];
+  instructionReferences: Array<InstructionReference & { sourcePath: string }>;
   referencesDir: string;
   enabledReferences: ReferenceEntry[];
   enabledSkills: ResolvedSkill[];
-  enabledCommands: string[];
-  enabledAgents: string[];
   enabledOpenCodeV2Commands: string[];
   enabledOpenCodeV2Agents: string[];
   enabledOpenCodeV2Plugins?: string[];
@@ -284,7 +283,7 @@ function normalizeSourceNames(
 function normalizeProfile(
   home: LoadedManifests,
   profile: ProfileManifest,
-  options: { includeOpenCode: boolean; includeOpenCodeV2: boolean }
+  options: { includeOpenCodeV2: boolean }
 ): ProfileBuild {
   const sources = emptySources();
   const references = profile.references.map((rawName) => {
@@ -312,39 +311,18 @@ function normalizeProfile(
     "instruction",
     { allowLocalSlash: true }
   );
-  const opencode = options.includeOpenCode
-    ? {
-        ...profile.opencode,
-        plugins: normalizeSourceNames(
-          home,
-          profile.opencode.plugins,
-          sources.plugins,
-          "opencode plugin",
-          "OpenCode plugin"
-        ),
-        tui_plugins: normalizeSourceNames(
-          home,
-          profile.opencode.tui_plugins,
-          sources.plugins,
-          "opencode TUI plugin",
-          "OpenCode TUI plugin"
-        ),
-        commands: normalizeSourceNames(
-          home,
-          profile.opencode.commands,
-          sources.commands,
-          "opencode command",
-          "OpenCode command"
-        ),
-        agents: normalizeSourceNames(
-          home,
-          profile.opencode.agents,
-          sources.agents,
-          "opencode agent",
-          "OpenCode agent"
-        )
-      }
-    : profile.opencode;
+  const instructionReferencePaths = normalizeSourceNames(
+    home,
+    profile.instruction_references.map((reference) => reference.path),
+    sources.instructions,
+    "instruction",
+    "instruction reference",
+    { allowLocalSlash: true }
+  );
+  const instructionReferences = profile.instruction_references.map((reference, index) => ({
+    ...reference,
+    path: instructionReferencePaths[index]!
+  }));
   const opencodeV2 = options.includeOpenCodeV2
     ? {
         ...profile.opencode_v2,
@@ -352,14 +330,14 @@ function normalizeProfile(
           home,
           profile.opencode_v2.plugins,
           sources.plugins,
-          "opencode plugin",
+          "opencode-v2 plugin",
           "OpenCode V2 plugin"
         ),
         tui_plugins: normalizeSourceNames(
           home,
           profile.opencode_v2.tui_plugins,
           sources.plugins,
-          "opencode TUI plugin",
+          "opencode-v2 TUI plugin",
           "OpenCode V2 TUI plugin"
         ),
         commands: normalizeSourceNames(
@@ -391,7 +369,7 @@ function normalizeProfile(
       skills,
       mcp,
       instructions,
-      opencode,
+      instruction_references: instructionReferences,
       opencode_v2: opencodeV2
     },
     sources,
@@ -438,6 +416,18 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     description: child.description || base.description,
     agents: child.agents.length > 0 ? child.agents : base.agents,
     instructions: dedupe([...base.instructions, ...child.instructions]),
+    instruction_references: (() => {
+      const map = new Map<string, InstructionReference>();
+      for (const reference of base.instruction_references) map.set(reference.name, reference);
+      for (const reference of child.instruction_references) map.set(reference.name, reference);
+      return [...map.values()];
+    })(),
+    capability_groups: (() => {
+      const map = new Map<string, CapabilityGroup>();
+      for (const group of base.capability_groups) map.set(group.name, group);
+      for (const group of child.capability_groups) map.set(group.name, group);
+      return [...map.values()];
+    })(),
     references: dedupe([...base.references, ...child.references]),
     extra_folders: (() => {
       const map = new Map<string, ExtraFolder>();
@@ -448,16 +438,6 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     skills: deepMerge(base.skills, child.skills),
     mcp: mergeMcpConfigs(base.mcp, child.mcp),
     executor: deepMerge(base.executor ?? {}, child.executor ?? {}),
-    opencode: {
-      config: deepMerge(base.opencode.config, child.opencode.config),
-      dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
-      plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
-      tui: deepMerge(base.opencode.tui, child.opencode.tui),
-      tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
-      commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
-      agents: dedupe([...base.opencode.agents, ...child.opencode.agents]),
-      delegate_general: child.opencode.delegate_general ?? base.opencode.delegate_general
-    },
     opencode_v2: {
       config: deepMerge(base.opencode_v2.config, child.opencode_v2.config),
       dependencies: { ...base.opencode_v2.dependencies, ...child.opencode_v2.dependencies },
@@ -548,7 +528,7 @@ function mergeMcpConfigs(
 
 function resolveSkillConfig(
   config: ProfileManifest["skills"][string],
-  agents: AgentName[]
+  agents: CapabilityAgentName[]
 ): ResolvedSkillConfig {
   if (!config?.agents) {
     throw new Error("Skill entries must declare agents after profile inheritance is resolved");
@@ -556,7 +536,7 @@ function resolveSkillConfig(
   const targets = Object.entries(config.agents)
     .filter(([, enabled]) => enabled)
     .map(([target]) => target)
-    .filter((target): target is ToolTargetName => agents.some((agent) => agent === target));
+    .filter((target): target is CapabilityAgentName => agents.some((agent) => agent === target));
   return {
     agents: config.agents,
     toggleable: config.toggleable,
@@ -575,14 +555,16 @@ interface ExecutorConnections {
 interface ResolvedSkillConfig {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
-  targets: ToolTargetName[];
+  targets: CapabilityAgentName[];
 }
 
-function capabilityAgent(agent: AgentName): AgentName {
-  return agent === "opencode-v2" ? "opencode" : agent;
+function capabilityAgent(agent: AgentName): CapabilityAgentName | undefined {
+  if (agent === "opencode-v2") return "opencode";
+  if (agent === "pi") return undefined;
+  return agent;
 }
 
-function directCapabilityAgent(agent: AgentName): "opencode" | "claude-code" | "codex" | undefined {
+function directCapabilityAgent(agent: AgentName): CapabilityAgentName | undefined {
   if (agent === "pi") return undefined;
   if (agent === "opencode-v2") return "opencode";
   return agent;
@@ -592,7 +574,7 @@ async function resolveEnabledSkills(
   profileName: string,
   build: ProfileBuild,
   manifests: LoadedManifests,
-  agents: AgentName[]
+  agents: CapabilityAgentName[]
 ): Promise<ResolvedSkill[]> {
   const enabled = Object.entries(build.profile.skills)
     .map(([skillName, config]): ResolvedSkill => {
@@ -680,7 +662,7 @@ function resolveMcpServers(
 async function resolveProfileByName(
   manifests: LoadedManifests,
   name: string,
-  options: { includeOpenCode: boolean; includeOpenCodeV2: boolean }
+  options: { includeOpenCodeV2: boolean }
 ): Promise<ProfileBuild> {
   const resolvedName = resolveCatalogName(manifests, name, "profile");
   const profile = resolvedName.home.profiles.get(resolvedName.name);
@@ -723,23 +705,23 @@ export async function resolveProfile(
   const name =
     requestedProfile ?? process.env.MFZ_PROFILE ?? manifests.machine.profile ?? "personal";
   const preliminary = await resolveProfileByName(manifests, name, {
-    includeOpenCode: false,
     includeOpenCodeV2: false
   });
   const evaluateAgents = options.evaluateAgents ?? preliminary.profile.agents;
-  const includeOpenCode = evaluateAgents.includes("opencode");
-  const includeOpenCodeV2 =
-    evaluateAgents.includes("opencode-v2") ||
-    (paths.activeOpenCodeRuntime === "v2" && evaluateAgents.includes("opencode"));
-  const profileBuild =
-    includeOpenCode || includeOpenCodeV2
-      ? await resolveProfileByName(manifests, name, { includeOpenCode, includeOpenCodeV2 })
-      : preliminary;
+  const includeOpenCodeV2 = evaluateAgents.includes("opencode-v2");
+  const profileBuild = includeOpenCodeV2
+    ? await resolveProfileByName(manifests, name, { includeOpenCodeV2 })
+    : preliminary;
   const { profile, sources } = profileBuild;
   const agents = profile.agents;
   if (includeOpenCodeV2) assertOpenCodeV2ConfigOwned(profile);
-  const capabilityAgents = [...new Set(evaluateAgents.map(capabilityAgent))];
-  const skillCapabilityAgents = [...new Set([...agents, ...evaluateAgents].map(capabilityAgent))];
+  const skillCapabilityAgents = [
+    ...new Set(
+      [...agents, ...evaluateAgents]
+        .map(capabilityAgent)
+        .filter((agent): agent is CapabilityAgentName => agent !== undefined)
+    )
+  ];
 
   const instructionFiles = profile.instructions.map((file) => {
     const sourceHome = sources.instructions.get(file) ?? manifests;
@@ -747,6 +729,18 @@ export async function resolveProfile(
       sourceHome.root,
       file.startsWith("instructions/") ? file : path.join("instructions", file)
     );
+  });
+  const instructionReferences = profile.instruction_references.map((reference) => {
+    const sourceHome = sources.instructions.get(reference.path) ?? manifests;
+    return {
+      ...reference,
+      sourcePath: path.resolve(
+        sourceHome.root,
+        reference.path.startsWith("instructions/")
+          ? reference.path
+          : path.join("instructions", reference.path)
+      )
+    };
   });
   const referenceNames = dedupe(profile.references);
   const enabledReferences = referenceNames.map((refName) => {
@@ -761,15 +755,13 @@ export async function resolveProfile(
     manifests,
     skillCapabilityAgents
   );
-  const enabledCommands = includeOpenCode ? dedupe(profile.opencode.commands) : [];
-  const enabledAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
   const enabledOpenCodeV2Commands = includeOpenCodeV2 ? dedupe(profile.opencode_v2.commands) : [];
   const enabledOpenCodeV2Agents = includeOpenCodeV2 ? dedupe(profile.opencode_v2.agents) : [];
   const enabledOpenCodeV2Plugins = includeOpenCodeV2 ? dedupe(profile.opencode_v2.plugins) : [];
   const enabledOpenCodeV2TuiPlugins = includeOpenCodeV2
     ? dedupe(profile.opencode_v2.tui_plugins)
     : [];
-  const mcpServers = resolveMcpServers(name, profileBuild, manifests, capabilityAgents);
+  const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
@@ -785,13 +777,12 @@ export async function resolveProfile(
     manifests,
     sources,
     instructionFiles,
+    instructionReferences,
     referencesDir: path.resolve(
       expandHome(process.env.MFZ_REFERENCES_DIR ?? manifests.machine.references_dir, paths.home)
     ),
     enabledReferences,
     enabledSkills,
-    enabledCommands,
-    enabledAgents,
     enabledOpenCodeV2Commands,
     enabledOpenCodeV2Agents,
     enabledOpenCodeV2Plugins,
@@ -804,9 +795,10 @@ export async function resolveProfile(
 
 export function filterMcpForTarget(
   profile: ResolvedProfile,
-  target: ToolTargetName
+  target: AgentName
 ): TargetedMcpServer[] {
   const capabilityTarget = capabilityAgent(target);
+  if (capabilityTarget === undefined) return [];
   return profile.mcpServers.flatMap((entry): TargetedMcpServer[] => {
     const agents = entry.agents;
     if (!agents || agents[capabilityTarget] === undefined) return [];
@@ -818,7 +810,9 @@ export function executorMcpServers(
   profile: ResolvedProfile,
   targets: readonly AgentName[] = profile.agents
 ): ResolvedMcpServer[] {
-  const capabilityTargets = targets.map(capabilityAgent);
+  const capabilityTargets = targets
+    .map(capabilityAgent)
+    .filter((target): target is CapabilityAgentName => target !== undefined);
   return profile.mcpServers.filter(
     (entry) =>
       entry.executor !== undefined &&
@@ -847,15 +841,4 @@ export function assertMcpToggleSupported(target: AgentName, enabled: boolean): v
       "Cannot disable MCP servers for Claude Code: user/local Claude MCP configuration has no supported configured-but-disabled state"
     );
   }
-}
-
-export function skillRuntimeDefaults(
-  profile: ResolvedProfile,
-  target: Extract<ToolTargetName, "opencode" | "codex">
-): Record<string, boolean> {
-  return Object.fromEntries(
-    profile.enabledSkills
-      .filter((skill) => skill.targets.some((entry) => entry === "opencode" || entry === "codex"))
-      .map((skill) => [skill.name, skill.targets.includes(target) && skill.agents[target] === true])
-  );
 }

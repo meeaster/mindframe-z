@@ -10,18 +10,17 @@ import type { ResolvedProfile } from "../core/profile.js";
 function profileWithServer(server: ResolvedProfile["mcpServers"][number]): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode"],
+    agents: ["opencode-v2"],
     profile: profileSchema.parse({ name: "personal" }),
     // SAFETY: this fixture only exercises mcpServers; unused resolution metadata is never read.
     manifests: {} as ResolvedProfile["manifests"],
     // SAFETY: this fixture only exercises mcpServers; unused resolution metadata is never read.
     sources: {} as ResolvedProfile["sources"],
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [server],

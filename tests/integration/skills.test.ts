@@ -13,17 +13,13 @@ const Overrides = z.object({
   projects: z.record(
     z.string(),
     z.object({
-      opencode: z.object({ skills: z.record(z.string(), z.boolean()) }).optional(),
-      "claude-code": z.object({ skills: z.record(z.string(), z.boolean()) }).optional()
+      "claude-code": z.object({ skills: z.record(z.string(), z.boolean()) }).optional(),
+      codex: z.object({ skills: z.record(z.string(), z.boolean()) }).optional()
     })
   )
 });
 const OpenCodePermission = z.object({ permission: z.object({ webfetch: z.string() }) });
 const ClaudeSettings = z.object({ includeGitInstructions: z.boolean() });
-const SkillPermission = z.object({
-  permission: z.object({ skill: z.record(z.string(), z.string()) })
-});
-
 describe("skill CLI integration", () => {
   let root: string;
   let home: string;
@@ -103,7 +99,7 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
+        "agents: [opencode-v2, claude-code]",
         "skills:",
         "  local-skill:",
         "    agents: { opencode: true }",
@@ -141,12 +137,12 @@ describe("skill CLI integration", () => {
       "mfz",
       root,
       home,
-      ["skills", "disable", "local-skill", "--target", "opencode"],
+      ["skills", "disable", "local-skill", "--target", "claude-code"],
       {},
       undefined,
       root
     );
-    expect(disable.stdout).toContain("Disabled local-skill for opencode");
+    expect(disable.stdout).toContain("Disabled local-skill for claude-code");
 
     const enable = await cli(
       "mfz",
@@ -163,7 +159,7 @@ describe("skill CLI integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
-    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(false);
+    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["local-skill"]).toBe(false);
     expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBeUndefined();
 
     const opencode = parseJson(
@@ -179,22 +175,21 @@ describe("skill CLI integration", () => {
     expect(claude).toEqual({ includeGitInstructions: true });
   });
 
-  it("preserves global OpenCode skill toggles across apply", async () => {
+  it("rejects OpenCode V2 skill toggles", async () => {
     const outsideRepo = await makeTempDir();
-    await cli(
-      "mfz",
-      root,
-      home,
-      ["skills", "disable", "local-skill", "--target", "opencode"],
-      {},
-      undefined,
-      outsideRepo
-    );
-
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-    const globalConfigPath = path.join(home, ".config", "opencode", "opencode.jsonc");
-    const updated = parseJson(SkillPermission, await readFile(globalConfigPath, "utf8"));
-    expect(updated.permission?.skill?.["local-skill"]).toBe("deny");
+    await expect(
+      cli(
+        "mfz",
+        root,
+        home,
+        ["skills", "disable", "local-skill", "--target", "opencode-v2"],
+        {},
+        undefined,
+        outsideRepo
+      )
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("OpenCode V2 skill toggles are not supported")
+    });
   });
 
   it("TUI saves profile-default skill state to local config files", async () => {
@@ -206,10 +201,10 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode, claude-code]",
+        "agents: [opencode-v2, claude-code]",
         "skills:",
         "  local-skill:",
-        "    agents: { opencode: true }",
+        "    agents: { claude-code: true }",
         "  claude-skill:",
         "    agents: { claude-code: true }",
         ""
@@ -221,6 +216,7 @@ describe("skill CLI integration", () => {
     const input = new PassThrough();
     const promise = runSkillsTui(paths, profile, { input, output: sink() });
 
+    await new Promise<void>((resolve) => setImmediate(resolve));
     input.write(" \r");
     input.end();
     try {
@@ -233,7 +229,7 @@ describe("skill CLI integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
-    expect(overrides.projects?.[root]?.opencode?.skills?.["local-skill"]).toBe(false);
+    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBe(false);
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -249,10 +245,10 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
+        "agents: [opencode-v2, claude-code]",
         "skills:",
         "  local-skill:",
-        "    agents: { opencode: true }",
+        "    agents: { claude-code: true }",
         "    toggleable: false",
         ""
       ].join("\n"),

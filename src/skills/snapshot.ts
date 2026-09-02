@@ -25,11 +25,16 @@ import {
   type AgentName,
   type RuntimePaths
 } from "../core/paths.js";
+import type { CapabilityAgentName } from "../core/manifests.js";
 import type { ResolvedProfile, ResolvedSkill } from "../core/profile.js";
 import { digestSkillFiles, readSkillFiles, validateSkillRecords } from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
 
 type SkillTarget = Exclude<AgentName, "pi">;
+
+function capabilityTarget(target: SkillTarget): CapabilityAgentName {
+  return target === "opencode-v2" ? "opencode" : target;
+}
 
 const snapshotManifestSchema = z
   .object({
@@ -41,7 +46,7 @@ const snapshotManifestSchema = z
           name: z.string(),
           source: z.enum(["local", "vendored", "engine"]),
           digest: z.string(),
-          targets: z.array(z.enum(["opencode", "opencode-v2", "claude-code", "codex"])),
+          targets: z.array(z.enum(["opencode-v2", "claude-code", "codex"])),
           repository: z.string().optional(),
           ref: z.string().optional(),
           subtree: z.string().optional(),
@@ -283,21 +288,19 @@ async function linksMatch(
 }
 
 function desiredTargets(skill: ResolvedSkill, selected: readonly SkillTarget[]): SkillTarget[] {
-  return selected.filter((target) =>
-    skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
-  );
+  return selected.filter((target) => skill.targets.includes(capabilityTarget(target)));
 }
 
 function engineTargets(profile: ResolvedProfile, selected: readonly SkillTarget[]): SkillTarget[] {
   return selected.filter((target) =>
-    profile.agents.includes(target === "opencode-v2" ? "opencode" : target)
+    profile.agents.includes(target === "opencode-v2" ? "opencode-v2" : target)
   );
 }
 
 export async function renderSkillSnapshot(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  selectedTargets: readonly SkillTarget[] = ["opencode", "claude-code", "codex"],
+  selectedTargets: readonly SkillTarget[] = ["opencode-v2", "claude-code", "codex"],
   options: { snapshotDir?: string } = {}
 ): Promise<{ manifest: SnapshotManifest; links: LinkPlan[]; temporaryPath: string }> {
   const engineEntries: Array<{
@@ -438,9 +441,7 @@ function selectedSkillNames(
   const names = new Set(
     profile.enabledSkills
       .filter((skill) =>
-        renderTargets.some((target) =>
-          skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
-        )
+        renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))
       )
       .map((skill) => skill.name)
   );
@@ -461,9 +462,7 @@ function selectedLinkPlans(
   for (const name of selectedSkillNames(profile, renderTargets)) {
     const declared = profile.enabledSkills.find((skill) => skill.name === name);
     const targets = declared
-      ? selectedTargets.filter((target) =>
-          declared.targets.includes(target === "opencode-v2" ? "opencode" : target)
-        )
+      ? selectedTargets.filter((target) => declared.targets.includes(capabilityTarget(target)))
       : selectedTargets.filter((target) => renderTargets.includes(target));
     for (const target of targets) {
       const directory =
@@ -493,11 +492,7 @@ async function syncSkillSnapshotGroup(
   const directories = linkDirectories(paths, selectedTargets);
   if (options.dryRun) {
     for (const skill of profile.enabledSkills) {
-      if (
-        renderTargets.some((target) =>
-          skill.targets.includes(target === "opencode-v2" ? "opencode" : target)
-        )
-      ) {
+      if (renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))) {
         const files = await readSkillFiles(sourcePath(skill));
         validateSkillRecords(files);
       }
@@ -525,7 +520,7 @@ async function syncSkillSnapshotGroup(
   const universalDir = path.join(paths.home, ".agents", "skills") + path.sep;
   const claudeDir = path.join(paths.claudeDir, "skills") + path.sep;
   const opencodeV2Dir = path.join(paths.opencodeConfigDir, "skills") + path.sep;
-  const useUniversal = selectedTargets.includes("opencode") || selectedTargets.includes("codex");
+  const useUniversal = selectedTargets.includes("codex");
   const useOpenCodeV2 = selectedTargets.includes("opencode-v2");
   const prepared = {
     ...rendered,
@@ -594,17 +589,7 @@ export async function syncSkillSnapshot(
 ): Promise<void> {
   const requestedTargets = options.selectedTargets ?? profile.agents.filter(isSkillTarget);
   const legacyRequested = requestedTargets.filter(isLegacySkillTarget);
-  const legacySelected =
-    legacyRequested.includes("opencode") || legacyRequested.includes("codex")
-      ? [
-          ...new Set([
-            ...legacyRequested,
-            ...profile.agents
-              .filter(isLegacySkillTarget)
-              .filter((target) => target === "opencode" || target === "codex")
-          ])
-        ]
-      : [...legacyRequested];
+  const legacySelected = [...legacyRequested];
   const legacyRenderTargets = profile.agents.filter(isLegacySkillTarget);
   await syncSkillSnapshotGroup(
     paths,
@@ -631,16 +616,11 @@ export async function syncSkillSnapshot(
 }
 
 function isLegacySkillTarget(target: AgentName): target is Exclude<SkillTarget, "opencode-v2"> {
-  return target === "opencode" || target === "claude-code" || target === "codex";
+  return target === "claude-code" || target === "codex";
 }
 
 function isSkillTarget(target: string): target is SkillTarget {
-  return (
-    target === "opencode" ||
-    target === "opencode-v2" ||
-    target === "claude-code" ||
-    target === "codex"
-  );
+  return target === "opencode-v2" || target === "claude-code" || target === "codex";
 }
 
 export type { SkillTarget };

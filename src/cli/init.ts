@@ -236,6 +236,30 @@ Catalog files define what exists. Profiles select entries by name. Unqualified n
 
 The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
 
+Use \`instructions\` for guidance every agent should receive. Use \`instruction_references\` for branch-specific guidance: each entry declares a stable kebab-case \`name\`, a source \`path\` under an active or upstream home's \`instructions/\` directory, and a trigger-focused \`description\`. MFZ copies these files into the rendered profile and adds compact pointers to global instructions; the agent reads a referenced file only when its description matches the task.
+
+~~~yaml
+instruction_references:
+  - name: browser
+    path: instructions/BROWSER.md
+    description: Browser automation, website interaction, or authenticated Chrome
+~~~
+
+Use \`capability_groups\` to replace the full reference and extra-folder inventories in global instructions with a compact awareness index. Each enabled reference and extra folder must declare a matching \`group\`, a short \`summary\`, and at least one \`signal\`. MFZ keeps \`~/.mindframe-z/references.md\` and \`~/.mindframe-z/extra_folders.md\` as the full indexes. It writes the awareness index and detailed group files under \`~/.mindframe-z/capabilities/\`.
+
+~~~yaml
+capability_groups:
+  - name: agent-tooling
+    summary: Agent harnesses, configuration engines, and workflow sources.
+
+extra_folders:
+  - path: ~/workspace/repos/mindframe-z
+    group: agent-tooling
+    summary: Mindframe-Z
+    signals: [Mindframe-Z, agent configuration]
+    description: Profile-aware AI tooling engine.
+~~~
+
 Runtime-managed files:
 
 - Mise profile settings live in \`profiles/<profile>/mise.toml\`; profile task files live under \`profiles/<profile>/.config/mise/tasks/\`. Run \`mfz apply --target mise\` after changing them. MFZ renders native Mise fragments under \`conf.d/\` and namespaced tasks under \`tasks/\`.
@@ -268,19 +292,22 @@ Use this guide before granting agent access to a host directory or changing its 
 ~~~yaml
 extra_folders:
   - path: /home/mark/workspace/repos/payments
+    group: product-systems
+    summary: Payment reconciliation
+    signals: [payments, settlement files, reconciliation]
     description: "Payment reconciliation: reconciles settlement files and exceptions; TypeScript, PostgreSQL, and S3."
     url: https://github.com/example/payments
     read: allow
     edit: allow
 ~~~
 
-\`path\` is required. Use \`url\` for a Git source a reader may need to reopen; omit it for mounts and local configuration directories. \`read\` and \`edit\` are permission grants, not documentation; declare only directories agents are intended to access.
+\`path\` is required. If the profile defines \`capability_groups\`, also declare a matching \`group\`, a short \`summary\`, and at least one \`signal\`. Use \`url\` for a Git source a reader may need to reopen; omit it for mounts and local configuration directories. \`read\` and \`edit\` are permission grants, not documentation; declare only directories agents are intended to access.
 
 Write \`description\` as capability-map metadata, not a miniature repository summary: lead with the domain outcome, state the capability, then include discriminative technology, integration, or dependency signals. Avoid generic "needed when" clauses, exhaustive inventories, volatile counts, and details an agent can discover after opening the folder.
 
 Within profile inheritance, a child entry overrides its parent by path, and a machine-config entry overrides both. Active and upstream homes are not granted implicitly; declare any home agents should edit as an extra folder.
 
-Run plain \`mfz apply\`, then inspect \`~/.mindframe-z/extra_folders.md\` and run \`mfz doctor\`. Done when the index shows the intended role and permissions and the profile reports healthy links.
+Run plain \`mfz apply\`, then inspect \`~/.mindframe-z/extra_folders.md\`, \`~/.mindframe-z/capabilities/index.md\`, and the matching group file. Run \`mfz doctor\`. Done when the full index shows the intended permissions and the compact index exposes enough signals to find the group.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
@@ -345,8 +372,11 @@ Add a reference:
    \`\`\`yaml
    references:
      - name: example
-       url: https://github.com/example/example.git
-       description: TypeScript library for example workflows. Inspect it when working on example configuration, adapters, or runtime behavior. Main entrypoint: src/index.ts.
+        url: https://github.com/example/example.git
+        group: agent-tooling
+        summary: Example workflow library
+        signals: [example configuration, adapters, runtime behavior]
+        description: TypeScript library for example workflows. Inspect it when working on example configuration, adapters, or runtime behavior. Main entrypoint: src/index.ts.
    \`\`\`
 
 2. Enable it in \`profiles/<profile>/profile.yml\`:
@@ -356,7 +386,9 @@ Add a reference:
      - example
    \`\`\`
 
-3. Run \`mfz refs sync example\` to clone or update it, then plain \`mfz apply\` to regenerate the reference index and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate only the index.
+3. Run \`mfz refs sync example\` to clone or update it, then plain \`mfz apply\` to regenerate the indexes and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate the reference, extra-folder, and capability indexes.
+
+If the profile defines \`capability_groups\`, each enabled reference must declare a matching \`group\`, a short \`summary\`, and at least one \`signal\`.
 
 Write descriptions as routing metadata, not miniature repository summaries. Lead with the stack or repository type and its purpose, name the concepts or situations that should cause an agent to inspect it, and include at most one or two durable entrypoints, packages, or config models. Keep descriptions concise; avoid promotional language, exhaustive feature lists, volatile counts, and details agents can discover after opening the repository.
 
@@ -418,7 +450,7 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
     "# Home Instructions\n",
     "utf8"
   );
-  const agentList = agents.length > 0 ? agents : ["opencode", "claude-code", "codex"];
+  const agentList = agents.length > 0 ? agents : ["opencode-v2", "claude-code", "codex"];
   await writeFile(
     path.join(homeRoot, "profiles", "base", "profile.yml"),
     [

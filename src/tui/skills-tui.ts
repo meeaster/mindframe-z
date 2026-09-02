@@ -24,7 +24,7 @@ interface SkillsPromptResult {
   states: Record<SkillToggleTarget, SkillToggleState>;
 }
 
-const targets: SkillToggleTarget[] = ["opencode", "claude-code", "codex"];
+const targets: SkillToggleTarget[] = ["claude-code", "codex"];
 
 function truncateText(text: string, maxLen: number): string {
   if (maxLen <= 0) return "";
@@ -59,12 +59,10 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
     states: Record<SkillToggleTarget, SkillToggleState>,
     streams: { input?: Readable; output?: Writable } = {}
   ) {
-    const initialTarget: SkillToggleTarget = profile.agents.includes("opencode")
-      ? "opencode"
-      : (profile.agents.find(
-          (agent): agent is SkillToggleTarget =>
-            agent === "opencode" || agent === "claude-code" || agent === "codex"
-        ) ?? "opencode");
+    const initialTarget: SkillToggleTarget =
+      profile.agents.find(
+        (agent): agent is SkillToggleTarget => agent === "claude-code" || agent === "codex"
+      ) ?? "claude-code";
     const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
@@ -158,7 +156,7 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
   private switchTarget(): void {
     this.captureCurrentState();
     const currentIndex = targets.indexOf(this.target);
-    this.target = targets[(currentIndex + 1) % targets.length] ?? "opencode";
+    this.target = targets[(currentIndex + 1) % targets.length] ?? "claude-code";
     this.targetState.value = this.target;
     this.options = optionsForTarget(this.profile, this.target);
     this.cursor = 0;
@@ -172,18 +170,14 @@ export async function runSkillsTui(
   streams: { input?: Readable; output?: Writable } = {}
 ): Promise<void> {
   if (!targets.some((target) => profile.agents.includes(target))) {
-    throw new Error(
-      "Skill toggles are only supported for V1 harnesses; OpenCode V2 is not supported"
-    );
+    throw new Error("Skill toggles are only supported for Claude Code and Codex");
   }
   const configPaths = await resolveSkillConfigPaths(paths);
-  const [opencodeState, claudeCodeState, codexState] = await Promise.all([
-    resolveSkillToggleStateForConfigPaths(configPaths, profile, "opencode"),
+  const [claudeCodeState, codexState] = await Promise.all([
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code"),
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "codex")
   ]);
   const states = {
-    opencode: opencodeState,
     "claude-code": claudeCodeState,
     codex: codexState
   } satisfies Record<SkillToggleTarget, SkillToggleState>;

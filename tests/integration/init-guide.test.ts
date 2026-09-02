@@ -98,7 +98,13 @@ describe("init and guide integration", () => {
     const machineHome = await makeTempDir();
     const homeRoot = path.join(await makeTempDir(), "my-home");
 
-    const result = await mfz(machineHome, ["init", "--create", homeRoot, "--agents", "opencode"]);
+    const result = await mfz(machineHome, [
+      "init",
+      "--create",
+      homeRoot,
+      "--agents",
+      "opencode-v2"
+    ]);
 
     expect(result.stdout).toContain(`home_path\t${homeRoot}`);
     expect(await readFile(path.join(homeRoot, "mfz_home.yml"), "utf8")).toContain(
@@ -122,7 +128,7 @@ describe("init and guide integration", () => {
   it("clones a home into the managed upstream clone root and points machine config at it", async () => {
     const sourceMachineHome = await makeTempDir();
     const source = path.join(await makeTempDir(), "shared-home");
-    await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode"]);
+    await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode-v2"]);
 
     const machineHome = await makeTempDir();
     const result = await mfz(machineHome, ["init", "--clone", source, "--name", "shared"]);

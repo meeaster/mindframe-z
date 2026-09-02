@@ -29,7 +29,6 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
     opencodeConfigDir: path.join(home, ".config", "opencode"),
-    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -38,7 +37,6 @@ export function testRuntimePaths(home: string, root = home): RuntimePaths {
 }
 
 export function configsPath(home: string, ...segments: string[]): string {
-  if (segments[1] === "opencode") segments[1] = "opencode-v1";
   return path.join(home, ".mindframe-z", "configs", ...segments);
 }
 
@@ -168,7 +166,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     [
       "name: personal",
       "extends: base",
-      "agents: [opencode, claude-code]",
+      "agents: [opencode-v2, claude-code]",
       "thread:",
       "  stores:",
       "    - name: personal",
@@ -190,7 +188,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "mcp:",
       "  context7:",
       "    agents: [opencode, claude-code]",
-      "opencode:",
+      "opencode_v2:",
       "  config:",
       "    model: test/model",
       "  plugins:",
@@ -232,7 +230,6 @@ export function cli(
       MFZ_ROOT: root,
       MFZ_HOME: home,
       OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
-      OPENCODE_V2_CONFIG_DIR: path.join(home, ".config", "opencode-v2"),
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       CODEX_HOME: path.join(home, ".codex"),
       PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
@@ -269,7 +266,6 @@ export function cliWithMachineHomePath(home: string, args: string[]) {
         MFZ_HOME: home,
         MFZ_ROOT: undefined,
         OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
-        OPENCODE_V2_CONFIG_DIR: path.join(home, ".config", "opencode-v2"),
         CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
         CODEX_HOME: path.join(home, ".codex"),
         PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent")

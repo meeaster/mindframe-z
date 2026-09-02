@@ -49,7 +49,7 @@ async function closeServer(server: ReturnType<typeof createServer>): Promise<voi
 }
 
 describe("context overrides and MCP probes", () => {
-  it("uses effective profile, global, and project skill visibility", async () => {
+  it("keeps V2 skill visibility independent of legacy OpenCode overrides", async () => {
     const { root, home } = await setupIntegrationFixture();
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
     const profile = await readFile(profilePath, "utf8");
@@ -89,7 +89,7 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       {},
       undefined,
       root
@@ -97,8 +97,8 @@ describe("context overrides and MCP probes", () => {
     expect(projectResult.stdout).toContain(
       "local-skill  ~22 catalogue; ~18 body inventory on invocation"
     );
-    expect(projectResult.stdout).toContain("Skills (1 skill | ~22 catalogue");
-    expect(projectResult.stdout).not.toContain("all-skill  ");
+    expect(projectResult.stdout).toContain("Skills (2 skills | ~44 catalogue");
+    expect(projectResult.stdout).toContain("all-skill  ");
 
     const otherRoot = await makeTempDir();
     await execa("git", ["init", "-q", otherRoot]);
@@ -106,13 +106,13 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       {},
       undefined,
       otherRoot
     );
     expect(otherResult.stdout).not.toContain("Notes:");
-    expect(otherResult.stdout).not.toContain("local-skill  ");
+    expect(otherResult.stdout).toContain("local-skill  ");
   });
 
   it("reports effective MCP membership separately for each harness", async () => {
@@ -127,8 +127,13 @@ describe("context overrides and MCP probes", () => {
 
     const result = await cli("mfz", root, home, ["context"], {}, undefined, root);
 
-    expect(result.stdout).toContain("Per request (none)");
-    expect(result.stdout).toContain("MCP servers (0 enabled; 1 disabled)");
+    expect(result.stdout).toContain("Per request (not established)");
+    expect(result.stdout).toContain(
+      "MCP schema inventory (1 enabled | loading unknown; excluded from Per request)"
+    );
+    expect(result.stdout).toContain(
+      "MCP schema inventory (2 enabled | loading unknown; excluded from Per request)"
+    );
     expect(result.stdout).not.toContain("context7  disabled");
     expect(result.stdout).toContain(
       "MCP schema inventory (2 enabled | loading unknown; excluded from Per request)"
@@ -181,7 +186,7 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       env,
       undefined,
       inspectedDirectory
@@ -195,7 +200,7 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode", "--probe-mcp"],
+      ["context", "--agent", "opencode-v2", "--probe-mcp"],
       env,
       undefined,
       inspectedDirectory
@@ -230,12 +235,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode"],
+      ["context", "--agent", "opencode-v2"],
       {},
       undefined,
       root
     );
-    expect(result.stdout).toContain("local-skill  ~24 catalogue; ~13 body inventory on invocation");
+    expect(result.stdout).toContain("local-skill  ~22 catalogue; ~18 body inventory on invocation");
     expect(result.stdout).not.toContain("model invocation disabled; catalogue is not advertised");
   });
 
@@ -302,7 +307,7 @@ describe("context overrides and MCP probes", () => {
         "mfz",
         root,
         home,
-        ["context", "--agent", "opencode", "--probe-mcp"],
+        ["context", "--agent", "opencode-v2", "--probe-mcp"],
         {},
         undefined,
         root
@@ -381,7 +386,7 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode", "--probe-mcp"],
+      ["context", "--agent", "opencode-v2", "--probe-mcp"],
       {},
       undefined,
       root

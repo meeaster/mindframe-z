@@ -2,7 +2,9 @@
 
 Date: 2026-08-08
 
-Status: research handoff; no implementation decisions have been approved beyond keeping V1 working and deferring plugin ports.
+Status: historical research handoff. The repository now implements the V2-only direction described below; source-history and machine-observation sections retain their original dates and facts.
+
+Current implementation guidance lives in `AGENTS.md`, `ARCHITECTURE.md`, and `docs/agent-cli-configuration-map.md`. Treat statements below describing the pre-migration renderer, V1 preservation, or side-by-side channel selection as historical observations, not current requirements.
 
 ## Purpose
 
@@ -80,7 +82,7 @@ An initial local trial should use V2 standalone or a managed V2 service with the
 
 The current renderer is V1-specific:
 
-- `src/renderers/opencode.ts:178-372` builds `opencode.jsonc`, optional `package.json`, and `tui.json`.
+- The pre-migration `src/renderers/opencode.ts` built `opencode.jsonc`, optional `package.json`, and `tui.json`; it was replaced by `src/renderers/opencode-v2.ts`.
 - It emits V1 `permission` maps, direct `mcp` entries with `enabled`, V1 plugin entries, and V1 TUI plugin configuration.
 - `src/core/manifests.ts:491-500` stores OpenCode config as an untyped record, plus separate plugin, TUI plugin, command, agent, dependency, and delegate-general fields.
 - `src/core/render.ts:72-105` has one `opencode` render target.
@@ -164,7 +166,7 @@ pnpm test:integration
 pnpm test:plugins
 ```
 
-Use temporary homes and isolated XDG paths in tests. Existing test guidance is in `AGENTS.md`, especially the integration isolation rules and the `smoke-opencode` implementation in `src/cli/mfz.ts:321-353`. That smoke path currently invokes the literal `opencode` binary and will need parameterization for a V2 channel.
+Use temporary homes and isolated XDG paths in tests. Current test guidance is in `AGENTS.md`, especially the integration isolation rules and the `smoke-opencode-v2` implementation in `src/cli/mfz.ts`. That smoke path invokes the `opencode2` binary.
 
 ## Open Questions For The Implementing Agent
 

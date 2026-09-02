@@ -13,7 +13,7 @@ Mindframe-Z is Mark's personal, unreleased development tool. Design for the curr
 
 ```sh
 pnpm build             # tsc -p tsconfig.json -> dist/
-pnpm test              # fast source/plugin tests: src/ and opencode/
+pnpm test              # fast source/plugin tests: src/
 pnpm test -- <file>    # focused Vitest run
 pnpm test:all          # full Vitest suite, including integration
 pnpm test:integration  # integration suite only
@@ -57,10 +57,10 @@ This is a profile-aware AI tool config renderer. Source manifests live in `share
 
 Key entrypoints:
 
-- `src/cli/mfz.ts` defines CLI commands: `apply`, `doctor`, `status`, `sync`, `skills`, `smoke-opencode`, `refs`.
+- `src/cli/mfz.ts` defines CLI commands: `apply`, `doctor`, `status`, `sync`, `skills`, `smoke-opencode-v2`, `refs`.
 - `src/core/manifests.ts` defines Zod schemas; run `pnpm schemas` after changing manifest shapes and commit `schemas/*.schema.json`.
 - `src/core/profile.ts` resolves profile inheritance and merge semantics.
-- `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
+- `src/renderers/` owns target-specific output for `opencode-v2`, `claude-code`, `mise`, and `dotfiles`.
 - `src/work/` owns configurable durable work units plus machine-local bindings, checkpoints, receipts, and CLI behavior.
 - `src/sync/` promotes unmanaged edits from rendered configs back into profile YAML/TOML.
 
@@ -86,9 +86,9 @@ If a read fails with "file not found", locate the path before retrying instead o
 
 Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`; root resolution is `--root` > `MFZ_ROOT` > machine `repo_path` > cwd.
 
-`shared/*.yml` is the catalog of available refs, skills, and MCP servers. `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and machine-specific OpenCode overrides.
+`shared/*.yml` is the catalog of available refs, skills, and MCP servers. `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and host-specific paths.
 
-Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, and `claude` are deep-merged with child keys overriding parent keys. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
+Profile arrays such as `instructions`, `references`, `opencode_v2.plugins`, and `opencode_v2.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode_v2.config`, and `claude` are deep-merged with child keys overriding parent keys. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 
 MCP enablement is profile-owned: the MCP catalog defines connection details only; profiles use `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays for native MCPs, plus an optional per-server `executor: { enabled: true, connections: ... }` block when Executor should also reconcile the same server. Claude Code cannot be declared in a direct `disabled` group; Executor inventory is shared across connected supported harnesses and is not per-agent toggleable. Set profile-level `executor.bridge: false` to keep Executor reconciliation without adding its MCP bridge to agents.
 
@@ -102,15 +102,15 @@ Catalog auth declarations belong under a server's `executor.authentication` list
 
 Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
 
-`extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode `external_directory`/`edit` permissions and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
+`extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode V2 native permission rules and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
 
 Claude `settings.json` and Claude MCP are not symlinked. The rendered `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
 
-OpenCode plugins and commands are source files under `opencode/`; profiles list enabled names, and apply copies them into `configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
+OpenCode V2 plugins and commands are source files under `opencode/`; profiles list enabled names under `opencode_v2`, and apply copies them into `configs/<profile>/opencode-v2/` before linking the rendered OpenCode config/commands.
 
 ## Permissions
 
-Profile permissions belong in `profiles/*/profile.yml` under `opencode.config.permission`.
+Profile permissions belong in `profiles/*/profile.yml` under `opencode_v2.config.permission`.
 
 - Default `bash` to `ask` with `"*": ask`.
 - Add explicit allow rules only for safe, read-only command forms you want to reuse.
@@ -120,7 +120,7 @@ Profile permissions belong in `profiles/*/profile.yml` under `opencode.config.pe
 Example:
 
 ```yml
-opencode:
+opencode_v2:
   config:
     permission:
       bash:
@@ -134,7 +134,7 @@ opencode:
 
 Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR` and `CLAUDE_CONFIG_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
 
-`smoke-opencode` renders OpenCode config into `configs/<profile>/opencode`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode` binary is missing.
+`smoke-opencode-v2` renders OpenCode V2 config into `configs/<profile>/opencode-v2`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode2` binary is missing.
 
 Pre-commit runs only Gitleaks. `pre-commit` is supplied by mise (`profiles/base/mise.toml`); use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
 

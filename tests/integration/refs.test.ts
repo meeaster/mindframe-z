@@ -27,10 +27,10 @@ describe("refs integration", () => {
     const refsAbs = path.join(home, ".mindframe-z", "references");
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
-    expect(opencode).toContain(`${refsAbs}/**`);
+    expect(opencode).toContain(`${refsAbs}/*`);
 
     const perms = parseJson(
       ClaudePermissions,
@@ -47,7 +47,7 @@ describe("refs integration", () => {
     await expect(readFile(indexPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).not.toContain("extra_folders.md");
@@ -88,7 +88,7 @@ describe("refs integration", () => {
     );
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
     expect(opencode).toContain("extra_folders.md");

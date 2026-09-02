@@ -221,6 +221,7 @@ function makeProfile(referencesDir: string): ResolvedProfile {
       agents: new Map()
     },
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir,
     enabledReferences: [
       {
@@ -230,8 +231,6 @@ function makeProfile(referencesDir: string): ResolvedProfile {
       }
     ],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],

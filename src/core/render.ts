@@ -2,20 +2,23 @@ import { chmod, lstat, readFile, readdir, rm, unlink } from "node:fs/promises";
 import path from "node:path";
 import { writeTextFile } from "./fs-util.js";
 import type { RuntimePaths, ToolTarget } from "./paths.js";
-import { globalSkillStatePath, profileConfigsDir } from "./paths.js";
+import { profileConfigsDir } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
 import type { RenderOwnership } from "./ownership.js";
-import { extraFoldersIndexContent, referenceIndexContent } from "../ref-store/references.js";
+import { capabilityIndexContent } from "../ref-store/capabilities.js";
 import { renderClaude } from "../renderers/claude.js";
 import { renderCodex } from "../renderers/codex.js";
 import { renderDotfiles } from "../renderers/dotfiles.js";
 import { renderMise } from "../renderers/mise.js";
-import { renderOpenCode } from "../renderers/opencode.js";
 import { renderOpenCodeV2 } from "../renderers/opencode-v2.js";
 import { renderPi } from "../renderers/pi.js";
 import type { LinkPlan } from "./symlinks.js";
-import { readSkillOverridesFile } from "./skill-overrides.js";
 import type { JsonObject } from "./json.js";
+import {
+  instructionReferencesDir,
+  instructionReferencesSection,
+  renderInstructionReferences
+} from "./instruction-references.js";
 
 export type OpenCodeV2PluginEntry = string | { package: string; options: JsonObject };
 
@@ -53,22 +56,27 @@ export async function renderRuntimeInstructions(
   profile: ResolvedProfile,
   includeIndexes = false
 ): Promise<RenderedFile[]> {
-  if (profile.instructionFiles.length === 0 && !includeIndexes) return [];
+  if (
+    profile.instructionFiles.length === 0 &&
+    profile.instructionReferences.length === 0 &&
+    !includeIndexes
+  )
+    return [];
   const contents = await Promise.all(
     profile.instructionFiles.map((file) => readFile(file, "utf8"))
   );
+  const referenceSection = instructionReferencesSection(paths, profile);
   return [
     {
       path: path.join(profileConfigsDir(paths, profile.name), "AGENTS.md"),
       content:
         [
           ...contents.map((content) => content.trimEnd()),
-          ...(includeIndexes ? [referenceIndexContent(profile).trimEnd()] : []),
-          ...(includeIndexes && profile.extraFolders.length > 0
-            ? [extraFoldersIndexContent(paths, profile).trimEnd()]
-            : [])
+          ...(includeIndexes ? [capabilityIndexContent(paths, profile).trimEnd()] : []),
+          ...(referenceSection ? [referenceSection] : [])
         ].join("\n\n") + "\n"
-    }
+    },
+    ...(await renderInstructionReferences(paths, profile))
   ];
 }
 
@@ -112,13 +120,6 @@ export async function renderTarget(
     : [];
   let rendered: RenderResult;
   switch (target) {
-    case "opencode":
-      rendered = await renderOpenCode(paths, profile, {
-        skillOverrides: options.includeGlobalSkillState
-          ? await readSkillOverridesFile(globalSkillStatePath(paths, "opencode"))
-          : {}
-      });
-      break;
     case "opencode-v2":
       rendered = await renderOpenCodeV2(paths, profile);
       break;
@@ -145,10 +146,7 @@ export async function renderTarget(
       rendered = await renderDotfiles(paths, profile);
       break;
   }
-  const snapshotRoot = path.join(
-    profileConfigsDir(paths, profile.name),
-    snapshotName(target, paths)
-  );
+  const snapshotRoot = path.join(profileConfigsDir(paths, profile.name), snapshotName(target));
   const current = new Set(
     rendered.files
       .filter((file) => file.path.startsWith(`${snapshotRoot}${path.sep}`))
@@ -156,7 +154,23 @@ export async function renderTarget(
   );
   const staleFiles = [
     ...(rendered.staleFiles ?? []),
-    ...(await staleSnapshotFiles(snapshotRoot, current))
+    ...(await staleSnapshotFiles(
+      snapshotRoot,
+      current,
+      target === "opencode-v2" ? ["skills"] : []
+    )),
+    ...(isAgentTarget(target)
+      ? await staleSnapshotFiles(
+          instructionReferencesDir(paths, profile),
+          new Set(
+            instructions
+              .filter((file) =>
+                file.path.startsWith(`${instructionReferencesDir(paths, profile)}${path.sep}`)
+              )
+              .map((file) => file.path)
+          )
+        )
+      : [])
   ];
   return { ...rendered, staleFiles, files: [...instructions, ...rendered.files] };
 }
@@ -165,15 +179,18 @@ function isAgentTarget(target: ToolTarget): boolean {
   return !["mise", "dotfiles"].includes(target);
 }
 
-function snapshotName(target: ToolTarget, paths: RuntimePaths): string {
-  if (target === "opencode")
-    return paths.activeOpenCodeRuntime === "v2" ? "opencode-v2" : "opencode-v1";
+function snapshotName(target: ToolTarget): string {
   if (target === "opencode-v2") return "opencode-v2";
   return target;
 }
 
-async function staleSnapshotFiles(root: string, current: Set<string>): Promise<string[]> {
+async function staleSnapshotFiles(
+  root: string,
+  current: Set<string>,
+  ignoredDirectories: readonly string[] = []
+): Promise<string[]> {
   const stale: string[] = [];
+  const ignored = new Set(ignoredDirectories);
   async function walk(dir: string): Promise<void> {
     let entries;
     try {
@@ -182,6 +199,7 @@ async function staleSnapshotFiles(root: string, current: Set<string>): Promise<s
       return;
     }
     for (const entry of entries) {
+      if (dir === root && entry.isDirectory() && ignored.has(entry.name)) continue;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(file);
       else if (entry.isFile() && !current.has(file)) stale.push(file);

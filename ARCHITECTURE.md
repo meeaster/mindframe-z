@@ -69,7 +69,7 @@ Normal MCP OAuth discovers metadata from the integration endpoint. Assisted OAut
 
 Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
-- `opencode`: `opencode.jsonc`, optional runtime `package.json`, `tui.json`, server and TUI plugins, commands, agents, permissions.
+- `opencode-v2`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI plugins, commands, agents, native permissions, and nested MCP servers.
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.

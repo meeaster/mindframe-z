@@ -4,9 +4,11 @@ import { z } from "zod";
 import { writeJsonFileAtomic } from "./fs-util.js";
 import { jsonValueSchema, type JsonObject } from "./json.js";
 import { overrideStorePath, type AgentName, type RuntimePaths } from "./paths.js";
+import type { CapabilityAgentName } from "./manifests.js";
 import type { ResolvedProfile } from "./profile.js";
 
 export type OverrideKind = "mcp" | "skills";
+export type OverrideTarget = AgentName;
 
 interface BooleanOverrides {
   [name: string]: boolean;
@@ -41,7 +43,7 @@ export interface ProjectHarnessOverrides {
 }
 
 export interface OverrideStore {
-  projects: Record<string, Partial<Record<AgentName, ProjectHarnessOverrides>>>;
+  projects: Record<string, Partial<Record<OverrideTarget, ProjectHarnessOverrides>>>;
 }
 
 export async function readOverrideStore(home: string): Promise<OverrideStore> {
@@ -66,7 +68,7 @@ export async function writeOverrideStore(home: string, store: OverrideStore): Pr
 export function projectOverrides(
   store: OverrideStore,
   projectRoot: string,
-  target: AgentName,
+  target: OverrideTarget,
   kind: OverrideKind
 ): BooleanOverrides {
   return { ...store.projects[projectRoot]?.[target]?.[kind] };
@@ -76,7 +78,7 @@ export async function writeProjectOverrideDelta(
   paths: RuntimePaths,
   profile: ResolvedProfile,
   projectRoot: string,
-  target: AgentName,
+  target: OverrideTarget,
   kind: OverrideKind,
   next: Record<string, boolean>,
   baseDefaults?: Record<string, boolean>
@@ -126,7 +128,7 @@ export function effectiveProjectState(
   store: OverrideStore,
   projectRoot: string | undefined,
   profile: ResolvedProfile,
-  target: AgentName,
+  target: OverrideTarget,
   kind: OverrideKind
 ): BooleanOverrides {
   const defaults = kind === "mcp" ? mcpDefaults(profile, target) : skillDefaults(profile, target);
@@ -135,11 +137,15 @@ export function effectiveProjectState(
 }
 
 export function mcpDefaults(profile: ResolvedProfile, target: AgentName): Record<string, boolean> {
+  const capabilityTarget: CapabilityAgentName | undefined =
+    target === "opencode-v2" ? "opencode" : target === "pi" ? undefined : target;
   return Object.fromEntries(
     (profile.mcpServers ?? []).flatMap((server) =>
-      server.agents === undefined || server.agents[target] === undefined
+      capabilityTarget === undefined ||
+      server.agents === undefined ||
+      server.agents[capabilityTarget] === undefined
         ? []
-        : [[server.name, server.agents[target]]]
+        : [[server.name, server.agents[capabilityTarget]]]
     )
   );
 }
@@ -148,9 +154,13 @@ export function skillDefaults(
   profile: ResolvedProfile,
   target: AgentName
 ): Record<string, boolean> {
+  const capabilityTarget: CapabilityAgentName | undefined =
+    target === "opencode-v2" ? "opencode" : target === "pi" ? undefined : target;
   return Object.fromEntries(
     (profile.enabledSkills ?? []).flatMap((skill) =>
-      skill.agents[target] === undefined ? [] : [[skill.name, skill.agents[target]]]
+      capabilityTarget === undefined || skill.agents[capabilityTarget] === undefined
+        ? []
+        : [[skill.name, skill.agents[capabilityTarget]]]
     )
   );
 }
@@ -163,7 +173,7 @@ async function renderProjectPayloads(
 ): Promise<void> {
   const project = store.projects[projectRoot];
   if (!project) return;
-  for (const target of ["opencode", "claude-code", "codex"] as const) {
+  for (const target of ["claude-code", "codex"] as const) {
     const section = project[target];
     if (!section) continue;
     const mcp = pruneDefaults(section.mcp ?? {}, mcpDefaults(profile, target));
@@ -193,25 +203,6 @@ async function renderPayload(
   mcp: Record<string, boolean>,
   skills: Record<string, boolean>
 ): Promise<ProjectHarnessOverrides["payload"]> {
-  if (target === "opencode") {
-    const config: NonNullable<ProjectHarnessOverrides["payload"]>["config"] = {};
-    if (Object.keys(mcp).length > 0) {
-      config.mcp = Object.fromEntries(
-        Object.entries(mcp).map(([name, enabled]) => [name, { enabled }])
-      );
-    }
-    if (Object.keys(skills).length > 0) {
-      config.permission = {
-        skill: Object.fromEntries(
-          Object.entries(skills).map(([name, enabled]) => [name, enabled ? "allow" : "deny"])
-        )
-      };
-    }
-    return {
-      config
-    };
-  }
-
   if (target === "claude-code") {
     return Object.keys(skills).length > 0
       ? {
@@ -273,7 +264,7 @@ function pruneHarness(section: ProjectHarnessOverrides): ProjectHarnessOverrides
 function pruneProject(store: OverrideStore, projectRoot: string): void {
   const project = store.projects[projectRoot];
   if (!project) return;
-  for (const target of ["opencode", "claude-code", "codex"] as const) {
+  for (const target of ["claude-code", "codex"] as const) {
     if (!project[target]) delete project[target];
   }
   if (Object.keys(project).length === 0) delete store.projects[projectRoot];

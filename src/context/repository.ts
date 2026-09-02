@@ -43,7 +43,7 @@ function instructionKind(
   }
   const name = path.basename(relative);
   const allowed =
-    harness === "opencode"
+    harness === "opencode-v2"
       ? new Set(["AGENTS.md", "CLAUDE.md", "CONTEXT.md"])
       : new Set(["CLAUDE.md", "CLAUDE.local.md"]);
   return allowed.has(name) ? { category: "repository instruction" } : undefined;
@@ -130,7 +130,7 @@ export async function analyzeRepository(
         candidate.kind !== undefined && isPathWithin(projectRoot, candidate.absolute)
     )
     .filter((candidate, _index, all) => {
-      if (harness !== "opencode" || candidate.kind.category !== "repository instruction")
+      if (harness !== "opencode-v2" || candidate.kind.category !== "repository instruction")
         return true;
       const directory = path.dirname(candidate.absolute);
       return !all.some(

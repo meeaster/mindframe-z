@@ -20,7 +20,6 @@ function machine(git: MachineManifest["git"]): MachineManifest {
     thread: { stores: [] },
     work: {},
     archives: [],
-    opencode: {},
     claude: {}
   };
 }

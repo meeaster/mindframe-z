@@ -21,7 +21,7 @@ describe("Executor apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
+        "agents: [opencode-v2]",
         "mcp:",
         "  context7:",
         "    executor:",
@@ -31,12 +31,12 @@ describe("Executor apply integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode", "--dry-run"]);
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--dry-run"]);
     expect(result.stdout).toContain("executor\tadd context7");
     const rendered = await renderTarget(
       createRuntimePaths({ root, home }),
       await resolveProfile(createRuntimePaths({ root, home }), "personal"),
-      "opencode"
+      "opencode-v2"
     );
     const config =
       rendered.files.find((file) => file.path.endsWith("opencode.jsonc"))?.content ?? "";
@@ -77,7 +77,7 @@ describe("Executor apply integration", () => {
     const result = await cli("mfz", root, home, [
       "apply",
       "--agent",
-      "opencode",
+      "opencode-v2",
       "--dry-run",
       "--no-link"
     ]);
@@ -94,7 +94,7 @@ describe("Executor apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode, claude-code, codex]",
+        "agents: [opencode-v2, claude-code, codex]",
         "mcp:",
         "  context7:",
         "    executor:",
@@ -108,7 +108,7 @@ describe("Executor apply integration", () => {
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "all", "--dry-run"]);
     expect(result.stdout).toContain("executor\tadd context7");
-    for (const target of ["opencode", "claude-code", "codex"] as const) {
+    for (const target of ["opencode-v2", "claude-code", "codex"] as const) {
       const rendered = await renderTarget(
         createRuntimePaths({ root, home }),
         await resolveProfile(createRuntimePaths({ root, home }), "personal"),
@@ -137,7 +137,7 @@ describe("Executor apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode, claude-code, codex]",
+        "agents: [opencode-v2, claude-code, codex]",
         "executor:",
         "  bridge: false",
         "mcp:",
@@ -163,7 +163,7 @@ describe("Executor apply integration", () => {
 
     expect(reconciled).toBe(true);
     const opencodeConfig = await readFile(
-      configsPath(home, "personal", "opencode", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
     const claudeConfig = await readFile(
@@ -182,8 +182,8 @@ describe("Executor apply integration", () => {
   });
 
   it("keeps the direct harness configuration when Executor startup fails", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
-    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    const configPath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
     const directConfig = await readFile(configPath, "utf8");
 
     await writeFile(
@@ -191,7 +191,7 @@ describe("Executor apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
+        "agents: [opencode-v2]",
         "mcp:",
         "  context7:",
         "    executor:",
@@ -202,7 +202,7 @@ describe("Executor apply integration", () => {
     );
 
     await expect(
-      cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"], {
+      cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"], {
         PATH: "/definitely-missing"
       })
     ).rejects.toMatchObject({ exitCode: 1 });
@@ -210,15 +210,15 @@ describe("Executor apply integration", () => {
   });
 
   it("keeps direct configuration when a later render fails after reconciliation", async () => {
-    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
-    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
+    await applyConfig({ root, home, agent: "opencode-v2", target: "all", noLink: true });
+    const configPath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
     const directConfig = await readFile(configPath, "utf8");
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode]",
+        "agents: [opencode-v2]",
         "mcp:",
         "  context7:",
         "    executor:",
@@ -231,7 +231,7 @@ describe("Executor apply integration", () => {
     let reconciled = false;
     await expect(
       applyConfig(
-        { root, home, agent: "opencode", target: "all", noLink: true },
+        { root, home, agent: "opencode-v2", target: "all", noLink: true },
         {
           reconcileExecutor: async () => {
             reconciled = true;

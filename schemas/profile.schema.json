@@ -15,7 +15,7 @@
     },
     "agents": {
       "default": [
-        "opencode",
+        "opencode-v2",
         "claude-code",
         "codex"
       ],
@@ -23,7 +23,6 @@
       "items": {
         "type": "string",
         "enum": [
-          "opencode",
           "opencode-v2",
           "claude-code",
           "codex",
@@ -36,6 +35,61 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "instruction_references": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "capability_groups": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "summary"
+        ],
+        "additionalProperties": false
       }
     },
     "references": {
@@ -61,8 +115,7 @@
               "enum": [
                 "opencode",
                 "claude-code",
-                "codex",
-                "pi"
+                "codex"
               ]
             },
             "additionalProperties": {
@@ -199,24 +252,6 @@
                       "properties": {
                         "enabled": {
                           "contains": {
-                            "const": "opencode-v2"
-                          }
-                        },
-                        "disabled": {
-                          "contains": {
-                            "const": "opencode-v2"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "required": [
-                        "enabled",
-                        "disabled"
-                      ],
-                      "properties": {
-                        "enabled": {
-                          "contains": {
                             "const": "claude-code"
                           }
                         },
@@ -296,102 +331,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "opencode": {
-      "default": {
-        "config": {},
-        "dependencies": {},
-        "plugins": [],
-        "tui": {},
-        "tui_plugins": [],
-        "commands": [],
-        "agents": []
-      },
-      "type": "object",
-      "properties": {
-        "config": {
-          "default": {},
-          "$ref": "#/$defs/__schema0"
-        },
-        "dependencies": {
-          "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string",
-            "minLength": 1
-          },
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
-          }
-        },
-        "plugins": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "tui": {
-          "default": {},
-          "$ref": "#/$defs/__schema0"
-        },
-        "tui_plugins": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "commands": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "agents": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "delegate_general": {
-          "type": "object",
-          "properties": {
-            "models": {
-              "default": [],
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "variants": {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "description": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "id",
-                  "variants"
-                ]
-              }
-            }
-          }
-        }
-      }
     },
     "opencode_v2": {
       "default": {
@@ -736,6 +675,23 @@
               "ask",
               "deny"
             ]
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "signals": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "required": [

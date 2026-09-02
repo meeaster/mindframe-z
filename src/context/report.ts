@@ -96,7 +96,7 @@ export async function buildContextReport(
 ): Promise<ContextReport> {
   const inspectedDirectory = path.resolve(process.cwd());
   const projectRoot = await findProjectRoot(inspectedDirectory);
-  const supported: ContextHarness[] = ["opencode", "claude-code"];
+  const supported: ContextHarness[] = ["opencode-v2", "claude-code"];
   const harnesses = supported.filter(
     (harness): harness is ContextHarness =>
       (!options.agent || options.agent === harness) && profile.agents.includes(harness)
@@ -156,7 +156,7 @@ export async function buildContextHistoryReport(
 ): Promise<ContextReport> {
   const inspectedDirectory = path.resolve(process.cwd());
   const projectRoot = await findProjectRoot(inspectedDirectory);
-  const supported: ContextHarness[] = ["opencode", "claude-code"];
+  const supported: ContextHarness[] = ["opencode-v2", "claude-code"];
   const harnesses = supported.filter(
     (harness) => (!agent || agent === harness) && profile.agents.includes(harness)
   );
@@ -178,7 +178,7 @@ export async function buildContextHistoryReport(
       contributors: [],
       mcpServers: [],
       history: projectRoot
-        ? harness === "opencode"
+        ? harness === "opencode-v2"
           ? await readOpenCodeHistory(paths, mcpNames, projectRoot, historyDays)
           : await readClaudeHistory(paths, mcpNames, projectRoot, historyDays)
         : unavailableHistory(historyDays)

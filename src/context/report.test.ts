@@ -10,7 +10,7 @@ describe("context reports", () => {
       projectRoot: "/work",
       harnesses: [
         {
-          harness: "opencode",
+          harness: "opencode-v2",
           scopeNotes: [],
           mcpServers: [{ name: "docs", enabled: true, loading: "per-step" }],
           contributors: [
@@ -66,7 +66,7 @@ describe("context reports", () => {
       homeDirectory: "/home/test",
       harnesses: [
         {
-          harness: "opencode",
+          harness: "opencode-v2",
           scopeNotes: [],
           mcpServers: [],
           contributors: [
@@ -186,9 +186,9 @@ describe("context reports", () => {
       mcpProbes: [
         {
           server: "docs",
-          harnesses: ["opencode", "claude-code"],
+          harnesses: ["opencode-v2", "claude-code"],
           probe: {
-            harness: "opencode",
+            harness: "opencode-v2",
             server: "docs",
             toolCount: 1,
             pages: 1,
@@ -199,7 +199,7 @@ describe("context reports", () => {
       ],
       harnesses: [
         {
-          harness: "opencode",
+          harness: "opencode-v2",
           scopeNotes: [],
           mcpServers: [{ name: "docs", enabled: true, loading: "per-step" }],
           contributors: [
@@ -287,7 +287,7 @@ describe("context reports", () => {
       inspectedDirectory: "/work",
       harnesses: [
         {
-          harness: "opencode",
+          harness: "opencode-v2",
           scopeNotes: [],
           contributors: [],
           mcpServers: [],

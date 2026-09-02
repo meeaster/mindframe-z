@@ -38,7 +38,7 @@ describe("sandbox image build plan", () => {
     expect(first.hash).toBe(second.hash);
     expect(first.inputs.resolvedMiseTree["conf.d/10-base.toml"]).toContain('jq = "latest"');
     expect(first.inputs.resolvedMiseTree["tasks/personal/check.toml"]).toContain('run = "true"');
-    expect(first.inputs.agents).toEqual(["claude-code", "opencode"]);
+    expect(first.inputs.agents).toEqual(["claude-code", "opencode-v2"]);
     expect(first.inputs.contextFiles).toHaveProperty("sandbox/scripts/helper.mjs");
     expect(first.label).toContain(first.hash);
 

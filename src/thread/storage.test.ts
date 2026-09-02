@@ -30,8 +30,7 @@ function paths(home: string): RuntimePaths {
     workRoot: path.join(home, ".mindframe-z", "work", "v1"),
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode"),
-    opencodeV2ConfigDir: path.join(home, ".config", "opencode-v2"),
+    opencodeConfigDir: path.join(home, ".config", "opencode-v2"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -48,7 +47,6 @@ function machine(stores: MachineManifest["thread"]["stores"]): MachineManifest {
     thread: { stores },
     work: {},
     archives: [],
-    opencode: {},
     claude: {}
   };
 }
@@ -56,24 +54,17 @@ function machine(stores: MachineManifest["thread"]["stores"]): MachineManifest {
 function profile(manifest: MachineManifest, root: string): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode", "claude-code"],
+    agents: ["opencode-v2", "claude-code"],
     profile: {
       name: "personal",
       description: "Test profile",
-      agents: ["opencode", "claude-code"],
+      agents: ["opencode-v2", "claude-code"],
       instructions: [],
+      instruction_references: [],
+      capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode: {
-        config: {},
-        dependencies: {},
-        plugins: [],
-        tui: {},
-        tui_plugins: [],
-        commands: [],
-        agents: []
-      },
       opencode_v2: {
         config: {},
         dependencies: {},
@@ -125,11 +116,10 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       agents: new Map()
     },
     instructionFiles: [],
+    instructionReferences: [],
     referencesDir: path.join(root, "references"),
     enabledReferences: [],
     enabledSkills: [],
-    enabledCommands: [],
-    enabledAgents: [],
     enabledOpenCodeV2Commands: [],
     enabledOpenCodeV2Agents: [],
     mcpServers: [],

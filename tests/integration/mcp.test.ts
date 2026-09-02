@@ -31,7 +31,7 @@ describe("mcp toggle integration", () => {
       "mfz",
       root,
       home,
-      ["mcp", "disable", "context7", "--agent", "opencode"],
+      ["mcp", "disable", "context7", "--agent", "codex"],
       {},
       undefined,
       root
@@ -41,7 +41,7 @@ describe("mcp toggle integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
-    expect(store.projects?.[root]?.opencode?.mcp).toEqual({ context7: false });
+    expect(store.projects?.[root]?.codex?.mcp).toEqual({ context7: false });
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
     ).rejects.toMatchObject({
@@ -54,7 +54,7 @@ describe("mcp toggle integration", () => {
       "mfz",
       root,
       home,
-      ["mcp", "disable", "context7", "--agent", "opencode"],
+      ["mcp", "disable", "context7", "--agent", "codex"],
       {},
       undefined,
       root
@@ -62,7 +62,7 @@ describe("mcp toggle integration", () => {
 
     const result = await cli("mfz", root, home, ["mcp", "status"], {}, undefined, root);
 
-    expect(result.stdout).toContain("context7\topencode\tdisabled\toverridden");
+    expect(result.stdout).toContain("context7\tcodex\tdisabled\toverridden");
   });
 
   it("preserves native Codex disable state", async () => {
@@ -108,13 +108,13 @@ describe("mcp toggle integration", () => {
         "mfz",
         root,
         home,
-        ["mcp", "enable", "local-helper", "--agent", "opencode"],
+        ["mcp", "enable", "local-helper", "--agent", "codex"],
         {},
         undefined,
         root
       )
     ).rejects.toMatchObject({
-      stderr: expect.stringContaining("MCP server local-helper is not available for opencode")
+      stderr: expect.stringContaining("MCP server local-helper is not available for codex")
     });
   });
 });
