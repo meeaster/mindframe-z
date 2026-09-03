@@ -186,8 +186,7 @@ describe("opencode commands integration", () => {
         "opencode-v2",
         "plugins",
         "tui",
-        "combined",
-        "tui.tsx"
+        "combined"
       )}`
     ]);
     expect(

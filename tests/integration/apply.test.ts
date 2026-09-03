@@ -332,7 +332,7 @@ describe("apply integration", () => {
     );
 
     const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
-    const managedPackage = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui", "tui", "index.tsx")}`;
+    const managedPackage = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui")}`;
     const managed = { package: managedPackage, options: { mode: "compact" } };
     expect(applied.stdout).toContain(`merged\t${cliPath} plugins`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
