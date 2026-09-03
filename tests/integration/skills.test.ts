@@ -1,13 +1,22 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { execa } from "execa";
+import YAML from "yaml";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRuntimePaths } from "../../src/core/paths.js";
+import { createRuntimePaths, skillCacheRoot } from "../../src/core/paths.js";
 import { resolveProfile } from "../../src/core/profile.js";
+import { sha256 } from "../../src/skills/tree.js";
 import { runSkillsTui } from "../../src/tui/skills-tui.js";
-import { cli, makeTempDir, parseJson, setupIntegrationFixture, sink } from "./support.js";
+import {
+  cli,
+  configsPath,
+  makeTempDir,
+  parseJson,
+  setupIntegrationFixture,
+  sink
+} from "./support.js";
 
 const Overrides = z.object({
   projects: z.record(
@@ -20,6 +29,85 @@ const Overrides = z.object({
 });
 const OpenCodePermission = z.object({ permission: z.object({ webfetch: z.string() }) });
 const ClaudeSettings = z.object({ includeGitInstructions: z.boolean() });
+
+async function seedGitCache(
+  root: string,
+  home: string,
+  repository: string
+): Promise<{ commit: string; newerCommit: string }> {
+  const upstream = await makeTempDir();
+  await execa("git", ["init", "-q"], { cwd: upstream });
+  await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: upstream });
+  await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: upstream });
+  const source = path.join(upstream, "skills", "trusted");
+  await mkdir(source, { recursive: true });
+  await writeFile(
+    path.join(source, "SKILL.md"),
+    "---\nname: trusted\ndescription: pinned\n---\n\n# Pinned\n",
+    "utf8"
+  );
+  await execa("git", ["add", "."], { cwd: upstream });
+  await execa("git", ["commit", "-qm", "initial"], { cwd: upstream });
+  const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: upstream });
+  await writeFile(
+    path.join(source, "SKILL.md"),
+    "---\nname: trusted\ndescription: newer\n---\n\n# Newer\n",
+    "utf8"
+  );
+  await execa("git", ["add", "."], { cwd: upstream });
+  await execa("git", ["commit", "-qm", "newer"], { cwd: upstream });
+  const { stdout: newerCommit } = await execa("git", ["rev-parse", "HEAD"], { cwd: upstream });
+
+  const paths = createRuntimePaths({ root, home });
+  const cache = path.join(skillCacheRoot(paths), sha256(repository));
+  await mkdir(path.dirname(cache), { recursive: true });
+  await execa("git", ["clone", "--bare", "-q", upstream, cache]);
+  await execa("git", ["--git-dir", cache, "remote", "set-url", "origin", repository]);
+  return { commit, newerCommit };
+}
+
+async function writeGitSkillCatalog(
+  root: string,
+  repository: string,
+  commit: string
+): Promise<void> {
+  await mkdir(path.join(root, "catalog"), { recursive: true });
+  await writeFile(
+    path.join(root, "catalog", "skills.yml"),
+    [
+      "skills:",
+      "  - name: trusted",
+      "    source: git",
+      `    repo: ${repository}`,
+      `    commit: ${commit}`,
+      "    subtree: skills/trusted",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+}
+
+async function writeGitSkillProfile(
+  root: string,
+  repository: string,
+  commit: string
+): Promise<void> {
+  await writeGitSkillCatalog(root, repository, commit);
+  await writeFile(
+    path.join(root, "profiles", "personal", "profile.yml"),
+    [
+      "name: personal",
+      "extends: base",
+      "agents: [opencode-v2]",
+      "skills:",
+      "  trusted:",
+      "    agents: { opencode: true }",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+}
+
 describe("skill CLI integration", () => {
   let root: string;
   let home: string;
@@ -90,6 +178,45 @@ describe("skill CLI integration", () => {
           "SKILL.md"
         )
       )
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("renders the exact pinned Git commit and records provenance", async () => {
+    const repository = "https://127.0.0.1:1/trusted.git";
+    const { commit, newerCommit } = await seedGitCache(root, home, repository);
+    await writeGitSkillProfile(root, repository, commit);
+
+    await cli("mfz", root, home, ["skills", "sync"]);
+
+    const snapshot = configsPath(home, "personal", "opencode-v2", "skills");
+    const manifest = YAML.parse(await readFile(path.join(snapshot, ".mfz-manifest.yml"), "utf8"));
+    const trusted = manifest.skills.find((skill: { name: string }) => skill.name === "trusted");
+    expect(trusted).toMatchObject({
+      source: "git",
+      repository,
+      subtree: "skills/trusted",
+      commit
+    });
+    expect(trusted.commit).not.toBe(newerCommit);
+    expect(trusted.digest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(await readFile(path.join(snapshot, "trusted", "SKILL.md"), "utf8")).toContain(
+      "description: pinned"
+    );
+  });
+
+  it("does not acquire or write state for a Git cache miss during dry-run", async () => {
+    const repository = "https://example.invalid/missing.git";
+    const commit = "a".repeat(40);
+    await writeGitSkillProfile(root, repository, commit);
+
+    const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
+
+    expect(result.stdout).toContain(`would acquire git commit\ttrusted\t${commit}`);
+    await expect(lstat(skillCacheRoot(createRuntimePaths({ root, home })))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(
+      lstat(configsPath(home, "personal", "opencode-v2", "skills", ".mfz-manifest.yml"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 

@@ -429,7 +429,7 @@ describe("validateManifests", () => {
 });
 
 describe("skill manifest schemas", () => {
-  it("accepts local and pinned vendored declarations", () => {
+  it("accepts local, vendored, and independently pinned Git declarations", () => {
     expect(skillSchema.parse({ name: "local", source: "local" })).toMatchObject({
       name: "local",
       source: "local"
@@ -443,12 +443,47 @@ describe("skill manifest schemas", () => {
         subtree: "skills/vendor"
       })
     ).toMatchObject({ source: "vendored", subtree: "skills/vendor" });
+    expect(
+      skillSchema.parse({
+        name: "trusted",
+        source: "git",
+        repo: "https://example.invalid/skills.git",
+        commit: "a".repeat(40),
+        subtree: "skills/trusted"
+      })
+    ).toMatchObject({ source: "git", commit: "a".repeat(40) });
   });
 
   it("rejects legacy installer declarations and unsafe transports", () => {
     expect(() =>
       skillSchema.parse({ name: "old", source: "git", repo: "https://example.invalid" })
     ).toThrow();
+    for (const commit of ["A".repeat(40), "a".repeat(39), "a".repeat(41)]) {
+      expect(() =>
+        skillSchema.parse({
+          name: "trusted",
+          source: "git",
+          repo: "https://example.invalid/skills.git",
+          commit,
+          subtree: "skills/trusted"
+        })
+      ).toThrow();
+    }
+    for (const field of [
+      { repo: "https://user:password@example.invalid/skills.git" },
+      { subtree: "skills/../trusted" }
+    ]) {
+      expect(() =>
+        skillSchema.parse({
+          name: "trusted",
+          source: "git",
+          repo: "https://example.invalid/skills.git",
+          commit: "a".repeat(40),
+          subtree: "skills/trusted",
+          ...field
+        })
+      ).toThrow();
+    }
     expect(() =>
       skillSchema.parse({
         name: "old",

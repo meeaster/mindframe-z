@@ -29,6 +29,7 @@ import type { CapabilityAgentName } from "../core/manifests.js";
 import type { ResolvedProfile, ResolvedSkill } from "../core/profile.js";
 import { digestSkillFiles, readSkillFiles, validateSkillRecords } from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
+import { readPinnedGitSkillFiles } from "./git.js";
 
 type SkillTarget = Exclude<AgentName, "pi">;
 
@@ -44,7 +45,7 @@ const snapshotManifestSchema = z
       z
         .object({
           name: z.string(),
-          source: z.enum(["local", "vendored", "engine"]),
+          source: z.enum(["local", "vendored", "git", "engine"]),
           digest: z.string(),
           targets: z.array(z.enum(["opencode-v2", "claude-code", "codex"])),
           repository: z.string().optional(),
@@ -66,7 +67,7 @@ function errorCode(error: Error): string | undefined {
 
 interface SnapshotSkill {
   name: string;
-  source: "local" | "vendored" | "engine";
+  source: "local" | "vendored" | "git" | "engine";
   digest: string;
   targets: SkillTarget[];
   repository?: string;
@@ -101,6 +102,7 @@ function isManagedTarget(configsDir: string, target: string): boolean {
 function sourcePath(skill: ResolvedSkill): string {
   if (skill.source === "vendored")
     return path.join(skill.sourceRoot, "skills", "vendor", skill.name);
+  if (skill.source === "git") return `git:${skill.repo}#${skill.subtree}@${skill.commit}`;
   return path.join(skill.sourceRoot, "skills", skill.skill ?? skill.name);
 }
 
@@ -113,8 +115,21 @@ function relativeLinkTarget(linkPath: string, targetPath: string): string {
   return relative || ".";
 }
 
-async function copyDirectory(source: string, destination: string): Promise<string> {
-  const files = await readSkillFiles(source);
+type GitSkill = Extract<ResolvedSkill, { source: "git" }>;
+
+interface SnapshotSource {
+  sourcePath: string;
+  git?: GitSkill;
+}
+
+async function copySource(
+  paths: RuntimePaths,
+  source: SnapshotSource,
+  destination: string
+): Promise<string> {
+  const files = source.git
+    ? await readPinnedGitSkillFiles(paths, source.git)
+    : await readSkillFiles(source.sourcePath);
   validateSkillRecords(files);
   await mkdir(destination, { recursive: true });
   for (const file of files) {
@@ -327,12 +342,14 @@ export async function renderSkillSnapshot(
   });
 
   const selected: SnapshotSkill[] = [];
-  const sources = new Map<string, { sourcePath: string; source: SnapshotSkill["source"] }>();
+  const sources = new Map<string, SnapshotSource>();
   for (const skill of profile.enabledSkills) {
     const targets = desiredTargets(skill, selectedTargets);
     if (targets.length === 0) continue;
-    const source = skill.source === "vendored" ? "vendored" : "local";
-    sources.set(skill.name, { sourcePath: sourcePath(skill), source });
+    const source = skill.source;
+    const snapshotSource: SnapshotSource = { sourcePath: sourcePath(skill) };
+    if (skill.source === "git") snapshotSource.git = skill;
+    sources.set(skill.name, snapshotSource);
     const selectedSkill: SnapshotSkill = {
       name: skill.name,
       source,
@@ -349,14 +366,20 @@ export async function renderSkillSnapshot(
         commit: skill.vendor.commit
       });
     }
+    if (skill.source === "git") {
+      Object.assign(selectedSkill, {
+        repository: skill.repo,
+        subtree: skill.subtree,
+        commit: skill.commit
+      });
+    }
     selected.push(selectedSkill);
   }
   for (const entry of engineEntries) {
     const targets = engineTargets(profile, selectedTargets);
     if (targets.length === 0 || selected.some((skill) => skill.name === entry.name)) continue;
     sources.set(entry.name, {
-      sourcePath: path.join(entry.sourceRoot, "skills", entry.skill),
-      source: entry.source
+      sourcePath: path.join(entry.sourceRoot, "skills", entry.skill)
     });
     const entrySourcePath = path.join(entry.sourceRoot, "skills", entry.skill);
     selected.push({
@@ -383,7 +406,7 @@ export async function renderSkillSnapshot(
     for (const skill of selected) {
       const source = sources.get(skill.name);
       if (!source) throw new Error(`Missing source for skill ${skill.name}`);
-      skill.digest = await copyDirectory(source.sourcePath, path.join(temporary, skill.name));
+      skill.digest = await copySource(paths, source, path.join(temporary, skill.name));
     }
     await writeFile(
       path.join(temporary, path.relative(snapshot, snapshotManifestPath(snapshot))),
@@ -493,8 +516,12 @@ async function syncSkillSnapshotGroup(
   if (options.dryRun) {
     for (const skill of profile.enabledSkills) {
       if (renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))) {
-        const files = await readSkillFiles(sourcePath(skill));
-        validateSkillRecords(files);
+        if (skill.source === "git") {
+          console.log(`would acquire git commit\t${skill.name}\t${skill.commit}`);
+        } else {
+          const files = await readSkillFiles(sourcePath(skill));
+          validateSkillRecords(files);
+        }
       }
     }
     const names = selectedSkillNames(profile, renderTargets);

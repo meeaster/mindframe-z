@@ -116,11 +116,13 @@ Managed source layout follows the target-relative path: profile dotfiles under `
 
 Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations and named connections are not removed automatically; apply blocks with a metadata-only remediation message naming the exact connection until the user disconnects it explicitly.
 
-## Vendored Skills
+## Skills
 
-Catalog entries use `source: local` or `source: vendored`. A vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree. Its selected files live under `skills/vendor/<name>/`, while `skills/vendor.lock.yml` records the full commit and independent framed SHA-256 digest. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
+Catalog entries use `source: local`, `source: vendored`, or trusted `source: git`. Local skills are authored in the home. A vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree; its selected files live under `skills/vendor/<name>/`, while `skills/vendor.lock.yml` records the full commit and independent framed SHA-256 digest. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
 
-`mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
+A Git entry records an HTTPS repository, explicit subtree, and full commit SHA. `mfz apply` fetches that exact commit through the machine-local bare cache. Git is an explicit trust decision by the home author, so it bypasses candidate review and vendor locks. Updating a Git skill means changing its catalog commit and applying again. Git skills still render into the same atomic snapshots as local and vendored skills; harnesses never link directly to the cache.
+
+For vendored skills, `mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
 
 ## Upstream Checkouts
 

@@ -136,6 +136,31 @@ describe("vendored skill contracts", () => {
     expect(legacy[0]).toMatchObject({ source: "vendored", name: "old", ref: "main" });
   });
 
+  it("does not reinterpret a valid pinned Git declaration as migration input", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-pinned-not-legacy-"));
+    await mkdir(path.join(root, "catalog"), { recursive: true });
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [
+          {
+            name: "trusted",
+            source: "git",
+            repo: "https://example.invalid/skills",
+            commit: "a".repeat(40),
+            subtree: "skills/trusted"
+          },
+          { name: "old", source: "git", repo: "https://example.invalid/old" }
+        ]
+      }),
+      "utf8"
+    );
+
+    const legacy = await readLegacyGitSkills(root);
+
+    expect(legacy.map((entry) => entry.name)).toEqual(["old"]);
+  });
+
   it("discovers legacy declarations in an inherited home", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-child-"));
     const upstream = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-upstream-"));

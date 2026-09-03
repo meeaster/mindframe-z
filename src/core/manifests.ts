@@ -198,6 +198,10 @@ function safeGitRef(value: string): boolean {
   return !value.startsWith("-") && [...value].every((character) => character.charCodeAt(0) > 32);
 }
 
+const gitCommitSchema = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/, "must be a full lowercase Git commit SHA");
+
 const skillFields = {
   name: skillNameSchema,
   description: z.string().default("")
@@ -225,7 +229,21 @@ const vendoredSkillSchema = z
   })
   .strict();
 
-export const skillSchema = z.discriminatedUnion("source", [localSkillSchema, vendoredSkillSchema]);
+const gitSkillSchema = z
+  .object({
+    ...skillFields,
+    source: z.literal("git"),
+    repo: httpsRepositorySchema,
+    commit: gitCommitSchema,
+    subtree: skillPathSchema
+  })
+  .strict();
+
+export const skillSchema = z.discriminatedUnion("source", [
+  localSkillSchema,
+  vendoredSkillSchema,
+  gitSkillSchema
+]);
 
 export const vendorLockEntrySchema = z
   .object({

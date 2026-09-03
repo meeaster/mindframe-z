@@ -792,6 +792,8 @@ export async function readLegacyGitSkills(
       );
       if (!parsed.success) continue;
       for (const raw of parsed.data.skills) {
+        const validSkill = skillSchema.safeParse(raw);
+        if (validSkill.success && validSkill.data.source === "git") continue;
         const item = legacySkillInputSchema.safeParse(raw);
         if (!item.success || item.data.source !== "git") continue;
         entries.push({

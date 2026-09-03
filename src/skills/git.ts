@@ -14,6 +14,7 @@ import {
   validatePortablePath
 } from "./tree.js";
 import { skillCacheRoot, type RuntimePaths } from "../core/paths.js";
+import type { SkillEntry } from "../core/manifests.js";
 
 const execFile = promisify(execFileCallback);
 const fullCommitPattern = /^[0-9a-f]{40}$/;
@@ -294,4 +295,13 @@ export async function readGitSkillFiles(
     throw new Error("Skill source must contain SKILL.md at its root");
   }
   return files;
+}
+
+export async function readPinnedGitSkillFiles(
+  paths: RuntimePaths,
+  entry: Extract<SkillEntry, { source: "git" }>
+): Promise<SkillFileRecord[]> {
+  const { cache, commit } = await fetchCommit(paths, entry.repo, entry.commit);
+  if (commit !== entry.commit) throw new Error(`Git did not return pinned commit ${entry.commit}`);
+  return readGitSkillFiles(cache, entry.commit, entry.subtree);
 }
