@@ -10,7 +10,7 @@ Use this guide when adding or changing a direct MCP server, Executor routing, or
 
 The catalog defines server connection details. A profile may select native agents, Executor, or both independently.
 
-MCP entries are direct by default. Use a concise enabled list or a grouped state list:
+Select direct harnesses with \`agents\` and Executor with \`executor.enabled: true\`. Set both for both routes. Omitting \`agents\` selects no direct harnesses. Use a concise enabled list or a grouped state list:
 
 \`\`\`yaml
 mcp:
@@ -53,7 +53,11 @@ executor:
           variable: api_key
 \`\`\`
 
-Normal OAuth uses endpoint discovery. Assisted OAuth additionally declares \`discoveryUrl\` and \`registrationScopes\`; those scopes are used only while registering the public client. Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly. Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
+Normal OAuth uses endpoint discovery. The catalog accepts assisted OAuth only with both \`discoveryUrl\` and \`registrationScopes\`, but MFZ currently sends neither field to Executor. MFZ uses \`registrationScopes\` locally to check reported missing OAuth scopes. These declarations do not configure public-client registration; verify the connection in Executor before cutover.
+
+Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly.
+
+Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
 
 Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
 `;
@@ -79,7 +83,7 @@ New sessions and forks are durable top-level sessions, so they appear in normal 
 
 Never use \`--continue\` in a scheduled service. It selects whichever root session happens to be latest for the location. A fixed \`--session\` ID is deterministic, but deleting that session makes the job fail. Do not target one persistent session from multiple services; separate services can submit competing prompts even though each individual oneshot service prevents its own overlap.
 
-## Add the job files
+## Common setup
 
 Keep each direct job in three source files:
 
@@ -91,14 +95,7 @@ profiles/<profile>/.config/
     └── <job>.timer
 ~~~
 
-For a persistent root plus a worker, use two prompt files. The root prompt delegates. The task prompt contains the complete work and output contract.
-
-~~~text
-profiles/<profile>/.config/opencode/jobs/<job>.md
-profiles/<profile>/.config/opencode/jobs/<job>-task.md
-~~~
-
-## Write the service and timer
+### Write the service and timer
 
 Use a oneshot service. Set an absolute working directory, a complete non-interactive \`PATH\`, and the prompt file as standard input.
 
@@ -135,15 +132,25 @@ WantedBy=timers.target
 
 This machine keeps WSL running, so no Windows scheduler or keepalive process is needed. If the user manager must survive logout or WSL restarts, inspect \`loginctl show-user "$USER" -p Linger\` and enable lingering deliberately. Treat the OpenCode transcript as durable report history. The systemd journal is operational output and may be volatile unless the machine configures persistent journaling.
 
-## Write a bounded prompt
+### Write a bounded prompt
 
-Derive the work window from the schedule when the task can be stateless; do not add a state file merely to remember the previous run. Name authoritative data sources, allowed temporary writes, prohibited mutations, and the exact human-facing output. Keep large inventories, raw diffs, tool transcripts, and child reports out of a persistent root. Optimize anything returned to that root for the human who reads the durable thread.
+Derive the work window from the schedule when the task can be stateless; do not add a state file merely to remember the previous run. Name authoritative data sources, allowed temporary writes, prohibited mutations, and the exact human-facing output.
 
-For evidence-heavy jobs, write temporary data under \`/tmp/opencode\` and remove it before returning. Gather and partition the evidence before fan-out. Give each child a complete batch manifest and a response cap. Ask the worker for one bounded synthesis rather than returning every item it inspected.
+For evidence-heavy jobs, write temporary data under \`/tmp/opencode\` and remove it before returning.
 
-When the prompt already contains the complete workflow, tell the root, worker, and review children not to load skills. Load a skill only when the scheduled task needs behavior that the prompt does not provide; loaded skill text becomes part of that session's context.
+When the prompt already contains the complete workflow, avoid redundant skill loads unless higher-priority instructions require them. Load skills for behavior the prompt does not provide; loaded skill text becomes part of that session's context.
 
-## Use a scheduled worker
+## If using a persistent session
+
+Create a persistent root once and record its exact ID in the service. The session location must match the service working directory. Skip this step for new direct sessions; for forks, select the intended baseline session instead.
+
+~~~sh
+opencode2 api v2.session.create --data '{"title":"Scheduled: <job>","agent":"build","model":{"providerID":"<provider>","id":"<model>","variant":"<variant>"},"location":{"directory":"<absolute-directory>"}}'
+~~~
+
+## If using a scheduled worker
+
+Use two prompt files: \`profiles/<profile>/.config/opencode/jobs/<job>.md\` for the root's delegation instructions and \`<job>-task.md\` beside it for the complete work and output contract.
 
 Keep a generic scheduled worker body-free so OpenCode uses its normal system prompt. Leave its model unset when it should inherit the model and variant selected by the root service.
 
@@ -174,19 +181,21 @@ opencode_v2:
 
 Profile inheritance may require retaining the profile's other enabled agents in the \`agents\` list. Depth \`2\` permits \`root -> worker -> child\`; it does not grant delegation. Deny delegation on custom subagents by default. On \`worker\` and \`scheduled-worker\`, deny every child before allowing only \`explore\` and \`research\`. Use a separate read-only specialist when a child needs shell or authenticated service access that those agents do not have.
 
-Keep the root prompt short. Pass one complete task prompt to one fresh worker, then emit only the worker's bounded human report without a preface or second synthesis. Let the worker gather and materialize shared evidence before it fans independent packets out to children. Raw work remains in durable child sessions, which do not appear in the normal top-level session list.
+Keep the root prompt short. Pass one complete task prompt to one fresh worker, then emit only the worker's bounded human report without a preface or second synthesis. Gather and partition shared evidence before fan-out; give each child a complete batch manifest and a response cap. Keep large inventories, raw diffs, tool transcripts, and child reports out of the persistent root. Raw work remains in durable child sessions, which do not appear in the normal top-level session list.
 
-## Select models and manage context
+## Models and context
 
 Set the root model with \`--model provider/model#variant\`. A model-free child inherits the parent's model and variant. A configured child model overrides the parent.
 
 Do not use \`OPENCODE_CONFIG_CONTENT\` as per-run agent configuration when \`opencode2 run\` connects to the shared service. The shared server reads that configuration when it starts. The CLI environment attached to a managed-service session is shell environment, not a new location configuration.
 
-OpenCode compacts long sessions automatically. Compaction preserves the durable transcript but replaces old model-visible context with a lossy summary and recent tail. Start with automatic compaction. Add a compact-before-run wrapper only after repeated runs show stale-context behavior or insufficient headroom.
+OpenCode compacts long sessions automatically. Compaction preserves the durable transcript but replaces old model-visible context with a lossy summary and recent tail. Start with automatic compaction.
 
-Compaction is checked before a model request, not during a running model request or tool. In a worker, the risky boundary is after child results return and before synthesis. Bound fan-in before that boundary: materialize large evidence outside the root, divide it into independent batches, cap every child response, and keep the final human report short. A persistent root otherwise stores both the worker tool result and the final answer.
+Compaction is checked before a model request, not during a running model request or tool. In a worker, the risky boundary is after child results return and before synthesis, so bound fan-in as described above. A persistent root stores both the worker tool result and the final answer.
 
-There is no \`opencode2 run --compact-first\` flag. If repeated runs justify explicit root compaction, a wrapper must submit compaction, wait for the session to become idle, verify that compaction succeeded, and only then run the scheduled prompt:
+### Only if repeated runs need explicit compaction
+
+Add a compact-before-run wrapper only after repeated runs show stale-context behavior or insufficient headroom. There is no \`opencode2 run --compact-first\` flag. A wrapper must submit compaction, wait for the session to become idle, verify that compaction succeeded, and only then run the scheduled prompt:
 
 ~~~sh
 opencode2 api post /api/session/<id>/compact --data '{}'
@@ -194,17 +203,11 @@ opencode2 api post /api/session/<id>/wait
 opencode2 run --session <id> ...
 ~~~
 
-Do not add that wrapper preemptively. It adds a model call and still retains a lossy summary plus recent context rather than producing a blank session.
+The wrapper adds a model call and retains a lossy summary plus recent context rather than producing a blank session.
 
-## Create and activate a persistent session
+## Activate and verify every job
 
-Create a persistent root once and record its exact ID in the service. The session location must match the service working directory.
-
-~~~sh
-opencode2 api v2.session.create --data '{"title":"Scheduled: <job>","agent":"build","model":{"providerID":"<provider>","id":"<model>","variant":"<variant>"},"location":{"directory":"<absolute-directory>"}}'
-~~~
-
-Apply and activate the job:
+After completing common setup and the sections for the chosen session policy, apply and activate the job:
 
 ~~~sh
 mfz apply
@@ -266,15 +269,9 @@ Runtime-managed files:
 - User systemd files live under \`profiles/<profile>/.config/systemd/user/\`. Run \`mfz apply --target dotfiles\` after changing them. MFZ writes unit files under \`~/.config/systemd/user/\`, but does not reload, enable, start, stop, or disable services.
 - When a systemd service should run, use \`systemctl --user daemon-reload\`, then explicitly \`systemctl --user enable <unit>\` and \`systemctl --user start <unit>\` as appropriate. \`WantedBy=default.target\` affects enablement only.
 
-Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Before adding or changing a skill, run \`mfz guide skills\`.
+Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets.
 
-MCP catalog entries define connection details; profiles select direct per-harness routing or shared Executor routing. Before adding or changing MCP configuration or Executor authentication, run \`mfz guide mcp\`.
-
-Profiles and machine config may declare \`extra_folders\`, which grant host-directory access and contribute to the agent-visible cross-repository capability map. Before granting a folder or changing its description, run \`mfz guide extra-folders\`.
-
-Recurring OpenCode jobs use \`mfz\`-managed systemd user timers. Before adding or changing one, run \`mfz guide cron\`.
-
-Topic guides:
+Before changing a topic below, run its guide:
 
 - \`mfz guide mcp\` - add or change direct MCP servers, Executor routing, or Executor authentication.
 - \`mfz guide cron\` - add or change a recurring OpenCode job.
@@ -307,12 +304,20 @@ Write \`description\` as capability-map metadata, not a miniature repository sum
 
 Within profile inheritance, a child entry overrides its parent by path, and a machine-config entry overrides both. Active and upstream homes are not granted implicitly; declare any home agents should edit as an extra folder.
 
-Run plain \`mfz apply\`, then inspect \`~/.mindframe-z/extra_folders.md\`, \`~/.mindframe-z/capabilities/index.md\`, and the matching group file. Run \`mfz doctor\`. Done when the full index shows the intended permissions and the compact index exposes enough signals to find the group.
+Run plain \`mfz apply\`, inspect \`~/.mindframe-z/extra_folders.md\`, and run \`mfz doctor\`. Done when the full index shows the intended permissions. If the profile defines \`capability_groups\`, also inspect \`~/.mindframe-z/capabilities/index.md\` and the matching group file; confirm the compact index exposes enough signals to find the group.
 `;
 
 const skillsGuideMarkdown = `# Skills Guide
 
-A skill reaches an agent in three steps: the catalog declares it, a profile enables it per agent, and \`mfz apply\` renders a managed snapshot before reconciling harness links. Runtime toggles control invocation, not snapshot membership.
+A skill reaches an agent in three steps: the catalog declares it, a profile enables it per agent, and \`mfz apply\` renders a managed snapshot before reconciling harness links. Runtime toggles control invocation, not snapshot membership. Every source type below requires profile enablement before activation:
+
+\`\`\`yaml
+skills:
+  my-skill:
+    agents: { opencode: true, claude-code: true, codex: true }
+\`\`\`
+
+Put this selection in \`profiles/<profile>/profile.yml\`, using the skill's catalog name.
 
 Add a local skill:
 
@@ -336,15 +341,7 @@ Add a local skill:
         description: One-line summary.
    \`\`\`
 
-3. Enable it in \`profiles/<profile>/profile.yml\`:
-
-   \`\`\`yaml
-   skills:
-     my-skill:
-       agents: { opencode: true, claude-code: true, codex: true }
-   \`\`\`
-
-4. Run plain \`mfz apply\`, then \`mfz skills list\` and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
+3. Enable it as above, then run plain \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
 
 Add a trusted Git skill:
 
@@ -377,11 +374,11 @@ Add a reference:
    \`\`\`yaml
    references:
      - name: example
-        url: https://github.com/example/example.git
-        group: agent-tooling
-        summary: Example workflow library
-        signals: [example configuration, adapters, runtime behavior]
-        description: TypeScript library for example workflows. Inspect it when working on example configuration, adapters, or runtime behavior. Main entrypoint: src/index.ts.
+       url: https://github.com/example/example.git
+       group: agent-tooling
+       summary: Example workflow library
+       signals: [example configuration, adapters, runtime behavior]
+       description: "TypeScript library for example workflows. Inspect it for example configuration, adapters, or runtime behavior. Main entrypoint: src/index.ts."
    \`\`\`
 
 2. Enable it in \`profiles/<profile>/profile.yml\`:
@@ -410,13 +407,13 @@ const guideTopics = new Map([
   ["extra-folders", extraFoldersGuideMarkdown]
 ]);
 
+export const guideTopicNames = [...guideTopics.keys()];
+
 export async function guide(topic?: string): Promise<void> {
   if (topic !== undefined) {
     const content = guideTopics.get(topic);
     if (!content) {
-      throw new Error(
-        `Unknown guide topic: ${topic}. Topics: ${[...guideTopics.keys()].join(", ")}`
-      );
+      throw new Error(`Unknown guide topic: ${topic}. Topics: ${guideTopicNames.join(", ")}`);
     }
     console.log(content.trimEnd());
     return;

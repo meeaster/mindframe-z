@@ -34,8 +34,8 @@ pnpm check             # lint -> fmt:check -> build -> fast test
 pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
 pnpm dev doctor
 # Isolated test examples only:
-pnpm dev --profile personal apply --target all --dry-run
-pnpm dev --home /tmp/mindframe-z-home smoke-opencode
+pnpm dev --root /tmp/opencode/mfz-source --home /tmp/opencode/mfz-machine --profile base apply --dry-run
+pnpm dev --root /tmp/opencode/mfz-source --home /tmp/opencode/mfz-machine --profile base smoke-opencode-v2
 pnpm dev refs list
 ```
 
@@ -53,7 +53,7 @@ When a verification command fails on unrelated existing issues, fix them if they
 
 Read `ARCHITECTURE.md` before architectural changes; update it in the same change when architecture or architectural principles change.
 
-This is a profile-aware AI tool config renderer. Source manifests live in `shared/` and `profiles/`; rendered, inspectable runtime output lives in `configs/<profile>/`; global tool config paths are linked or merged from there.
+This is a profile-aware AI tool config renderer. Source manifests live in the active home's `catalog/` and `profiles/`; rendered, inspectable runtime output lives in `~/.mindframe-z/configs/<profile>/`; global tool config paths are linked or merged from there.
 
 Key entrypoints:
 
@@ -68,12 +68,12 @@ Key entrypoints:
 
 Do not guess repo paths. Before reading a path from memory or convention, confirm it with `fff_find_files`, `glob`, or a targeted grep. Common path traps in this repo:
 
-- Profiles live at `profiles/<name>/profile.yml`, not `profiles/<name>.yml`.
-- The references catalog is `shared/refs.yml`, not `shared/references.yml`.
+- Profiles live at `profiles/<name>/profile.yml` in the active home, not `profiles/<name>.yml`.
+- The references catalog is `catalog/references.yml` in the active home.
 - Machine config uses `~/.mindframe-z/config.yml` and `machine-config.example.yml`; there is no `machine/` config directory.
 - Renderer keys are not always file names; for example, the `claude-code` renderer lives in `src/renderers/claude.ts`.
-- `configs/<profile>/` is rendered output, not profile source; change source files under `profiles/<profile>/`, `shared/`, `opencode/`, or `src/renderers/` instead.
-- OpenCode agents live under `opencode/agents/`; this repo does not use `.opencode/agents/` as source.
+- `~/.mindframe-z/configs/<profile>/` is rendered output. Change configuration in the active home; change rendering behavior in this engine's `src/renderers/`.
+- OpenCode agents live under the home's `opencode/agents/`, not this engine's `.opencode/agents/`.
 - There is no in-repo `references/` directory. Reference repositories are external paths listed in `~/.mindframe-z/references.md`.
 - Integration test support is TypeScript at `tests/integration/support.ts`, not `support.js`.
 - Thread source files live in `src/thread/`; there is no `src/thread/broker.ts`.
@@ -84,9 +84,9 @@ If a read fails with "file not found", locate the path before retrying instead o
 
 ## Manifest Model
 
-Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`; root resolution is `--root` > `MFZ_ROOT` > machine `repo_path` > cwd.
+Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`; root resolution is `--root` > `MFZ_ROOT` > machine `home_path` > cwd.
 
-`shared/*.yml` is the catalog of available refs, skills, and MCP servers. `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and host-specific paths.
+The active home's `catalog/*.yml` declares available references, skills, and MCP servers. Its `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and host-specific paths.
 
 Profile arrays such as `instructions`, `references`, `opencode_v2.plugins`, and `opencode_v2.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode_v2.config`, and `claude` are deep-merged with child keys overriding parent keys. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 
@@ -94,23 +94,23 @@ MCP enablement is profile-owned: the MCP catalog defines connection details only
 
 ## Rendering And Sync
 
-`mfz apply` writes rendered files under `configs/<profile>/`, writes machine-local `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` when configured, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
+`mfz apply` writes rendered files under `~/.mindframe-z/configs/<profile>/`, writes machine-local `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` when configured, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
 
 When a profile enables Executor for any MCP entry, apply validates the pinned Executor binary, reuses or starts Executor's native default daemon for the shared `$HOME/.executor` store (or an intentionally set `EXECUTOR_DATA_DIR`), reconciles non-secret integration metadata and connections, and only then writes harness files. Direct and Executor configuration may be applied for the same server. MFZ never sets `EXECUTOR_DATA_DIR` or `EXECUTOR_SCOPE_DIR`, passes `--scope`, or creates profile-specific Executor runtime data. The generated bridge uses browser elicitation and native default scope behavior when `executor.bridge` is not false. Existing OAuth state is preserved; credentialed removal requires explicit Executor disconnection. `--dry-run` reports the plan without starting Executor or creating runtime files. Existing profile-scoped MFZ Executor state is not migrated or deleted automatically; use an explicitly approved/manual migration or cleanup procedure only.
 
-Catalog auth declarations belong under a server's `executor.authentication` list when its profile entry enables Executor. Use `{slug, kind: none}` for public integrations, `{slug, kind: oauth2}` for normal discovered OAuth, or an `apikey` method with structural header/query `placements` and variable names only. Assisted OAuth must declare both `discoveryUrl` and `registrationScopes`; those scopes are registration-only. Never put access tokens, refresh tokens, API keys, client secrets, provider values, or generated client data in catalog/profile source. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools use full integration/owner/connection addresses; never silently choose an organization. Apply blocks credentialed cutover until every declared connection has compatible metadata and reports all missing connections together.
+Catalog auth declarations belong under a server's `executor.authentication` list when its profile entry enables Executor. Use `{slug, kind: none}` for public integrations, `{slug, kind: oauth2}` for normal discovered OAuth, or an `apikey` method with structural header/query `placements` and variable names only. Assisted OAuth declarations require both `discoveryUrl` and `registrationScopes`, but the current encoder sends neither to Executor. MFZ uses `registrationScopes` locally to check reported missing OAuth scopes; these fields do not configure public-client registration. Never put access tokens, refresh tokens, API keys, client secrets, provider values, or generated client data in catalog/profile source. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools use full integration/owner/connection addresses; never silently choose an organization. Apply blocks credentialed cutover until every declared connection has compatible metadata and reports all missing connections together.
 
 Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
 
 `extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode V2 native permission rules and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
 
-Claude `settings.json` and Claude MCP are not symlinked. The rendered `configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
+Claude `settings.json` and Claude MCP are not symlinked. The rendered `~/.mindframe-z/configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
 
-OpenCode V2 plugins and commands are source files under `opencode/`; profiles list enabled names under `opencode_v2`, and apply copies them into `configs/<profile>/opencode-v2/` before linking the rendered OpenCode config/commands.
+OpenCode V2 plugins and commands are source files under the home's `opencode/`; profiles list enabled names under `opencode_v2`, and apply copies them into `~/.mindframe-z/configs/<profile>/opencode-v2/` before linking the rendered OpenCode config/commands.
 
 ## Permissions
 
-Profile permissions belong in `profiles/*/profile.yml` under `opencode_v2.config.permission`.
+Profile permissions belong in the home's `profiles/*/profile.yml` under `opencode_v2.config.permission`.
 
 - Default `bash` to `ask` with `"*": ask`.
 - Add explicit allow rules only for safe, read-only command forms you want to reuse.
@@ -128,15 +128,15 @@ opencode_v2:
         "aws ec2 describe-instances *": allow
 ```
 
-`mfz sync` is the intended path after editing rendered configs directly in `configs/<profile>/`; it detects unmanaged top-level config keys and promotes them to `base` or the active profile.
+Edit configuration in the home and activate it with plain `mfz apply`. Use `mfz sync` only to promote supported unmanaged configuration keys to `base` or the active profile; it is not the editing workflow for managed output or skill source.
 
 ## Testing And Safety
 
 Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR` and `CLAUDE_CONFIG_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
 
-`smoke-opencode-v2` renders OpenCode V2 config into `configs/<profile>/opencode-v2`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode2` binary is missing.
+`smoke-opencode-v2` renders OpenCode V2 config into `<home>/.mindframe-z/configs/<profile>/opencode-v2`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode2` binary is missing.
 
-Pre-commit runs only Gitleaks. `pre-commit` is supplied by mise (`profiles/base/mise.toml`); use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
+Pre-commit runs only Gitleaks. `pre-commit` is supplied by the home's Mise configuration; use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
 
 ## Repo Conventions
 
@@ -150,8 +150,8 @@ This repo has no external users yet; follow the product and compatibility policy
 
 ## Reference Descriptions
 
-`shared/refs.yml` entries have a `description` field rendered into agent-visible indexes. Follow the conventions in `ARCHITECTURE.md#Description-Convention` when adding or updating descriptions: lead with language/stack, state purpose, and include LLM-actionable details (entrypoints, package names, config models).
+The home's `catalog/references.yml` entries have a `description` field rendered into agent-visible indexes. Follow `mfz guide references` when adding or updating descriptions.
 
 `extra_folders` entries in profiles and machine config have a `description` field rendered into `~/.mindframe-z/extra_folders.md`. They form a cross-repository capability map: use concise but discriminative descriptions that state the domain, role, and high-signal stack, integration, or dependency relationship. Avoid generic "needed when" clauses and exhaustive implementation inventories.
 
-`shared/AGENTS.global.md` is rendered into agent runtime configs. Do not put repo-maintainer instructions there unless they should appear in generated OpenCode/Claude guidance.
+Profile-selected home instruction files are rendered into agent runtime configs. Put engine-maintainer instructions in this repository's `AGENTS.md`; put guidance intended for configured agents in the home's selected instructions.

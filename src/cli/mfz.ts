@@ -82,7 +82,7 @@ import {
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
-import { guide, initHome } from "./init.js";
+import { guide, guideTopicNames, initHome } from "./init.js";
 import { hasHomeGuidance, materializeReviewSkill } from "../core/engine-skill.js";
 import { applyConfig } from "./apply.js";
 import {
@@ -456,7 +456,7 @@ program
 program
   .command("guide")
   .description("Print the mindframe-z home conventions guide")
-  .argument("[topic]", "topic guide: mcp, skills, references, extra-folders")
+  .argument("[topic]", `topic guide: ${guideTopicNames.join(", ")}`)
   .action(async (topic) => guide(topic));
 
 program

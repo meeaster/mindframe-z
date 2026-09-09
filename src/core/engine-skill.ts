@@ -15,19 +15,10 @@ export const skillUpdateReviewName = "skill-update-review";
 
 const engineSkillMarkdown = `---
 name: mindframe-z
-description: Operate the mfz CLI or change mindframe-z configuration — requests naming mfz or mindframe-z, its homes, profiles, skills, machine config, or recurring OpenCode jobs, from any directory.
+description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."
 ---
 
-mindframe-z renders AI tool configuration from a home repo onto this machine.
-Run \`mfz guide\` for home layout and editing conventions, and \`mfz guide skills\`
-before adding or changing skills. Run \`mfz guide cron\` before adding or changing a
-scheduled OpenCode job. \`mfz --help\` lists commands. For normal machine
-changes, edit home source files and run plain \`mfz apply\`; it follows the active home
-and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and
-\`--profile\` for isolated tests with an explicit test home. Never edit rendered output
-(\`~/.mindframe-z/configs/\` or globally linked tool config). Use \`mfz sync\` only to
-promote unmanaged configuration keys; skill source changes must be reviewed in the
-home and activated with \`mfz apply\`.
+Mindframe-Z renders AI tool configuration from a home repository. Before changing MFZ configuration, run \`mfz guide\` and follow its topic routing. For CLI command discovery, run \`mfz --help\`.
 `;
 
 const skillUpdateReviewMarkdown = `---
@@ -50,7 +41,7 @@ Read the candidate provenance and verify that its identity, repository, subtree,
 
 ### 2. Account for evidence
 
-Read the complete inventory, deterministic findings, resulting source tree, and old-to-new diff. Account for every file, including retained files and files with unchanged content. Use the disclosed risk reference when a category needs a reminder.
+Read the complete inventory, deterministic findings, resulting source tree, and old-to-new diff. Account for every file, including retained files and files with unchanged content. Read the [risk reference](references/risk-reference.md) when a category needs a reminder.
 
 - [ ] Every inventory file has a file-specific assessment.
 - [ ] Every deterministic finding is explained or escalated.
@@ -143,23 +134,7 @@ const guidanceBegin = "<!-- mfz:home-guidance:begin -->";
 const guidanceEnd = "<!-- mfz:home-guidance:end -->";
 
 const homeGuidance = `${guidanceBegin}
-This repo is a mindframe-z home: the source of truth for the AI tool
-configuration rendered onto this machine by the \`mfz\` CLI. This block is
-managed by \`mfz apply\` and rewritten on every run.
-
-- Before configuring anything here (profiles, catalog entries, skills, MCP,
-  instructions, dotfiles), run \`mfz guide\`; before adding or changing skills,
-  run \`mfz guide skills\`.
-- Before adding or changing a recurring OpenCode job, run \`mfz guide cron\`.
-- Edit source files in this repo, then run plain \`mfz apply\`; it follows the active home and profile from \`~/.mindframe-z/config.yml\`.
-- Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated test commands with an explicit test home.
-- Never edit rendered output (\`~/.mindframe-z/configs/\` or globally linked
-  tool config). Use \`mfz sync\` only to promote unmanaged configuration keys;
-  skill source changes belong in the home and require \`mfz apply\`.
-- Executor-routed integrations are shared inventory. If one integration has
-  multiple named connections, add each one in the Executor app using the exact
-  profile connection name. Call tools with the full integration/owner/connection
-  address; never infer an account or organization.
+This repository is a Mindframe-Z home, the source for AI tool configuration rendered by \`mfz\`. Before changing configuration here, run \`mfz guide\` and follow its topic routing. This block is managed by \`mfz apply\`.
 ${guidanceEnd}
 `;
 

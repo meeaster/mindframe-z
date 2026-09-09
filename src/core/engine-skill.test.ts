@@ -20,8 +20,7 @@ describe("ensureHomeGuidance", () => {
     expect(await ensureHomeGuidance(home)).toBe("wrote");
     const agents = await readFile(path.join(home, "AGENTS.md"), "utf8");
     expect(agents).toContain("mfz:home-guidance:begin");
-    expect(agents).toContain("mfz guide skills");
-    expect(agents).toContain("mfz guide cron");
+    expect(agents).toContain("mfz guide");
     expect(await readFile(path.join(home, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
     expect(await ensureHomeGuidance(home)).toBe("ok");
     expect(await hasHomeGuidance(home)).toBe(true);
@@ -35,11 +34,11 @@ describe("ensureHomeGuidance", () => {
     let agents = await readFile(agentsPath, "utf8");
     expect(agents.startsWith("# My home notes")).toBe(true);
 
-    const stale = agents.replace("mfz guide skills", "mfz guide legacy-topic");
+    const stale = agents.replace("mfz guide", "mfz guide legacy-topic");
     await writeFile(agentsPath, stale, "utf8");
     expect(await ensureHomeGuidance(home)).toBe("wrote");
     agents = await readFile(agentsPath, "utf8");
-    expect(agents).toContain("mfz guide skills");
+    expect(agents).toContain("mfz guide");
     expect(agents).not.toContain("legacy-topic");
     expect(agents.startsWith("# My home notes")).toBe(true);
   });
@@ -73,10 +72,11 @@ describe("materializeEngineSkill", () => {
       "utf8"
     );
     expect(skillMd).toContain("name: mindframe-z");
-    expect(skillMd).toContain("description:");
-    expect(skillMd).toContain("recurring OpenCode jobs");
+    expect(skillMd).toContain(
+      `description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."`
+    );
     expect(skillMd).toContain("mfz guide");
-    expect(skillMd).toContain("mfz guide cron");
+    expect(skillMd).toContain("mfz --help");
   });
 
   it("materializes the immutable hostile-evidence review skill", async () => {
@@ -90,6 +90,7 @@ describe("materializeEngineSkill", () => {
     expect(skill).toContain("hostile evidence");
     expect(skill).toContain("disable-model-invocation: true");
     expect(skill).toContain('argument-hint: "<candidate-id>"');
+    expect(skill).toContain("[risk reference](references/risk-reference.md)");
     for (const term of [
       "authority escalation",
       "secret or credential access",
