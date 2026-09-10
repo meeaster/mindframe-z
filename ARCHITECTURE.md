@@ -22,7 +22,8 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 ├── instructions/
 ├── profiles/<name>/
 ├── skills/<local-name>/
-├── skills/vendor/<name>/
+├── skills/vendor/<name>/                  # single-subtree vendored skill
+├── skills/vendor/<name>/<target>/         # provider-variant vendored skill
 ├── skills/vendor.lock.yml
 ├── opencode/
 └── sandbox/
@@ -57,7 +58,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/skill-candidates/
 ```
 
-Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Skill source is copied into `configs/<profile>/skills/` and harness links point only at that snapshot. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
+Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Single-subtree skill source is copied into the shared `configs/<profile>/skills/` snapshot. Provider variants use `configs/<profile>/opencode-v2/skills/` for OpenCode and target-scoped `configs/<profile>/<target>/skills/` snapshots for legacy targets. Harness links point only at those snapshots. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
 
 ## Apply and reference reconciliation
 
@@ -87,7 +88,7 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
 - `mise`: ordered native fragments under `conf.d/` plus namespaced task files; snapshots live under `configs/<profile>/mise/` and the single `configs/<profile>/.mfz-owned.json` manifest limits host cleanup to exact MFZ-owned paths.
 - `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.
-- `skills`: `src/skills/snapshot.ts` builds the complete profile skill snapshot and reconciles only owned universal and Claude skill links.
+- `skills`: `src/skills/snapshot.ts` builds shared and provider-scoped profile skill snapshots and reconciles only owned universal and Claude skill links.
 
 MCP profile entries independently declare native `agents` (`[opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays) and an optional `executor: { enabled: true, connections: ... }` selection. An entry may declare either capability or both. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge when profile-level `executor.bridge` is enabled, and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; direct and Executor configuration can be applied together.
 
@@ -130,11 +131,11 @@ Generated Executor snapshots and bridge entries are derived output and are not a
 
 ## Skills
 
-Catalog entries use `source: local`, `source: vendored`, or trusted `source: git`. Local skills are authored in the home. A vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree; its selected files live under `skills/vendor/<name>/`, while `skills/vendor.lock.yml` records the full commit and independent framed SHA-256 digest. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
+Catalog entries use `source: local`, `source: vendored`, or trusted `source: git`. Local skills are authored in the home. A single-subtree vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree; its selected files live under `skills/vendor/<name>/`. A provider-variant entry records the same repository and ref plus exactly one subtree for each of `claude-code`, `codex`, and `opencode-v2`; its files live under `skills/vendor/<name>/<target>/`. `skills/vendor.lock.yml` records the full commit and aggregate framed SHA-256 digest, plus each provider digest for a variant. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
 
 A Git entry records an HTTPS repository, explicit subtree, and full commit SHA. `mfz apply` fetches that exact commit through the machine-local bare cache. Git is an explicit trust decision by the home author, so it bypasses candidate review and vendor locks. Updating a Git skill means changing its catalog commit and applying again. Git skills still render into the same atomic snapshots as local and vendored skills; harnesses never link directly to the cache.
 
-For vendored skills, `mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
+For vendored skills, `mfz skills check` fetches only into a bare machine-local cache and reports selected-subtree or provider-subtree changes. `mfz skills stage` extracts an exact revision into quarantine with provenance, inventory, findings, digest, and diff; candidate identity binds the complete target and trusted baseline state, while variant provenance includes the complete target-to-subtree/digest set. The user-invoked engine review skill treats candidate text as hostile evidence and never executes it. `mfz skills promote` revalidates the candidate, rejects a changed trusted baseline, asks for explicit human confirmation, and atomically updates home source plus lock without applying. A later `mfz apply` activates the committed source.
 
 ## Upstream Checkouts
 

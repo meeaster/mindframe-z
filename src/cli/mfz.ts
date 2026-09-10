@@ -1087,7 +1087,14 @@ skills
       try {
         const result = await checkVendoredSkill(paths, skill, skill.sourceRoot);
         const status = result.changed ? "update available" : "current";
-        const note = result.changed ? "selected subtree changed" : "selected subtree unchanged";
+        const note =
+          "variants" in skill
+            ? result.changed
+              ? "selected provider subtrees changed"
+              : "selected provider subtrees unchanged"
+            : result.changed
+              ? "selected subtree changed"
+              : "selected subtree unchanged";
         console.log(
           `${status}\t${skill.name}\tpinned=${result.pinned.commit}\tobserved=${result.observedCommit}\t${note}`
         );
@@ -1157,6 +1164,11 @@ skills
     console.log(
       `provenance\t${candidate.provenance.oldCommit ?? "none"} -> ${candidate.provenance.commit}`
     );
+    if ("variants" in skill) {
+      for (const target of ["claude-code", "codex", "opencode-v2"] as const) {
+        console.log(`variant\t${target}\t${skill.variants[target]}`);
+      }
+    }
     console.log(
       `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
     );

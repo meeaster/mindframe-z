@@ -1,20 +1,372 @@
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import {
+  checkVendoredSkill,
   digestSkillTree,
   promoteVendoredSkill,
+  readCandidate,
   readLegacyGitSkills,
+  revalidateCandidate,
   stageVendoredSkill,
   validateVendoredSkill,
   validateVendoredSkills
 } from "./vendor.js";
-import { skillSchema } from "../core/manifests.js";
+import { skillSchema, vendoredSkillTargets, type SkillEntry } from "../core/manifests.js";
 import { createRuntimePaths, skillCandidatesRoot } from "../core/paths.js";
-import { digestSkillFiles, frame, inventory, staticFindings } from "./tree.js";
+import {
+  digestSkillFiles,
+  frame,
+  inventory,
+  sha256,
+  staticFindings,
+  type SkillFileRecord
+} from "./tree.js";
+
+type VariantTarget = (typeof vendoredSkillTargets)[number];
+type VariantFiles = Record<VariantTarget, SkillFileRecord[]>;
+
+function variantFiles(name: string, suffix: string): VariantFiles {
+  const files: VariantFiles = {
+    "claude-code": [
+      {
+        path: "SKILL.md",
+        mode: "100644",
+        bytes: Buffer.from(
+          `---\nname: ${name}\ndescription: claude-code ${suffix}\n---\n\n# Claude\n`
+        )
+      }
+    ],
+    codex: [
+      {
+        path: "SKILL.md",
+        mode: "100644",
+        bytes: Buffer.from(`---\nname: ${name}\ndescription: codex ${suffix}\n---\n\n# Codex\n`)
+      }
+    ],
+    "opencode-v2": [
+      {
+        path: "SKILL.md",
+        mode: "100644",
+        bytes: Buffer.from(
+          `---\nname: ${name}\ndescription: opencode-v2 ${suffix}\n---\n\n# OpenCode\n`
+        )
+      }
+    ]
+  };
+  return files;
+}
+
+function variantRecords(files: VariantFiles): SkillFileRecord[] {
+  const records: SkillFileRecord[] = [];
+  for (const target of vendoredSkillTargets) {
+    for (const file of files[target]) records.push({ ...file, path: `${target}/${file.path}` });
+  }
+  return records;
+}
+
+function variantDigests(files: VariantFiles): Record<VariantTarget, string> {
+  return {
+    "claude-code": digestSkillFiles(files["claude-code"]),
+    codex: digestSkillFiles(files.codex),
+    "opencode-v2": digestSkillFiles(files["opencode-v2"])
+  };
+}
+
+function variantFindings(files: VariantFiles): ReturnType<typeof staticFindings> {
+  const findings: ReturnType<typeof staticFindings> = [];
+  for (const target of vendoredSkillTargets) {
+    for (const finding of staticFindings(files[target])) {
+      findings.push({ ...finding, path: `${target}/${finding.path}` });
+    }
+  }
+  return findings;
+}
+
+function variantEntry(name: string) {
+  const entry = skillSchema.parse({
+    name,
+    source: "vendored",
+    repo: "https://example.invalid/skills.git",
+    ref: "main",
+    variants: {
+      "claude-code": "dist/claude",
+      codex: "dist/codex",
+      "opencode-v2": "dist/opencode"
+    }
+  });
+  if (entry.source !== "vendored" || !("variants" in entry)) {
+    throw new Error("test fixture did not create a variant vendored entry");
+  }
+  return entry;
+}
+
+async function writeVariantTree(
+  root: string,
+  name: string,
+  suffix = "same"
+): Promise<{
+  source: string;
+  files: VariantFiles;
+  digests: Record<VariantTarget, string>;
+  digest: string;
+}> {
+  const source = path.join(root, "skills", "vendor", name);
+  const files = variantFiles(name, suffix);
+  for (const target of vendoredSkillTargets) {
+    const directory = path.join(source, target);
+    await mkdir(directory, { recursive: true });
+    for (const file of files[target]) {
+      await writeFile(path.join(directory, file.path), file.bytes, {
+        mode: file.mode === "100755" ? 0o755 : 0o644
+      });
+    }
+  }
+  const digests = variantDigests(files);
+  return { source, files, digests, digest: digestSkillFiles(variantRecords(files)) };
+}
+
+async function writeVariantLock(
+  root: string,
+  name: string,
+  commit: string,
+  digest: string,
+  variants: Record<VariantTarget, string>
+): Promise<void> {
+  await mkdir(path.join(root, "skills"), { recursive: true });
+  await writeFile(
+    path.join(root, "skills", "vendor.lock.yml"),
+    YAML.stringify({ skills: { [name]: { commit, digest, variants } } }),
+    "utf8"
+  );
+}
+
+type CandidateBaseline =
+  | { kind: "none" }
+  | { kind: "single"; commit: string; digest: string }
+  | {
+      kind: "variants";
+      commit: string;
+      digest: string;
+      variants: Record<VariantTarget, string>;
+    };
+
+function candidateIdentityForTest(
+  kind: "single" | "variants",
+  name: string,
+  repository: string,
+  ref: string,
+  sourceRoot: string,
+  targetValues: readonly string[],
+  commit: string,
+  digest: string,
+  baseline: CandidateBaseline
+): string {
+  const hash = createHash("sha256");
+  const values = [
+    "candidate-v2",
+    kind,
+    name,
+    repository,
+    ref,
+    sourceRoot,
+    ...targetValues,
+    commit,
+    digest,
+    "baseline",
+    JSON.stringify(baseline)
+  ];
+  for (const value of values) hash.update(frame(Buffer.from(value, "utf8")));
+  return hash.digest("hex");
+}
+
+async function writeVariantCandidate(
+  paths: ReturnType<typeof createRuntimePaths>,
+  root: string,
+  name: string,
+  files: VariantFiles,
+  oldCommit: string,
+  commit: string
+): Promise<string> {
+  const records = variantRecords(files);
+  const digests = variantDigests(files);
+  const digest = digestSkillFiles(records);
+  const inventoryContent = YAML.stringify({ files: inventory(records) });
+  const findingsContent = YAML.stringify({ findings: variantFindings(files) });
+  const diff = "";
+  const repository = "https://example.invalid/skills.git";
+  const subtrees = {
+    "claude-code": "dist/claude",
+    codex: "dist/codex",
+    "opencode-v2": "dist/opencode"
+  } satisfies Record<VariantTarget, string>;
+  const baseline = {
+    kind: "variants" as const,
+    commit: oldCommit,
+    digest,
+    variants: digests
+  } satisfies CandidateBaseline;
+  const id = candidateIdentityForTest(
+    "variants",
+    name,
+    repository,
+    "main",
+    root,
+    vendoredSkillTargets.flatMap((target) => [target, subtrees[target], digests[target]]),
+    commit,
+    digest,
+    baseline
+  );
+  const digestContent = `${digest}\n`;
+  const provenance = {
+    candidateId: id,
+    name,
+    repository,
+    ref: "main",
+    variants: {
+      "claude-code": { subtree: subtrees["claude-code"], digest: digests["claude-code"] },
+      codex: { subtree: subtrees.codex, digest: digests.codex },
+      "opencode-v2": { subtree: subtrees["opencode-v2"], digest: digests["opencode-v2"] }
+    },
+    commit,
+    digest,
+    sourceRoot: root,
+    oldCommit,
+    oldDigest: digest,
+    oldVariants: digests,
+    artifacts: {
+      inventory: sha256(inventoryContent),
+      findings: sha256(findingsContent),
+      diff: sha256(diff),
+      digest: sha256(digestContent)
+    }
+  };
+  const candidatePath = path.join(skillCandidatesRoot(paths), id);
+  await mkdir(path.join(candidatePath, "source"), { recursive: true });
+  for (const target of vendoredSkillTargets) {
+    for (const file of files[target]) {
+      await mkdir(path.join(candidatePath, "source", target), { recursive: true });
+      await writeFile(path.join(candidatePath, "source", target, file.path), file.bytes, {
+        mode: file.mode === "100755" ? 0o755 : 0o644
+      });
+    }
+  }
+  await writeFile(path.join(candidatePath, "provenance.yml"), YAML.stringify(provenance), "utf8");
+  await writeFile(path.join(candidatePath, "inventory.yml"), inventoryContent, "utf8");
+  await writeFile(path.join(candidatePath, "findings.yml"), findingsContent, "utf8");
+  await writeFile(path.join(candidatePath, "diff.patch"), diff, "utf8");
+  await writeFile(path.join(candidatePath, "digest"), digestContent, "utf8");
+  return id;
+}
+
+async function writeLegacyState(
+  root: string,
+  name: string,
+  content: string,
+  commit: string
+): Promise<string> {
+  const source = path.join(root, "skills", "vendor", name);
+  await mkdir(source, { recursive: true });
+  const bytes = Buffer.from(content);
+  await writeFile(path.join(source, "SKILL.md"), bytes);
+  const digest = digestSkillFiles([{ path: "SKILL.md", mode: "100644", bytes }]);
+  await mkdir(path.join(root, "skills"), { recursive: true });
+  await writeFile(
+    path.join(root, "skills", "vendor.lock.yml"),
+    YAML.stringify({ skills: { [name]: { commit, digest } } }),
+    "utf8"
+  );
+  return digest;
+}
+
+async function writeVendoredCatalog(root: string, entry: SkillEntry): Promise<void> {
+  await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+  await mkdir(path.join(root, "catalog"), { recursive: true });
+  await writeFile(
+    path.join(root, "catalog", "skills.yml"),
+    YAML.stringify({ skills: [entry] }),
+    "utf8"
+  );
+}
+
+function singleEntry(name: string) {
+  const entry = skillSchema.parse({
+    name,
+    source: "vendored",
+    repo: "https://example.invalid/skills.git",
+    ref: "main",
+    subtree: "dist/legacy"
+  });
+  if (entry.source !== "vendored" || "variants" in entry) {
+    throw new Error("test fixture did not create a single-subtree vendored entry");
+  }
+  return entry;
+}
+
+async function gitRepository(
+  files: Record<string, string>
+): Promise<{ root: string; commit: string }> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mfz-vendor-upstream-"));
+  await execa("git", ["init", "-q", "-b", "main"], { cwd: root });
+  await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: root });
+  await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: root });
+  for (const [relative, content] of Object.entries(files)) {
+    const file = path.join(root, ...relative.split("/"));
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, content, "utf8");
+  }
+  await execa("git", ["add", "."], { cwd: root });
+  await execa("git", ["commit", "-qm", "fixture"], { cwd: root });
+  const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: root });
+  return { root, commit };
+}
+
+async function withLocalGitFetch<T>(remote: string, action: () => Promise<T>): Promise<T> {
+  const bin = await mkdtemp(path.join(os.tmpdir(), "mfz-git-shim-"));
+  const shim = path.join(bin, "git");
+  await writeFile(
+    shim,
+    [
+      "#!/usr/bin/env node",
+      'import { spawnSync } from "node:child_process";',
+      `const remote = ${JSON.stringify(remote)};`,
+      'process.env.GIT_PROTOCOL_FROM_USER = "1";',
+      "const args = process.argv.slice(2);",
+      'const fetchIndex = args.indexOf("fetch");',
+      "if (fetchIndex >= 0) {",
+      '  const originIndex = args.indexOf("origin", fetchIndex + 1);',
+      "  if (originIndex >= 0) {",
+      "    args[originIndex] = remote;",
+      "    for (let index = fetchIndex - 1; index >= 0; index -= 1) {",
+      '      if (args[index] === "-c" && args[index + 1]?.startsWith("protocol.")) {',
+      "        args.splice(index, 2);",
+      "      }",
+      "    }",
+      "  }",
+      "}",
+      'const result = spawnSync("/usr/bin/git", args, { stdio: "inherit" });',
+      "if (result.error) {",
+      "  console.error(result.error);",
+      "  process.exit(1);",
+      "}",
+      "process.exit(result.status ?? 1);",
+      ""
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    return await action();
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  }
+}
 
 async function skillDir(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "mfz-vendor-test-"));
@@ -105,6 +457,297 @@ describe("vendored skill contracts", () => {
       "utf8"
     );
     await expect(validateVendoredSkill(home, entry)).resolves.toBeUndefined();
+  });
+
+  it("validates all provider variant trees and their individual lock digests", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-vendor-home-"));
+    const name = "variant-skill";
+    const fixture = await writeVariantTree(root, name);
+    await writeVariantLock(root, name, "a".repeat(40), fixture.digest, fixture.digests);
+
+    await expect(validateVendoredSkill(root, variantEntry(name))).resolves.toBeUndefined();
+
+    await writeVariantLock(root, name, "a".repeat(40), fixture.digest, {
+      ...fixture.digests,
+      codex: "b".repeat(64)
+    });
+    await expect(validateVendoredSkill(root, variantEntry(name))).rejects.toThrow(
+      /codex integrity mismatch/
+    );
+  });
+
+  it("rejects missing, unexpected, and colliding provider variant entries", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-layout-home-"));
+    const name = "variant-skill";
+    const fixture = await writeVariantTree(root, name);
+    await writeVariantLock(root, name, "a".repeat(40), fixture.digest, fixture.digests);
+    await rm(path.join(fixture.source, "codex"), { recursive: true, force: true });
+
+    await expect(validateVendoredSkill(root, variantEntry(name))).rejects.toThrow(
+      "missing provider variant: codex"
+    );
+
+    await mkdir(path.join(fixture.source, "codex"), { recursive: true });
+    await mkdir(path.join(fixture.source, "extra"), { recursive: true });
+    await expect(validateVendoredSkill(root, variantEntry(name))).rejects.toThrow(
+      "unknown provider variant: extra"
+    );
+
+    await rm(path.join(fixture.source, "extra"), { recursive: true, force: true });
+    await writeFile(path.join(fixture.source, "claude-code", "skill.md"), "duplicate\n", "utf8");
+    await expect(validateVendoredSkill(root, variantEntry(name))).rejects.toThrow(
+      /colliding paths/
+    );
+  });
+
+  it("rejects a tampered provider variant payload", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-tamper-home-"));
+    const name = "variant-skill";
+    const fixture = await writeVariantTree(root, name);
+    await writeVariantLock(root, name, "a".repeat(40), fixture.digest, fixture.digests);
+    await writeFile(
+      path.join(fixture.source, "opencode-v2", "SKILL.md"),
+      `---\nname: ${name}\ndescription: tampered\n---\n`,
+      "utf8"
+    );
+
+    await expect(validateVendoredSkill(root, variantEntry(name))).rejects.toThrow(
+      /integrity mismatch/
+    );
+  });
+
+  it("stages and promotes variants over a promoted single-subtree state", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-migration-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-migration-home-"));
+    const name = "variant-migration";
+    const entry = variantEntry(name);
+    const oldCommit = "a".repeat(40);
+    const oldContent = `---\nname: ${name}\ndescription: old\n---\n\n# Old\n`;
+    const oldDigest = await writeLegacyState(root, name, oldContent, oldCommit);
+    await writeVendoredCatalog(root, entry);
+    const upstream = await gitRepository({
+      "dist/claude/SKILL.md": `---\nname: ${name}\ndescription: claude\n---\n\n# Claude\n`,
+      "dist/codex/SKILL.md": `---\nname: ${name}\ndescription: codex\n---\n\n# Codex\n`,
+      "dist/opencode/SKILL.md": `---\nname: ${name}\ndescription: opencode\n---\n\n# OpenCode\n`
+    });
+    const paths = createRuntimePaths({ root, home });
+
+    await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
+    await expect(validateVendoredSkills(root)).resolves.toEqual([]);
+
+    const checked = await withLocalGitFetch(upstream.root, () =>
+      checkVendoredSkill(paths, entry, root)
+    );
+    expect(checked).toMatchObject({
+      pinned: { commit: oldCommit, digest: oldDigest },
+      observedCommit: upstream.commit,
+      changed: true
+    });
+
+    const candidate = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+    if (candidate.provenance.variants === undefined) {
+      throw new Error("test fixture did not create a variant candidate");
+    }
+    expect(candidate.provenance).toMatchObject({
+      oldCommit,
+      oldDigest,
+      commit: upstream.commit,
+      variants: {
+        "claude-code": { subtree: "dist/claude" },
+        codex: { subtree: "dist/codex" },
+        "opencode-v2": { subtree: "dist/opencode" }
+      }
+    });
+    expect(candidate.provenance.oldVariants).toBeUndefined();
+    expect(candidate.diff).toContain("--- old/SKILL.md");
+    expect(candidate.diff).toContain("+++ new/claude-code/SKILL.md");
+
+    const oldPath = path.join(root, "skills", "vendor", name, "SKILL.md");
+    await writeFile(oldPath, `${oldContent}tampered\n`, "utf8");
+    await expect(promoteVendoredSkill(paths, candidate.provenance.candidateId)).rejects.toThrow(
+      /integrity mismatch/
+    );
+    await writeFile(oldPath, oldContent, "utf8");
+
+    await promoteVendoredSkill(paths, candidate.provenance.candidateId);
+
+    await expect(readFile(oldPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    for (const target of vendoredSkillTargets) {
+      await expect(
+        readFile(path.join(root, "skills", "vendor", name, target, "SKILL.md"), "utf8")
+      ).resolves.toContain(
+        target === "opencode-v2" ? "OpenCode" : target === "claude-code" ? "Claude" : "Codex"
+      );
+    }
+    await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
+    const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
+    expect(lock.skills[name]).toEqual({
+      commit: upstream.commit,
+      digest: candidate.provenance.digest,
+      variants: {
+        "claude-code": candidate.provenance.variants["claude-code"].digest,
+        codex: candidate.provenance.variants.codex.digest,
+        "opencode-v2": candidate.provenance.variants["opencode-v2"].digest
+      }
+    });
+  });
+
+  it("stages and promotes a single subtree over a promoted variant state", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-single-migration-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-single-migration-home-"));
+    const name = "single-migration";
+    const entry = singleEntry(name);
+    const oldCommit = "a".repeat(40);
+    const oldFixture = await writeVariantTree(root, name);
+    await writeVariantLock(root, name, oldCommit, oldFixture.digest, oldFixture.digests);
+    await writeVendoredCatalog(root, entry);
+    const upstream = await gitRepository({
+      "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
+    });
+    const paths = createRuntimePaths({ root, home });
+
+    await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
+    const candidate = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+    expect(candidate.provenance).toMatchObject({
+      oldCommit,
+      oldDigest: oldFixture.digest,
+      commit: upstream.commit,
+      subtree: "dist/legacy"
+    });
+    expect(candidate.provenance.oldVariants).toEqual(oldFixture.digests);
+
+    await writeVariantLock(root, name, oldCommit, oldFixture.digest, {
+      ...oldFixture.digests,
+      codex: "b".repeat(64)
+    });
+    await expect(promoteVendoredSkill(paths, candidate.provenance.candidateId)).rejects.toThrow(
+      "Candidate baseline does not match the active vendor state"
+    );
+    await writeVariantLock(root, name, oldCommit, oldFixture.digest, oldFixture.digests);
+
+    await promoteVendoredSkill(paths, candidate.provenance.candidateId);
+
+    await expect(
+      readFile(path.join(root, "skills", "vendor", name, "SKILL.md"), "utf8")
+    ).resolves.toContain("description: new");
+    for (const target of vendoredSkillTargets) {
+      await expect(lstat(path.join(root, "skills", "vendor", name, target))).rejects.toMatchObject({
+        code: "ENOENT"
+      });
+    }
+    await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
+    const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
+    expect(lock.skills[name]).toEqual({
+      commit: upstream.commit,
+      digest: candidate.provenance.digest
+    });
+  });
+
+  it("binds candidate identity and reuse to the complete trusted baseline", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-baseline-bound-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-baseline-bound-home-"));
+    const name = "baseline-bound";
+    const entry = singleEntry(name);
+    await writeVendoredCatalog(root, entry);
+    const upstream = await gitRepository({
+      "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
+    });
+    const paths = createRuntimePaths({ root, home });
+
+    const withoutBaseline = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+    expect(withoutBaseline.provenance.oldCommit).toBeUndefined();
+    const originalProvenance = await readFile(
+      path.join(withoutBaseline.path, "provenance.yml"),
+      "utf8"
+    );
+
+    const oldCommit = "a".repeat(40);
+    const oldDigest = await writeLegacyState(
+      root,
+      name,
+      `---\nname: ${name}\ndescription: old\n---\n\n# Old\n`,
+      oldCommit
+    );
+    const withBaseline = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+    expect(withBaseline.provenance.candidateId).not.toBe(withoutBaseline.provenance.candidateId);
+    expect(withBaseline.provenance).toMatchObject({ oldCommit, oldDigest });
+    expect(await readFile(path.join(withoutBaseline.path, "provenance.yml"), "utf8")).toBe(
+      originalProvenance
+    );
+    const preserved = await readCandidate(paths, withoutBaseline.provenance.candidateId);
+    expect(preserved.provenance.oldCommit).toBeUndefined();
+    expect(preserved.provenance.oldDigest).toBeUndefined();
+
+    const repeated = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+    expect(repeated.provenance.candidateId).toBe(withBaseline.provenance.candidateId);
+  });
+
+  it("rejects promotion after the trusted baseline changes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-stale-baseline-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-stale-baseline-home-"));
+    const name = "stale-baseline";
+    const entry = singleEntry(name);
+    await writeVendoredCatalog(root, entry);
+    const firstCommit = "a".repeat(40);
+    const firstDigest = await writeLegacyState(
+      root,
+      name,
+      `---\nname: ${name}\ndescription: first\n---\n\n# First\n`,
+      firstCommit
+    );
+    const upstream = await gitRepository({
+      "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
+    });
+    const paths = createRuntimePaths({ root, home });
+    const candidate = await withLocalGitFetch(upstream.root, () =>
+      stageVendoredSkill(paths, entry, root, upstream.commit)
+    );
+
+    const secondCommit = "b".repeat(40);
+    const secondDigest = await writeLegacyState(
+      root,
+      name,
+      `---\nname: ${name}\ndescription: second\n---\n\n# Second\n`,
+      secondCommit
+    );
+    await expect(promoteVendoredSkill(paths, candidate.provenance.candidateId)).rejects.toThrow(
+      "Candidate baseline does not match the active vendor state"
+    );
+    expect(candidate.provenance).toMatchObject({ oldCommit: firstCommit, oldDigest: firstDigest });
+    expect(await readFile(path.join(root, "skills", "vendor", name, "SKILL.md"), "utf8")).toContain(
+      "description: second"
+    );
+    const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
+    expect(lock.skills[name]).toEqual({ commit: secondCommit, digest: secondDigest });
+  });
+
+  it("rejects a shape transition when the promoted payload has drifted", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-transition-drift-root-"));
+    const name = "transition-drift";
+    const entry = variantEntry(name);
+    const oldContent = `---\nname: ${name}\ndescription: old\n---\n\n# Old\n`;
+    const oldDigest = await writeLegacyState(root, name, oldContent, "a".repeat(40));
+    await writeVendoredCatalog(root, entry);
+    await writeFile(
+      path.join(root, "skills", "vendor", name, "SKILL.md"),
+      `${oldContent}changed\n`,
+      "utf8"
+    );
+
+    await expect(validateVendoredSkill(root, entry)).rejects.toThrow(/integrity mismatch/);
+    await expect(validateVendoredSkills(root)).resolves.toEqual([
+      expect.stringContaining(`expected ${oldDigest}`)
+    ]);
   });
 
   it("rejects an orphaned vendor lock entry", async () => {
@@ -273,19 +916,17 @@ describe("vendored skill contracts", () => {
 
     const files = [{ path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(newContent) }];
     const digest = digestSkillFiles(files);
-    const candidateId = (() => {
-      const hash = createHash("sha256");
-      for (const value of [
-        name,
-        "https://example.invalid/skills.git",
-        "skills/test-skill",
-        "b".repeat(40),
-        digest
-      ]) {
-        hash.update(frame(Buffer.from(value, "utf8")));
-      }
-      return hash.digest("hex");
-    })();
+    const candidateId = candidateIdentityForTest(
+      "single",
+      name,
+      "https://example.invalid/skills.git",
+      "main",
+      path.join(home, "not-the-active-home"),
+      ["skills/test-skill"],
+      "b".repeat(40),
+      digest,
+      { kind: "single", commit: "a".repeat(40), digest: oldDigest }
+    );
     const candidatePath = path.join(
       skillCandidatesRoot(createRuntimePaths({ root, home })),
       candidateId
@@ -341,5 +982,85 @@ describe("vendored skill contracts", () => {
     await expect(
       lstat(path.join(home, ".mindframe-z", "configs", "personal", "skills"))
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("promotes one logical provider-variant skill and preserves per-target provenance", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-promote-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-promote-home-"));
+    const name = "variant-skill";
+    const oldCommit = "a".repeat(40);
+    const newCommit = "b".repeat(40);
+    const repository = "https://example.invalid/skills.git";
+    await writeFile(path.join(root, "mfz_home.yml"), "description: Test\n", "utf8");
+    await mkdir(path.join(root, "catalog"), { recursive: true });
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [
+          {
+            name,
+            source: "vendored",
+            repo: repository,
+            ref: "main",
+            variants: {
+              "claude-code": "dist/claude",
+              codex: "dist/codex",
+              "opencode-v2": "dist/opencode"
+            }
+          }
+        ]
+      }),
+      "utf8"
+    );
+    const fixture = await writeVariantTree(root, name);
+    await writeVariantLock(root, name, oldCommit, fixture.digest, fixture.digests);
+    const paths = createRuntimePaths({ root, home });
+    const candidateId = await writeVariantCandidate(
+      paths,
+      root,
+      name,
+      fixture.files,
+      oldCommit,
+      newCommit
+    );
+
+    await promoteVendoredSkill(paths, candidateId);
+
+    const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
+    expect(lock.skills[name]).toEqual({
+      commit: newCommit,
+      digest: fixture.digest,
+      variants: fixture.digests
+    });
+    for (const target of vendoredSkillTargets) {
+      await expect(
+        readFile(path.join(root, "skills", "vendor", name, target, "SKILL.md"), "utf8")
+      ).resolves.toContain(target);
+    }
+  });
+
+  it("rejects a provider-variant candidate after its source is tampered", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-candidate-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-candidate-home-"));
+    const name = "variant-skill";
+    const fixture = await writeVariantTree(root, name);
+    const paths = createRuntimePaths({ root, home });
+    const candidateId = await writeVariantCandidate(
+      paths,
+      root,
+      name,
+      fixture.files,
+      "a".repeat(40),
+      "b".repeat(40)
+    );
+    await writeFile(
+      path.join(skillCandidatesRoot(paths), candidateId, "source", "codex", "SKILL.md"),
+      `---\nname: ${name}\ndescription: tampered\n---\n`,
+      "utf8"
+    );
+
+    await expect(
+      revalidateCandidate(paths, await readCandidate(paths, candidateId))
+    ).rejects.toThrow("Candidate content digest changed");
   });
 });

@@ -3,9 +3,48 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
+import YAML from "yaml";
 import { profileSchema } from "./manifests.js";
 import { deepMerge, mergeProfiles, resolveProfile } from "./profile.js";
 import { createRuntimePaths } from "./paths.js";
+import { digestSkillFiles, readSkillFiles } from "../skills/tree.js";
+
+const variantTargets = ["claude-code", "codex", "opencode-v2"] as const;
+
+async function writeVariantSkillFixture(
+  root: string,
+  name: string
+): Promise<{
+  digest: string;
+  variants: Record<(typeof variantTargets)[number], string>;
+}> {
+  const files: Record<
+    (typeof variantTargets)[number],
+    Awaited<ReturnType<typeof readSkillFiles>>
+  > = {
+    "claude-code": [],
+    codex: [],
+    "opencode-v2": []
+  };
+  for (const target of variantTargets) {
+    const directory = path.join(root, "skills", "vendor", name, target);
+    const content = `---\nname: ${name}\ndescription: ${target}\n---\n\n# ${target}\n`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "SKILL.md"), content, "utf8");
+    files[target] = await readSkillFiles(directory);
+  }
+  const records = [];
+  const variants: Record<(typeof variantTargets)[number], string> = {
+    "claude-code": "",
+    codex: "",
+    "opencode-v2": ""
+  };
+  for (const target of variantTargets) {
+    variants[target] = digestSkillFiles(files[target]);
+    for (const file of files[target]) records.push({ ...file, path: `${target}/${file.path}` });
+  }
+  return { digest: digestSkillFiles(records), variants };
+}
 
 async function writeHome(
   root: string,
@@ -757,6 +796,144 @@ describe("home inheritance", () => {
     const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
 
     expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
+  });
+
+  it("resolves provider variant provenance for every enabled harness", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-profile-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-variant-profile-machine-"));
+    const name = "variant-skill";
+    const repository = "https://example.invalid/skills.git";
+    await writeHome(root);
+    const digests = await writeVariantSkillFixture(root, name);
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [
+          {
+            name,
+            source: "vendored",
+            repo: repository,
+            ref: "main",
+            variants: {
+              "claude-code": "dist/claude",
+              codex: "dist/codex",
+              "opencode-v2": "dist/opencode"
+            }
+          }
+        ]
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(root, "skills"), { recursive: true });
+    await writeFile(
+      path.join(root, "skills", "vendor.lock.yml"),
+      YAML.stringify({
+        skills: {
+          [name]: {
+            commit: "a".repeat(40),
+            digest: digests.digest,
+            variants: digests.variants
+          }
+        }
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      [
+        "name: work",
+        "agents: [opencode-v2, claude-code, codex]",
+        "skills:",
+        `  ${name}:`,
+        "    agents: { opencode: true, claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
+    const skill = resolved.enabledSkills[0];
+
+    expect(skill).toMatchObject({
+      name,
+      source: "vendored",
+      sourceRoot: root,
+      targets: ["opencode", "claude-code", "codex"],
+      vendor: {
+        repository,
+        ref: "main",
+        commit: "a".repeat(40),
+        digest: digests.digest,
+        variants: {
+          "claude-code": { subtree: "dist/claude", digest: digests.variants["claude-code"] },
+          codex: { subtree: "dist/codex", digest: digests.variants.codex },
+          "opencode-v2": { subtree: "dist/opencode", digest: digests.variants["opencode-v2"] }
+        }
+      }
+    });
+  });
+
+  it("resolves a catalog-ahead shape transition without trusting the desired payload", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-shape-transition-profile-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-shape-transition-profile-machine-"));
+    const name = "transition-skill";
+    await writeHome(root);
+
+    const source = path.join(root, "skills", "vendor", name);
+    const content = `---\nname: ${name}\ndescription: legacy\n---\n\n# Legacy\n`;
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, "SKILL.md"), content, "utf8");
+    const files = await readSkillFiles(source);
+    await writeFile(
+      path.join(root, "skills", "vendor.lock.yml"),
+      YAML.stringify({
+        skills: {
+          [name]: { commit: "a".repeat(40), digest: digestSkillFiles(files) }
+        }
+      }),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [
+          {
+            name,
+            source: "vendored",
+            repo: "https://example.invalid/skills.git",
+            ref: "main",
+            variants: {
+              "claude-code": "dist/claude",
+              codex: "dist/codex",
+              "opencode-v2": "dist/opencode"
+            }
+          }
+        ]
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      [
+        "name: work",
+        "agents: [opencode-v2, claude-code, codex]",
+        "skills:",
+        `  ${name}:`,
+        "    agents: { opencode: true, claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
+    expect(resolved.enabledSkills[0]).toMatchObject({
+      name,
+      source: "vendored",
+      targets: ["opencode", "claude-code", "codex"]
+    });
+    expect(resolved.enabledSkills[0]).not.toHaveProperty("vendor");
   });
 
   it("retains an explicitly configured upstream home as an extra folder", async () => {

@@ -11,22 +11,68 @@
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
       },
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "commit": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{40}$"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "commit",
+              "digest"
+            ],
+            "additionalProperties": false
           },
-          "digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+          {
+            "type": "object",
+            "properties": {
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "variants": {
+                "type": "object",
+                "properties": {
+                  "claude-code": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "codex": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "opencode-v2": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "claude-code",
+                  "codex",
+                  "opencode-v2"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "commit",
+              "digest",
+              "variants"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "commit",
-          "digest"
-        ],
-        "additionalProperties": false
+        ]
       }
     }
   },

@@ -157,6 +157,14 @@ export function skillSnapshotDir(paths: RuntimePaths, profileName: string): stri
   return path.join(profileConfigsDir(paths, profileName), "skills");
 }
 
+export function providerSkillSnapshotDir(
+  paths: RuntimePaths,
+  profileName: string,
+  target: Exclude<AgentName, "pi">
+): string {
+  return path.join(profileConfigsDir(paths, profileName), target, "skills");
+}
+
 export function opencodeV2SkillSnapshotDir(paths: RuntimePaths, profileName: string): string {
   return path.join(profileConfigsDir(paths, profileName), "opencode-v2", "skills");
 }

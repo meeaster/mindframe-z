@@ -6,7 +6,7 @@
       "default": [],
       "type": "array",
       "items": {
-        "oneOf": [
+        "anyOf": [
           {
             "type": "object",
             "properties": {
@@ -36,44 +36,109 @@
             "additionalProperties": false
           },
           {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "vendored"
+                  },
+                  "repo": {
+                    "type": "string",
+                    "pattern": "^https:\\/\\/(?![^/]*@)\\S+$"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!-)(?!.*\\s).+$"
+                  },
+                  "subtree": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "repo",
+                  "ref",
+                  "subtree"
+                ],
+                "additionalProperties": false
               },
-              "description": {
-                "default": "",
-                "type": "string"
-              },
-              "source": {
-                "type": "string",
-                "const": "vendored"
-              },
-              "repo": {
-                "type": "string",
-                "pattern": "^https:\\/\\/(?![^/]*@)\\S+$"
-              },
-              "ref": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "^(?!-)(?!.*\\s).+$"
-              },
-              "subtree": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "vendored"
+                  },
+                  "repo": {
+                    "type": "string",
+                    "pattern": "^https:\\/\\/(?![^/]*@)\\S+$"
+                  },
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!-)(?!.*\\s).+$"
+                  },
+                  "variants": {
+                    "type": "object",
+                    "properties": {
+                      "claude-code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+                      },
+                      "codex": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+                      },
+                      "opencode-v2": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+                      }
+                    },
+                    "required": [
+                      "claude-code",
+                      "codex",
+                      "opencode-v2"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "repo",
+                  "ref",
+                  "variants"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "name",
-              "source",
-              "repo",
-              "ref",
-              "subtree"
-            ],
-            "additionalProperties": false
+            ]
           },
           {
             "type": "object",

@@ -7,6 +7,7 @@ import {
   loadManifests,
   mcpServerSchema,
   skillSchema,
+  skillsManifestSchema,
   validateManifests,
   vendorLockSchema
 } from "./manifests.js";
@@ -245,7 +246,9 @@ describe("loadManifests", () => {
 describe("generated skill schema", () => {
   it("retains transport and ref safety constraints", async () => {
     const schema = await readGeneratedSchema("skills.schema.json");
-    const vendored = schema.properties?.skills?.items?.oneOf?.[1];
+    const vendored = schema.properties?.skills?.items?.anyOf
+      ?.flatMap((branch) => branch.anyOf ?? [branch])
+      .find((branch) => branch.properties?.source?.const === "vendored");
     expect(vendored?.properties?.repo?.pattern).toContain("@");
     expect(vendored?.properties?.ref?.pattern).toContain("\\s");
   });
@@ -452,6 +455,83 @@ describe("skill manifest schemas", () => {
         subtree: "skills/trusted"
       })
     ).toMatchObject({ source: "git", commit: "a".repeat(40) });
+  });
+
+  it("accepts one vendored skill with complete provider variant subtrees", () => {
+    const entry = skillSchema.parse({
+      name: "variant",
+      source: "vendored",
+      repo: "https://example.invalid/skills.git",
+      ref: "main",
+      variants: {
+        "claude-code": "dist/claude",
+        codex: "dist/codex",
+        "opencode-v2": "dist/opencode"
+      }
+    });
+
+    expect(entry).toMatchObject({
+      source: "vendored",
+      variants: {
+        "claude-code": "dist/claude",
+        codex: "dist/codex",
+        "opencode-v2": "dist/opencode"
+      }
+    });
+
+    expect(
+      vendorLockSchema.parse({
+        skills: {
+          variant: {
+            commit: "a".repeat(40),
+            digest: "b".repeat(64),
+            variants: {
+              "claude-code": "c".repeat(64),
+              codex: "d".repeat(64),
+              "opencode-v2": "e".repeat(64)
+            }
+          }
+        }
+      })
+    ).toMatchObject({ skills: { variant: { variants: { codex: "d".repeat(64) } } } });
+  });
+
+  it("requires exactly the three provider variant paths", () => {
+    const base = {
+      name: "variant",
+      source: "vendored" as const,
+      repo: "https://example.invalid/skills.git",
+      ref: "main"
+    };
+    const complete = {
+      "claude-code": "dist/claude",
+      codex: "dist/codex",
+      "opencode-v2": "dist/opencode"
+    };
+
+    expect(() =>
+      skillSchema.parse({
+        ...base,
+        variants: { "claude-code": "dist/claude", codex: "dist/codex" }
+      })
+    ).toThrow();
+    expect(() =>
+      skillSchema.parse({ ...base, variants: { ...complete, extra: "dist/extra" } })
+    ).toThrow();
+    expect(() =>
+      skillSchema.parse({ ...base, variants: complete, subtree: "dist/shared" })
+    ).toThrow();
+    expect(() =>
+      skillSchema.parse({ ...base, variants: complete, skill: "dist/shared" })
+    ).toThrow();
+    expect(() =>
+      skillsManifestSchema.parse({
+        skills: [
+          { ...base, variants: complete },
+          { ...base, variants: complete }
+        ]
+      })
+    ).toThrow(/duplicate skill name/);
   });
 
   it("rejects legacy installer declarations and unsafe transports", () => {

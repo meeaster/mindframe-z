@@ -37,7 +37,7 @@ argument-hint: "<candidate-id>"
 
 ### 1. Bind the candidate
 
-Read the candidate provenance and verify that its identity, repository, subtree, old commit, new commit, and content digest match the candidate directory. Treat a mismatch as a failed review.
+Read the candidate provenance and verify that its identity, repository, ref, complete trusted baseline (shape, old commit, aggregate digest, and variant digests where applicable), new commit, content digest, and complete target-to-subtree/digest set match the candidate directory. Treat a mismatch as a failed review.
 
 - [ ] The candidate identity and digest are recorded in the report.
 - [ ] The candidate is still quarantined and no candidate file has been executed.

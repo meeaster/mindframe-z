@@ -207,6 +207,17 @@ const skillFields = {
   description: z.string().default("")
 };
 
+export const vendoredSkillTargets = ["claude-code", "codex", "opencode-v2"] as const;
+export const vendoredSkillTargetSchema = z.enum(vendoredSkillTargets);
+
+const vendoredSkillVariantsSchema = z
+  .object({
+    "claude-code": skillPathSchema,
+    codex: skillPathSchema,
+    "opencode-v2": skillPathSchema
+  })
+  .strict();
+
 const localSkillSchema = z
   .object({
     ...skillFields,
@@ -215,19 +226,31 @@ const localSkillSchema = z
   })
   .strict();
 
-const vendoredSkillSchema = z
-  .object({
-    ...skillFields,
-    source: z.literal("vendored"),
-    repo: httpsRepositorySchema,
-    ref: z
-      .string()
-      .min(1)
-      .regex(/^(?!-)(?!.*\s).+$/, "must not start with an option marker or contain whitespace")
-      .refine(safeGitRef, "must be a Git ref without option or whitespace characters"),
-    subtree: skillPathSchema
-  })
-  .strict();
+const vendoredSkillFields = {
+  ...skillFields,
+  source: z.literal("vendored"),
+  repo: httpsRepositorySchema,
+  ref: z
+    .string()
+    .min(1)
+    .regex(/^(?!-)(?!.*\s).+$/, "must not start with an option marker or contain whitespace")
+    .refine(safeGitRef, "must be a Git ref without option or whitespace characters")
+};
+
+const vendoredSkillSchema = z.union([
+  z
+    .object({
+      ...vendoredSkillFields,
+      subtree: skillPathSchema
+    })
+    .strict(),
+  z
+    .object({
+      ...vendoredSkillFields,
+      variants: vendoredSkillVariantsSchema
+    })
+    .strict()
+]);
 
 const gitSkillSchema = z
   .object({
@@ -239,18 +262,37 @@ const gitSkillSchema = z
   })
   .strict();
 
-export const skillSchema = z.discriminatedUnion("source", [
-  localSkillSchema,
-  vendoredSkillSchema,
-  gitSkillSchema
-]);
+export const skillSchema = z.union([localSkillSchema, vendoredSkillSchema, gitSkillSchema]);
 
-export const vendorLockEntrySchema = z
+const vendorCommitSchema = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/, "must be a full lowercase Git commit SHA");
+const skillDigestSchema = z.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 content digest");
+export const vendorLockVariantDigestsSchema = z
   .object({
-    commit: z.string().regex(/^[0-9a-f]{40}$/, "must be a full lowercase Git commit SHA"),
-    digest: z.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 content digest")
+    "claude-code": skillDigestSchema,
+    codex: skillDigestSchema,
+    "opencode-v2": skillDigestSchema
   })
   .strict();
+const vendorLockSingleEntrySchema = z
+  .object({
+    commit: vendorCommitSchema,
+    digest: skillDigestSchema
+  })
+  .strict();
+const vendorLockVariantsEntrySchema = z
+  .object({
+    commit: vendorCommitSchema,
+    digest: skillDigestSchema,
+    variants: vendorLockVariantDigestsSchema
+  })
+  .strict();
+
+export const vendorLockEntrySchema = z.union([
+  vendorLockSingleEntrySchema,
+  vendorLockVariantsEntrySchema
+]);
 
 export const vendorLockSchema = z
   .object({
@@ -258,9 +300,23 @@ export const vendorLockSchema = z
   })
   .strict();
 
-export const skillsManifestSchema = z.object({
-  skills: z.array(skillSchema).default([])
-});
+export const skillsManifestSchema = z
+  .object({
+    skills: z.array(skillSchema).default([])
+  })
+  .superRefine(({ skills }, context) => {
+    const seen = new Set<string>();
+    for (const [index, skill] of skills.entries()) {
+      if (seen.has(skill.name)) {
+        context.addIssue({
+          code: "custom",
+          message: `duplicate skill name: ${skill.name}`,
+          path: ["skills", index, "name"]
+        });
+      }
+      seen.add(skill.name);
+    }
+  });
 
 const mcpServerBaseSchema = z
   .object({
@@ -660,8 +716,11 @@ export const machineSchema = z.object({
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
+export type VendoredSkillTarget = z.infer<typeof vendoredSkillTargetSchema>;
+export type VendoredSkillVariantMap = z.infer<typeof vendoredSkillVariantsSchema>;
 export type VendorLock = z.infer<typeof vendorLockSchema>;
 export type VendorLockEntry = z.infer<typeof vendorLockEntrySchema>;
+export type VendorLockVariantDigests = z.infer<typeof vendorLockVariantDigestsSchema>;
 export type ToolTargetName = z.infer<typeof targetSchema>;
 export type ProfileAgentDefaults = Partial<Record<CapabilityAgentName, boolean>>;
 export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;

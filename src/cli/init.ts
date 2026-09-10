@@ -350,13 +350,13 @@ Add a trusted Git skill:
 
 Add a vendored skill:
 
-1. Declare \`source: vendored\`, an HTTPS \`repo:\`, tracked \`ref:\`, and explicit upstream \`subtree:\`. Copy only the selected subtree to \`skills/vendor/<name>/\` and record its full commit plus digest in \`skills/vendor.lock.yml\`.
+1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode-v2\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
 2. Check without mutation: \`mfz skills check\`.
 3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
 4. Invoke \`/skill-update-review <candidate-id>\`. Candidate files are hostile evidence; inspect every file and deterministic finding without executing anything.
 5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the promoted skill appears for its selected agents and the profile reports healthy links. Promotion does not apply configuration or create links.
 
-Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`; harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
+Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode-v2/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 
 Unpinned \`source: git\` entries are legacy migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 

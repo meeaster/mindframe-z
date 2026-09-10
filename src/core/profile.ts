@@ -9,6 +9,7 @@ import {
   type ProfileMcpConfig,
   type ProfileAgentDefaults,
   type CapabilityAgentName,
+  type VendoredSkillTarget,
   type ProfileManifest,
   type InstructionReference,
   type CapabilityGroup,
@@ -102,18 +103,28 @@ export interface ResolvedMcpServer {
   };
 }
 
+type ResolvedVendor =
+  | {
+      repository: string;
+      ref: string;
+      subtree: string;
+      commit: string;
+      digest: string;
+    }
+  | {
+      repository: string;
+      ref: string;
+      variants: Record<VendoredSkillTarget, { subtree: string; digest: string }>;
+      commit: string;
+      digest: string;
+    };
+
 export type ResolvedSkill = SkillEntry & {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
   targets: CapabilityAgentName[];
   sourceRoot: string;
-  vendor?: {
-    repository: string;
-    ref: string;
-    subtree: string;
-    commit: string;
-    digest: string;
-  };
+  vendor?: ResolvedVendor;
 };
 
 export type TargetedMcpServer = ResolvedMcpServer & {
@@ -599,16 +610,48 @@ async function resolveEnabledSkills(
       validatedVendorRoots.add(skill.sourceRoot);
     }
     const lock = await readVendorLock(skill.sourceRoot);
-    const entry = lock.skills[skill.name];
-    if (!entry) throw new Error(`Vendored skill ${skill.name} has no vendor lock entry`);
+    const lockEntry = lock.skills[skill.name];
+    if (!lockEntry) throw new Error(`Vendored skill ${skill.name} has no vendor lock entry`);
     await validateVendoredSkill(skill.sourceRoot, skill, lock);
-    skill.vendor = {
-      repository: skill.repo,
-      ref: skill.ref,
-      subtree: skill.subtree,
-      commit: entry.commit,
-      digest: entry.digest
-    };
+    // The catalog may lead the promoted lock during a shape migration. Keep the desired entry
+    // available to read-only profile commands without assigning it trusted vendor provenance.
+    if ("variants" in skill !== "variants" in lockEntry) continue;
+    if ("variants" in skill) {
+      if (!("variants" in lockEntry)) {
+        throw new Error(`Vendored skill ${skill.name} variant lock entry is missing variants`);
+      }
+      skill.vendor = {
+        repository: skill.repo,
+        ref: skill.ref,
+        variants: {
+          "claude-code": {
+            subtree: skill.variants["claude-code"],
+            digest: lockEntry.variants["claude-code"]
+          },
+          codex: {
+            subtree: skill.variants.codex,
+            digest: lockEntry.variants.codex
+          },
+          "opencode-v2": {
+            subtree: skill.variants["opencode-v2"],
+            digest: lockEntry.variants["opencode-v2"]
+          }
+        },
+        commit: lockEntry.commit,
+        digest: lockEntry.digest
+      };
+    } else {
+      if ("variants" in lockEntry) {
+        throw new Error(`Vendored skill ${skill.name} lock entry unexpectedly contains variants`);
+      }
+      skill.vendor = {
+        repository: skill.repo,
+        ref: skill.ref,
+        subtree: skill.subtree,
+        commit: lockEntry.commit,
+        digest: lockEntry.digest
+      };
+    }
   }
   return enabled;
 }
@@ -717,9 +760,10 @@ export async function resolveProfile(
   if (includeOpenCodeV2) assertOpenCodeV2ConfigOwned(profile);
   const skillCapabilityAgents = [
     ...new Set(
-      [...agents, ...evaluateAgents]
-        .map(capabilityAgent)
-        .filter((agent): agent is CapabilityAgentName => agent !== undefined)
+      [...agents, ...evaluateAgents].flatMap((agent) => {
+        const capability = capabilityAgent(agent);
+        return capability === undefined ? [] : [capability];
+      })
     )
   ];
 
@@ -810,9 +854,10 @@ export function executorMcpServers(
   profile: ResolvedProfile,
   targets: readonly AgentName[] = profile.agents
 ): ResolvedMcpServer[] {
-  const capabilityTargets = targets
-    .map(capabilityAgent)
-    .filter((target): target is CapabilityAgentName => target !== undefined);
+  const capabilityTargets = targets.flatMap((target) => {
+    const capability = capabilityAgent(target);
+    return capability === undefined ? [] : [capability];
+  });
   return profile.mcpServers.filter(
     (entry) =>
       entry.executor !== undefined &&

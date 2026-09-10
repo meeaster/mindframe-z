@@ -5,7 +5,54 @@ import { Writable } from "node:stream";
 import { execa } from "execa";
 import { parse } from "smol-toml";
 import { z } from "zod";
+import { vendoredSkillTargets, type VendoredSkillTarget } from "../../src/core/manifests.js";
 import type { RuntimePaths } from "../../src/core/paths.js";
+import { digestSkillFiles, type SkillFileRecord } from "../../src/skills/tree.js";
+
+export const providerVariantTargets = vendoredSkillTargets;
+type ProviderVariantTarget = VendoredSkillTarget;
+
+export interface ProviderVariantFixture {
+  contents: Record<ProviderVariantTarget, string>;
+  digests: Record<ProviderVariantTarget, string>;
+  digest: string;
+}
+
+export async function writeProviderVariantSkill(
+  root: string,
+  name: string
+): Promise<ProviderVariantFixture> {
+  const contents = {
+    "claude-code": `---\nname: ${name}\ndescription: Claude variant\n---\n\n# Claude variant\n`,
+    codex: `---\nname: ${name}\ndescription: Codex variant\n---\n\n# Codex variant\n`,
+    "opencode-v2": `---\nname: ${name}\ndescription: OpenCode variant\n---\n\n# OpenCode variant\n`
+  } satisfies Record<ProviderVariantTarget, string>;
+  const files = {
+    "claude-code": [
+      { path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents["claude-code"]) }
+    ],
+    codex: [{ path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents.codex) }],
+    "opencode-v2": [
+      { path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents["opencode-v2"]) }
+    ]
+  } satisfies Record<ProviderVariantTarget, SkillFileRecord[]>;
+  const records: SkillFileRecord[] = [];
+  const digests: Record<ProviderVariantTarget, string> = {
+    "claude-code": "",
+    codex: "",
+    "opencode-v2": ""
+  };
+  for (const target of providerVariantTargets) {
+    const directory = path.join(root, "skills", "vendor", name, target);
+    await mkdir(directory, { recursive: true });
+    for (const file of files[target]) {
+      await writeFile(path.join(directory, file.path), file.bytes);
+      records.push({ ...file, path: `${target}/${file.path}` });
+    }
+    digests[target] = digestSkillFiles(files[target]);
+  }
+  return { contents, digests, digest: digestSkillFiles(records) };
+}
 
 export const projectRoot = path.resolve(import.meta.dirname, "../..");
 

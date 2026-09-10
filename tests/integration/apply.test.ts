@@ -13,12 +13,18 @@ import {
 import path from "node:path";
 import { execa } from "execa";
 import { parse } from "smol-toml";
+import YAML from "yaml";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, configsPath, fixtureReferenceSource, setupIntegrationFixture } from "./support.js";
 import { applyConfig } from "../../src/cli/apply.js";
 import { operationChanged, type OperationOutcome } from "../../src/core/operations.js";
-import { createRuntimePaths, referenceStatePath } from "../../src/core/paths.js";
+import {
+  createRuntimePaths,
+  providerSkillSnapshotDir,
+  referenceStatePath
+} from "../../src/core/paths.js";
+import { providerVariantTargets, writeProviderVariantSkill } from "./support.js";
 
 const JsonObject = z.object({}).passthrough();
 const McpEntry = z
@@ -146,6 +152,58 @@ describe("apply integration", () => {
         (outcome) => outcome.significance === "meaningful" && operationChanged(outcome)
       )
     ).toEqual([]);
+  });
+
+  it("applies provider variants to target-scoped snapshots under one skill name", async () => {
+    const name = "provider-skill";
+    const fixture = await writeProviderVariantSkill(root, name);
+    const skillsPath = path.join(root, "catalog", "skills.yml");
+    await writeFile(
+      skillsPath,
+      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: https://example.invalid/skills.git\n    ref: main\n    variants:\n      claude-code: dist/claude\n      codex: dist/codex\n      opencode-v2: dist/opencode\n`,
+      "utf8"
+    );
+    await mkdir(path.join(root, "skills"), { recursive: true });
+    await writeFile(
+      path.join(root, "skills", "vendor.lock.yml"),
+      YAML.stringify({
+        skills: {
+          [name]: {
+            commit: "a".repeat(40),
+            digest: fixture.digest,
+            variants: fixture.digests
+          }
+        }
+      }),
+      "utf8"
+    );
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const profile = await readFile(profilePath, "utf8");
+    await writeFile(
+      profilePath,
+      profile
+        .replace("agents: [opencode-v2, claude-code]", "agents: [opencode-v2, claude-code, codex]")
+        .replace(
+          "mcp:\n",
+          `  ${name}:\n    agents: { opencode: true, claude-code: true, codex: true }\nmcp:\n`
+        ),
+      "utf8"
+    );
+
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
+
+    const paths = createRuntimePaths({ root, home });
+    for (const target of providerVariantTargets) {
+      await expect(
+        readFile(
+          path.join(providerSkillSnapshotDir(paths, "personal", target), name, "SKILL.md"),
+          "utf8"
+        )
+      ).resolves.toBe(fixture.contents[target]);
+    }
+    await expect(lstat(configsPath(home, "personal", "skills", name))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
   });
 
   it("keeps linked OpenCode files and links unchanged across repeat apply", async () => {

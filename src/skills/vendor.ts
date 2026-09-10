@@ -8,9 +8,13 @@ import {
   skillsManifestSchema,
   skillSchema,
   vendorLockSchema,
+  vendorLockVariantDigestsSchema,
+  vendoredSkillTargets,
+  type VendoredSkillTarget,
   type SkillEntry,
   type VendorLock,
-  type VendorLockEntry
+  type VendorLockEntry,
+  type VendorLockVariantDigests
 } from "../core/manifests.js";
 import {
   expandHome,
@@ -18,11 +22,13 @@ import {
   vendorLockPath,
   type RuntimePaths
 } from "../core/paths.js";
-import { pathExists } from "../core/fs-util.js";
+import { pathExists, readDirEntries } from "../core/fs-util.js";
 import { fetchCommit, normalizedRepository, readGitSkillFiles } from "./git.js";
 import { commitVendoredPromotion, recoverVendoredPromotion } from "./transaction.js";
 import {
   comparePosixBytes,
+  MAX_SKILL_BYTES,
+  MAX_SKILL_FILES,
   copySkillFiles,
   digestSkillFiles,
   frame,
@@ -43,30 +49,47 @@ export { digestSkillFiles, digestSkillTree, readSkillFiles, validateSkillRecords
 const fullCommitPattern = /^[0-9a-f]{40}$/;
 
 const candidateHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
-const candidateProvenanceSchema = z
+const candidateVariantSchema = z
+  .object({ subtree: z.string().min(1), digest: candidateHashSchema })
+  .strict();
+const candidateVariantsSchema = z
   .object({
-    candidateId: candidateHashSchema,
-    name: z.string().min(1),
-    repository: z.string().url(),
-    ref: z.string().min(1).refine(safeGitRevision),
-    subtree: z.string().min(1),
-    commit: z.string().regex(fullCommitPattern),
-    digest: candidateHashSchema,
-    sourceRoot: z.string().min(1),
-    oldCommit: z.string().regex(fullCommitPattern).optional(),
-    oldDigest: candidateHashSchema.optional(),
-    artifacts: z
-      .object({
-        inventory: candidateHashSchema,
-        findings: candidateHashSchema,
-        diff: candidateHashSchema,
-        digest: candidateHashSchema
-      })
-      .strict()
+    "claude-code": candidateVariantSchema,
+    codex: candidateVariantSchema,
+    "opencode-v2": candidateVariantSchema
   })
-  .strict()
+  .strict();
+const candidateOldVariantsSchema = vendorLockVariantDigestsSchema;
+const candidateProvenanceFields = {
+  candidateId: candidateHashSchema,
+  name: z.string().min(1),
+  repository: z.string().url(),
+  ref: z.string().min(1).refine(safeGitRevision),
+  commit: z.string().regex(fullCommitPattern),
+  digest: candidateHashSchema,
+  sourceRoot: z.string().min(1),
+  oldCommit: z.string().regex(fullCommitPattern).optional(),
+  oldDigest: candidateHashSchema.optional(),
+  oldVariants: candidateOldVariantsSchema.optional(),
+  artifacts: z
+    .object({
+      inventory: candidateHashSchema,
+      findings: candidateHashSchema,
+      diff: candidateHashSchema,
+      digest: candidateHashSchema
+    })
+    .strict()
+};
+const candidateProvenanceSchema = z
+  .union([
+    z.object({ ...candidateProvenanceFields, subtree: z.string().min(1) }).strict(),
+    z.object({ ...candidateProvenanceFields, variants: candidateVariantsSchema }).strict()
+  ])
   .refine((value) => Boolean(value.oldCommit) === Boolean(value.oldDigest), {
     message: "oldCommit and oldDigest must be supplied together"
+  })
+  .refine((value) => value.oldVariants === undefined || value.oldCommit !== undefined, {
+    message: "oldVariants requires oldCommit and oldDigest"
   });
 
 const candidateInventorySchema = z
@@ -92,8 +115,15 @@ const legacySkillInputSchema = z.looseObject({
 });
 type CatalogDocument = z.infer<typeof legacyCatalogSchema>;
 
+type VendoredSkill = Extract<SkillEntry, { source: "vendored" }>;
+type VendoredVariantSkill = Extract<VendoredSkill, { variants: object }>;
+
+export type VendoredPayload =
+  | { kind: "single"; files: SkillFileRecord[] }
+  | { kind: "variants"; files: Record<VendoredSkillTarget, SkillFileRecord[]> };
+
 interface CatalogEntryResolution {
-  entry: Extract<SkillEntry, { source: "vendored" }>;
+  entry: VendoredSkill;
   migrated: boolean;
   document?: CatalogDocument;
 }
@@ -137,17 +167,17 @@ async function activeHomeRoots(
   return roots;
 }
 
-export interface CandidateProvenance {
+interface CandidateProvenanceBase {
   candidateId: string;
   name: string;
   repository: string;
   ref: string;
-  subtree: string;
   commit: string;
   digest: string;
   sourceRoot: string;
   oldCommit?: string;
   oldDigest?: string;
+  oldVariants?: VendorLockVariantDigests;
   artifacts?: {
     inventory: string;
     findings: string;
@@ -155,6 +185,21 @@ export interface CandidateProvenance {
     digest: string;
   };
 }
+
+interface CandidateVariantProvenance {
+  subtree: string;
+  digest: string;
+}
+
+export type CandidateProvenance =
+  | (Omit<CandidateProvenanceBase, "subtree"> & {
+      subtree: string;
+      variants?: never;
+    })
+  | (Omit<CandidateProvenanceBase, "subtree"> & {
+      variants: Record<VendoredSkillTarget, CandidateVariantProvenance>;
+      subtree?: never;
+    });
 
 export interface SkillCandidate {
   path: string;
@@ -169,25 +214,315 @@ export type LegacySkillEntry = Extract<SkillEntry, { source: "vendored" }> & {
   sourceRoot: string;
 };
 
+function isVariantSkill(entry: VendoredSkill): entry is VendoredVariantSkill {
+  return "variants" in entry;
+}
+
+export function vendoredSkillSourcePath(
+  root: string,
+  name: string,
+  target?: VendoredSkillTarget
+): string {
+  const source = path.join(root, "skills", "vendor", name);
+  return target === undefined ? source : path.join(source, target);
+}
+
+function payloadRecords(payload: VendoredPayload): SkillFileRecord[] {
+  if (payload.kind === "single") return payload.files;
+  return vendoredSkillTargets.flatMap((target) =>
+    payload.files[target].map((file) => ({ ...file, path: `${target}/${file.path}` }))
+  );
+}
+
+function payloadDigest(payload: VendoredPayload): string {
+  return digestSkillFiles(payloadRecords(payload));
+}
+
+function payloadFindings(payload: VendoredPayload): SkillFinding[] {
+  if (payload.kind === "single") return staticFindings(payload.files);
+  return vendoredSkillTargets.flatMap((target) =>
+    staticFindings(payload.files[target]).map((finding) => ({
+      ...finding,
+      path: `${target}/${finding.path}`
+    }))
+  );
+}
+
+function assertPayloadLimits(files: readonly SkillFileRecord[]): void {
+  if (files.length > MAX_SKILL_FILES) throw new Error("Skill source exceeds the file-count limit");
+  const totalBytes = files.reduce((total, file) => total + file.bytes.byteLength, 0);
+  if (totalBytes > MAX_SKILL_BYTES) throw new Error("Skill source exceeds the 32 MiB size limit");
+}
+
+function validatePayloadRecords(payload: VendoredPayload): void {
+  assertPayloadLimits(payloadRecords(payload));
+  if (payload.kind === "single") {
+    validateSkillRecords(payload.files);
+    return;
+  }
+  for (const target of vendoredSkillTargets) validateSkillRecords(payload.files[target]);
+}
+
+async function readVariantPayload(parent: string, name: string): Promise<VendoredPayload> {
+  const parentStat = await lstat(parent);
+  if (parentStat.isSymbolicLink() || !parentStat.isDirectory()) {
+    throw new Error(`Vendored skill ${name} provider variants must be real directories`);
+  }
+  const entries = await readDirEntries(parent);
+  const expected = new Set<string>(vendoredSkillTargets);
+  for (const entry of entries) {
+    if (!expected.has(entry.name)) {
+      throw new Error(`Vendored skill ${name} has unknown provider variant: ${entry.name}`);
+    }
+    if (entry.isSymbolicLink() || !entry.isDirectory()) {
+      throw new Error(`Vendored skill ${name} provider variant ${entry.name} must be a directory`);
+    }
+  }
+  for (const target of vendoredSkillTargets) {
+    if (!entries.some((entry) => entry.name === target)) {
+      throw new Error(`Vendored skill ${name} is missing provider variant: ${target}`);
+    }
+  }
+  return {
+    kind: "variants",
+    files: {
+      "claude-code": await readSkillFiles(path.join(parent, "claude-code")),
+      codex: await readSkillFiles(path.join(parent, "codex")),
+      "opencode-v2": await readSkillFiles(path.join(parent, "opencode-v2"))
+    }
+  };
+}
+
+async function readStoredPayloadForKind(
+  root: string,
+  name: string,
+  kind: VendoredPayload["kind"]
+): Promise<VendoredPayload> {
+  const source = vendoredSkillSourcePath(root, name);
+  const payload =
+    kind === "variants"
+      ? await readVariantPayload(source, name)
+      : { kind: "single" as const, files: await readSkillFiles(source) };
+  validatePayloadRecords(payload);
+  return payload;
+}
+
+async function readStoredPayload(root: string, entry: VendoredSkill): Promise<VendoredPayload> {
+  return readStoredPayloadForKind(root, entry.name, isVariantSkill(entry) ? "variants" : "single");
+}
+
+async function readStoredPayloadForLock(
+  root: string,
+  name: string,
+  lock: VendorLockEntry
+): Promise<VendoredPayload> {
+  return readStoredPayloadForKind(root, name, "variants" in lock ? "variants" : "single");
+}
+
+async function readCandidatePayload(candidate: SkillCandidate): Promise<VendoredPayload> {
+  if (candidate.provenance.variants !== undefined) {
+    return readVariantPayload(candidate.sourcePath, candidate.provenance.name);
+  }
+  return { kind: "single", files: await readSkillFiles(candidate.sourcePath) };
+}
+
+async function readUpstreamPayload(
+  cache: string,
+  commit: string,
+  entry: VendoredSkill
+): Promise<VendoredPayload> {
+  const payload = isVariantSkill(entry)
+    ? {
+        kind: "variants" as const,
+        files: {
+          "claude-code": await readGitSkillFiles(cache, commit, entry.variants["claude-code"]),
+          codex: await readGitSkillFiles(cache, commit, entry.variants.codex),
+          "opencode-v2": await readGitSkillFiles(cache, commit, entry.variants["opencode-v2"])
+        }
+      }
+    : { kind: "single" as const, files: await readGitSkillFiles(cache, commit, entry.subtree) };
+  assertPayloadLimits(payloadRecords(payload));
+  return payload;
+}
+
+function variantDigests(
+  payload: Extract<VendoredPayload, { kind: "variants" }>
+): Record<VendoredSkillTarget, string> {
+  return {
+    "claude-code": digestSkillFiles(payload.files["claude-code"]),
+    codex: digestSkillFiles(payload.files.codex),
+    "opencode-v2": digestSkillFiles(payload.files["opencode-v2"])
+  };
+}
+
+function assertPayloadMatchesLock(
+  name: string,
+  payload: VendoredPayload,
+  locked: VendorLockEntry
+): void {
+  const isVariantLock = "variants" in locked;
+  if ((payload.kind === "variants") !== isVariantLock) {
+    throw new Error(
+      `Vendored skill ${name} lock entry ${isVariantLock ? "contains" : "is missing"} provider variants`
+    );
+  }
+  const digest = payloadDigest(payload);
+  if (digest !== locked.digest) {
+    throw new Error(
+      `Vendored skill ${name} integrity mismatch: expected ${locked.digest}, got ${digest}`
+    );
+  }
+  if (payload.kind === "variants" && isVariantLock) {
+    const actual = variantDigests(payload);
+    for (const target of vendoredSkillTargets) {
+      if (actual[target] !== locked.variants[target]) {
+        throw new Error(
+          `Vendored skill ${name} ${target} integrity mismatch: expected ${locked.variants[target]}, got ${actual[target]}`
+        );
+      }
+    }
+  }
+}
+
+function candidateVariantProvenance(
+  entry: VendoredVariantSkill,
+  payload: Extract<VendoredPayload, { kind: "variants" }>
+): Record<VendoredSkillTarget, CandidateVariantProvenance> {
+  const digests = variantDigests(payload);
+  return {
+    "claude-code": { subtree: entry.variants["claude-code"], digest: digests["claude-code"] },
+    codex: { subtree: entry.variants.codex, digest: digests.codex },
+    "opencode-v2": { subtree: entry.variants["opencode-v2"], digest: digests["opencode-v2"] }
+  };
+}
+
+function sameVariantSubtrees(
+  entry: VendoredVariantSkill,
+  variants: Record<VendoredSkillTarget, CandidateVariantProvenance>
+): boolean {
+  return vendoredSkillTargets.every(
+    (target) => entry.variants[target] === variants[target].subtree
+  );
+}
+
+function requireVariantPayload(
+  payload: VendoredPayload
+): Extract<VendoredPayload, { kind: "variants" }> {
+  if (payload.kind !== "variants") throw new Error("Provider variant payload is incomplete");
+  return payload;
+}
+
+function candidateLockEntry(candidate: CandidateProvenance): VendorLockEntry {
+  if (candidate.variants === undefined) {
+    return { commit: candidate.commit, digest: candidate.digest };
+  }
+  return {
+    commit: candidate.commit,
+    digest: candidate.digest,
+    variants: {
+      "claude-code": candidate.variants["claude-code"].digest,
+      codex: candidate.variants.codex.digest,
+      "opencode-v2": candidate.variants["opencode-v2"].digest
+    }
+  };
+}
+
+type CandidateBaseline =
+  | { kind: "none" }
+  | { kind: "single"; commit: string; digest: string }
+  | {
+      kind: "variants";
+      commit: string;
+      digest: string;
+      variants: VendorLockVariantDigests;
+    };
+
+function baselineFromLock(lock: VendorLockEntry | undefined): CandidateBaseline {
+  if (lock === undefined) return { kind: "none" };
+  if ("variants" in lock) {
+    return {
+      kind: "variants",
+      commit: lock.commit,
+      digest: lock.digest,
+      variants: {
+        "claude-code": lock.variants["claude-code"],
+        codex: lock.variants.codex,
+        "opencode-v2": lock.variants["opencode-v2"]
+      }
+    };
+  }
+  return { kind: "single", commit: lock.commit, digest: lock.digest };
+}
+
+function baselineFromCandidate(provenance: CandidateProvenance): CandidateBaseline {
+  const oldCommit = provenance.oldCommit;
+  const oldDigest = provenance.oldDigest;
+  const oldVariants = provenance.oldVariants;
+  if (oldCommit === undefined && oldDigest === undefined && oldVariants === undefined) {
+    return { kind: "none" };
+  }
+  if (oldCommit === undefined || oldDigest === undefined) {
+    throw new Error("Candidate baseline provenance is incomplete");
+  }
+  if (oldVariants === undefined) {
+    return { kind: "single", commit: oldCommit, digest: oldDigest };
+  }
+  return {
+    kind: "variants",
+    commit: oldCommit,
+    digest: oldDigest,
+    variants: {
+      "claude-code": oldVariants["claude-code"],
+      codex: oldVariants.codex,
+      "opencode-v2": oldVariants["opencode-v2"]
+    }
+  };
+}
+
+function baselineKey(baseline: CandidateBaseline): string {
+  return JSON.stringify(baseline);
+}
+
+function attachBaseline(
+  provenance: CandidateProvenance,
+  lock: VendorLockEntry | undefined
+): CandidateProvenance {
+  const baseline = baselineFromLock(lock);
+  if (baseline.kind === "none") return provenance;
+  if (baseline.kind === "single") {
+    return { ...provenance, oldCommit: baseline.commit, oldDigest: baseline.digest };
+  }
+  return {
+    ...provenance,
+    oldCommit: baseline.commit,
+    oldDigest: baseline.digest,
+    oldVariants: baseline.variants
+  };
+}
+
+async function copyPayload(payload: VendoredPayload, destination: string): Promise<void> {
+  if (payload.kind === "single") {
+    await copySkillFiles(payload.files, destination);
+    return;
+  }
+  for (const target of vendoredSkillTargets) {
+    await copySkillFiles(payload.files[target], path.join(destination, target));
+  }
+}
+
 export async function validateVendoredSkill(
   root: string,
-  entry: Extract<SkillEntry, { source: "vendored" }>,
+  entry: VendoredSkill,
   lock?: VendorLock
 ): Promise<void> {
   await recoverVendoredPromotion(root);
   const resolvedLock = lock ?? (await readVendorLock(root));
   const locked = resolvedLock.skills[entry.name];
   if (!locked) throw new Error(`Vendored skill ${entry.name} has no vendor lock entry`);
-  const sourcePath = path.join(root, "skills", "vendor", entry.name);
+  const sourcePath = vendoredSkillSourcePath(root, entry.name);
   await assertNoSymlinkAncestors(root, sourcePath);
-  const files = await readSkillFiles(sourcePath);
-  validateSkillRecords(files);
-  const digest = digestSkillFiles(files);
-  if (digest !== locked.digest) {
-    throw new Error(
-      `Vendored skill ${entry.name} integrity mismatch: expected ${locked.digest}, got ${digest}`
-    );
-  }
+  const payload = await readStoredPayloadForLock(root, entry.name, locked);
+  assertPayloadMatchesLock(entry.name, payload, locked);
 }
 
 export async function readVendorLock(root: string): Promise<VendorLock> {
@@ -288,15 +623,41 @@ function buildDiff(
   return changed.map((file) => lineDiff(oldByPath.get(file), newByPath.get(file), file)).join("\n");
 }
 
-function candidateIdentity(
-  name: string,
-  repository: string,
-  subtree: string,
-  commit: string,
-  digest: string
-): string {
+function candidateIdentity(candidate: CandidateProvenance): string {
   const hash = createHash("sha256");
-  for (const value of [name, repository, subtree, commit, digest]) {
+  const values =
+    candidate.variants === undefined
+      ? [
+          "candidate-v2",
+          "single",
+          candidate.name,
+          candidate.repository,
+          candidate.ref,
+          candidate.sourceRoot,
+          candidate.subtree,
+          candidate.commit,
+          candidate.digest,
+          "baseline",
+          baselineKey(baselineFromCandidate(candidate))
+        ]
+      : [
+          "candidate-v2",
+          "variants",
+          candidate.name,
+          candidate.repository,
+          candidate.ref,
+          candidate.sourceRoot,
+          ...vendoredSkillTargets.flatMap((target) => [
+            target,
+            candidate.variants[target].subtree,
+            candidate.variants[target].digest
+          ]),
+          candidate.commit,
+          candidate.digest,
+          "baseline",
+          baselineKey(baselineFromCandidate(candidate))
+        ];
+  for (const value of values) {
     hash.update(frame(Buffer.from(value, "utf8")));
   }
   return hash.digest("hex");
@@ -306,16 +667,13 @@ function candidateFile(root: string, name: string): string {
   return path.join(root, name);
 }
 
-async function writeCandidate(
-  candidate: SkillCandidate,
-  files: readonly SkillFileRecord[]
-): Promise<void> {
+async function writeCandidate(candidate: SkillCandidate, payload: VendoredPayload): Promise<void> {
   const parent = path.dirname(candidate.path);
   await assertNoSymlinkAncestors(parent, candidate.path);
   await mkdir(parent, { recursive: true });
   const temporary = `${candidate.path}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
   await rm(temporary, { recursive: true, force: true });
-  await copySkillFiles(files, path.join(temporary, "source"));
+  await copyPayload(payload, path.join(temporary, "source"));
   const inventoryContent = YAML.stringify({ files: candidate.inventory });
   const findingsContent = YAML.stringify({ findings: candidate.findings });
   const digestContent = `${candidate.provenance.digest}\n`;
@@ -339,18 +697,29 @@ async function writeCandidate(
 
 export async function stageVendoredSkill(
   paths: RuntimePaths,
-  rawEntry: Extract<SkillEntry, { source: "vendored" }>,
+  rawEntry: VendoredSkill,
   sourceRoot: string,
   revision?: string
 ): Promise<SkillCandidate> {
-  const parsedEntry = skillSchema.parse({
-    name: rawEntry.name,
-    source: rawEntry.source,
-    repo: rawEntry.repo,
-    ref: rawEntry.ref,
-    subtree: rawEntry.subtree,
-    description: rawEntry.description
-  });
+  const parsedEntry = skillSchema.parse(
+    isVariantSkill(rawEntry)
+      ? {
+          name: rawEntry.name,
+          source: rawEntry.source,
+          repo: rawEntry.repo,
+          ref: rawEntry.ref,
+          variants: rawEntry.variants,
+          description: rawEntry.description
+        }
+      : {
+          name: rawEntry.name,
+          source: rawEntry.source,
+          repo: rawEntry.repo,
+          ref: rawEntry.ref,
+          subtree: rawEntry.subtree,
+          description: rawEntry.description
+        }
+  );
   if (parsedEntry.source !== "vendored") throw new Error("Skill staging requires a vendored entry");
   const entry = parsedEntry;
   const repository = normalizedRepository(entry.repo);
@@ -359,17 +728,8 @@ export async function stageVendoredSkill(
     throw new Error(`Explicit skill revision must be a full commit SHA: ${revision}`);
   }
   const { cache, commit } = await fetchCommit(paths, repository, requestedRevision);
-  const files = await readGitSkillFiles(cache, commit, entry.subtree);
-  const digest = digestSkillFiles(files);
-  const oldPath = path.join(sourceRoot, "skills", "vendor", entry.name);
-  await assertNoSymlinkAncestors(sourceRoot, oldPath);
-  let oldFiles: SkillFileRecord[] = [];
-  try {
-    oldFiles = await readSkillFiles(oldPath);
-  } catch (error) {
-    if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
-    // A first import has no old subtree to diff.
-  }
+  const payload = await readUpstreamPayload(cache, commit, entry);
+  const digest = payloadDigest(payload);
   let oldLock: VendorLockEntry | undefined;
   try {
     oldLock = (await readVendorLock(sourceRoot)).skills[entry.name];
@@ -377,33 +737,59 @@ export async function stageVendoredSkill(
     if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
     // The candidate still carries enough provenance to be reviewed before first promotion.
   }
-  if (oldLock && digestSkillFiles(oldFiles) !== oldLock.digest) {
-    throw new Error(`Vendored skill ${entry.name} source does not match its vendor lock`);
+  const oldPath = vendoredSkillSourcePath(sourceRoot, entry.name);
+  await assertNoSymlinkAncestors(sourceRoot, oldPath);
+  const oldPayload = (await pathExists(oldPath))
+    ? oldLock
+      ? await readStoredPayloadForLock(sourceRoot, entry.name, oldLock)
+      : await readStoredPayload(sourceRoot, entry)
+    : undefined;
+  const oldFiles = oldPayload ? payloadRecords(oldPayload) : [];
+  if (oldLock) {
+    if (!oldPayload) {
+      throw new Error(`Vendored skill ${entry.name} source does not match its vendor lock`);
+    }
+    assertPayloadMatchesLock(entry.name, oldPayload, oldLock);
   }
-  const id = candidateIdentity(entry.name, repository, entry.subtree, commit, digest);
-  const provenance: CandidateProvenance = {
-    candidateId: id,
-    name: entry.name,
-    repository,
-    ref: entry.ref,
-    subtree: entry.subtree,
-    commit,
-    digest,
-    sourceRoot
-  };
-  if (oldLock) Object.assign(provenance, { oldCommit: oldLock.commit, oldDigest: oldLock.digest });
+  const provenanceWithoutBaseline: CandidateProvenance = isVariantSkill(entry)
+    ? {
+        candidateId: "",
+        name: entry.name,
+        repository,
+        ref: entry.ref,
+        variants: candidateVariantProvenance(entry, requireVariantPayload(payload)),
+        commit,
+        digest,
+        sourceRoot
+      }
+    : {
+        candidateId: "",
+        name: entry.name,
+        repository,
+        ref: entry.ref,
+        subtree: entry.subtree,
+        commit,
+        digest,
+        sourceRoot
+      };
+  const provenance = attachBaseline(provenanceWithoutBaseline, oldLock);
+  provenance.candidateId = candidateIdentity(provenance);
+  const files = payloadRecords(payload);
   const candidate: SkillCandidate = {
-    path: candidateFile(skillCandidatesRoot(paths), id),
-    sourcePath: candidateFile(skillCandidatesRoot(paths), path.join(id, "source")),
+    path: candidateFile(skillCandidatesRoot(paths), provenance.candidateId),
+    sourcePath: candidateFile(
+      skillCandidatesRoot(paths),
+      path.join(provenance.candidateId, "source")
+    ),
     provenance,
     inventory: inventory(files),
-    findings: staticFindings(files),
+    findings: payloadFindings(payload),
     diff: buildDiff(oldFiles, files)
   };
   await assertNoSymlinkAncestors(paths.home, candidate.path);
   try {
     await lstat(candidate.path);
-    const existing = await readCandidate(paths, id);
+    const existing = await readCandidate(paths, provenance.candidateId);
     await revalidateCandidate(paths, existing);
     return existing;
   } catch (error) {
@@ -413,7 +799,7 @@ export async function stageVendoredSkill(
     } catch (existingError) {
       if (existingError === error) throw error;
     }
-    await writeCandidate(candidate, files);
+    await writeCandidate(candidate, payload);
     return candidate;
   }
 }
@@ -421,19 +807,23 @@ export async function stageVendoredSkill(
 function candidateProvenance(
   parsed: z.infer<typeof candidateProvenanceSchema>
 ): CandidateProvenance {
-  const provenance: CandidateProvenance = {
+  const base = {
     candidateId: parsed.candidateId,
     name: parsed.name,
     repository: parsed.repository,
     ref: parsed.ref,
-    subtree: parsed.subtree,
     commit: parsed.commit,
     digest: parsed.digest,
     sourceRoot: parsed.sourceRoot,
     artifacts: parsed.artifacts
   };
+  const provenance: CandidateProvenance =
+    "variants" in parsed
+      ? { ...base, variants: parsed.variants }
+      : { ...base, subtree: parsed.subtree };
   if (parsed.oldCommit !== undefined) provenance.oldCommit = parsed.oldCommit;
   if (parsed.oldDigest !== undefined) provenance.oldDigest = parsed.oldDigest;
+  if (parsed.oldVariants !== undefined) provenance.oldVariants = parsed.oldVariants;
   return provenance;
 }
 
@@ -487,15 +877,16 @@ export async function revalidateCandidate(
   }
   await assertNoSymlinkAncestors(skillCandidatesRoot(paths), expectedPath);
   await assertNoSymlinkAncestors(skillCandidatesRoot(paths), candidate.sourcePath);
-  const files = await readSkillFiles(candidate.sourcePath);
-  validateSkillRecords(files);
-  const digest = digestSkillFiles(files);
+  const payload = await readCandidatePayload(candidate);
+  validatePayloadRecords(payload);
+  const files = payloadRecords(payload);
+  const digest = payloadDigest(payload);
   if (digest !== candidate.provenance.digest) throw new Error("Candidate content digest changed");
   const actualInventory = inventory(files);
   if (JSON.stringify(actualInventory) !== JSON.stringify(candidate.inventory)) {
     throw new Error("Candidate inventory changed");
   }
-  const actualFindings = staticFindings(files);
+  const actualFindings = payloadFindings(payload);
   if (JSON.stringify(actualFindings) !== JSON.stringify(candidate.findings)) {
     throw new Error("Candidate deterministic findings changed");
   }
@@ -518,13 +909,10 @@ export async function revalidateCandidate(
   if (artifactFiles[3].toString("utf8") !== `${candidate.provenance.digest}\n`) {
     throw new Error("Candidate digest evidence changed");
   }
-  const expected = candidateIdentity(
-    candidate.provenance.name,
-    normalizedRepository(candidate.provenance.repository),
-    candidate.provenance.subtree,
-    candidate.provenance.commit,
-    candidate.provenance.digest
-  );
+  const expected = candidateIdentity({
+    ...candidate.provenance,
+    repository: normalizedRepository(candidate.provenance.repository)
+  });
   if (expected !== candidate.provenance.candidateId) throw new Error("Candidate identity changed");
   void paths;
   return files;
@@ -559,6 +947,10 @@ async function resolveCatalogEntry(
     const document = documentResult.data;
     const skills = document.skills;
     const legacySkills = skills.map((skill) => legacySkillInputSchema.safeParse(skill));
+    const matchingSkills = legacySkills.filter(
+      (skill) => skill.success && skill.data.name === candidate.name
+    );
+    if (matchingSkills.length > 1) throw error;
     const index = legacySkills.findIndex(
       (skill) => skill.success && skill.data.name === candidate.name && skill.data.source === "git"
     );
@@ -573,6 +965,7 @@ async function resolveCatalogEntry(
     }
     const legacy = legacySkills[index];
     if (!legacy?.success) throw error;
+    if (candidate.variants !== undefined) throw error;
     const entry = skillSchema.parse({
       name: candidate.name,
       source: "vendored",
@@ -594,6 +987,8 @@ async function locatePromotionTarget(
   candidate: CandidateProvenance
 ): Promise<PromotionTarget> {
   const matches: PromotionTarget[] = [];
+  const expectedBaseline = baselineFromCandidate(candidate);
+  let baselineMismatch = false;
   for (const root of await activeHomeRoots(paths.root, paths.home)) {
     let catalog: CatalogEntryResolution;
     try {
@@ -602,11 +997,11 @@ async function locatePromotionTarget(
       continue;
     }
     const entry = catalog.entry;
-    if (
-      normalizedRepository(entry.repo) !== candidate.repository ||
-      entry.subtree !== candidate.subtree ||
-      entry.ref !== candidate.ref
-    ) {
+    if (normalizedRepository(entry.repo) !== candidate.repository || entry.ref !== candidate.ref)
+      continue;
+    if (candidate.variants !== undefined) {
+      if (!isVariantSkill(entry) || !sameVariantSubtrees(entry, candidate.variants)) continue;
+    } else if (isVariantSkill(entry) || entry.subtree !== candidate.subtree) {
       continue;
     }
     let lock: VendorLock;
@@ -617,34 +1012,32 @@ async function locatePromotionTarget(
       lock = { skills: {} };
     }
     const current = lock.skills[entry.name];
-    if (current) {
-      if (
-        !candidate.oldCommit ||
-        current.commit !== candidate.oldCommit ||
-        current.digest !== candidate.oldDigest
-      ) {
-        continue;
-      }
-    } else if (candidate.oldCommit) {
+    if (baselineKey(expectedBaseline) !== baselineKey(baselineFromLock(current))) {
+      baselineMismatch = true;
       continue;
     }
-    const source = path.join(root, "skills", "vendor", entry.name);
+    const source = vendoredSkillSourcePath(root, entry.name);
     await assertNoSymlinkAncestors(root, source);
-    let oldFiles: SkillFileRecord[] = [];
-    try {
-      oldFiles = await readSkillFiles(source);
-    } catch (error) {
-      if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
+    const oldPayload = (await pathExists(source))
+      ? current
+        ? await readStoredPayloadForLock(root, entry.name, current)
+        : await readStoredPayload(root, entry)
+      : undefined;
+    if (current) {
+      if (!oldPayload) {
+        throw new Error(`Vendored skill ${entry.name} source does not match its vendor lock`);
+      }
+      assertPayloadMatchesLock(entry.name, oldPayload, current);
     }
-    if (current && digestSkillFiles(oldFiles) !== current.digest) {
-      throw new Error(`Vendored skill ${entry.name} source does not match its vendor lock`);
-    }
+    const oldFiles = oldPayload ? payloadRecords(oldPayload) : [];
     matches.push({ root, catalog, lock, oldFiles });
   }
   if (matches.length !== 1) {
     throw new Error(
       matches.length === 0
-        ? `Candidate does not match exactly one active home declaration: ${candidate.name}`
+        ? baselineMismatch
+          ? `Candidate baseline does not match the active vendor state: ${candidate.name}`
+          : `Candidate does not match exactly one active home declaration: ${candidate.name}`
         : `Candidate matches multiple active home declarations: ${candidate.name}`
     );
   }
@@ -656,6 +1049,7 @@ export async function promoteVendoredSkill(
   candidateId: string
 ): Promise<SkillCandidate> {
   const candidate = await readCandidate(paths, candidateId);
+  let candidatePayload: VendoredPayload;
   let candidateFiles = await revalidateCandidate(paths, candidate);
   let target = await locatePromotionTarget(paths, candidate.provenance);
   let targetRoot = target.root;
@@ -675,6 +1069,7 @@ export async function promoteVendoredSkill(
     throw new Error("Candidate review evidence changed after confirmation");
   }
   candidateFiles = await revalidateCandidate(paths, confirmedCandidate);
+  candidatePayload = await readCandidatePayload(confirmedCandidate);
   target = await locatePromotionTarget(paths, confirmedCandidate.provenance);
   if (target.root !== targetRoot || buildDiff(target.oldFiles, candidateFiles) !== candidate.diff) {
     throw new Error("Active home state changed after confirmation");
@@ -701,11 +1096,11 @@ export async function promoteVendoredSkill(
   await rm(backupLock, { force: true });
   await rm(tempCatalog, { force: true });
   await rm(backupCatalog, { force: true });
-  await copySkillFiles(candidateFiles, tempSource);
+  await copyPayload(candidatePayload, tempSource);
   const nextLock: VendorLock = {
     skills: {
       ...lock.skills,
-      [entry.name]: { commit: candidate.provenance.commit, digest: candidate.provenance.digest }
+      [entry.name]: candidateLockEntry(candidate.provenance)
     }
   };
   await writeFile(tempLock, YAML.stringify(nextLock), "utf8");
@@ -756,15 +1151,17 @@ export async function promoteVendoredSkill(
 
 export async function checkVendoredSkill(
   paths: RuntimePaths,
-  entry: Extract<SkillEntry, { source: "vendored" }>,
+  entry: VendoredSkill,
   sourceRoot: string
 ): Promise<{ pinned: VendorLockEntry; observedCommit: string; changed: boolean }> {
   const lock = await readVendorLock(sourceRoot);
   const pinned = lock.skills[entry.name];
   if (!pinned) throw new Error(`Vendored skill ${entry.name} has no vendor lock entry`);
   const { cache, commit: observedCommit } = await fetchCommit(paths, entry.repo, entry.ref);
-  const digest = digestSkillFiles(await readGitSkillFiles(cache, observedCommit, entry.subtree));
-  return { pinned, observedCommit, changed: digest !== pinned.digest };
+  const payload = await readUpstreamPayload(cache, observedCommit, entry);
+  const digest = payloadDigest(payload);
+  const payloadKindChanged = isVariantSkill(entry) !== "variants" in pinned;
+  return { pinned, observedCommit, changed: payloadKindChanged || digest !== pinned.digest };
 }
 
 export function candidateReviewInvocation(candidateId: string): string {

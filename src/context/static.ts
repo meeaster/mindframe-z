@@ -13,6 +13,7 @@ import { type RuntimePaths } from "../core/paths.js";
 import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import { analyzeRepository } from "./repository.js";
 import { measuredContributor, unknownContributor } from "./measurement.js";
+import { vendoredSkillSourcePath } from "../skills/vendor.js";
 import type {
   ContextContributor,
   ContextHarness,
@@ -57,16 +58,21 @@ async function readSkillFile(
       ? path.join(paths.opencodeConfigDir, "skills")
       : path.join(paths.claudeDir, "skills");
   const skillName = skill.source === "local" ? (skill.skill ?? skill.name) : skill.name;
+  const sourceSkill =
+    skill.source === "vendored"
+      ? path.join(
+          vendoredSkillSourcePath(
+            skill.sourceRoot,
+            skill.name,
+            "variants" in skill ? harness : undefined
+          ),
+          "SKILL.md"
+        )
+      : path.join(skill.sourceRoot, "skills", skillName, "SKILL.md");
   const candidates = [
     path.join(targetRoot, skill.name, "SKILL.md"),
     path.join(targetRoot, skillName, "SKILL.md"),
-    path.join(
-      skill.sourceRoot,
-      "skills",
-      skill.source === "vendored" ? "vendor" : "",
-      skillName,
-      "SKILL.md"
-    )
+    sourceSkill
   ];
   for (const candidate of new Set(candidates)) {
     try {

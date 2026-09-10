@@ -21,18 +21,30 @@ import {
 import { readDirEntries } from "../core/fs-util.js";
 import {
   opencodeV2SkillSnapshotDir,
+  providerSkillSnapshotDir,
   skillSnapshotDir,
   type AgentName,
   type RuntimePaths
 } from "../core/paths.js";
-import type { CapabilityAgentName } from "../core/manifests.js";
+import {
+  vendoredSkillTargetSchema,
+  type CapabilityAgentName,
+  type VendoredSkillTarget
+} from "../core/manifests.js";
 import type { ResolvedProfile, ResolvedSkill } from "../core/profile.js";
-import { digestSkillFiles, readSkillFiles, validateSkillRecords } from "./vendor.js";
+import {
+  digestSkillFiles,
+  readSkillFiles,
+  validateSkillRecords,
+  vendoredSkillSourcePath
+} from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
 import { readPinnedGitSkillFiles } from "./git.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
 type SkillTarget = Exclude<AgentName, "pi">;
+type LegacySkillTarget = Exclude<SkillTarget, "opencode-v2">;
+type ManagedSnapshotOptions = { dryRun?: boolean; onComplete?: OperationCompletion };
 
 function capabilityTarget(target: SkillTarget): CapabilityAgentName {
   return target === "opencode-v2" ? "opencode" : target;
@@ -49,6 +61,7 @@ const snapshotManifestSchema = z
           source: z.enum(["local", "vendored", "git", "engine"]),
           digest: z.string(),
           targets: z.array(z.enum(["opencode-v2", "claude-code", "codex"])),
+          variant: vendoredSkillTargetSchema.optional(),
           repository: z.string().optional(),
           ref: z.string().optional(),
           subtree: z.string().optional(),
@@ -71,6 +84,7 @@ interface SnapshotSkill {
   source: "local" | "vendored" | "git" | "engine";
   digest: string;
   targets: SkillTarget[];
+  variant?: VendoredSkillTarget;
   repository?: string;
   ref?: string;
   subtree?: string;
@@ -101,14 +115,26 @@ interface SnapshotInspection {
   replacementRequired: boolean;
 }
 
+interface SnapshotRenderOptions {
+  snapshotDir?: string;
+  excludeProviderVariants?: boolean;
+}
+
 function isManagedTarget(configsDir: string, target: string): boolean {
   const relative = path.relative(configsDir, target);
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-function sourcePath(skill: ResolvedSkill): string {
-  if (skill.source === "vendored")
-    return path.join(skill.sourceRoot, "skills", "vendor", skill.name);
+function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
+  if (skill.source === "vendored") {
+    if ("variants" in skill) {
+      if (target === undefined) {
+        throw new Error(`Provider variant skill ${skill.name} requires a target snapshot`);
+      }
+      return vendoredSkillSourcePath(skill.sourceRoot, skill.name, target);
+    }
+    return vendoredSkillSourcePath(skill.sourceRoot, skill.name);
+  }
   if (skill.source === "git") return `git:${skill.repo}#${skill.subtree}@${skill.commit}`;
   return path.join(skill.sourceRoot, "skills", skill.skill ?? skill.name);
 }
@@ -339,9 +365,33 @@ function desiredTargets(skill: ResolvedSkill, selected: readonly SkillTarget[]):
   return selected.filter((target) => skill.targets.includes(capabilityTarget(target)));
 }
 
+function selectedVariantTarget(
+  skill: ResolvedSkill,
+  targets: readonly SkillTarget[]
+): SkillTarget | undefined {
+  if (!("variants" in skill)) return undefined;
+  if (targets.length !== 1) {
+    throw new Error(`Provider variant skill ${skill.name} requires one target snapshot`);
+  }
+  return targets[0];
+}
+
 function engineTargets(profile: ResolvedProfile, selected: readonly SkillTarget[]): SkillTarget[] {
   return selected.filter((target) =>
     profile.agents.includes(target === "opencode-v2" ? "opencode-v2" : target)
+  );
+}
+
+function hasProviderVariant(profile: ResolvedProfile, target: LegacySkillTarget): boolean {
+  return profile.enabledSkills.some(
+    (skill) => "variants" in skill && skill.targets.includes(capabilityTarget(target))
+  );
+}
+
+function legacyVariantTargets(profile: ResolvedProfile): LegacySkillTarget[] {
+  return profile.agents.filter(
+    (target): target is LegacySkillTarget =>
+      isLegacySkillTarget(target) && hasProviderVariant(profile, target)
   );
 }
 
@@ -349,7 +399,7 @@ export async function renderSkillSnapshot(
   paths: RuntimePaths,
   profile: ResolvedProfile,
   selectedTargets: readonly SkillTarget[] = ["opencode-v2", "claude-code", "codex"],
-  options: { snapshotDir?: string } = {}
+  options: SnapshotRenderOptions = {}
 ): Promise<{ manifest: SnapshotManifest; links: LinkPlan[]; temporaryPath: string }> {
   const engineEntries: Array<{
     name: string;
@@ -377,10 +427,13 @@ export async function renderSkillSnapshot(
   const selected: SnapshotSkill[] = [];
   const sources = new Map<string, SnapshotSource>();
   for (const skill of profile.enabledSkills) {
+    if (options.excludeProviderVariants && "variants" in skill) continue;
     const targets = desiredTargets(skill, selectedTargets);
     if (targets.length === 0) continue;
+    const variantTarget = selectedVariantTarget(skill, targets);
     const source = skill.source;
-    const snapshotSource: SnapshotSource = { sourcePath: sourcePath(skill) };
+    const skillSourcePath = sourcePath(skill, variantTarget);
+    const snapshotSource: SnapshotSource = { sourcePath: skillSourcePath };
     if (skill.source === "git") snapshotSource.git = skill;
     sources.set(skill.name, snapshotSource);
     const selectedSkill: SnapshotSkill = {
@@ -389,15 +442,31 @@ export async function renderSkillSnapshot(
       digest: "",
       targets,
       sourceRoot: skill.sourceRoot,
-      sourcePath: sourcePath(skill)
+      sourcePath: skillSourcePath
     };
     if (skill.source === "vendored" && skill.vendor) {
-      Object.assign(selectedSkill, {
-        repository: skill.vendor.repository,
-        ref: skill.vendor.ref,
-        subtree: skill.vendor.subtree,
-        commit: skill.vendor.commit
-      });
+      if ("variants" in skill) {
+        if (variantTarget === undefined || !("variants" in skill.vendor)) {
+          throw new Error(`Provider variant skill ${skill.name} has incomplete vendor provenance`);
+        }
+        Object.assign(selectedSkill, {
+          repository: skill.vendor.repository,
+          ref: skill.vendor.ref,
+          variant: variantTarget,
+          subtree: skill.vendor.variants[variantTarget].subtree,
+          commit: skill.vendor.commit
+        });
+      } else {
+        if ("variants" in skill.vendor) {
+          throw new Error(`Single-subtree skill ${skill.name} has variant vendor provenance`);
+        }
+        Object.assign(selectedSkill, {
+          repository: skill.vendor.repository,
+          ref: skill.vendor.ref,
+          subtree: skill.vendor.subtree,
+          commit: skill.vendor.commit
+        });
+      }
     }
     if (skill.source === "git") {
       Object.assign(selectedSkill, {
@@ -482,6 +551,7 @@ async function readSnapshotManifest(snapshot: string): Promise<SnapshotManifest 
           sourceRoot: skill.sourceRoot,
           sourcePath: skill.sourcePath
         };
+        if (skill.variant !== undefined) exact.variant = skill.variant;
         if (skill.repository !== undefined) exact.repository = skill.repository;
         if (skill.ref !== undefined) exact.ref = skill.ref;
         if (skill.subtree !== undefined) exact.subtree = skill.subtree;
@@ -493,6 +563,39 @@ async function readSnapshotManifest(snapshot: string): Promise<SnapshotManifest 
     if (error instanceof Error && errorCode(error) === "ENOENT") return undefined;
     throw error;
   }
+}
+
+async function removeManagedSkillSnapshot(
+  paths: RuntimePaths,
+  snapshot: string,
+  options: ManagedSnapshotOptions = {}
+): Promise<OperationOutcome[]> {
+  await assertNoSymlinkAncestors(paths.home, snapshot);
+  let stat;
+  try {
+    stat = await lstat(snapshot);
+  } catch (error) {
+    if (error instanceof Error && errorCode(error) === "ENOENT") return [];
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`Skill snapshot is not a real directory: ${snapshot}`);
+  }
+  if (!(await readSnapshotManifest(snapshot))) {
+    throw new Error(`Cannot remove unmanaged skill snapshot: ${snapshot}`);
+  }
+  if (!options.dryRun) await rm(snapshot, { recursive: true, force: true });
+  const outcome: OperationOutcome = {
+    category: "bookkeeping",
+    action: "snapshot",
+    status: options.dryRun ? "planned" : "removed",
+    target: snapshot,
+    significance: "internal"
+  };
+  if (options.dryRun && !options.onComplete)
+    console.log(`would remove skill snapshot\t${snapshot}`);
+  options.onComplete?.(outcome);
+  return [outcome];
 }
 
 async function inspectSnapshot(
@@ -562,15 +665,16 @@ async function inspectSnapshot(
 
 function selectedSkillNames(
   profile: ResolvedProfile,
-  renderTargets: readonly SkillTarget[]
+  renderTargets: readonly SkillTarget[],
+  options: Pick<SnapshotRenderOptions, "excludeProviderVariants"> = {}
 ): Set<string> {
-  const names = new Set(
-    profile.enabledSkills
-      .filter((skill) =>
-        renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))
-      )
-      .map((skill) => skill.name)
-  );
+  const names = new Set<string>();
+  for (const skill of profile.enabledSkills) {
+    if (options.excludeProviderVariants && "variants" in skill) continue;
+    if (renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))) {
+      names.add(skill.name);
+    }
+  }
   if (!profile.manifests.skills.some((skill) => skill.name === engineSkillName))
     names.add(engineSkillName);
   if (renderTargets.length > 0) names.add(skillUpdateReviewName);
@@ -582,10 +686,11 @@ function selectedLinkPlans(
   profile: ResolvedProfile,
   snapshot: string,
   selectedTargets: readonly SkillTarget[],
-  renderTargets: readonly SkillTarget[]
+  renderTargets: readonly SkillTarget[],
+  options: Pick<SnapshotRenderOptions, "excludeProviderVariants"> = {}
 ): LinkPlan[] {
   const links: LinkPlan[] = [];
-  for (const name of selectedSkillNames(profile, renderTargets)) {
+  for (const name of selectedSkillNames(profile, renderTargets, options)) {
     const declared = profile.enabledSkills.find((skill) => skill.name === name);
     const targets = declared
       ? selectedTargets.filter((target) => declared.targets.includes(capabilityTarget(target)))
@@ -612,25 +717,34 @@ async function syncSkillSnapshotGroup(
   selectedTargets: readonly SkillTarget[],
   renderTargets: readonly SkillTarget[],
   snapshot: string,
-  options: { dryRun?: boolean; link?: boolean; onComplete?: OperationCompletion }
+  options: {
+    dryRun?: boolean;
+    link?: boolean;
+    onComplete?: OperationCompletion;
+    excludeProviderVariants?: boolean;
+  }
 ): Promise<OperationOutcome[]> {
   if (selectedTargets.length === 0) return [];
   const directories = linkDirectories(paths, selectedTargets);
   if (options.dryRun) {
     for (const skill of profile.enabledSkills) {
       if (renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))) {
+        if (options.excludeProviderVariants && "variants" in skill) continue;
         if (skill.source === "git") {
           if (!options.onComplete) {
             console.log(`would acquire git commit\t${skill.name}\t${skill.commit}`);
           }
           continue;
         } else {
-          const files = await readSkillFiles(sourcePath(skill));
+          const skillTargets = desiredTargets(skill, renderTargets);
+          const files = await readSkillFiles(
+            sourcePath(skill, selectedVariantTarget(skill, skillTargets))
+          );
           validateSkillRecords(files);
         }
       }
     }
-    const names = selectedSkillNames(profile, renderTargets);
+    const names = selectedSkillNames(profile, renderTargets, options);
     if (!options.onComplete) {
       for (const name of [...names].sort()) console.log(`would render skill\t${name}`);
     }
@@ -641,7 +755,14 @@ async function syncSkillSnapshotGroup(
       target: name,
       significance: "meaningful"
     }));
-    const plans = selectedLinkPlans(paths, profile, snapshot, selectedTargets, renderTargets);
+    const plans = selectedLinkPlans(
+      paths,
+      profile,
+      snapshot,
+      selectedTargets,
+      renderTargets,
+      options
+    );
     if (options.link !== false) await preflightLinks(paths, plans, directories);
     const current =
       options.link !== false ? await captureManagedLinks(paths, directories) : undefined;
@@ -677,9 +798,14 @@ async function syncSkillSnapshotGroup(
     for (const outcome of completed) options.onComplete?.(outcome);
     return completed;
   }
-  const rendered = await renderSkillSnapshot(paths, profile, renderTargets, {
-    snapshotDir: snapshot
-  });
+  const rendered = await renderSkillSnapshot(
+    paths,
+    profile,
+    renderTargets,
+    options.excludeProviderVariants
+      ? { snapshotDir: snapshot, excludeProviderVariants: true }
+      : { snapshotDir: snapshot }
+  );
   const inspection = await inspectSnapshot(snapshot, rendered.manifest);
   const universalDir = path.join(paths.home, ".agents", "skills") + path.sep;
   const claudeDir = path.join(paths.claudeDir, "skills") + path.sep;
@@ -791,18 +917,58 @@ export async function syncSkillSnapshot(
   const outcomes: OperationOutcome[] = [];
   const requestedTargets = options.selectedTargets ?? profile.agents.filter(isSkillTarget);
   const legacyRequested = requestedTargets.filter(isLegacySkillTarget);
-  const legacySelected = [...legacyRequested];
-  const legacyRenderTargets = profile.agents.filter(isLegacySkillTarget);
-  outcomes.push(
-    ...(await syncSkillSnapshotGroup(
-      paths,
-      profile,
-      legacySelected,
-      legacyRenderTargets,
-      skillSnapshotDir(paths, profile.name),
-      options
-    ))
+  const variantTargets = legacyVariantTargets(profile);
+  const sharedRenderTargets = profile.agents.filter(
+    (target): target is LegacySkillTarget =>
+      isLegacySkillTarget(target) && !variantTargets.includes(target)
   );
+  const sharedSelected = legacyRequested.filter((target) => sharedRenderTargets.includes(target));
+  if (sharedSelected.length > 0) {
+    outcomes.push(
+      ...(await syncSkillSnapshotGroup(
+        paths,
+        profile,
+        sharedSelected,
+        sharedRenderTargets,
+        skillSnapshotDir(paths, profile.name),
+        { ...options, excludeProviderVariants: true }
+      ))
+    );
+  }
+  for (const target of variantTargets) {
+    if (!legacyRequested.includes(target)) continue;
+    outcomes.push(
+      ...(await syncSkillSnapshotGroup(
+        paths,
+        profile,
+        [target],
+        [target],
+        providerSkillSnapshotDir(paths, profile.name, target),
+        options
+      ))
+    );
+  }
+
+  const allLegacyTargetsSelected = profile.agents
+    .filter(isLegacySkillTarget)
+    .every((target) => legacyRequested.includes(target));
+  if (allLegacyTargetsSelected) {
+    const staleSnapshots: string[] = [];
+    if (sharedRenderTargets.length === 0) {
+      staleSnapshots.push(skillSnapshotDir(paths, profile.name));
+    }
+    for (const target of ["claude-code", "codex"] as const) {
+      if (!variantTargets.includes(target)) {
+        staleSnapshots.push(providerSkillSnapshotDir(paths, profile.name, target));
+      }
+    }
+    for (const snapshot of staleSnapshots) {
+      const cleanupOptions: ManagedSnapshotOptions = {};
+      if (options.dryRun) cleanupOptions.dryRun = true;
+      if (options.onComplete) cleanupOptions.onComplete = options.onComplete;
+      outcomes.push(...(await removeManagedSkillSnapshot(paths, snapshot, cleanupOptions)));
+    }
+  }
 
   const v2Selected = requestedTargets.includes("opencode-v2") ? (["opencode-v2"] as const) : [];
   const v2RenderTargets =
@@ -822,7 +988,7 @@ export async function syncSkillSnapshot(
   return outcomes;
 }
 
-function isLegacySkillTarget(target: AgentName): target is Exclude<SkillTarget, "opencode-v2"> {
+function isLegacySkillTarget(target: AgentName): target is LegacySkillTarget {
   return target === "claude-code" || target === "codex";
 }
 
