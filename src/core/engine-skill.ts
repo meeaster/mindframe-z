@@ -4,6 +4,9 @@ import type { SkillEntry } from "./manifests.js";
 import { pathExists, readTextFile } from "./fs-util.js";
 import type { RuntimePaths } from "./paths.js";
 import { assertNoSymlinkAncestors } from "../skills/tree.js";
+import { writeFileOutcome } from "./file-operations.js";
+import type { WriteFileOptions } from "./file-operations.js";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 
 // The engine-owned skill and the home guidance block both ship inside the
 // binary so their content upgrades with the engine instead of rotting as
@@ -142,7 +145,10 @@ ${guidanceEnd}
 // appended when absent, refreshed in place when stale — preserving user
 // content outside the markers, and that CLAUDE.md exists so Claude Code reads
 // it too. Deleting the block is harmless: the next apply restores it.
-export async function ensureHomeGuidance(homeRoot: string): Promise<"ok" | "wrote"> {
+export async function ensureHomeGuidance(
+  homeRoot: string,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
   const agentsPath = path.join(homeRoot, "AGENTS.md");
   const existing = (await readTextFile(agentsPath)) ?? "";
   const begin = existing.indexOf(guidanceBegin);
@@ -153,17 +159,25 @@ export async function ensureHomeGuidance(homeRoot: string): Promise<"ok" | "wrot
       : existing === ""
         ? homeGuidance
         : `${existing.trimEnd()}\n\n${homeGuidance}`;
-  let changed = false;
-  if (next !== existing) {
-    await writeFile(agentsPath, next, "utf8");
-    changed = true;
-  }
+  const writeOptions: WriteFileOptions = { category: "guidance" };
+  if (onComplete) writeOptions.onComplete = onComplete;
+  const outcomes = [await writeFileOutcome(agentsPath, next, writeOptions)];
   const claudePath = path.join(homeRoot, "CLAUDE.md");
-  if (!(await pathExists(claudePath))) {
-    await writeFile(claudePath, "@AGENTS.md\n", "utf8");
-    changed = true;
+  if (await pathExists(claudePath)) {
+    const outcome: OperationOutcome = {
+      category: "guidance",
+      action: "write",
+      status: "unchanged",
+      target: claudePath,
+      significance: "meaningful",
+      detail: "preserved existing file"
+    };
+    outcomes.push(outcome);
+    onComplete?.(outcome);
+  } else {
+    outcomes.push(await writeFileOutcome(claudePath, "@AGENTS.md\n", writeOptions));
   }
-  return changed ? "wrote" : "ok";
+  return outcomes;
 }
 
 export async function hasHomeGuidance(homeRoot: string): Promise<boolean> {

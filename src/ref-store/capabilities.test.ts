@@ -65,9 +65,10 @@ describe("workspace capability indexes", () => {
 
     const written = await writeCapabilityIndexes(paths, groupedProfile(home));
 
-    expect(written).toEqual([
-      capabilityIndexPath(paths),
-      capabilityGroupPath(paths, "agent-tooling")
+    expect(written).toMatchObject([
+      { target: stale, status: "removed" },
+      { target: capabilityIndexPath(paths), status: "created" },
+      { target: capabilityGroupPath(paths, "agent-tooling"), status: "created" }
     ]);
     await expect(readFile(stale, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });

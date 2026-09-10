@@ -143,8 +143,8 @@ async function walkSkillFiles(
     throw new Error(`Skill source contains a symbolic link: ${current}`);
   if (!currentStat.isDirectory()) throw new Error(`Skill source is not a directory: ${root}`);
 
-  const entries = await readdir(current, { withFileTypes: true, encoding: "buffer" });
-  const namedEntries = entries.map((entry) => decodePathBytes(entry.name)).sort(comparePosixBytes);
+  const entries = await readdir(current, { encoding: "buffer" });
+  const namedEntries = entries.map(decodePathBytes).sort(comparePosixBytes);
   for (const name of namedEntries) {
     if (name.toLowerCase() === ".git")
       throw new Error(`Skill source contains nested Git state: ${current}`);

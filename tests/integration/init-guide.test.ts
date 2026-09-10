@@ -145,7 +145,9 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("catalog/references.yml");
     expect(result.stdout).toContain("profiles/<profile>/profile.yml");
     expect(result.stdout).toContain("mfz refs sync");
-    expect(result.stdout).toContain("mfz refs index");
+    expect(result.stdout).toContain("regenerate the local reference");
+    expect(result.stdout).toContain("without activating configuration");
+    expect(result.stdout).not.toContain("refs index");
     expect(result.stdout).toContain("routing metadata");
     const examples = yamlExamples(result.stdout);
     expect(examples).toHaveLength(2);
@@ -181,7 +183,7 @@ describe("init and guide integration", () => {
     );
 
     const apply = await mfz(machineHome, ["apply", "--no-link"]);
-    expect(apply.stdout).toContain("rendered");
+    expect(apply.stdout).toContain("created\tfile");
   });
 
   it("clones a home into the managed upstream clone root and points machine config at it", async () => {
@@ -203,6 +205,6 @@ describe("init and guide integration", () => {
     );
 
     const apply = await mfz(machineHome, ["apply", "--no-link"]);
-    expect(apply.stdout).toContain("rendered");
+    expect(apply.stdout).toContain("created\tfile");
   });
 });

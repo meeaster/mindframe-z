@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { writeJsonFileAtomic } from "./fs-util.js";
+import { writeJsonAtomicOutcome, type WriteFileOptions } from "./file-operations.js";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 import { profileConfigsDir, type RuntimePaths } from "./paths.js";
 
 export type OwnershipTarget = "mise";
@@ -86,8 +87,9 @@ export async function readOwnership(
 export async function writeOwnership(
   paths: RuntimePaths,
   profileName: string,
-  ownership: RenderOwnership
-): Promise<void> {
+  ownership: RenderOwnership,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
   const file = ownershipManifestPath(paths, profileName);
   let manifest: OwnershipManifest = { version: 1, targets: {} };
   try {
@@ -101,7 +103,12 @@ export async function writeOwnership(
     ownership.target,
     ownership
   );
-  await writeJsonFileAtomic(file, manifest);
+  const options: WriteFileOptions = {
+    category: "bookkeeping",
+    significance: "internal"
+  };
+  if (onComplete) options.onComplete = onComplete;
+  return writeJsonAtomicOutcome(file, manifest, options);
 }
 
 export function relativeOwnership(

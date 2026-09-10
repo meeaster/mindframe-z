@@ -17,12 +17,18 @@ async function tempDir(): Promise<string> {
 describe("ensureHomeGuidance", () => {
   it("creates AGENTS.md and CLAUDE.md, then is idempotent", async () => {
     const home = await tempDir();
-    expect(await ensureHomeGuidance(home)).toBe("wrote");
+    expect(await ensureHomeGuidance(home)).toMatchObject([
+      { status: "created", target: path.join(home, "AGENTS.md") },
+      { status: "created", target: path.join(home, "CLAUDE.md") }
+    ]);
     const agents = await readFile(path.join(home, "AGENTS.md"), "utf8");
     expect(agents).toContain("mfz:home-guidance:begin");
     expect(agents).toContain("mfz guide");
     expect(await readFile(path.join(home, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
-    expect(await ensureHomeGuidance(home)).toBe("ok");
+    expect(await ensureHomeGuidance(home)).toMatchObject([
+      { status: "unchanged" },
+      { status: "unchanged" }
+    ]);
     expect(await hasHomeGuidance(home)).toBe(true);
   });
 
@@ -36,7 +42,10 @@ describe("ensureHomeGuidance", () => {
 
     const stale = agents.replace("mfz guide", "mfz guide legacy-topic");
     await writeFile(agentsPath, stale, "utf8");
-    expect(await ensureHomeGuidance(home)).toBe("wrote");
+    expect(await ensureHomeGuidance(home)).toMatchObject([
+      { status: "updated" },
+      { status: "unchanged" }
+    ]);
     agents = await readFile(agentsPath, "utf8");
     expect(agents).toContain("mfz guide");
     expect(agents).not.toContain("legacy-topic");

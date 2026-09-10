@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import type { ExtraFolder, ReferenceEntry } from "../core/manifests.js";
 import {
@@ -11,7 +11,14 @@ import {
   type RuntimePaths
 } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { writeTextFile } from "../core/fs-util.js";
+import {
+  planFileOutcome,
+  planRemovePathOutcome,
+  removePathOutcome,
+  writeFileOutcome,
+  type WriteFileOptions
+} from "../core/file-operations.js";
+import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 import { extraFoldersIndexContent, referenceIndexContent, referencePath } from "./references.js";
 
 interface CapabilityMetadata {
@@ -168,31 +175,75 @@ function title(name: string): string {
     .join(" ");
 }
 
-export async function writeCapabilityIndexes(
-  paths: RuntimePaths,
-  profile: ResolvedProfile
-): Promise<string[]> {
-  const directory = capabilitiesDir(paths);
-  if (profile.profile.capability_groups.length === 0) {
-    await rm(directory, { recursive: true, force: true });
-    return [];
-  }
-  const groups = activeCapabilityGroups(profile);
-  const files = [
+function capabilityFiles(paths: RuntimePaths, profile: ResolvedProfile) {
+  return [
     { path: capabilityIndexPath(paths), content: capabilityIndexContent(paths, profile) },
-    ...groups.map((group) => ({
+    ...activeCapabilityGroups(profile).map((group) => ({
       path: capabilityGroupPath(paths, group.name),
       content: groupContent(paths, profile, group)
     }))
   ];
+}
+
+async function existingCapabilityFiles(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => path.join(directory, entry.name));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+export async function writeCapabilityIndexes(
+  paths: RuntimePaths,
+  profile: ResolvedProfile,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
+  const directory = capabilitiesDir(paths);
+  const options: WriteFileOptions = { category: "index" };
+  if (onComplete) options.onComplete = onComplete;
+  if (profile.profile.capability_groups.length === 0) {
+    return [await removePathOutcome(directory, options)];
+  }
+  const files = capabilityFiles(paths, profile);
   await mkdir(directory, { recursive: true });
+  const outcomes: OperationOutcome[] = [];
   const expected = new Set(files.map((file) => file.path));
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const stalePath = path.join(directory, entry.name);
     if (entry.isFile() && entry.name.endsWith(".md") && !expected.has(stalePath)) {
-      await rm(stalePath);
+      outcomes.push(await removePathOutcome(stalePath, options));
     }
   }
-  for (const file of files) await writeTextFile(file.path, file.content);
-  return files.map((file) => file.path);
+  for (const file of files) {
+    outcomes.push(await writeFileOutcome(file.path, file.content, options));
+  }
+  return outcomes;
+}
+
+export async function planCapabilityIndexes(
+  paths: RuntimePaths,
+  profile: ResolvedProfile,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
+  const directory = capabilitiesDir(paths);
+  const options: WriteFileOptions = { category: "index" };
+  if (onComplete) options.onComplete = onComplete;
+  if (profile.profile.capability_groups.length === 0) {
+    return [await planRemovePathOutcome(directory, options)];
+  }
+  const files = capabilityFiles(paths, profile);
+  const expected = new Set(files.map((file) => file.path));
+  const outcomes: OperationOutcome[] = [];
+  for (const stalePath of await existingCapabilityFiles(directory)) {
+    if (!expected.has(stalePath)) {
+      outcomes.push(await planRemovePathOutcome(stalePath, options));
+    }
+  }
+  for (const file of files) {
+    outcomes.push(await planFileOutcome(file.path, file.content, options));
+  }
+  return outcomes;
 }

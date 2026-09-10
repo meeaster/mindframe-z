@@ -40,6 +40,22 @@ export function configsPath(home: string, ...segments: string[]): string {
   return path.join(home, ".mindframe-z", "configs", ...segments);
 }
 
+export function fixtureReferenceSource(root: string): string {
+  return path.join(path.dirname(root), `${path.basename(root)}-local-ref-source`);
+}
+
+async function createFixtureReferenceSource(root: string): Promise<string> {
+  const source = fixtureReferenceSource(root);
+  await mkdir(source, { recursive: true });
+  await execa("git", ["init", "--initial-branch=main"], { cwd: source });
+  await execa("git", ["config", "user.email", "test@example.com"], { cwd: source });
+  await execa("git", ["config", "user.name", "Test User"], { cwd: source });
+  await writeFile(path.join(source, "README.md"), "local reference fixture\n", "utf8");
+  await execa("git", ["add", "README.md"], { cwd: source });
+  await execa("git", ["commit", "-m", "initial reference fixture"], { cwd: source });
+  return source;
+}
+
 // Fresh, isolated root + home temp dirs populated with the standard fixture. One
 // definition of "a fixture" so the integration suites don't drift apart.
 export async function setupIntegrationFixture(): Promise<{ root: string; home: string }> {
@@ -50,6 +66,7 @@ export async function setupIntegrationFixture(): Promise<{ root: string; home: s
 }
 
 export async function writeFixture(root: string, home?: string): Promise<void> {
+  const referenceSource = await createFixtureReferenceSource(root);
   await mkdir(path.join(root, "catalog"), { recursive: true });
   await mkdir(path.join(root, "instructions"), { recursive: true });
   await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
@@ -98,7 +115,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     [
       "references:",
       "  - name: local-ref",
-      "    url: https://example.invalid/local-ref.git",
+      `    url: ${referenceSource}`,
       "    description: Local test reference.",
       ""
     ].join("\n"),
@@ -252,6 +269,57 @@ export function cli(
       ...args
     ],
     options
+  );
+}
+
+export function cliWithPtyStdin(
+  root: string,
+  home: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = {}
+) {
+  const runner = [
+    "import os, pty, subprocess, sys",
+    "master, slave = pty.openpty()",
+    "try:",
+    "    result = subprocess.run(sys.argv[1:], stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)",
+    "finally:",
+    "    os.close(slave)",
+    "    os.close(master)",
+    "sys.stdout.buffer.write(result.stdout)",
+    "sys.stderr.buffer.write(result.stderr)",
+    "raise SystemExit(result.returncode)"
+  ].join("\n");
+  return execa(
+    "python3",
+    [
+      "-c",
+      runner,
+      process.execPath,
+      "--import",
+      path.join(projectRoot, "node_modules", "tsx", "dist", "loader.mjs"),
+      path.join(projectRoot, "src", "cli", "mfz.ts"),
+      "--root",
+      root,
+      "--home",
+      home,
+      ...args
+    ],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        MFZ_ROOT: root,
+        MFZ_HOME: home,
+        OPENCODE_CONFIG_DIR: path.join(home, ".config", "opencode"),
+        CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+        CODEX_HOME: path.join(home, ".codex"),
+        PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
+        EXECUTOR_DATA_DIR: path.join(home, ".executor"),
+        MFZ_REFERENCES_DIR: undefined,
+        ...env
+      }
+    }
   );
 }
 

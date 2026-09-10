@@ -1,6 +1,5 @@
-import { chmod, lstat, readFile, readdir, rm, unlink } from "node:fs/promises";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { writeTextFile } from "./fs-util.js";
 import type { RuntimePaths, ToolTarget } from "./paths.js";
 import { profileConfigsDir } from "./paths.js";
 import type { ResolvedProfile } from "./profile.js";
@@ -14,6 +13,8 @@ import { renderOpenCodeV2 } from "../renderers/opencode-v2.js";
 import { renderPi } from "../renderers/pi.js";
 import type { LinkPlan } from "./symlinks.js";
 import type { JsonObject } from "./json.js";
+import { removePathOutcome, writeFileOutcome, type WriteFileOptions } from "./file-operations.js";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 import {
   instructionReferencesDir,
   instructionReferencesSection,
@@ -80,29 +81,65 @@ export async function renderRuntimeInstructions(
   ];
 }
 
-export async function writeRenderedFiles(files: RenderedFile[]): Promise<void> {
+export async function writeRenderedFiles(
+  files: RenderedFile[],
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
+  const outcomes: OperationOutcome[] = [];
   for (const file of files) {
-    await writeTextFile(file.path, file.content);
-    if (file.mode !== undefined) await chmod(file.path, file.mode);
+    const options: WriteFileOptions = {};
+    if (file.mode !== undefined) options.mode = file.mode;
+    if (onComplete) options.onComplete = onComplete;
+    outcomes.push(await writeFileOutcome(file.path, file.content, options));
   }
+  return outcomes;
 }
 
-export async function removeRenderedFiles(files: string[]): Promise<void> {
-  for (const file of files) await rm(file, { force: true, recursive: true });
+export async function removeRenderedFiles(
+  files: string[],
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
+  const outcomes: OperationOutcome[] = [];
+  for (const file of files) {
+    const options: Pick<WriteFileOptions, "onComplete"> = {};
+    if (onComplete) options.onComplete = onComplete;
+    outcomes.push(await removePathOutcome(file, options));
+  }
+  return outcomes;
 }
 
-export async function writeLocalFiles(files: RenderedFile[]): Promise<void> {
+export async function writeLocalFiles(
+  files: RenderedFile[],
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome[]> {
+  const outcomes: OperationOutcome[] = [];
   for (const file of files) {
     try {
-      const stat = await lstat(file.path);
-      if (file.ifMissing) continue;
-      if (stat.isSymbolicLink()) await unlink(file.path);
-    } catch {
+      await lstat(file.path);
+      if (file.ifMissing) {
+        const outcome: OperationOutcome = {
+          category: "file",
+          action: "write",
+          status: "unchanged",
+          target: file.path,
+          significance: "meaningful",
+          detail: "preserved existing file"
+        };
+        outcomes.push(outcome);
+        onComplete?.(outcome);
+        continue;
+      }
+    } catch (error) {
+      // SAFETY: Node filesystem failures expose their stable errno code on thrown errors.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       // Missing files are created below.
     }
-    await writeTextFile(file.path, file.content);
-    if (file.mode !== undefined) await chmod(file.path, file.mode);
+    const options: WriteFileOptions = {};
+    if (file.mode !== undefined) options.mode = file.mode;
+    if (onComplete) options.onComplete = onComplete;
+    outcomes.push(await writeFileOutcome(file.path, file.content, options));
   }
+  return outcomes;
 }
 
 export async function renderTarget(
@@ -147,11 +184,10 @@ export async function renderTarget(
       break;
   }
   const snapshotRoot = path.join(profileConfigsDir(paths, profile.name), snapshotName(target));
-  const current = new Set(
-    rendered.files
-      .filter((file) => file.path.startsWith(`${snapshotRoot}${path.sep}`))
-      .map((file) => file.path)
-  );
+  const current = new Set<string>();
+  for (const file of [...rendered.files, ...(rendered.localFiles ?? [])]) {
+    if (file.path.startsWith(`${snapshotRoot}${path.sep}`)) current.add(file.path);
+  }
   const staleFiles = [
     ...(rendered.staleFiles ?? []),
     ...(await staleSnapshotFiles(

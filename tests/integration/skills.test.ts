@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { execa } from "execa";
@@ -7,6 +7,8 @@ import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRuntimePaths, skillCacheRoot } from "../../src/core/paths.js";
 import { resolveProfile } from "../../src/core/profile.js";
+import { operationChanged } from "../../src/core/operations.js";
+import { syncSkillSnapshot } from "../../src/skills/snapshot.js";
 import { sha256 } from "../../src/skills/tree.js";
 import { runSkillsTui } from "../../src/tui/skills-tui.js";
 import {
@@ -179,6 +181,77 @@ describe("skill CLI integration", () => {
         )
       )
     ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports skill digest changes without labeling the complete snapshot as changed", async () => {
+    const paths = createRuntimePaths({ root, home });
+    const profile = await resolveProfile(paths, "personal");
+    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode-v2"], link: false });
+    const skillPath = path.join(root, "skills", "local-skill", "SKILL.md");
+    await writeFile(skillPath, `${await readFile(skillPath, "utf8")}\nChanged.\n`, "utf8");
+
+    const changed = await syncSkillSnapshot(paths, profile, {
+      selectedTargets: ["opencode-v2"],
+      link: false
+    });
+    expect(
+      changed.filter((outcome) => outcome.category === "skill" && outcome.status !== "unchanged")
+    ).toMatchObject([{ target: "local-skill", status: "updated" }]);
+    expect(changed).toContainEqual(
+      expect.objectContaining({
+        category: "bookkeeping",
+        action: "snapshot",
+        significance: "internal",
+        status: "updated"
+      })
+    );
+
+    const repeated = await syncSkillSnapshot(paths, profile, {
+      selectedTargets: ["opencode-v2"],
+      link: false
+    });
+    expect(repeated.every((outcome) => outcome.status === "unchanged")).toBe(true);
+  });
+
+  it("reports and repairs installed skill content, missing-file, and mode drift", async () => {
+    const paths = createRuntimePaths({ root, home });
+    const profile = await resolveProfile(paths, "personal");
+    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode-v2"], link: false });
+    const sourcePath = path.join(root, "skills", "local-skill", "SKILL.md");
+    const installedPath = path.join(
+      configsPath(home, "personal", "opencode-v2", "skills"),
+      "local-skill",
+      "SKILL.md"
+    );
+    const manifestPath = path.join(
+      configsPath(home, "personal", "opencode-v2", "skills"),
+      ".mfz-manifest.yml"
+    );
+    const expectedBytes = await readFile(sourcePath);
+    const unchangedManifest = await readFile(manifestPath);
+
+    const assertRepair = async (): Promise<void> => {
+      const outcomes = await syncSkillSnapshot(paths, profile, {
+        selectedTargets: ["opencode-v2"],
+        link: false
+      });
+      expect(
+        outcomes.filter((outcome) => outcome.category === "skill" && outcome.status !== "unchanged")
+      ).toMatchObject([{ target: "local-skill", status: "updated" }]);
+      expect(outcomes.some(operationChanged)).toBe(true);
+      expect(await readFile(installedPath)).toEqual(expectedBytes);
+      expect((await lstat(installedPath)).mode & 0o777).toBe(0o644);
+      expect(await readFile(manifestPath)).toEqual(unchangedManifest);
+    };
+
+    await writeFile(installedPath, "drifted\n", "utf8");
+    await assertRepair();
+
+    await rm(installedPath);
+    await assertRepair();
+
+    await chmod(installedPath, 0o755);
+    await assertRepair();
   });
 
   it("renders the exact pinned Git commit and records provenance", async () => {

@@ -154,7 +154,7 @@ describe("dotfiles integration", () => {
 
   it("renders and links .npmrc dotfile from profile folder", async () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
@@ -200,7 +200,7 @@ describe("dotfiles integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
     expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
@@ -222,7 +222,7 @@ describe("dotfiles integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const bashrc = await readFile(configsPath(home, "personal", "dotfiles", ".bashrc"), "utf8");
     expect(bashrc).toContain("# Managed by mindframe-z.");
@@ -280,7 +280,7 @@ describe("dotfiles integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
@@ -299,7 +299,7 @@ describe("dotfiles integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const rendered = await readFile(
       configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json"),

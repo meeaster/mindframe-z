@@ -346,7 +346,6 @@ export async function renderOpenCodeV2(
         [...pluginResult.files, ...tuiPluginResult.files].map((file) => [file.path, file])
       ).values()
     ],
-    localStaleFiles: [pluginsPath],
     links,
     staleLinks: [
       ...(useGlobalInstructions
@@ -376,14 +375,6 @@ export async function renderOpenCodeV2(
       {
         linkPath: path.join(paths.opencodeConfigDir, "delegate-general.json"),
         targetPath: path.join(configsOpenCodeV2, "delegate-general.json")
-      },
-      {
-        linkPath: path.join(paths.opencodeConfigDir, "commands"),
-        targetPath: commandsPath
-      },
-      {
-        linkPath: path.join(paths.opencodeConfigDir, "agents"),
-        targetPath: agentsPath
       },
       {
         linkPath: path.join(paths.opencodeConfigDir, "node_modules"),

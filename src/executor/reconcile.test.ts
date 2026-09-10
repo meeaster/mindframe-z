@@ -9,6 +9,7 @@ import type { ExecutorAdapter, ExecutorConnection, ExecutorIntegration } from ".
 import { executorConnectionAddress } from "./contract.js";
 import { executorJsonObjectSchema } from "./contract.js";
 import { reconcileExecutor, readManagedState } from "./reconcile.js";
+import type { OperationOutcome } from "../core/operations.js";
 
 function profileWithServer(
   name: string,
@@ -601,6 +602,40 @@ describe("Executor reconciliation", () => {
     });
     await expect(readFile(executorDesiredPath(paths, "personal"), "utf8")).resolves.toContain(
       '"slug": "example"'
+    );
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("notifies completed Executor effects before a later integration fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-outcomes-"));
+    const paths = createRuntimePaths({ root, home: root });
+    const profile = profileWithServer("personal", "https://example.test/mcp");
+    profile.mcpServers.push({
+      ...profile.mcpServers[0]!,
+      name: "second",
+      server: {
+        type: "remote",
+        description: "Second",
+        url: "https://second.example.test/mcp",
+        transport: "http"
+      }
+    });
+    const { adapter } = fakeAdapter();
+    const addServer = adapter.addServer.bind(adapter);
+    adapter.addServer = async (server) => {
+      if (server.slug === "second") throw new Error("second declaration failed");
+      await addServer(server);
+    };
+    const completed: OperationOutcome[] = [];
+
+    await expect(
+      reconcileExecutor(paths, profile, { adapter, onComplete: completed.push.bind(completed) })
+    ).rejects.toThrow("second declaration failed");
+    expect(completed).toContainEqual(
+      expect.objectContaining({ category: "executor", target: "example", status: "created" })
+    );
+    expect(completed).not.toContainEqual(
+      expect.objectContaining({ category: "executor", target: "second", status: "created" })
     );
     await rm(root, { recursive: true, force: true });
   });

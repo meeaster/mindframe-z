@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { writeJsonFileAtomic } from "./fs-util.js";
+import { writeJsonAtomicOutcome, type WriteFileOptions } from "./file-operations.js";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 import { jsonValueSchema, type JsonObject } from "./json.js";
 import { overrideStorePath, type AgentName, type RuntimePaths } from "./paths.js";
 import type { CapabilityAgentName } from "./manifests.js";
@@ -114,14 +116,20 @@ export async function writeProjectOverrideDelta(
 
 export async function renderAllPayloads(
   paths: RuntimePaths,
-  profile: ResolvedProfile
-): Promise<void> {
+  profile: ResolvedProfile,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
   const store = await readOverrideStore(paths.home);
   for (const projectRoot of Object.keys(store.projects)) {
     await renderProjectPayloads(paths, profile, store, projectRoot);
     pruneProject(store, projectRoot);
   }
-  await writeOverrideStore(paths.home, store);
+  const options: WriteFileOptions = {
+    category: "bookkeeping",
+    significance: "internal"
+  };
+  if (onComplete) options.onComplete = onComplete;
+  return writeJsonAtomicOutcome(overrideStorePath(paths.home), store, options);
 }
 
 export function effectiveProjectState(

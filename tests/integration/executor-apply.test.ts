@@ -32,7 +32,7 @@ describe("Executor apply integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--dry-run"]);
-    expect(result.stdout).toContain("executor\tadd context7");
+    expect(result.stdout).toContain("planned\tadd\texecutor\tcontext7");
     const rendered = await renderTarget(
       createRuntimePaths({ root, home }),
       await resolveProfile(createRuntimePaths({ root, home }), "personal"),
@@ -81,11 +81,71 @@ describe("Executor apply integration", () => {
       "--dry-run",
       "--no-link"
     ]);
-    expect(result.stdout).toContain("executor\tremove context7");
-    expect(result.stdout).toContain("live state unavailable");
+    expect(result.stdout).toContain("planned\tremove\texecutor\tcontext7");
+    expect(result.stdout).toContain("live Executor metadata unavailable");
     await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
+  });
+
+  it("distinguishes planned Executor additions, updates, and removals", async () => {
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      [
+        "servers:",
+        "  context7:",
+        "    description: Updated docs.",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://mcp.context7.com/mcp",
+        "  search:",
+        "    description: Search.",
+        "    type: remote",
+        "    transport: http",
+        "    url: https://search.example.test/mcp",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "agents: [opencode-v2]",
+        "mcp:",
+        "  context7:",
+        "    executor: { enabled: true }",
+        "  search:",
+        "    executor: { enabled: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    const managedPath = executorManagedPath(createRuntimePaths({ root, home }), "personal");
+    await mkdir(path.dirname(managedPath), { recursive: true });
+    await writeFile(
+      managedPath,
+      JSON.stringify(
+        {
+          version: 1,
+          profile: "personal",
+          complete: true,
+          integrations: {
+            context7: { digest: "outdated", lastReconciledAt: new Date().toISOString() },
+            retired: { digest: "retired", lastReconciledAt: new Date().toISOString() }
+          }
+        },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+
+    const result = await cli("mfz", root, home, ["apply", "--dry-run", "--no-link"]);
+
+    expect(result.stdout).toContain("planned\tadd\texecutor\tsearch");
+    expect(result.stdout).toContain("planned\tupdate\texecutor\tcontext7");
+    expect(result.stdout).toContain("planned\tremove\texecutor\tretired");
   });
 
   it("renders one shared bridge alongside direct MCP entries for every supported harness", async () => {
@@ -107,7 +167,7 @@ describe("Executor apply integration", () => {
     );
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "all", "--dry-run"]);
-    expect(result.stdout).toContain("executor\tadd context7");
+    expect(result.stdout).toContain("planned\tadd\texecutor\tcontext7");
     for (const target of ["opencode-v2", "claude-code", "codex"] as const) {
       const rendered = await renderTarget(
         createRuntimePaths({ root, home }),

@@ -41,7 +41,9 @@ Common commands:
 
 - `mfz init` creates machine config and creates, clones, or points at a home.
 - `mfz guide` prints home layout and editing conventions.
-- `mfz apply` renders the active home into `~/.mindframe-z/configs/<profile>/` and links or merges global tool config.
+- `mfz apply` synchronizes enabled references, removes safe deselected managed checkouts, regenerates indexes, renders the active home, and activates global tool configuration.
+- `mfz apply --verbose` includes unchanged checks and internal operations. Captured output uses stable plain lines without terminal control sequences.
+- `mfz refs sync [name]` reconciles all enabled references or only one named reference, then regenerates local indexes without activating agent configuration.
 - `mfz sync` promotes unmanaged rendered config edits back into home profiles.
 - `mfz doctor` validates manifests, symlinks, stale project toggles, legacy references, and upstream checkout state.
 - `mfz schemas` regenerates committed JSON Schemas from Zod schemas.

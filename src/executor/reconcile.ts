@@ -1,7 +1,13 @@
 import { readFile, readdir } from "node:fs/promises";
 import { z } from "zod";
 import { executorDesiredPath, executorManagedPath, type RuntimePaths } from "../core/paths.js";
-import { pathExists, writeJsonFileAtomic } from "../core/fs-util.js";
+import { pathExists } from "../core/fs-util.js";
+import { writeJsonAtomicOutcome } from "../core/file-operations.js";
+import type {
+  OperationCompletion,
+  OperationOutcome,
+  PlannedOperationEffect
+} from "../core/operations.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { createExecutorAdapter, attachExecutorAdapter, type ExecutorAdapter } from "./adapter.js";
 import {
@@ -131,10 +137,16 @@ async function writeSnapshots(
   paths: RuntimePaths,
   profileName: string,
   desired: ExecutorDesiredState,
-  managed: ManagedState
+  managed: ManagedState,
+  onComplete?: OperationCompletion
 ): Promise<void> {
-  await writeJsonFileAtomic(executorDesiredPath(paths, profileName), desired);
-  await writeJsonFileAtomic(executorManagedPath(paths, profileName), managed);
+  const options = {
+    category: "bookkeeping" as const,
+    significance: "internal" as const
+  };
+  if (onComplete) Object.assign(options, { onComplete });
+  await writeJsonAtomicOutcome(executorDesiredPath(paths, profileName), desired, options);
+  await writeJsonAtomicOutcome(executorManagedPath(paths, profileName), managed, options);
 }
 
 function emptyResult(desired: ExecutorDesiredState): ExecutorReconcileResult {
@@ -307,13 +319,21 @@ async function reconcileServer(
   adapter: ExecutorAdapter,
   desired: ExecutorDesiredServer,
   result: ExecutorReconcileResult,
-  checkpoint: ReconcileCheckpoint
+  checkpoint: ReconcileCheckpoint,
+  onComplete?: OperationCompletion
 ): Promise<void> {
   let current = await adapter.getIntegration(desired.slug);
   if (!current) {
     await adapter.addServer(desired);
-    await checkpoint(desired.slug);
     result.added.push(desired.slug);
+    onComplete?.({
+      category: "executor",
+      action: "reconcile",
+      status: "created",
+      target: desired.slug,
+      significance: "meaningful"
+    });
+    await checkpoint(desired.slug);
     current = await adapter.getIntegration(desired.slug);
     if (!current) throw new Error(`Executor registered ${desired.slug} but could not read it back`);
   } else {
@@ -326,8 +346,16 @@ async function reconcileServer(
     let changed = false;
     if (classification.descriptionChanged) {
       await adapter.updateIntegration(desired.slug, { description: desired.description });
-      await checkpoint(desired.slug);
       result.updated.push(desired.slug);
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "updated",
+        target: desired.slug,
+        significance: "meaningful",
+        detail: "description"
+      });
+      await checkpoint(desired.slug);
       changed = true;
     }
     if (classification.configurationChanged) {
@@ -335,8 +363,16 @@ async function reconcileServer(
         Object.entries(desired.config).filter(([key]) => key !== "authenticationTemplate")
       );
       await adapter.configureServer(desired.slug, serverConfig);
-      await checkpoint(desired.slug);
       result.updated.push(desired.slug);
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "updated",
+        target: desired.slug,
+        significance: "meaningful",
+        detail: "configuration"
+      });
+      await checkpoint(desired.slug);
       changed = true;
       current = (await adapter.getIntegration(desired.slug)) ?? current;
     }
@@ -346,11 +382,28 @@ async function reconcileServer(
     if (classification.authenticationChanged && !hasCredentialedConnection) {
       const methods = desired.config.authenticationTemplate ?? [{ slug: "none", kind: "none" }];
       await adapter.configureAuth(desired.slug, methods, "replace");
-      await checkpoint(desired.slug);
       result.updated.push(desired.slug);
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "updated",
+        target: desired.slug,
+        significance: "meaningful",
+        detail: "authentication"
+      });
+      await checkpoint(desired.slug);
       changed = true;
     }
-    if (!changed) result.reused.push(desired.slug);
+    if (!changed) {
+      result.reused.push(desired.slug);
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "unchanged",
+        target: desired.slug,
+        significance: "meaningful"
+      });
+    }
   }
 }
 
@@ -358,7 +411,8 @@ async function ensureDeclaredConnection(
   adapter: ExecutorAdapter,
   server: ExecutorDesiredServer,
   result: ExecutorReconcileResult,
-  checkpoint: ReconcileCheckpoint
+  checkpoint: ReconcileCheckpoint,
+  onComplete?: OperationCompletion
 ): Promise<void> {
   const current = await adapter.getIntegration(server.slug);
   const classification = classifyExecutorIntegration(
@@ -376,8 +430,16 @@ async function ensureDeclaredConnection(
   for (const connection of actionable) {
     if (connection.method === "none") {
       await adapter.createNoAuthConnection(server.slug, connection.name, connection.method);
-      await checkpoint(server.slug);
       result.addedConnections.push(connectionKey(server.slug, connection.name));
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "created",
+        target: connectionKey(server.slug, connection.name),
+        significance: "meaningful",
+        detail: "connection"
+      });
+      await checkpoint(server.slug);
     }
   }
   if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
@@ -386,6 +448,14 @@ async function ensureDeclaredConnection(
     if (required) result.requiredConnections.push(required);
     if (connection.kind === "compatible") {
       result.reusedConnections.push(connectionKey(server.slug, connection.name));
+      onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "unchanged",
+        target: connectionKey(server.slug, connection.name),
+        significance: "meaningful",
+        detail: "connection"
+      });
     }
   }
 }
@@ -397,6 +467,7 @@ export async function reconcileExecutor(
     dryRun?: boolean;
     interactive?: boolean;
     adapter?: ExecutorAdapter;
+    onComplete?: OperationCompletion;
   } = {}
 ): Promise<ExecutorReconcileResult | undefined> {
   const desired = buildExecutorDesiredState(profile, paths.home);
@@ -420,14 +491,18 @@ export async function reconcileExecutor(
     const digestPlan = planExecutor(desired, previous, sharedOwnedSlugs);
     const attached = options.adapter ?? (await attachExecutorAdapter({}));
     if (!attached) {
-      return {
+      const plan = {
         ...digestPlan,
         planning: "metadata-unavailable",
         blockers: ["live Executor metadata unavailable; health and durable state are unknown"]
-      };
+      } satisfies ExecutorReconcileResult;
+      for (const outcome of executorPlanOutcomes(plan)) options.onComplete?.(outcome);
+      return plan;
     }
     try {
-      return await planExecutorWithMetadata(attached, desired, digestPlan);
+      const plan = await planExecutorWithMetadata(attached, desired, digestPlan);
+      for (const outcome of executorPlanOutcomes(plan)) options.onComplete?.(outcome);
+      return plan;
     } finally {
       if (!options.adapter) await attached.close();
     }
@@ -445,7 +520,7 @@ export async function reconcileExecutor(
     },
     integrations: { ...previous.integrations }
   };
-  await writeSnapshots(paths, profile.name, desired, managed);
+  await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   await preflightReconciliation(adapter, desired.integrations, previous, {
     retainedSlugs: sharedOwnedSlugs
   });
@@ -457,11 +532,11 @@ export async function reconcileExecutor(
       lastReconciledAt: new Date().toISOString(),
       connections: { ...server.connections }
     };
-    await writeSnapshots(paths, profile.name, desired, managed);
+    await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   };
   for (const server of desired.integrations) {
-    await reconcileServer(adapter, server, result, checkpoint);
-    await ensureDeclaredConnection(adapter, server, result, checkpoint);
+    await reconcileServer(adapter, server, result, checkpoint, options.onComplete);
+    await ensureDeclaredConnection(adapter, server, result, checkpoint, options.onComplete);
     await checkpoint(server.slug);
   }
 
@@ -470,7 +545,15 @@ export async function reconcileExecutor(
     if (sharedOwnedSlugs.has(slug)) {
       result.retained.push(slug);
       delete managed.integrations[slug];
-      await writeSnapshots(paths, profile.name, desired, managed);
+      options.onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "unchanged",
+        target: slug,
+        significance: "meaningful",
+        detail: "retained by another profile"
+      });
+      await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
       continue;
     }
     const current = await adapter.getIntegration(slug);
@@ -479,18 +562,75 @@ export async function reconcileExecutor(
     if (removal.blockers.length > 0) throw new Error(removal.blockers[0]);
     await adapter.removeIntegration(slug);
     result.removed.push(slug);
+    options.onComplete?.({
+      category: "executor",
+      action: "reconcile",
+      status: "removed",
+      target: slug,
+      significance: "meaningful"
+    });
     delete managed.integrations[slug];
-    await writeSnapshots(paths, profile.name, desired, managed);
+    await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   }
 
   if (result.requiredConnections.length > 0) {
+    for (const connection of result.requiredConnections) {
+      options.onComplete?.({
+        category: "executor",
+        action: "reconcile",
+        status: "blocked",
+        target: connectionKey(connection.integration, connection.name),
+        significance: "meaningful",
+        detail: `${connection.authentication} connection ${connection.reason}`
+      });
+    }
     throw new Error(requiredConnectionsMessage(result.requiredConnections));
   }
 
   managed.complete = true;
   if (managed.operation) managed.operation.status = "complete";
-  await writeSnapshots(paths, profile.name, desired, managed);
+  await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   return result;
+}
+
+function executorPlanOutcomes(result: ExecutorReconcileResult | undefined): OperationOutcome[] {
+  if (!result) return [];
+  const outcomes: OperationOutcome[] = [];
+  const add = (
+    status: OperationOutcome["status"],
+    target: string,
+    detail?: string,
+    plannedEffect?: PlannedOperationEffect
+  ) => {
+    const outcome: OperationOutcome = {
+      category: "executor",
+      action: "reconcile",
+      status,
+      target,
+      significance: "meaningful"
+    };
+    if (detail) outcome.detail = detail;
+    if (plannedEffect) outcome.plannedEffect = plannedEffect;
+    outcomes.push(outcome);
+  };
+  for (const target of new Set(result.added)) add("planned", target, undefined, "add");
+  for (const target of new Set(result.updated)) add("planned", target, undefined, "update");
+  for (const target of new Set(result.reused)) add("unchanged", target);
+  for (const target of new Set(result.removed)) add("planned", target, undefined, "remove");
+  for (const target of new Set(result.retained))
+    add("unchanged", target, "retained by another profile");
+  for (const target of new Set(result.addedConnections))
+    add("planned", target, "connection", "add");
+  for (const target of new Set(result.reusedConnections)) add("unchanged", target, "connection");
+  for (const connection of result.requiredConnections) {
+    add(
+      "blocked",
+      connectionKey(connection.integration, connection.name),
+      `${connection.authentication} connection ${connection.reason}`
+    );
+  }
+  for (const blocker of result.blockers ?? []) add("blocked", "Executor", blocker);
+  return outcomes;
 }
 
 function requiredConnection(

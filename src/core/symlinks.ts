@@ -1,5 +1,6 @@
 import { lstat, mkdir, readlink, rename, symlink } from "node:fs/promises";
 import path from "node:path";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 
 export interface LinkPlan {
   linkPath: string;
@@ -52,13 +53,43 @@ export function backupPathFor(linkPath: string): string {
   return `${linkPath}.mindframe-z.bak-${Date.now()}`;
 }
 
-export async function createLink(plan: LinkPlan): Promise<void> {
+export async function createLink(
+  plan: LinkPlan,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
   await mkdir(path.dirname(plan.linkPath), { recursive: true });
   await symlink(plan.targetPath, plan.linkPath);
+  const outcome: OperationOutcome = {
+    category: "link",
+    action: "link",
+    status: "linked",
+    target: plan.linkPath,
+    significance: "meaningful",
+    changes: ["destination"],
+    detail: plan.targetPath
+  };
+  onComplete?.(outcome);
+  return outcome;
 }
 
-export async function replaceWithBackup(plan: LinkPlan, backupPath: string): Promise<void> {
+export async function replaceWithBackup(
+  plan: LinkPlan,
+  backupPath: string,
+  onComplete?: OperationCompletion,
+  previousTarget?: string
+): Promise<OperationOutcome> {
   await mkdir(path.dirname(plan.linkPath), { recursive: true });
   await rename(plan.linkPath, backupPath);
   await symlink(plan.targetPath, plan.linkPath);
+  const outcome: OperationOutcome = {
+    category: "link",
+    action: "link",
+    status: "relinked",
+    target: plan.linkPath,
+    significance: "meaningful",
+    changes: ["destination"],
+    detail: previousTarget ? `${previousTarget} -> ${plan.targetPath}` : plan.targetPath
+  };
+  onComplete?.(outcome);
+  return outcome;
 }

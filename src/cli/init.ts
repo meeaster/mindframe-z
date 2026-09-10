@@ -365,7 +365,7 @@ Skills from the upstream home are enabled with qualified names like \`<alias>/<n
 
 const referencesGuideMarkdown = `# References Guide
 
-A reference is a read-only local clone that gives agents source-grounded context when a repository becomes relevant. The catalog declares available repositories, a profile enables them, and \`mfz apply\` renders an agent-visible index with each description and local path.
+A reference is a read-only local clone that gives agents source-grounded context when a repository becomes relevant. The catalog declares available repositories, and a profile enables them. Full \`mfz apply\` clones or updates enabled references, removes deselected checkouts that MFZ owns and can delete safely, regenerates local indexes, refreshes embedded agent snapshots, and activates configuration.
 
 Add a reference:
 
@@ -388,7 +388,11 @@ Add a reference:
      - example
    \`\`\`
 
-3. Run \`mfz refs sync example\` to clone or update it, then plain \`mfz apply\` to regenerate the indexes and agent configuration. Use \`mfz refs list\` to inspect availability and \`mfz refs index\` to regenerate the reference, extra-folder, and capability indexes.
+3. Run plain \`mfz apply\` to synchronize references, regenerate indexes, refresh embedded agent snapshots, and activate configuration. Use \`mfz refs list\` to inspect availability. Use \`mfz refs sync example\` when you need to update only this reference without activating configuration. Both named and bulk reference synchronization regenerate the local reference, extra-folder, and capability indexes automatically.
+
+Bulk reconciliation removes a deselected checkout only when MFZ owns it and Git establishes that removal is safe. MFZ preserves modified or untracked files, ahead or divergent commits, and checkouts with an unexpected remote. Resolve a reported conflict instead of deleting local work. Named synchronization does not update or remove unrelated references.
+
+Use \`--verbose\` with apply or reference synchronization to show unchanged checks and internal operations. Default output lists changes and items that need attention. Captured output uses plain lines without terminal control sequences.
 
 If the profile defines \`capability_groups\`, each enabled reference must declare a matching \`group\`, a short \`summary\`, and at least one \`signal\`.
 
@@ -396,7 +400,7 @@ Write descriptions as routing metadata, not miniature repository summaries. Lead
 
 References inherited from an upstream home use qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
 
-Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify the result with \`mfz refs list\` and \`mfz doctor\`.
+Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify a complete activation with \`mfz refs list\` and \`mfz doctor\`. A focused \`mfz refs sync [name]\` updates local references and indexes only; run full \`mfz apply\` when agent snapshots or configuration also need activation.
 `;
 
 const guideTopics = new Map([

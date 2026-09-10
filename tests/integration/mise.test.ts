@@ -21,7 +21,7 @@ describe("mise integration", () => {
 
   it("renders mise config from base profile and links it", async () => {
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const ownership = parseJson(
       Ownership,

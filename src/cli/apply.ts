@@ -1,12 +1,7 @@
-import * as readline from "node:readline/promises";
+import { confirm, isCancel } from "@clack/prompts";
 import path from "node:path";
-import { unlink } from "node:fs/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
-import {
-  executorPlanSummary,
-  hasManagedExecutorState,
-  reconcileExecutor
-} from "../executor/index.js";
+import { hasManagedExecutorState, reconcileExecutor } from "../executor/index.js";
 import {
   agentList,
   createRuntimePaths,
@@ -25,22 +20,16 @@ import {
 } from "../core/render.js";
 import {
   ensureGitConfigInclude,
-  gitIdentityFragmentPath,
-  globalGitConfigPath,
+  planGitConfigInclude,
+  planGitIdentityFragment,
   writeGitIdentityFragment
 } from "../core/git-config.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
-import { writeExtraFoldersIndex, writeReferenceIndex } from "../ref-store/references.js";
-import { writeCapabilityIndexes } from "../ref-store/capabilities.js";
+import { planReferences, syncReferences } from "../ref-store/references.js";
+import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
-import {
-  jsonFileContent,
-  pathExists,
-  readJsonObject,
-  writeJsonFileAtomic,
-  writeTextFile
-} from "../core/fs-util.js";
+import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
 import {
   mergeOpenCodeV2CliPlugins,
   parseOpenCodeV2PluginEntries
@@ -51,6 +40,19 @@ import {
   writeOwnership,
   activeProfilePath
 } from "../core/ownership.js";
+import {
+  planFileOutcome,
+  planRemovePathOutcome,
+  removePathOutcome,
+  writeFileOutcome,
+  writeJsonAtomicOutcome
+} from "../core/file-operations.js";
+import {
+  collectOperations,
+  type OperationCompletion,
+  type OperationOutcome,
+  type OperationStartNotification
+} from "../core/operations.js";
 
 export interface ApplyOptions {
   root?: string | undefined;
@@ -60,6 +62,10 @@ export interface ApplyOptions {
   target: InfraTarget | "all";
   dryRun?: boolean | undefined;
   noLink?: boolean | undefined;
+  interactive?: boolean | undefined;
+  onStart?: OperationStartNotification | undefined;
+  onComplete?: OperationCompletion | undefined;
+  beforePrompt?: (() => void) | undefined;
 }
 
 export interface ApplyDependencies {
@@ -68,9 +74,10 @@ export interface ApplyDependencies {
 }
 
 async function confirmReplace(
-  rl: readline.Interface | null,
+  interactive: boolean,
   linkPath: string,
-  backupPath: string
+  backupPath: string,
+  beforePrompt?: () => void
 ): Promise<boolean> {
   const replaceExisting = process.env.MFZ_REPLACE_EXISTING?.trim().toLowerCase();
   if (replaceExisting === "y" || replaceExisting === "yes" || replaceExisting === "true") {
@@ -80,14 +87,16 @@ async function confirmReplace(
     return false;
   }
 
-  let answer = "";
-  if (rl) {
-    answer = await rl.question(`Replace existing ${linkPath}? Backup: ${backupPath} [y/N]: `);
-  } else {
-    return false;
-  }
-  const normalized = answer.trim().toLowerCase();
-  return normalized === "y" || normalized === "yes";
+  if (!interactive) return false;
+  beforePrompt?.();
+  const answer = await confirm({
+    message: `Replace existing ${linkPath}? Backup: ${backupPath}`,
+    initialValue: false,
+    input: processStdin,
+    output: processStdout
+  });
+  if (isCancel(answer)) throw new Error("Apply cancelled");
+  return answer === true;
 }
 
 function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir: string): boolean {
@@ -99,41 +108,67 @@ function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir
 async function applyRenderedTarget(
   paths: ReturnType<typeof createRuntimePaths>,
   result: RenderResult,
-  options: Pick<ApplyOptions, "dryRun" | "noLink">,
-  rl: readline.Interface | null
+  options: Pick<ApplyOptions, "dryRun" | "noLink" | "beforePrompt">,
+  interactive: boolean,
+  onComplete: OperationCompletion
 ): Promise<void> {
-  if (!options.dryRun) {
-    await removeRenderedFiles(result.staleFiles ?? []);
-    await writeRenderedFiles(result.files);
-  }
-  for (const file of result.files) {
-    console.log(`${options.dryRun ? "would render" : "rendered"}\t${file.path}`);
+  if (options.dryRun) {
+    for (const file of result.staleFiles ?? []) {
+      await planRemovePathOutcome(file, { onComplete });
+    }
+    for (const file of result.files) {
+      await planRenderedFile(file, onComplete);
+    }
+  } else {
+    await removeRenderedFiles(result.staleFiles ?? [], onComplete);
+    await writeRenderedFiles(result.files, onComplete);
   }
 
   if (result.localFiles && !options.noLink) {
-    for (const file of result.localStaleFiles ?? []) {
-      console.log(`${options.dryRun ? "would remove local" : "removed local"}\t${file}`);
-    }
-    if (!options.dryRun) {
-      await removeRenderedFiles(result.localStaleFiles ?? []);
-      await writeLocalFiles(result.localFiles);
-    }
-    for (const file of result.localFiles) {
-      console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${file.path}`);
+    if (options.dryRun) {
+      for (const file of result.localStaleFiles ?? []) {
+        await planRemovePathOutcome(file, { onComplete });
+      }
+      for (const file of result.localFiles) {
+        if (file.ifMissing && (await pathExists(file.path))) {
+          onComplete({
+            category: "file",
+            action: "write",
+            status: "unchanged",
+            target: file.path,
+            significance: "meaningful",
+            detail: "preserved existing file"
+          });
+        } else {
+          await planRenderedFile(file, onComplete);
+        }
+      }
+    } else {
+      await removeRenderedFiles(result.localStaleFiles ?? [], onComplete);
+      await writeLocalFiles(result.localFiles, onComplete);
     }
   }
   if (options.noLink) return;
 
   for (const link of result.staleLinks ?? []) {
     const status = await verifyLink(link);
+    if (status.state === "missing") {
+      if (!options.dryRun) {
+        await removePathOutcome(link.linkPath, { category: "link", onComplete });
+      }
+      continue;
+    }
     if (
       status.state !== "ok" &&
       !staleManagedConfigTarget(status.resolvedTarget, paths.configsDir)
     ) {
       continue;
     }
-    if (!options.dryRun) await unlink(link.linkPath);
-    console.log(`${options.dryRun ? "would unlink" : "unlinked"}\t${link.linkPath}`);
+    if (options.dryRun) {
+      await planRemovePathOutcome(link.linkPath, { category: "link", onComplete });
+    } else {
+      await removePathOutcome(link.linkPath, { category: "link", onComplete });
+    }
   }
 
   if (result.cliPlugins) {
@@ -147,57 +182,96 @@ async function applyRenderedTarget(
         result.cliPlugins.entries,
         previousEntries
       );
-      if (!options.dryRun) await writeTextFile(result.cliPlugins.path, jsonFileContent(merged));
-      console.log(
-        `${options.dryRun ? "would merge" : "merged"}\t${result.cliPlugins.path} plugins`
-      );
+      if (options.dryRun) {
+        await planFileOutcome(result.cliPlugins.path, jsonFileContent(merged), { onComplete });
+      } else {
+        await writeFileOutcome(result.cliPlugins.path, jsonFileContent(merged), { onComplete });
+      }
     }
     if (!options.dryRun && (previousEntries.length > 0 || result.cliPlugins.entries.length > 0))
-      await writeJsonFileAtomic(result.cliPlugins.registryPath, {
-        version: 1,
-        entries: result.cliPlugins.entries
-      });
+      await writeJsonAtomicOutcome(
+        result.cliPlugins.registryPath,
+        { version: 1, entries: result.cliPlugins.entries },
+        { category: "bookkeeping", significance: "internal", onComplete }
+      );
   }
 
   for (const link of result.links) {
     const status = await verifyLink(link);
     if (options.dryRun) {
-      const action =
-        status.state === "missing"
-          ? "would link"
-          : status.state === "ok"
-            ? "link ok"
-            : "would replace after backup";
-      console.log(`${action}\t${link.linkPath} -> ${link.targetPath}`);
+      const outcome: OperationOutcome = {
+        category: "link",
+        action: "link",
+        status: status.state === "ok" ? "unchanged" : "planned",
+        target: link.linkPath,
+        significance: "meaningful",
+        changes: status.state === "ok" ? [] : ["destination"],
+        after: link.targetPath
+      };
+      if (status.resolvedTarget !== undefined) outcome.before = status.resolvedTarget;
+      if (status.state === "conflict") {
+        outcome.detail = `would replace after backup: ${status.detail}`;
+      }
+      onComplete(outcome);
       continue;
     }
     if (status.state === "ok") {
-      console.log(`link ok\t${link.linkPath} -> ${link.targetPath}`);
+      onComplete({
+        category: "link",
+        action: "link",
+        status: "unchanged",
+        target: link.linkPath,
+        significance: "meaningful",
+        detail: link.targetPath
+      });
       continue;
     }
     if (status.state === "missing") {
-      await createLink(link);
-      console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+      await createLink(link, onComplete);
       continue;
     }
 
     const backupPath = backupPathFor(link.linkPath);
     const autoReplace = staleManagedConfigTarget(status.resolvedTarget, paths.configsDir);
-    if (!autoReplace && !(await confirmReplace(rl, link.linkPath, backupPath))) {
-      console.log(`skipped\t${link.linkPath} (${status.detail})`);
+    if (
+      !autoReplace &&
+      !(await confirmReplace(interactive, link.linkPath, backupPath, options.beforePrompt))
+    ) {
+      onComplete({
+        category: "link",
+        action: "link",
+        status: "skipped",
+        target: link.linkPath,
+        significance: "meaningful",
+        detail: status.detail
+      });
       continue;
     }
-    await replaceWithBackup(link, backupPath);
-    console.log(`backed up\t${link.linkPath} -> ${backupPath}`);
-    console.log(`linked\t${link.linkPath} -> ${link.targetPath}`);
+    await replaceWithBackup(link, backupPath, onComplete, status.resolvedTarget);
   }
+}
+
+async function planRenderedFile(
+  file: RenderResult["files"][number],
+  onComplete: OperationCompletion
+): Promise<void> {
+  const writeOptions = { onComplete };
+  if (file.mode !== undefined) Object.assign(writeOptions, { mode: file.mode });
+  await planFileOutcome(file.path, file.content, writeOptions);
 }
 
 export async function applyConfig(
   options: ApplyOptions,
   dependencies: ApplyDependencies = {}
-): Promise<void> {
+): Promise<OperationOutcome[]> {
+  const operations = collectOperations(options.onComplete);
   const paths = createRuntimePaths({ root: options.root, home: options.home });
+  options.onStart?.({
+    category: "bookkeeping",
+    action: "reconcile",
+    target: options.profile ?? "configured profile",
+    detail: "resolve profile"
+  });
   const rendersAgents = options.target === "all";
   const profile = await resolveProfile(
     paths,
@@ -208,6 +282,14 @@ export async function applyConfig(
         ? undefined
         : { evaluateAgents: [options.agent] }
   );
+  operations.complete({
+    category: "bookkeeping",
+    action: "reconcile",
+    status: "unchanged",
+    target: profile.name,
+    significance: "internal",
+    detail: "profile resolved"
+  });
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
@@ -216,71 +298,124 @@ export async function applyConfig(
   const render = dependencies.renderTarget ?? renderTarget;
   const usePrompts = !options.dryRun && !options.noLink;
   const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
-  const rl =
-    usePrompts && processStdin.isTTY
-      ? readline.createInterface({ input: processStdin, output: processStdout })
-      : null;
+  const interactive = usePrompts && options.interactive === true;
 
-  try {
-    const executorPlan =
-      selectedExecutorTarget &&
-      (requiresExecutorReconciliation(profile, selectedAgents) ||
-        (await hasManagedExecutorState(paths, profile.name)))
-        ? await reconcile(paths, profile, {
-            dryRun: options.dryRun ?? false,
-            interactive: Boolean(processStdin.isTTY)
-          })
-        : undefined;
-    if (executorPlan) console.log(`executor\t${executorPlanSummary(executorPlan)}`);
-    if (!options.dryRun) {
-      if (rendersAgents) {
-        await writeReferenceIndex(paths, profile);
-        await writeExtraFoldersIndex(paths, profile);
-        await writeCapabilityIndexes(paths, profile);
-        await renderAllPayloads(paths, profile);
-      }
+  if (rendersAgents) {
+    const referenceOptions = { onComplete: operations.complete };
+    if (options.onStart) Object.assign(referenceOptions, { onStart: options.onStart });
+    if (options.dryRun) {
+      await planReferences(paths, profile, referenceOptions);
+    } else {
+      await syncReferences(paths, profile, referenceOptions);
     }
-    if (!options.noLink && rendersAgents) {
-      const fragmentPath = gitIdentityFragmentPath(paths);
-      const configPath = globalGitConfigPath(paths);
-      if (!options.dryRun) {
-        await writeGitIdentityFragment(paths, profile.manifests.machine);
-        await ensureGitConfigInclude(paths);
-      }
-      console.log(`${options.dryRun ? "would write local" : "wrote local"}\t${fragmentPath}`);
-      console.log(`${options.dryRun ? "would update" : "updated"}\t${configPath}`);
-    }
-    for (const target of selectedTargets) {
-      const previousOwnership =
-        target === "mise" ? await readOwnership(paths, previousProfile, target) : undefined;
-      const previousOwnedHostPaths = previousOwnership?.host.map((relative) =>
-        path.resolve(paths.miseConfigDir, relative)
-      );
-      const renderOptions = {
-        includeGlobalSkillState: !options.noLink
-      };
-      if (previousOwnedHostPaths !== undefined)
-        Object.assign(renderOptions, { previousOwnedHostPaths });
-      const result = await render(paths, profile, target, renderOptions);
-      await applyRenderedTarget(paths, result, options, rl);
-      if (!options.dryRun && result.ownership) {
-        await writeOwnership(paths, profile.name, result.ownership);
-      }
-    }
-    if (!options.dryRun) await writeTextFile(activeProfilePath(paths), `${profile.name}\n`);
-    if (rendersAgents && !options.dryRun && (await ensureHomeGuidance(paths.root)) === "wrote") {
-      console.log(`wrote\t${path.join(paths.root, "AGENTS.md")} (home guidance block)`);
-    }
-    if (!rendersAgents) return;
-    await syncSkillSnapshot(paths, profile, {
-      selectedTargets: selectedAgents.filter(
-        (target): target is SkillTarget =>
-          target === "opencode-v2" || target === "claude-code" || target === "codex"
-      ),
-      dryRun: options.dryRun ?? false,
-      link: !options.noLink
-    });
-  } finally {
-    rl?.close();
   }
+  if (
+    selectedExecutorTarget &&
+    (requiresExecutorReconciliation(profile, selectedAgents) ||
+      (await hasManagedExecutorState(paths, profile.name)))
+  ) {
+    options.onStart?.({
+      category: "executor",
+      action: "reconcile",
+      target: profile.name,
+      detail: "Executor integrations"
+    });
+    await reconcile(paths, profile, {
+      dryRun: options.dryRun ?? false,
+      interactive: options.interactive === true,
+      onComplete: operations.complete
+    });
+  }
+  if (rendersAgents) {
+    options.onStart?.({
+      category: "index",
+      action: "write",
+      target: profile.name,
+      detail: "local indexes"
+    });
+    await reconcileLocalIndexes(paths, profile, {
+      dryRun: options.dryRun ?? false,
+      onComplete: operations.complete
+    });
+    if (!options.dryRun) {
+      options.onStart?.({
+        category: "bookkeeping",
+        action: "write",
+        target: profile.name,
+        detail: "project override payloads"
+      });
+      await renderAllPayloads(paths, profile, operations.complete);
+    }
+  }
+  if (!options.noLink && rendersAgents) {
+    options.onStart?.({
+      category: "file",
+      action: "write",
+      target: profile.name,
+      detail: "Git identity configuration"
+    });
+    if (options.dryRun) {
+      await planGitIdentityFragment(paths, profile.manifests.machine, operations.complete);
+      await planGitConfigInclude(paths, operations.complete);
+    } else {
+      await writeGitIdentityFragment(paths, profile.manifests.machine, operations.complete);
+      await ensureGitConfigInclude(paths, operations.complete);
+    }
+  }
+  for (const target of selectedTargets) {
+    options.onStart?.({
+      category: "file",
+      action: "write",
+      target,
+      detail: `render ${target}`
+    });
+    const previousOwnership =
+      target === "mise" ? await readOwnership(paths, previousProfile, target) : undefined;
+    const previousOwnedHostPaths = previousOwnership?.host.map((relative) =>
+      path.resolve(paths.miseConfigDir, relative)
+    );
+    const renderOptions = {
+      includeGlobalSkillState: !options.noLink
+    };
+    if (previousOwnedHostPaths !== undefined)
+      Object.assign(renderOptions, { previousOwnedHostPaths });
+    const result = await render(paths, profile, target, renderOptions);
+    await applyRenderedTarget(paths, result, options, interactive, operations.complete);
+    if (!options.dryRun && result.ownership) {
+      await writeOwnership(paths, profile.name, result.ownership, operations.complete);
+    }
+  }
+  if (!options.dryRun) {
+    await writeFileOutcome(activeProfilePath(paths), `${profile.name}\n`, {
+      category: "bookkeeping",
+      significance: "internal",
+      onComplete: operations.complete
+    });
+  }
+  if (rendersAgents && !options.dryRun) {
+    options.onStart?.({
+      category: "guidance",
+      action: "write",
+      target: path.join(paths.root, "AGENTS.md"),
+      detail: "home guidance"
+    });
+    await ensureHomeGuidance(paths.root, operations.complete);
+  }
+  if (!rendersAgents) return operations.outcomes;
+  options.onStart?.({
+    category: "skill",
+    action: "snapshot",
+    target: profile.name,
+    detail: "skill snapshot"
+  });
+  await syncSkillSnapshot(paths, profile, {
+    selectedTargets: selectedAgents.filter(
+      (target): target is SkillTarget =>
+        target === "opencode-v2" || target === "claude-code" || target === "codex"
+    ),
+    dryRun: options.dryRun ?? false,
+    link: !options.noLink,
+    onComplete: operations.complete
+  });
+  return operations.outcomes;
 }

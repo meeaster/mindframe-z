@@ -32,14 +32,8 @@ import {
 } from "../core/override-store.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
-import {
-  referenceRows,
-  syncReference,
-  syncReferences,
-  writeExtraFoldersIndex,
-  writeReferenceIndex
-} from "../ref-store/references.js";
-import { writeCapabilityIndexes } from "../ref-store/capabilities.js";
+import { referenceRows, syncReference, syncReferences } from "../ref-store/references.js";
+import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import {
   candidateReviewInvocation,
   checkVendoredSkill,
@@ -85,6 +79,11 @@ import { runSkillsTui } from "../tui/skills-tui.js";
 import { guide, guideTopicNames, initHome } from "./init.js";
 import { hasHomeGuidance, materializeReviewSkill } from "../core/engine-skill.js";
 import { applyConfig } from "./apply.js";
+import {
+  commandIsInteractive,
+  createOperationReporter,
+  printInventory
+} from "./operation-report.js";
 import {
   buildContextHistoryReport,
   buildContextReport,
@@ -488,15 +487,34 @@ program
   .option("--target <target>", "mise, dotfiles, or all", parseInfraTarget, "all")
   .option("--dry-run", "show planned writes and links")
   .option("--no-link", "render without creating global links")
-  .action(async (options) =>
-    applyConfig({
-      ...program.opts(),
-      agent: options.agent,
-      target: options.target,
-      dryRun: options.dryRun,
-      noLink: !options.link
-    })
-  );
+  .option("--verbose", "show every completed operation")
+  .action(async (options) => {
+    const interactive = commandIsInteractive();
+    const reporter = createOperationReporter({
+      command: "mfz apply",
+      scope: `${program.opts().profile ?? "configured profile"} · ${options.target}`,
+      verbose: options.verbose ?? false,
+      dryRun: options.dryRun ?? false,
+      interactive
+    });
+    try {
+      await applyConfig({
+        ...program.opts(),
+        agent: options.agent,
+        target: options.target,
+        dryRun: options.dryRun,
+        noLink: !options.link,
+        interactive,
+        onStart: reporter.start.bind(reporter),
+        onComplete: reporter.complete.bind(reporter),
+        beforePrompt: reporter.pause.bind(reporter)
+      });
+      if (!reporter.finish()) process.exitCode = 1;
+    } catch (error) {
+      reporter.fail(error instanceof Error ? error : new Error(String(error)));
+      process.exitCode = 1;
+    }
+  });
 
 const sandbox = program
   .command("sandbox")
@@ -1277,33 +1295,51 @@ refs
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    for (const row of referenceRows(profile)) console.log(row);
+    const enabled = new Set(profile.enabledReferences.map((reference) => reference.name));
+    printInventory(
+      "mfz refs list",
+      profile.name,
+      referenceRows(profile),
+      profile.manifests.references.map((reference) => ({
+        label: `${enabled.has(reference.name) ? "enabled" : "available"}  ${reference.name}`,
+        detail: `${path.join(profile.referencesDir, reference.name)}\n${reference.description}`
+      }))
+    );
   });
 
 refs
   .command("sync")
   .description("Clone or update references")
   .argument("[name]", "reference name")
-  .action(async (name) => {
+  .option("--verbose", "show every completed operation")
+  .action(async (name, options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    if (name) {
-      console.log(await syncReference(profile, name));
-      return;
+    const reporter = createOperationReporter({
+      command: "mfz refs sync",
+      scope: `${profile.name} · ${name ?? "all"}`,
+      verbose: options.verbose ?? false,
+      interactive: commandIsInteractive()
+    });
+    const lifecycle = {
+      onStart: reporter.start.bind(reporter),
+      onComplete: reporter.complete.bind(reporter)
+    };
+    try {
+      if (name) await syncReference(paths, profile, name, lifecycle);
+      else await syncReferences(paths, profile, lifecycle);
+      reporter.start({
+        category: "index",
+        action: "write",
+        target: profile.name,
+        detail: "local indexes"
+      });
+      await reconcileLocalIndexes(paths, profile, { onComplete: lifecycle.onComplete });
+      if (!reporter.finish()) process.exitCode = 1;
+    } catch (error) {
+      reporter.fail(error instanceof Error ? error : new Error(String(error)));
+      process.exitCode = 1;
     }
-    for (const message of await syncReferences(paths, profile)) console.log(message);
-  });
-
-refs
-  .command("index")
-  .description("Generate runtime reference and capability indexes")
-  .action(async () => {
-    const paths = createRuntimePaths(program.opts());
-    const profile = await resolveProfile(paths, program.opts().profile);
-    console.log(await writeReferenceIndex(paths, profile));
-    const folders = await writeExtraFoldersIndex(paths, profile);
-    if (folders) console.log(folders);
-    for (const file of await writeCapabilityIndexes(paths, profile)) console.log(file);
   });
 
 refs
@@ -1312,7 +1348,15 @@ refs
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
-    for (const ref of profile.enabledReferences) console.log(`${ref.name}\t${ref.url}`);
+    printInventory(
+      "mfz refs status",
+      profile.name,
+      profile.enabledReferences.map((reference) => `${reference.name}\t${reference.url}`),
+      profile.enabledReferences.map((reference) => ({
+        label: `enabled  ${reference.name}`,
+        detail: reference.url
+      }))
+    );
   });
 
 await program.parseAsync();

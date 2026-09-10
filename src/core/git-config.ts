@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { writeTextFile } from "./fs-util.js";
+import { planFileOutcome, writeFileOutcome, type WriteFileOptions } from "./file-operations.js";
 import type { MachineManifest } from "./manifests.js";
+import type { OperationCompletion, OperationOutcome } from "./operations.js";
 import type { RuntimePaths } from "./paths.js";
 
 export function gitIdentityFragmentPath(paths: RuntimePaths): string {
@@ -35,14 +36,53 @@ export function renderGitIncludeLine(paths: RuntimePaths): string {
 
 export async function writeGitIdentityFragment(
   paths: RuntimePaths,
-  machine: MachineManifest
-): Promise<string> {
+  machine: MachineManifest,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
   const fragmentPath = gitIdentityFragmentPath(paths);
-  await writeTextFile(fragmentPath, renderGitIdentityFragment(machine));
-  return fragmentPath;
+  const options: WriteFileOptions = {};
+  if (onComplete) options.onComplete = onComplete;
+  return writeFileOutcome(fragmentPath, renderGitIdentityFragment(machine), options);
 }
 
-export async function ensureGitConfigInclude(paths: RuntimePaths): Promise<string> {
+export async function planGitIdentityFragment(
+  paths: RuntimePaths,
+  machine: MachineManifest,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
+  const options: WriteFileOptions = {};
+  if (onComplete) options.onComplete = onComplete;
+  return planFileOutcome(
+    gitIdentityFragmentPath(paths),
+    renderGitIdentityFragment(machine),
+    options
+  );
+}
+
+export async function ensureGitConfigInclude(
+  paths: RuntimePaths,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
+  const { configPath, content } = await intendedGitConfig(paths);
+  const options: WriteFileOptions = {};
+  if (onComplete) options.onComplete = onComplete;
+  return writeFileOutcome(configPath, content, options);
+}
+
+export async function planGitConfigInclude(
+  paths: RuntimePaths,
+  onComplete?: OperationCompletion
+): Promise<OperationOutcome> {
+  const { configPath, content } = await intendedGitConfig(paths);
+  const options: WriteFileOptions = {};
+  if (onComplete) options.onComplete = onComplete;
+  return planFileOutcome(configPath, content, options);
+}
+
+async function intendedGitConfig(paths: RuntimePaths): Promise<{
+  configPath: string;
+  content: string;
+}> {
   const configPath = globalGitConfigPath(paths);
   const includeLine = renderGitIncludeLine(paths);
   let existing = "";
@@ -53,11 +93,29 @@ export async function ensureGitConfigInclude(paths: RuntimePaths): Promise<strin
   }
 
   const lines = existing.split("\n");
-  const withoutManagedInclude = lines.filter((line) => line.trim() !== includeLine.trim());
-  const next = [withoutManagedInclude.join("\n").trimEnd(), "", "[include]", includeLine, ""]
+  const managedInclude = includeLine.trim();
+  const managedIncludeIndexes: number[] = [];
+  let inUnconditionalInclude = false;
+  for (const [index, line] of lines.entries()) {
+    if (/^\s*\[/.test(line)) {
+      inUnconditionalInclude = /^\s*\[\s*include\s*\]\s*(?:[#;].*)?$/i.test(line);
+      continue;
+    }
+    if (inUnconditionalInclude && line.trim() === managedInclude) {
+      managedIncludeIndexes.push(index);
+    }
+  }
+
+  if (managedIncludeIndexes.length === 1) return { configPath, content: existing };
+
+  if (managedIncludeIndexes.length > 1) {
+    const redundantManagedIncludes = new Set(managedIncludeIndexes.slice(1));
+    const content = lines.filter((_line, index) => !redundantManagedIncludes.has(index)).join("\n");
+    return { configPath, content };
+  }
+
+  const content = [existing.trimEnd(), "", "[include]", includeLine, ""]
     .filter((part, index) => part !== "" || index > 0)
     .join("\n");
-
-  if (next !== existing) await writeTextFile(configPath, next);
-  return configPath;
+  return { configPath, content };
 }

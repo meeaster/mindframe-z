@@ -4,16 +4,21 @@ import {
   lstat,
   mkdir,
   readFile,
+  readlink,
   realpath,
   stat,
   symlink,
   writeFile
 } from "node:fs/promises";
 import path from "node:path";
+import { execa } from "execa";
 import { parse } from "smol-toml";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+import { cli, configsPath, fixtureReferenceSource, setupIntegrationFixture } from "./support.js";
+import { applyConfig } from "../../src/cli/apply.js";
+import { operationChanged, type OperationOutcome } from "../../src/core/operations.js";
+import { createRuntimePaths, referenceStatePath } from "../../src/core/paths.js";
 
 const JsonObject = z.object({}).passthrough();
 const McpEntry = z
@@ -127,6 +132,345 @@ describe("apply integration", () => {
     }
   }
 
+  async function git(directory: string, args: readonly string[]): Promise<string> {
+    return (await execa("git", ["-C", directory, ...args])).stdout.trim();
+  }
+
+  it("returns a truthful no-change outcome set on repeat apply", async () => {
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
+
+    const repeated = await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
+
+    expect(
+      repeated.filter(
+        (outcome) => outcome.significance === "meaningful" && operationChanged(outcome)
+      )
+    ).toEqual([]);
+  });
+
+  it("keeps linked OpenCode files and links unchanged across repeat apply", async () => {
+    const agentSource = path.join(root, "opencode", "agents", "test-agent.md");
+    await mkdir(path.dirname(agentSource), { recursive: true });
+    await writeFile(agentSource, "# Test agent\n", "utf8");
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    await writeFile(
+      profilePath,
+      (await readFile(profilePath, "utf8")).replace(
+        "  commands:\n    - test-cmd",
+        "  commands:\n    - test-cmd\n  agents:\n    - test-agent"
+      ),
+      "utf8"
+    );
+    const managedPlugins = configsPath(home, "personal", "opencode-v2", "plugins");
+    const plugin = path.join(managedPlugins, "config-marker.ts");
+    const stalePlugin = path.join(managedPlugins, "stale.ts");
+    await mkdir(managedPlugins, { recursive: true });
+    await writeFile(stalePlugin, "export default {}\n", "utf8");
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await expect(access(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const gitConfig = path.join(home, ".gitconfig");
+    const commandLink = path.join(home, ".config", "opencode", "commands");
+    const agentLink = path.join(home, ".config", "opencode", "agents");
+    const fileState = async (file: string) => {
+      const metadata = await stat(file);
+      return {
+        content: await readFile(file, "utf8"),
+        inode: metadata.ino,
+        mode: metadata.mode,
+        size: metadata.size,
+        modified: metadata.mtimeMs,
+        changed: metadata.ctimeMs
+      };
+    };
+    const linkState = async (link: string) => {
+      const metadata = await lstat(link);
+      return {
+        destination: await readlink(link),
+        inode: metadata.ino,
+        modified: metadata.mtimeMs,
+        changed: metadata.ctimeMs
+      };
+    };
+    const firstGitConfig = await fileState(gitConfig);
+    const firstPlugin = await fileState(plugin);
+    const firstCommandLink = await linkState(commandLink);
+    const firstAgentLink = await linkState(agentLink);
+
+    const repeated = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+
+    expect(repeated.stdout).toContain("Result\tmfz apply complete — no changes");
+    expect(repeated.stdout).not.toMatch(/^(?:created|updated|removed|linked|relinked)\t/mu);
+    expect(await fileState(gitConfig)).toEqual(firstGitConfig);
+    expect(await fileState(plugin)).toEqual(firstPlugin);
+    expect(await linkState(commandLink)).toEqual(firstCommandLink);
+    expect(await linkState(agentLink)).toEqual(firstAgentLink);
+
+    const withoutLinks = await cli("mfz", root, home, [
+      "apply",
+      "--agent",
+      "opencode-v2",
+      "--no-link"
+    ]);
+    expect(withoutLinks.stdout).toContain("Result\tmfz apply complete — no changes");
+    expect(await fileState(plugin)).toEqual(firstPlugin);
+    expect(await linkState(commandLink)).toEqual(firstCommandLink);
+    expect(await linkState(agentLink)).toEqual(firstAgentLink);
+
+    await writeFile(
+      profilePath,
+      (await readFile(profilePath, "utf8")).replace("  plugins:\n    - config-marker\n", ""),
+      "utf8"
+    );
+    const deselected = await cli("mfz", root, home, [
+      "apply",
+      "--agent",
+      "opencode-v2",
+      "--no-link"
+    ]);
+    expect(deselected.stdout).toContain(`removed\tfile\t${plugin}`);
+    await expect(access(plugin)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 30_000);
+
+  it("prints default no-change and complete verbose apply receipts", async () => {
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const unchanged = await cli("mfz", root, home, ["apply", "--no-link"]);
+    expect(unchanged.stdout).not.toContain("Changes\n");
+    expect(unchanged.stdout).toContain("Result\tmfz apply complete — no changes");
+    expect(unchanged.stdout).not.toContain(String.fromCharCode(27));
+    expect(unchanged.stdout).not.toContain(String.fromCharCode(155));
+
+    const verbose = await cli("mfz", root, home, ["apply", "--no-link", "--verbose"]);
+    expect(verbose.stdout).toContain("working\treference\treconcile");
+    expect(verbose.stdout).toContain("unchanged\tfile");
+    expect(verbose.stdout).toContain("unchanged\tbookkeeping");
+    expect(verbose.stdout).toContain("Result\tmfz apply complete — no changes");
+  });
+
+  it("reconciles references for full --agent and --no-link apply", async () => {
+    const source = fixtureReferenceSource(root);
+    const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    const before = await git(checkout, ["rev-parse", "HEAD"]);
+    await writeFile(path.join(source, "README.md"), "advanced fixture\n", "utf8");
+    await git(source, ["add", "README.md"]);
+    await git(source, ["commit", "-m", "advance fixture"]);
+
+    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+
+    expect(await git(checkout, ["rev-parse", "HEAD"])).not.toBe(before);
+    expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(
+      await git(source, ["rev-parse", "HEAD"])
+    );
+  });
+
+  it.each(["mise", "dotfiles"])(
+    "keeps targeted %s apply scoped away from references",
+    async (target) => {
+      const referencesPath = path.join(root, "catalog", "references.yml");
+      await writeFile(
+        referencesPath,
+        (await readFile(referencesPath, "utf8")).replace(
+          fixtureReferenceSource(root),
+          path.join(home, "missing-reference.git")
+        ),
+        "utf8"
+      );
+
+      await cli("mfz", root, home, ["apply", "--target", target, "--no-link"]);
+
+      expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(false);
+      expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
+    }
+  );
+
+  it("plans a missing reference checkout without creating reference paths", async () => {
+    const paths = createRuntimePaths({ root, home });
+
+    const outcomes = await applyConfig({
+      root,
+      home,
+      agent: "opencode-v2",
+      target: "all",
+      dryRun: true,
+      noLink: true
+    });
+
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        category: "reference",
+        status: "planned",
+        detail: "local-ref: checkout would be cloned"
+      })
+    );
+    expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(false);
+    expect(await exists(referenceStatePath(paths))).toBe(false);
+    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
+
+    const receipt = await cli("mfz", root, home, ["apply", "--dry-run", "--no-link"]);
+    expect(receipt.stdout).toContain("planned\treference");
+    expect(receipt.stdout).toContain("checkout would be cloned");
+    expect(receipt.stdout).toContain("planned\tindex");
+    expect(receipt.stdout).toContain("planned change");
+  });
+
+  it("plans reference and index work without checking upstream or writing reference state", async () => {
+    await applyConfig({ root, home, agent: "opencode-v2", target: "all", noLink: true });
+    const paths = createRuntimePaths({ root, home });
+    const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
+    const source = fixtureReferenceSource(root);
+    const checkoutBefore = await git(checkout, ["rev-parse", "HEAD"]);
+    const stateBefore = await readFile(referenceStatePath(paths), "utf8");
+    const indexPath = path.join(home, ".mindframe-z", "references.md");
+    await writeFile(indexPath, "stale index\n", "utf8");
+    await writeFile(path.join(source, "README.md"), "unfetched upstream\n", "utf8");
+    await git(source, ["add", "README.md"]);
+    await git(source, ["commit", "-m", "unfetched upstream"]);
+
+    const outcomes = await applyConfig({
+      root,
+      home,
+      agent: "opencode-v2",
+      target: "all",
+      dryRun: true,
+      noLink: true
+    });
+
+    expect(outcomes.find((outcome) => outcome.category === "reference")?.detail).toContain(
+      "upstream state not checked"
+    );
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({ category: "index", target: indexPath, status: "planned" })
+    );
+    expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(checkoutBefore);
+    expect(await readFile(referenceStatePath(paths), "utf8")).toBe(stateBefore);
+    expect(await readFile(indexPath, "utf8")).toBe("stale index\n");
+  });
+
+  it("stops activation after a reference failure and retains completed reference effects", async () => {
+    const referencesPath = path.join(root, "catalog", "references.yml");
+    await writeFile(
+      referencesPath,
+      (await readFile(referencesPath, "utf8")).replace(
+        "    description: Local test reference.\n",
+        [
+          "    description: Local test reference.",
+          "  - name: broken-ref",
+          `    url: ${path.join(home, "missing-reference.git")}`,
+          "    description: Broken reference.",
+          ""
+        ].join("\n")
+      ),
+      "utf8"
+    );
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    await writeFile(
+      profilePath,
+      (await readFile(profilePath, "utf8")).replace(
+        "references:\n  - local-ref",
+        "references:\n  - local-ref\n  - broken-ref"
+      ),
+      "utf8"
+    );
+    const completed: OperationOutcome[] = [];
+    let renders = 0;
+
+    await expect(
+      applyConfig(
+        {
+          root,
+          home,
+          agent: "opencode-v2",
+          target: "all",
+          noLink: true,
+          onComplete: completed.push.bind(completed)
+        },
+        {
+          renderTarget: async () => {
+            renders += 1;
+            return { files: [], links: [] };
+          }
+        }
+      )
+    ).rejects.toThrow();
+    expect(renders).toBe(0);
+    expect(completed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "reference", status: "created" }),
+        expect.objectContaining({ category: "reference", status: "failed" })
+      ])
+    );
+    expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(true);
+    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
+  });
+
+  it("prints known completed effects when apply fails partway through references", async () => {
+    const referencesPath = path.join(root, "catalog", "references.yml");
+    await writeFile(
+      referencesPath,
+      (await readFile(referencesPath, "utf8")).replace(
+        "    description: Local test reference.\n",
+        [
+          "    description: Local test reference.",
+          "  - name: broken-ref",
+          `    url: ${path.join(home, "missing-reference.git")}`,
+          "    description: Broken reference.",
+          ""
+        ].join("\n")
+      ),
+      "utf8"
+    );
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    await writeFile(
+      profilePath,
+      (await readFile(profilePath, "utf8")).replace(
+        "references:\n  - local-ref",
+        "references:\n  - local-ref\n  - broken-ref"
+      ),
+      "utf8"
+    );
+
+    await expect(cli("mfz", root, home, ["apply", "--no-link"])).rejects.toMatchObject({
+      stdout: expect.stringMatching(
+        /created\treference[\s\S]+failed\treference[\s\S]+earlier changes were not rolled back/u
+      ),
+      stderr: expect.stringContaining("missing-reference.git")
+    });
+  });
+
+  it("notifies completed outcomes before a later operation fails", async () => {
+    const completed: OperationOutcome[] = [];
+    let renders = 0;
+
+    await expect(
+      applyConfig(
+        {
+          root,
+          home,
+          agent: "all",
+          target: "all",
+          noLink: true,
+          onComplete: completed.push.bind(completed)
+        },
+        {
+          renderTarget: async () => {
+            renders += 1;
+            if (renders > 1) throw new Error("later render failed");
+            return {
+              files: [{ path: path.join(home, "first-completed.txt"), content: "done\n" }],
+              links: []
+            };
+          }
+        }
+      )
+    ).rejects.toThrow("later render failed");
+    expect(completed).toContainEqual(
+      expect.objectContaining({ target: path.join(home, "first-completed.txt"), status: "created" })
+    );
+  });
+
   it("renders and links OpenCode and Claude config into temporary homes", async () => {
     const managedPlugins = configsPath(home, "personal", "opencode-v2", "plugins");
     const stalePlugin = path.join(managedPlugins, "stale.ts");
@@ -134,7 +478,7 @@ describe("apply integration", () => {
     await writeFile(stalePlugin, "export default {}\n", "utf8");
 
     const result = await cli("mfz", root, home, ["apply", "--target", "all"]);
-    expect(result.stdout).toContain("rendered");
+    expect(result.stdout).toContain("created\tfile");
 
     const opencode = await readFile(
       configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
@@ -334,7 +678,7 @@ describe("apply integration", () => {
     const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
     const managedPackage = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui")}`;
     const managed = { package: managedPackage, options: { mode: "compact" } };
-    expect(applied.stdout).toContain(`merged\t${cliPath} plugins`);
+    expect(applied.stdout).toContain(`updated\tfile\t${cliPath}`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
       plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin, managed]
@@ -731,7 +1075,9 @@ describe("apply integration", () => {
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "pi"]);
 
-    expect(result.stdout).toContain("wrote local");
+    expect(result.stdout).toContain(
+      `updated\tfile\t${path.join(home, ".pi", "agent", "settings.json")}`
+    );
     const localSettings = parseJson(
       PiSettings,
       await readFile(path.join(home, ".pi", "agent", "settings.json"), "utf8")
@@ -1018,7 +1364,9 @@ describe("apply integration", () => {
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
 
-    expect(result.stdout).toContain("wrote local");
+    expect(result.stdout).toContain(
+      `updated\tfile\t${path.join(home, ".claude", "settings.json")}`
+    );
     expect((await lstat(path.join(home, ".claude", "settings.json"))).isSymbolicLink()).toBe(false);
 
     const localSettings = parseJson(
@@ -1380,7 +1728,7 @@ describe("apply integration", () => {
 
   it("keeps skill runtime state unchanged during apply dry-run", async () => {
     const result = await cli("mfz", root, home, ["apply", "--dry-run"]);
-    expect(result.stdout).toContain("would render skill");
+    expect(result.stdout).toContain("planned\tskill\tlocal-skill");
     await expect(
       readFile(
         path.join(
