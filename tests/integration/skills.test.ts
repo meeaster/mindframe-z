@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { execa } from "execa";
@@ -252,6 +252,132 @@ describe("skill CLI integration", () => {
     await expect(lstat(path.join(paths.claudeDir, "skills", name))).resolves.toBeTruthy();
     await expect(lstat(path.join(home, ".agents", "skills", name))).resolves.toBeTruthy();
     await expect(lstat(path.join(paths.opencodeConfigDir, "skills", name))).resolves.toBeTruthy();
+
+    const observeProviderSnapshot = async (target: (typeof providerVariantTargets)[number]) => {
+      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
+      const manifestPath = path.join(snapshot, ".mfz-manifest.yml");
+      const skillPath = path.join(snapshot, name, "SKILL.md");
+
+      const linkPath =
+        target === "claude-code"
+          ? path.join(paths.claudeDir, "skills", name)
+          : target === "codex"
+            ? path.join(home, ".agents", "skills", name)
+            : path.join(paths.opencodeConfigDir, "skills", name);
+
+      const [snapshotStat, manifestStat, skillStat, linkStat] = await Promise.all([
+        lstat(snapshot),
+        lstat(manifestPath),
+        lstat(skillPath),
+        lstat(linkPath)
+      ]);
+
+      return {
+        snapshot: { dev: snapshotStat.dev, ino: snapshotStat.ino },
+        manifest: {
+          dev: manifestStat.dev,
+          ino: manifestStat.ino,
+          mtimeMs: manifestStat.mtimeMs,
+          bytes: await readFile(manifestPath)
+        },
+        skill: {
+          dev: skillStat.dev,
+          ino: skillStat.ino,
+          mtimeMs: skillStat.mtimeMs,
+          bytes: await readFile(skillPath)
+        },
+        link: {
+          dev: linkStat.dev,
+          ino: linkStat.ino,
+          mtimeMs: linkStat.mtimeMs,
+          content: await readFile(path.join(linkPath, "SKILL.md")),
+          destination: await readlink(linkPath)
+        }
+      };
+    };
+
+    const initialState = await Promise.all(
+      providerVariantTargets.map(async (target) => ({
+        target,
+        state: await observeProviderSnapshot(target)
+      }))
+    );
+
+    const repeated = await syncSkillSnapshot(paths, resolved, {
+      selectedTargets: providerVariantTargets,
+      link: true
+    });
+
+    expect(repeated.length).toBeGreaterThan(0);
+    expect(repeated.every((outcome) => outcome.status === "unchanged")).toBe(true);
+
+    for (const { target, state } of initialState) {
+      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
+      expect(repeated).toContainEqual(
+        expect.objectContaining({
+          category: "bookkeeping",
+          action: "snapshot",
+          status: "unchanged",
+          significance: "internal",
+          target: snapshot
+        })
+      );
+      expect(await observeProviderSnapshot(target)).toEqual(state);
+    }
+
+    const skillsSource = await readFile(skillsPath, "utf8");
+    await writeFile(skillsPath, skillsSource.replace("    ref: main", "    ref: stable"), "utf8");
+    const provenanceProfile = await resolveProfile(paths, "personal");
+
+    const provenanceChanged = await syncSkillSnapshot(paths, provenanceProfile, {
+      selectedTargets: providerVariantTargets,
+      link: true
+    });
+
+    expect(provenanceChanged.length).toBeGreaterThan(0);
+
+    for (const target of providerVariantTargets) {
+      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
+      expect(provenanceChanged).toContainEqual(
+        expect.objectContaining({
+          category: "bookkeeping",
+          action: "snapshot",
+          status: "updated",
+          significance: "internal",
+          target: snapshot
+        })
+      );
+      const manifest = YAML.parse(await readFile(path.join(snapshot, ".mfz-manifest.yml"), "utf8"));
+      expect(manifest.skills.find((skill: { name: string }) => skill.name === name)).toMatchObject({
+        name,
+        ref: "stable",
+        digest: fixture.digests[target]
+      });
+
+      expect(await readFile(path.join(snapshot, name, "SKILL.md"), "utf8")).toBe(
+        fixture.contents[target]
+      );
+    }
+
+    const provenanceRepeated = await syncSkillSnapshot(paths, provenanceProfile, {
+      selectedTargets: providerVariantTargets,
+      link: true
+    });
+
+    expect(provenanceRepeated.length).toBeGreaterThan(0);
+    expect(provenanceRepeated.every((outcome) => outcome.status === "unchanged")).toBe(true);
+
+    for (const target of providerVariantTargets) {
+      expect(provenanceRepeated).toContainEqual(
+        expect.objectContaining({
+          category: "bookkeeping",
+          action: "snapshot",
+          status: "unchanged",
+          significance: "internal",
+          target: providerSkillSnapshotDir(paths, "personal", target)
+        })
+      );
+    }
   });
 
   it("reports skill digest changes without labeling the complete snapshot as changed", async () => {

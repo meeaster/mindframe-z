@@ -10,6 +10,7 @@ import {
   writeFile
 } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import YAML from "yaml";
 import { z } from "zod";
 import {
@@ -656,10 +657,11 @@ async function inspectSnapshot(
       detail: changed ? `${installedDigest ?? "missing"} -> ${newSkill.digest}` : newSkill.digest
     });
   }
+
   return {
     previousManifest: previous,
     outcomes,
-    replacementRequired: JSON.stringify(previous) !== JSON.stringify(next) || treeDrift
+    replacementRequired: !isDeepStrictEqual(previous, next) || treeDrift
   };
 }
 
