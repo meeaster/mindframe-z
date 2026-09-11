@@ -193,7 +193,7 @@ export async function renderTarget(
     ...(await staleSnapshotFiles(
       snapshotRoot,
       current,
-      target === "opencode-v2" ? ["skills"] : []
+      ["opencode-v2", "claude-code", "codex"].includes(target) ? ["skills"] : []
     )),
     ...(isAgentTarget(target)
       ? await staleSnapshotFiles(

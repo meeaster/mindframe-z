@@ -204,6 +204,75 @@ describe("apply integration", () => {
     await expect(lstat(configsPath(home, "personal", "skills", name))).rejects.toMatchObject({
       code: "ENOENT"
     });
+
+    const observeProviderSnapshot = async (target: (typeof providerVariantTargets)[number]) => {
+      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
+      const manifestPath = path.join(snapshot, ".mfz-manifest.yml");
+      const skillPath = path.join(snapshot, name, "SKILL.md");
+
+      const [snapshotStat, manifestStat, skillStat] = await Promise.all([
+        lstat(snapshot),
+        lstat(manifestPath),
+        lstat(skillPath)
+      ]);
+
+      return {
+        snapshot: {
+          dev: snapshotStat.dev,
+          ino: snapshotStat.ino,
+          mtimeMs: snapshotStat.mtimeMs
+        },
+        manifest: {
+          dev: manifestStat.dev,
+          ino: manifestStat.ino,
+          mtimeMs: manifestStat.mtimeMs,
+          bytes: await readFile(manifestPath)
+        },
+        skill: {
+          dev: skillStat.dev,
+          ino: skillStat.ino,
+          mtimeMs: skillStat.mtimeMs,
+          bytes: await readFile(skillPath)
+        }
+      };
+    };
+
+    const initialState = await Promise.all(
+      providerVariantTargets.map(async (target) => ({
+        target,
+        state: await observeProviderSnapshot(target)
+      }))
+    );
+
+    const repeated = await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
+
+    expect(
+      repeated.filter(
+        (outcome) => outcome.significance === "meaningful" && operationChanged(outcome)
+      )
+    ).toEqual([]);
+
+    for (const { target, state } of initialState) {
+      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
+      expect(repeated).toContainEqual(
+        expect.objectContaining({
+          category: "bookkeeping",
+          action: "snapshot",
+          status: "unchanged",
+          significance: "internal",
+          target: snapshot
+        })
+      );
+      expect(
+        repeated.filter(
+          (outcome) =>
+            outcome.category === "file" &&
+            outcome.action === "remove" &&
+            outcome.target.startsWith(`${snapshot}${path.sep}`)
+        )
+      ).toEqual([]);
+      expect(await observeProviderSnapshot(target)).toEqual(state);
+    }
   });
 
   it("keeps linked OpenCode files and links unchanged across repeat apply", async () => {
