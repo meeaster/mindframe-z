@@ -24,9 +24,11 @@ import {
   providerSkillSnapshotDir,
   referenceStatePath
 } from "../../src/core/paths.js";
+import { ReferenceReconciliationError } from "../../src/ref-store/references.js";
 import { providerVariantTargets, writeProviderVariantSkill } from "./support.js";
 
 const JsonObject = z.object({}).passthrough();
+
 const McpEntry = z
   .object({
     type: z.string().optional(),
@@ -37,7 +39,9 @@ const McpEntry = z
     env: z.record(z.string(), z.string()).optional()
   })
   .passthrough();
+
 const McpMap = z.record(z.string(), McpEntry);
+
 const OpenCodeConfig = z
   .object({
     model: z.string().optional(),
@@ -50,12 +54,15 @@ const OpenCodeConfig = z
       .optional()
   })
   .passthrough();
+
 const OpenCodeMcpConfig = OpenCodeConfig.extend({
   mcp: z.object({ servers: McpMap }).passthrough()
 });
+
 const OpenCodeFolderConfig = OpenCodeConfig.extend({
   permissions: z.array(z.object({ action: z.string(), resource: z.string(), effect: z.string() }))
 });
+
 const ClaudeSettings = z
   .object({
     model: z.string().optional(),
@@ -68,6 +75,7 @@ const ClaudeSettings = z
     env: z.record(z.string(), z.string()).optional()
   })
   .passthrough();
+
 const ClaudeJson = z
   .object({
     installMethod: z.string().optional(),
@@ -75,6 +83,7 @@ const ClaudeJson = z
     projects: z.record(z.string(), JsonObject).optional()
   })
   .passthrough();
+
 const CodexConfig = z
   .object({
     model: z.string().optional(),
@@ -88,12 +97,15 @@ const CodexConfig = z
       .optional()
   })
   .passthrough();
+
 const CodexSecuredConfig = CodexConfig.extend({
   mcp_servers: z.object({ secured: JsonObject }).passthrough()
 });
+
 const ClaudeSecuredMcp = z
   .object({ secured: z.object({ headers: z.record(z.string(), z.string()) }).passthrough() })
   .passthrough();
+
 const PiSettings = z
   .object({
     theme: z.string().optional(),
@@ -102,6 +114,7 @@ const PiSettings = z
     subagents: JsonObject.optional()
   })
   .passthrough();
+
 const SmokeCapture = z.object({
   argv: z.array(z.string()),
   cwd: z.string(),
@@ -132,6 +145,7 @@ describe("apply integration", () => {
   async function exists(file: string): Promise<boolean> {
     try {
       await access(file);
+
       return true;
     } catch {
       return false;
@@ -193,6 +207,7 @@ describe("apply integration", () => {
     await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     const paths = createRuntimePaths({ root, home });
+
     for (const target of providerVariantTargets) {
       await expect(
         readFile(
@@ -201,6 +216,7 @@ describe("apply integration", () => {
         )
       ).resolves.toBe(fixture.contents[target]);
     }
+
     await expect(lstat(configsPath(home, "personal", "skills", name))).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -300,8 +316,10 @@ describe("apply integration", () => {
     const gitConfig = path.join(home, ".gitconfig");
     const commandLink = path.join(home, ".config", "opencode", "commands");
     const agentLink = path.join(home, ".config", "opencode", "agents");
+
     const fileState = async (file: string) => {
       const metadata = await stat(file);
+
       return {
         content: await readFile(file, "utf8"),
         inode: metadata.ino,
@@ -311,8 +329,10 @@ describe("apply integration", () => {
         changed: metadata.ctimeMs
       };
     };
+
     const linkState = async (link: string) => {
       const metadata = await lstat(link);
+
       return {
         destination: await readlink(link),
         inode: metadata.ino,
@@ -320,6 +340,7 @@ describe("apply integration", () => {
         changed: metadata.ctimeMs
       };
     };
+
     const firstGitConfig = await fileState(gitConfig);
     const firstPlugin = await fileState(plugin);
     const firstCommandLink = await linkState(commandLink);
@@ -340,6 +361,7 @@ describe("apply integration", () => {
       "opencode-v2",
       "--no-link"
     ]);
+
     expect(withoutLinks.stdout).toContain("Result\tmfz apply complete — no changes");
     expect(await fileState(plugin)).toEqual(firstPlugin);
     expect(await linkState(commandLink)).toEqual(firstCommandLink);
@@ -350,12 +372,14 @@ describe("apply integration", () => {
       (await readFile(profilePath, "utf8")).replace("  plugins:\n    - config-marker\n", ""),
       "utf8"
     );
+
     const deselected = await cli("mfz", root, home, [
       "apply",
       "--agent",
       "opencode-v2",
       "--no-link"
     ]);
+
     expect(deselected.stdout).toContain(`removed\tfile\t${plugin}`);
     await expect(access(plugin)).rejects.toMatchObject({ code: "ENOENT" });
   }, 30_000);
@@ -517,6 +541,7 @@ describe("apply integration", () => {
         {
           renderTarget: async () => {
             renders += 1;
+
             return { files: [], links: [] };
           }
         }
@@ -531,6 +556,85 @@ describe("apply integration", () => {
     );
     expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(true);
     expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
+  });
+
+  it("stops indexes and activation after reference state persistence fails", async () => {
+    const completed: OperationOutcome[] = [];
+    let renders = 0;
+    const failureCause = new Error("state store unavailable");
+    const failureDetail = "Could not record ownership for local-ref: state store unavailable";
+
+    const referenceOutcome: OperationOutcome = {
+      category: "reference",
+      action: "reconcile",
+      status: "created",
+      target: path.join(home, ".mindframe-z", "references", "local-ref"),
+      significance: "meaningful",
+      detail: "local-ref"
+    };
+
+    const referenceFailure: OperationOutcome = {
+      category: "reference",
+      action: "reconcile",
+      status: "failed",
+      target: referenceOutcome.target,
+      significance: "meaningful",
+      detail: failureDetail
+    };
+
+    const bookkeepingFailure: OperationOutcome = {
+      category: "bookkeeping",
+      action: "write",
+      status: "failed",
+      target: referenceStatePath(createRuntimePaths({ root, home })),
+      significance: "internal",
+      detail: failureDetail
+    };
+
+    await expect(
+      applyConfig(
+        {
+          root,
+          home,
+          agent: "opencode-v2",
+          target: "all",
+          noLink: true,
+          onComplete: completed.push.bind(completed)
+        },
+        {
+          syncReferences: async (_paths, _profile, options) => {
+            for (const outcome of [referenceOutcome, referenceFailure, bookkeepingFailure])
+              options.onComplete?.(outcome);
+
+            throw new ReferenceReconciliationError(
+              failureDetail,
+              [referenceOutcome, referenceFailure, bookkeepingFailure],
+              failureCause
+            );
+          },
+          renderTarget: async () => {
+            renders += 1;
+
+            return { files: [], links: [] };
+          }
+        }
+      )
+    ).rejects.toThrow("Could not record ownership");
+
+    expect(renders).toBe(0);
+    expect(completed).toEqual(
+      expect.arrayContaining([referenceOutcome, referenceFailure, bookkeepingFailure])
+    );
+    await expect(readFile(path.join(home, ".mindframe-z", "references.md"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(
+      readFile(
+        path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "opencode.jsonc")
+      )
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
   });
 
   it("prints known completed effects when apply fails partway through references", async () => {
@@ -584,7 +688,9 @@ describe("apply integration", () => {
         {
           renderTarget: async () => {
             renders += 1;
+
             if (renders > 1) throw new Error("later render failed");
+
             return {
               files: [{ path: path.join(home, "first-completed.txt"), content: "done\n" }],
               links: []
@@ -611,6 +717,7 @@ describe("apply integration", () => {
       configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
+
     expect(opencode).toContain("https://opencode.ai/config.json");
     expect(opencode).toContain("context7");
     expect(await readFile(path.join(managedPlugins, "config-marker.ts"), "utf8")).toContain(
@@ -631,6 +738,7 @@ describe("apply integration", () => {
       McpMap,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
     );
+
     expect(claudeMcp).toMatchObject({
       context7: { type: "http", url: "https://mcp.context7.com/mcp" },
       "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
@@ -651,18 +759,21 @@ describe("apply integration", () => {
       ClaudeJson,
       await readFile(path.join(home, ".claude.json"), "utf8")
     );
+
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
   });
 
   it("renders OpenCode V2 independently with native config and skill paths", async () => {
     await writeFile(path.join(home, ".mindframe-z", "config.yml"), "profile: personal\n", "utf8");
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode-v2, claude-code]", "agents: [opencode-v2]")
       .replace("    model: test/model", "    model: v2/test-model")
       .replace("  plugins:\n    - config-marker", "  plugins: []")
       .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
       .replace("opencode_v2:\n", "opencode_v2:\n  cli:\n    theme: dark\n");
+
     await writeFile(profilePath, profile, "utf8");
 
     const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
@@ -742,10 +853,12 @@ describe("apply integration", () => {
       path.join(home, ".mindframe-z", "capabilities", "index.md"),
       "utf8"
     );
+
     const details = await readFile(
       path.join(home, ".mindframe-z", "capabilities", "agent-tooling.md"),
       "utf8"
     );
+
     const agents = await readFile(configsPath(home, "personal", "AGENTS.md"), "utf8");
     expect(awareness).toContain("Includes: Local reference, Fixture repository");
     expect(awareness).not.toContain("full routing detail");
@@ -774,6 +887,7 @@ describe("apply integration", () => {
       "utf8"
     );
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode-v2, claude-code]", "agents: [opencode-v2]")
       .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
@@ -789,6 +903,7 @@ describe("apply integration", () => {
           ""
         ].join("\n")
       );
+
     await writeFile(profilePath, profile, "utf8");
     const cliPath = path.join(home, ".config", "opencode", "cli.json");
     await mkdir(path.dirname(cliPath), { recursive: true });
@@ -862,6 +977,7 @@ describe("apply integration", () => {
     await chmod(binaryPath, 0o755);
 
     const ambientDb = path.join(home, "v1", "opencode.db");
+
     const result = await cli("mfz", root, home, ["smoke-opencode-v2"], {
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       MFZ_SMOKE_CAPTURE: capturePath,
@@ -871,6 +987,7 @@ describe("apply integration", () => {
       XDG_STATE_HOME: path.join(home, "v1", "state"),
       XDG_CACHE_HOME: path.join(home, "v1", "cache")
     });
+
     const captures = z.array(SmokeCapture).parse(JSON.parse(await readFile(capturePath, "utf8")));
     const capture = captures[0]!;
     const isolated = path.join(home, ".mindframe-z-opencode-v2-smoke");
@@ -985,6 +1102,7 @@ describe("apply integration", () => {
       configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
+
     const config = parseJson(OpenCodeFolderConfig, opencode);
     expect(config.permissions).toEqual(
       expect.arrayContaining([
@@ -1016,6 +1134,7 @@ describe("apply integration", () => {
       ClaudeSettings,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     );
+
     expect(settings).toHaveProperty("permissions");
     expect(settings).toHaveProperty("additionalDirectories");
     expect(settings.additionalDirectories).toContain(codePath);
@@ -1070,6 +1189,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     );
+
     expect(config.model).toBe("test/codex");
     expect(config.plugins).toEqual({
       "github@openai-curated": { enabled: true, toggleable: false },
@@ -1115,6 +1235,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     );
+
     expect(config).not.toHaveProperty("plugins");
   });
 
@@ -1153,6 +1274,7 @@ describe("apply integration", () => {
       PiSettings,
       await readFile(configsPath(home, "personal", "pi", "settings.json"), "utf8")
     );
+
     expect(snapshot).toMatchObject({
       theme: "dark",
       defaultProvider: "openai-codex",
@@ -1205,10 +1327,12 @@ describe("apply integration", () => {
     expect(result.stdout).toContain(
       `updated\tfile\t${path.join(home, ".pi", "agent", "settings.json")}`
     );
+
     const localSettings = parseJson(
       PiSettings,
       await readFile(path.join(home, ".pi", "agent", "settings.json"), "utf8")
     );
+
     expect(localSettings).toMatchObject({
       theme: "dark",
       keep: true,
@@ -1218,6 +1342,7 @@ describe("apply integration", () => {
     expect(await readFile(path.join(home, ".pi", "agent", "AGENTS.md"), "utf8")).toContain(
       "# Test Agents"
     );
+
     const localSubagentConfig = parseJson(
       z.object({ keepLocal: z.boolean(), toolDescriptionMode: z.string() }),
       await readFile(
@@ -1225,7 +1350,9 @@ describe("apply integration", () => {
         "utf8"
       )
     );
+
     expect(localSubagentConfig).toEqual({ keepLocal: true, toolDescriptionMode: "compact" });
+
     const snapshotSubagentConfig = parseJson(
       z.object({ toolDescriptionMode: z.string() }),
       await readFile(
@@ -1233,6 +1360,7 @@ describe("apply integration", () => {
         "utf8"
       )
     );
+
     expect(snapshotSubagentConfig).toEqual({ toolDescriptionMode: "compact" });
   });
 
@@ -1260,6 +1388,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
     );
+
     expect(localConfig.user_key).toBe("kept");
     expect(localConfig.model).toBe("test/codex");
     expect(await exists(path.join(home, ".codex", "AGENTS.override.md"))).toBe(false);
@@ -1299,6 +1428,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
     );
+
     expect(localConfig.user_key).toBe("kept");
     expect(localConfig.model).toBe("test/codex");
     expect(localConfig.plugins).toEqual({ "github@openai-curated": { enabled: true } });
@@ -1330,6 +1460,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(path.join(home, ".codex", "config.toml"), "utf8")
     );
+
     expect(localConfig).not.toHaveProperty("plugins");
   });
 
@@ -1370,10 +1501,12 @@ describe("apply integration", () => {
     expect(syncResult.stdout).toContain(
       "Updated personal/profile.yml: codex.config.model_verbosity"
     );
+
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       "utf8"
     );
+
     expect(profileYaml).toContain("model_verbosity: low");
     expect(profileYaml).not.toContain("mcp_servers");
   });
@@ -1419,10 +1552,12 @@ describe("apply integration", () => {
     );
     expect(syncResult.stdout).not.toContain("github@openai-curated");
     expect(syncResult.stdout).not.toContain("slack@openai-curated");
+
     const profileYaml = await readFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       "utf8"
     );
+
     expect(profileYaml).toContain("teams@openai-curated");
     expect(profileYaml).toContain("enabled: true");
     expect(profileYaml).not.toContain("slack@openai-curated");
@@ -1445,6 +1580,7 @@ describe("apply integration", () => {
       path.join(root, "profiles", "personal", "profile.yml"),
       "utf8"
     );
+
     expect(profileYaml).toContain("small_model: test/small-model");
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
@@ -1500,6 +1636,7 @@ describe("apply integration", () => {
       ClaudeSettings,
       await readFile(path.join(home, ".claude", "settings.json"), "utf8")
     );
+
     expect(localSettings).toMatchObject({
       includeGitInstructions: true,
       model: "sonnet",
@@ -1515,6 +1652,7 @@ describe("apply integration", () => {
       ClaudeSettings,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     );
+
     expect(snapshot).toEqual({
       includeGitInstructions: true,
       permissions: {
@@ -1601,6 +1739,7 @@ describe("apply integration", () => {
       ClaudeJson,
       await readFile(path.join(home, ".claude.json"), "utf8")
     );
+
     expect(localClaudeJson.installMethod).toBe("native");
     expect(localClaudeJson.projects).toBeDefined();
     expect(localClaudeJson.mcpServers).toEqual({
@@ -1628,6 +1767,7 @@ describe("apply integration", () => {
       ClaudeJson,
       await readFile(path.join(home, ".claude.json"), "utf8")
     );
+
     expect(localClaudeJson.mcpServers).toMatchObject({
       executor: { type: "stdio", command: "executor" },
       manual: { type: "http", url: "https://manual.invalid" }
@@ -1679,10 +1819,12 @@ describe("apply integration", () => {
     );
 
     await cli("mfz", root, home, ["apply", "--no-link"]);
+
     const opencode = await readFile(
       configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
       "utf8"
     );
+
     expect(opencode).toContain("context7");
   });
 
@@ -1723,6 +1865,7 @@ describe("apply integration", () => {
       OpenCodeConfig,
       await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
+
     expect(opencode.mcp?.servers).toMatchObject({
       exa: { headers: { Authorization: "{env:EXA_API_KEY}", "X-Client": "literal-value" } }
     });
@@ -1732,6 +1875,7 @@ describe("apply integration", () => {
       McpMap,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
     );
+
     expect(claudeMcp).toMatchObject({
       exa: { headers: { Authorization: "${EXA_API_KEY}", "X-Client": "literal-value" } }
     });
@@ -1741,6 +1885,7 @@ describe("apply integration", () => {
       CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     );
+
     expect(codex.mcp_servers).toMatchObject({
       exa: {
         env_http_headers: { Authorization: "EXA_API_KEY" },
@@ -1804,6 +1949,7 @@ describe("apply integration", () => {
       CodexSecuredConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     );
+
     // Codex keeps the env-ref name in env_http_headers and only literals in http_headers.
     expect(codexConfig.mcp_servers.secured.env_http_headers).toEqual({
       Authorization: "SECURED_TOKEN"
@@ -1814,6 +1960,7 @@ describe("apply integration", () => {
       ClaudeSecuredMcp,
       await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
     );
+
     // Claude rewrites the env-ref into ${NAME} while passing literals through verbatim.
     expect(claudeMcp.secured.headers).toEqual({
       Authorization: "${SECURED_TOKEN}",
@@ -1829,6 +1976,7 @@ describe("apply integration", () => {
 
   it("links skills to the rendered snapshot and keeps source edits inactive until apply", async () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
+
     const snapshotSkill = configsPath(
       home,
       "personal",
@@ -1837,6 +1985,7 @@ describe("apply integration", () => {
       "local-skill",
       "SKILL.md"
     );
+
     const oldContent = await readFile(snapshotSkill, "utf8");
     const sourceSkill = path.join(root, "skills", "local-skill", "SKILL.md");
     await writeFile(
@@ -1875,6 +2024,7 @@ describe("apply integration", () => {
 
   it("fails before replacing a snapshot when an unmanaged skill path conflicts", async () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
+
     const snapshotSkill = configsPath(
       home,
       "personal",
@@ -1883,6 +2033,7 @@ describe("apply integration", () => {
       "local-skill",
       "SKILL.md"
     );
+
     const prior = await readFile(snapshotSkill, "utf8");
     await mkdir(path.join(home, ".config", "opencode", "skills", "local-skill"), {
       recursive: true
@@ -1891,6 +2042,7 @@ describe("apply integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]).catch(
       (error) => error
     );
+
     expect(result.stderr).toContain("Unmanaged skill link conflict");
     expect(await readFile(snapshotSkill, "utf8")).toBe(prior);
   });
@@ -1917,6 +2069,7 @@ describe("apply integration", () => {
 
   it("does not rewrite a matching snapshot", async () => {
     await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+
     const snapshotSkill = configsPath(
       home,
       "personal",
@@ -1925,6 +2078,7 @@ describe("apply integration", () => {
       "local-skill",
       "SKILL.md"
     );
+
     const before = (await stat(snapshotSkill)).ino;
     await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
     expect((await stat(snapshotSkill)).ino).toBe(before);
@@ -1950,11 +2104,14 @@ describe("apply integration", () => {
       OpenCodeConfig,
       await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
     );
+
     expect(opencode.skills).toEqual([configsPath(home, "personal", "opencode-v2", "skills")]);
+
     const codex = parseToml(
       CodexConfig,
       await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
     );
+
     expect(codex.skills?.config).toContainEqual({
       path: path.join(home, ".agents", "skills", "local-skill", "SKILL.md"),
       enabled: true

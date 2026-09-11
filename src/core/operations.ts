@@ -44,7 +44,24 @@ export type OperationStart = Pick<OperationOutcome, "category" | "action" | "tar
 };
 
 export type OperationStartNotification = (operation: OperationStart) => void;
+
 export type OperationCompletion = (outcome: OperationOutcome) => void;
+
+export type OperationLifecycleEvent =
+  | {
+      type: "start";
+      key: string;
+      ordinal: number;
+      operation: OperationStart;
+    }
+  | {
+      type: "complete";
+      key: string;
+      ordinal: number;
+      outcome: OperationOutcome;
+    };
+
+export type OperationLifecycleNotification = (event: OperationLifecycleEvent) => void;
 
 export interface OperationCollector {
   readonly outcomes: OperationOutcome[];
@@ -53,6 +70,7 @@ export interface OperationCollector {
 
 export function collectOperations(onComplete?: OperationCompletion): OperationCollector {
   const outcomes: OperationOutcome[] = [];
+
   return {
     outcomes,
     complete(outcome) {

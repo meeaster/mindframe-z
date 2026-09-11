@@ -32,8 +32,16 @@ import {
 } from "../core/override-store.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
-import { referenceRows, syncReference, syncReferences } from "../ref-store/references.js";
+import {
+  referenceRows,
+  syncReferenceLocked,
+  syncReferencesLocked
+} from "../ref-store/references.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
+import {
+  throwIfReferenceSyncCancelled,
+  withReferenceResourceLock
+} from "../ref-store/reference-lock.js";
 import {
   candidateReviewInvocation,
   checkVendoredSkill,
@@ -126,35 +134,47 @@ async function doctor(options: {
   console.log(`mise config dir\t${paths.miseConfigDir}`);
   const manifestResults = await validateManifests(paths.root, paths.home);
   const hasInvalidManifest = manifestResults.some((result) => !result.ok);
+
   for (const result of manifestResults) {
     console.log(`manifest:${result.ok ? "✓" : "✗"}\t${path.relative(paths.root, result.file)}`);
+
     if (result.error) console.log(result.error);
   }
+
   for (const legacy of await readLegacyGitSkills(paths.root, paths.home)) {
     console.log(`migration\t${migrationMessage(legacy.name)}`);
   }
+
   if (await pathExists(path.join(paths.home, ".agents", ".skill-lock.json"))) {
     console.log(
       `hint\tignoring external skill installer lock at ${path.join(paths.home, ".agents", ".skill-lock.json")}; it is untrusted migration evidence only`
     );
   }
+
   if (hasInvalidManifest) return;
 
   const vendoredFailures = await validateVendoredSkills(paths.root);
+
   for (const failure of vendoredFailures) console.log(`skill:✗\t${failure}`);
+
   if (vendoredFailures.length > 0) return;
 
   let profile;
+
   try {
     profile = await resolveProfile(paths, options.profile);
   } catch (error) {
     console.log(`skill:✗\t${error instanceof Error ? error.message : String(error)}`);
+
     return;
   }
+
   console.log(`profile\t${profile.name}`);
+
   for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
     console.log(line);
   }
+
   if (await hasHomeGuidance(paths.root)) {
     console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
   } else {
@@ -162,22 +182,28 @@ async function doctor(options: {
       `home-guidance:missing\t${path.join(paths.root, "AGENTS.md")}\trun mfz apply to write it`
     );
   }
+
   if (await shouldHintLegacyReferences(paths.home)) {
     console.log(
       `hint\tlegacy references directory exists at ${path.join(paths.home, "references")}; default is now ${path.join(paths.home, ".mindframe-z", "references")}. Set references_dir to keep using the legacy path.`
     );
   }
+
   for (const upstream of eachUpstream(profile.manifests)) {
     for (const line of await upstreamDoctorLines(upstream)) console.log(line);
   }
+
   for (const target of [...profile.agents, ...infraTargetList("all")]) {
     const result = await renderTarget(paths, profile, target);
+
     for (const link of result.links) {
       const status = await verifyLink(link);
       console.log(`link:${status.state}\t${status.linkPath}\t${status.detail}`);
     }
   }
+
   const projectRoot = await findProjectRoot();
+
   if (projectRoot) {
     for (const file of [
       path.join(projectRoot, ".opencode", "opencode.jsonc"),
@@ -196,6 +222,7 @@ async function doctor(options: {
 async function gitStdout(cwd: string, args: string[]): Promise<string | null> {
   try {
     const { stdout } = await execa("git", args, { cwd });
+
     return stdout;
   } catch {
     return null;
@@ -207,32 +234,40 @@ async function upstreamDoctorLines(upstream: LoadedManifests): Promise<string[]>
     const label = upstream.aliasPath.join("/");
     const lines: string[] = [];
     const dirty = (await gitStdout(upstream.root, ["status", "--porcelain"]))?.trim();
+
     if (dirty) lines.push(`upstream:dirty\t${label}\t${upstream.root}`);
 
     const ahead = Number(
       (await gitStdout(upstream.root, ["rev-list", "--count", "@{u}..HEAD"])) ?? "0"
     );
+
     if (ahead > 0) lines.push(`upstream:ahead\t${label}\t${ahead} commit(s) unpushed`);
 
     await gitStdout(upstream.root, ["fetch", "--quiet"]);
+
     const behind = Number(
       (await gitStdout(upstream.root, ["rev-list", "--count", "HEAD..@{u}"])) ?? "0"
     );
+
     if (behind > 0) lines.push(`upstream:stale\t${label}\t${behind} commit(s) behind`);
+
     return lines;
   });
 }
 
 async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   if (process.env.MFZ_REFERENCES_DIR) return false;
+
   try {
     const source = YAML.parse(await readFile(machineConfigPath(home), "utf8"));
     const parsed = machineSchema.safeParse(source);
     const declared = z.object({ references_dir: z.string().optional() }).safeParse(source);
+
     if (parsed.success && declared.success && declared.data.references_dir) return false;
   } catch {
     // Missing or unreadable machine config means there is no references_dir override.
   }
+
   return pathExists(path.join(home, "references"));
 }
 
@@ -250,9 +285,11 @@ async function statusFn(options: {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
+
   for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
     console.log(line);
   }
+
   console.log(`agents\t${profile.agents.join(", ") || "none"}`);
   console.log(
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
@@ -268,6 +305,7 @@ function formatMcpStatus(server: ResolvedMcpServer): string {
         .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
         .join("|")}`
     : undefined;
+
   const shared = server.executor
     ? `${server.name}:shared${
         Object.keys(server.executor.connections).length > 0
@@ -277,6 +315,7 @@ function formatMcpStatus(server: ResolvedMcpServer): string {
           : ""
       }`
     : undefined;
+
   return [direct, shared].filter((value): value is string => value !== undefined).join("+");
 }
 
@@ -289,10 +328,13 @@ function parseHistoryDays(value: string): number {
   if (!/^[1-9]\d*$/.test(value)) {
     throw new Error(`Invalid history window: ${value}; expected a positive whole number of days`);
   }
+
   const days = Number(value);
+
   if (!Number.isSafeInteger(days) || days <= 0) {
     throw new Error(`Invalid history window: ${value}; expected a positive whole number of days`);
   }
+
   return days;
 }
 
@@ -306,6 +348,7 @@ function parseApplyAgent(value: string): ApplyAgent {
   ) {
     return value;
   }
+
   throw new Error(`Unknown apply agent: ${value}`);
 }
 
@@ -322,13 +365,16 @@ async function contextReport(options: {
   probeMcp?: boolean;
 }) {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
+
   const profile = await resolveProfile(paths, options.profile, {
     evaluateAgents: ["opencode-v2", "claude-code"]
   });
+
   const report = await buildContextReport(paths, profile, {
     agent: options.agent,
     probeMcp: options.probeMcp
   });
+
   console.log(formatContextReport(report));
 }
 
@@ -343,10 +389,13 @@ async function contextHistoryReport(options: {
   if (options.probeMcp) {
     throw new Error("--probe-mcp is only available with mfz context, not context history");
   }
+
   const paths = createRuntimePaths({ root: options.root, home: options.home });
+
   const profile = await resolveProfile(paths, options.profile, {
     evaluateAgents: ["opencode-v2", "claude-code"]
   });
+
   console.log(
     formatContextHistoryReport(
       await buildContextHistoryReport(paths, profile, options.agent, options.days)
@@ -368,13 +417,16 @@ async function opencodeV2Smoke(options: {
   profile?: string | undefined;
 }): Promise<void> {
   const paths = createRuntimePaths({ root: options.root, home: options.home });
+
   const profile = await resolveProfile(paths, options.profile, {
     evaluateAgents: ["opencode-v2"]
   });
+
   await applyConfig({ ...options, agent: "opencode-v2", target: "all", noLink: true });
   const isolated = path.join(paths.home, ".mindframe-z-opencode-v2-smoke");
   await mkdir(isolated, { recursive: true });
   const configsOpenCodeV2 = path.join(paths.configsDir, profile.name, "opencode-v2");
+
   const env = {
     ...process.env,
     HOME: paths.home,
@@ -387,21 +439,27 @@ async function opencodeV2Smoke(options: {
     XDG_STATE_HOME: path.join(isolated, "state"),
     XDG_CACHE_HOME: path.join(isolated, "cache")
   };
+
   let binaryFound = true;
+
   try {
     const result = await execa("opencode2", ["debug", "config"], {
       cwd: paths.home,
       env,
       timeout: 30_000
     });
+
     console.log(result.stdout);
   } catch (error) {
     const parsedError = errorCodeSchema.safeParse(error);
+
     if (parsedError.success && parsedError.data.code === "ENOENT") {
       binaryFound = false;
       console.log("opencode2 not found; skipped smoke check");
+
       return;
     }
+
     throw error;
   } finally {
     if (binaryFound) {
@@ -474,9 +532,11 @@ program
   .option("--profile <profile>", "target profile to write changes to (skip interactive prompt)")
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
+
     const profile = await resolveProfile(paths, program.opts().profile, {
       evaluateAgents: ["opencode-v2", "claude-code", "codex"]
     });
+
     await runSync(paths, profile, options.profile);
   });
 
@@ -490,6 +550,7 @@ program
   .option("--verbose", "show every completed operation")
   .action(async (options) => {
     const interactive = commandIsInteractive();
+
     const reporter = createOperationReporter({
       command: "mfz apply",
       scope: `${program.opts().profile ?? "configured profile"} · ${options.target}`,
@@ -497,6 +558,7 @@ program
       dryRun: options.dryRun ?? false,
       interactive
     });
+
     try {
       await applyConfig({
         ...program.opts(),
@@ -507,8 +569,10 @@ program
         interactive,
         onStart: reporter.start.bind(reporter),
         onComplete: reporter.complete.bind(reporter),
+        onLifecycle: reporter.lifecycle.bind(reporter),
         beforePrompt: reporter.pause.bind(reporter)
       });
+
       if (!reporter.finish()) process.exitCode = 1;
     } catch (error) {
       reporter.fail(error instanceof Error ? error : new Error(String(error)));
@@ -526,10 +590,13 @@ const sandbox = program
   .action(async (target, args, options) => {
     const parsed = parseSandboxTarget(target);
     const forwarded = target === "shell" || target === "cc" || target === "oc" ? args : [];
+
     if (parsed.target === "init") {
       await runSandboxInit(program.opts());
+
       return;
     }
+
     await runSandboxLaunch({
       ...program.opts(),
       target: parsed.target,
@@ -975,18 +1042,23 @@ function isMcpStatusAgent(target: string): target is AgentName {
 
 function parseSkillToggleTarget(target: string | undefined): SkillToggleTarget | undefined {
   if (!target) return undefined;
+
   if (target === "claude-code" || target === "codex") return target;
+
   if (target === "opencode-v2") {
     throw new Error("OpenCode V2 skill toggles are not supported");
   }
+
   throw new Error(`Unknown skill target: ${target}`);
 }
 
 function parseSkillRenderTarget(target: string | undefined): SkillTarget | undefined {
   if (!target) return undefined;
+
   if (target === "opencode-v2" || target === "claude-code" || target === "codex") {
     return target;
   }
+
   throw new Error(`Unknown skill target: ${target}`);
 }
 
@@ -996,6 +1068,7 @@ function isSkillTarget(target: string): target is SkillTarget {
 
 function parseSkillAgentOption(agent: string | undefined): SkillTarget | undefined {
   if (!agent || agent === "all") return undefined;
+
   return parseSkillRenderTarget(agent);
 }
 
@@ -1007,13 +1080,18 @@ async function setSkillEnabled(
   const paths = createRuntimePaths(program.opts());
   const profile = await resolveProfile(paths, program.opts().profile);
   const skill = profile.enabledSkills.find((entry) => entry.name === name);
+
   if (!skill) throw new Error(`Profile ${profile.name} does not declare skill: ${name}`);
+
   if (!skill.toggleable) throw new Error(`Skill "${name}" is not toggleable`);
   const requestedTarget = parseSkillToggleTarget(options.target);
+
   const targets = (requestedTarget ? [requestedTarget] : skill.targets).filter(
     (target): target is SkillToggleTarget => target === "claude-code" || target === "codex"
   );
+
   if (targets.length === 0) throw new Error("OpenCode V2 skill toggles are not supported");
+
   for (const target of targets) {
     await setLocalSkillState(paths, profile, target, name, enabled);
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
@@ -1040,6 +1118,7 @@ skills
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
+
     for (const skill of profile.enabledSkills)
       console.log(`${skill.name}\t${skill.targets.join(",")}\t${skill.description}`);
   });
@@ -1052,11 +1131,13 @@ skills
   .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const requestedAgent = parseSkillAgentOption(options.agent);
+
     const profile = await resolveProfile(
       paths,
       program.opts().profile,
       requestedAgent ? { evaluateAgents: [requestedAgent] } : undefined
     );
+
     const targets = (requestedAgent ? [requestedAgent] : profile.agents).filter(isSkillTarget);
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: targets,
@@ -1079,14 +1160,18 @@ skills
   .action(async () => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
+
     const skills = profile.enabledSkills.filter(
       (skill): skill is typeof skill & { source: "vendored" } => skill.source === "vendored"
     );
+
     let failures = 0;
+
     for (const skill of skills) {
       try {
         const result = await checkVendoredSkill(paths, skill, skill.sourceRoot);
         const status = result.changed ? "update available" : "current";
+
         const note =
           "variants" in skill
             ? result.changed
@@ -1095,23 +1180,28 @@ skills
             : result.changed
               ? "selected subtree changed"
               : "selected subtree unchanged";
+
         console.log(
           `${status}\t${skill.name}\tpinned=${result.pinned.commit}\tobserved=${result.observedCommit}\t${note}`
         );
       } catch (error) {
         failures += 1;
         let pinned = "unknown";
+
         try {
           pinned = (await readVendorLock(skill.sourceRoot)).skills[skill.name]?.commit ?? "missing";
         } catch {
           // The manifest/lock error is included in the observational failure below.
         }
+
         console.log(
           `remote failure\t${skill.name}\tpinned=${pinned}\t${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
+
     if (skills.length === 0) console.log("No vendored skills are enabled in the resolved profile.");
+
     if (failures > 0) throw new Error(`${failures} vendored skill check(s) failed`);
   });
 
@@ -1124,51 +1214,64 @@ skills
   .action(async (name, options) => {
     const paths = createRuntimePaths(program.opts());
     let profile;
+
     try {
       profile = await resolveProfile(paths, program.opts().profile);
     } catch (error) {
       const legacy = (await readLegacyGitSkills(paths.root, paths.home)).find(
         (entry) => entry.name === name
       );
+
       if (!legacy) throw error;
+
       if (legacy.source !== "vendored") throw error;
       await materializeReviewSkill(paths);
+
       const candidate = await stageVendoredSkill(
         paths,
         legacy,
         legacy.sourceRoot,
         options.commit ?? options.revision
       );
+
       console.log(`candidate\t${candidate.provenance.candidateId}`);
       console.log(`migration\t${migrationMessage(name)}`);
       console.log(
         `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
       );
+
       return;
     }
+
     const skill =
       profile.enabledSkills.find((entry) => entry.name === name) ??
       profile.manifests.skills.find((entry) => entry.name === name);
+
     if (!skill || skill.source !== "vendored") {
       throw new Error(`Profile ${profile.name} does not declare vendored skill: ${name}`);
     }
+
     const sourceRoot = profile.sources.skills.get(name)?.root ?? paths.root;
     await materializeReviewSkill(paths);
+
     const candidate = await stageVendoredSkill(
       paths,
       skill,
       sourceRoot,
       options.commit ?? options.revision
     );
+
     console.log(`candidate\t${candidate.provenance.candidateId}`);
     console.log(
       `provenance\t${candidate.provenance.oldCommit ?? "none"} -> ${candidate.provenance.commit}`
     );
+
     if ("variants" in skill) {
       for (const target of ["claude-code", "codex", "opencode-v2"] as const) {
         console.log(`variant\t${target}\t${skill.variants[target]}`);
       }
     }
+
     console.log(
       `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
     );
@@ -1187,6 +1290,7 @@ skills
 
 function parseAgentOption(agent: string | undefined): AgentName | undefined {
   if (!agent) return undefined;
+
   if (agent === "opencode-v2" || agent === "claude-code" || agent === "codex" || agent === "pi")
     return agent;
   throw new Error(`Unknown agent: ${agent}`);
@@ -1200,40 +1304,53 @@ async function setMcpEnabled(
   const paths = createRuntimePaths(program.opts());
   const profile = await resolveProfile(paths, program.opts().profile);
   const server = profile.mcpServers.find((entry) => entry.name === name);
+
   if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
+
   if (!server.agents) {
     throw new Error(
       `MCP server ${name} is Executor-routed and shared by every connected agent; change the profile instead of using a per-agent toggle`
     );
   }
+
   const requestedAgent = parseAgentOption(options.agent);
+
   if (requestedAgent === "opencode-v2") {
     throw new Error("OpenCode V2 project MCP toggles are not supported");
   }
+
   if (requestedAgent === "pi") {
     throw new Error("Pi MCP toggles are not supported yet");
   }
+
   const targets = requestedAgent
     ? [requestedAgent]
     : Object.keys(server.agents).filter(isMcpToggleAgent);
+
   if (targets.length === 0) {
     throw new Error("OpenCode V2 project MCP toggles are not supported");
   }
+
   for (const target of targets) {
     if (server.agents[target] === undefined) {
       throw new Error(`MCP server ${name} is not available for ${target}`);
     }
   }
+
   if (!enabled && targets.includes("claude-code")) {
     assertMcpToggleSupported("claude-code", false);
   }
+
   const projectRoot = await findProjectRoot();
+
   if (!projectRoot) throw new Error("mfz mcp toggles must be run inside a git repository");
+
   for (const target of targets) {
     await writeProjectOverrideDelta(paths, profile, projectRoot, target, "mcp", {
       [name]: enabled
     });
   }
+
   for (const target of targets)
     console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
 }
@@ -1243,11 +1360,14 @@ async function printMcpStatus(): Promise<void> {
   const profile = await resolveProfile(paths, program.opts().profile);
   const projectRoot = await findProjectRoot();
   const store = await readOverrideStore(paths.home);
+
   for (const server of profile.mcpServers) {
     if (server.executor) {
       console.log(`${server.name}\tshared\texecutor`);
     }
+
     if (!server.agents) continue;
+
     for (const target of Object.keys(server.agents).filter(isMcpStatusAgent)) {
       const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
       const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};
@@ -1327,26 +1447,35 @@ refs
   .action(async (name, options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
+
     const reporter = createOperationReporter({
       command: "mfz refs sync",
       scope: `${profile.name} · ${name ?? "all"}`,
       verbose: options.verbose ?? false,
       interactive: commandIsInteractive()
     });
-    const lifecycle = {
-      onStart: reporter.start.bind(reporter),
-      onComplete: reporter.complete.bind(reporter)
-    };
+
     try {
-      if (name) await syncReference(paths, profile, name, lifecycle);
-      else await syncReferences(paths, profile, lifecycle);
-      reporter.start({
-        category: "index",
-        action: "write",
-        target: profile.name,
-        detail: "local indexes"
+      await withReferenceResourceLock(paths, profile.referencesDir, async (signal, scope) => {
+        const lifecycle = {
+          onStart: reporter.start.bind(reporter),
+          onComplete: reporter.complete.bind(reporter),
+          onLifecycle: reporter.lifecycle.bind(reporter),
+          signal
+        };
+
+        if (name) await syncReferenceLocked(paths, profile, name, lifecycle, scope);
+        else await syncReferencesLocked(paths, profile, lifecycle, scope);
+        throwIfReferenceSyncCancelled(signal);
+        reporter.start({
+          category: "index",
+          action: "write",
+          target: profile.name,
+          detail: "local indexes"
+        });
+        await reconcileLocalIndexes(paths, profile, { onComplete: lifecycle.onComplete });
       });
-      await reconcileLocalIndexes(paths, profile, { onComplete: lifecycle.onComplete });
+
       if (!reporter.finish()) process.exitCode = 1;
     } catch (error) {
       reporter.fail(error instanceof Error ? error : new Error(String(error)));

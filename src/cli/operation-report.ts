@@ -1,4 +1,4 @@
-import { intro, log, outro, spinner, type SpinnerResult } from "@clack/prompts";
+import { intro, log, outro } from "@clack/prompts";
 import {
   stderr as processStderr,
   stdin as processStdin,
@@ -7,12 +7,16 @@ import {
 import type { Writable } from "node:stream";
 import {
   operationChanged,
+  type OperationLifecycleEvent,
   type OperationOutcome,
   type OperationStart
 } from "../core/operations.js";
+import { TerminalRegion } from "./terminal-region.js";
 
 interface TerminalCapability {
   isTTY?: boolean;
+  columns?: number;
+  rows?: number;
 }
 
 interface TerminalStream extends Writable, TerminalCapability {}
@@ -29,6 +33,7 @@ export interface OperationReporterOptions {
 
 export interface OperationReporter {
   start(operation: OperationStart): void;
+  lifecycle(event: OperationLifecycleEvent): void;
   complete(outcome: OperationOutcome): void;
   pause(): void;
   finish(): boolean;
@@ -39,7 +44,9 @@ const attentionStatuses = new Set(["skipped", "blocked", "failed"]);
 
 function uniqueOutcomes(outcomes: readonly OperationOutcome[]): OperationOutcome[] {
   const unique = new Map<string, OperationOutcome>();
+
   for (const outcome of outcomes) unique.set(outcomeFields(outcome).join("\0"), outcome);
+
   return [...unique.values()];
 }
 
@@ -49,13 +56,18 @@ function singleLine(value: string): string {
 
 function outcomeFields(outcome: OperationOutcome): string[] {
   const fields: string[] = [outcome.status];
+
   if (outcome.status === "planned" && outcome.plannedEffect) fields.push(outcome.plannedEffect);
   fields.push(outcome.category, outcome.target);
+
   if (outcome.before !== undefined || outcome.after !== undefined) {
     fields.push(`${outcome.before ?? "none"} -> ${outcome.after ?? "none"}`);
   }
+
   if (outcome.changes && outcome.changes.length > 0) fields.push(outcome.changes.join(","));
+
   if (outcome.detail) fields.push(singleLine(outcome.detail));
+
   return fields;
 }
 
@@ -64,12 +76,17 @@ function terminalOutcome(outcome: OperationOutcome): string {
     outcome.status === "planned" && outcome.plannedEffect
       ? `${outcome.status} ${outcome.plannedEffect}`
       : outcome.status;
+
   const lines = [`${status}  ${outcome.category}: ${outcome.detail ?? outcome.target}`];
+
   if (outcome.detail && outcome.detail !== outcome.target) lines.push(outcome.target);
+
   if (outcome.before !== undefined || outcome.after !== undefined) {
     lines.push(`${outcome.before ?? "none"} -> ${outcome.after ?? "none"}`);
   }
+
   if (outcome.changes && outcome.changes.length > 0) lines.push(outcome.changes.join(", "));
+
   return lines.join("\n");
 }
 
@@ -81,8 +98,7 @@ class CliOperationReporter implements OperationReporter {
   readonly #dryRun: boolean;
   readonly #command: string;
   readonly #outcomes: OperationOutcome[] = [];
-  readonly #spinner: SpinnerResult | undefined;
-  #spinnerActive = false;
+  readonly #region: TerminalRegion | undefined;
   #finished = false;
 
   constructor(options: OperationReporterOptions) {
@@ -92,12 +108,10 @@ class CliOperationReporter implements OperationReporter {
     this.#verbose = options.verbose ?? false;
     this.#dryRun = options.dryRun ?? false;
     this.#command = options.command;
+
     if (this.#terminal) {
       intro(`${options.command} · ${options.scope}`, { output: this.#output });
-      this.#spinner = spinner({
-        output: this.#output,
-        onCancel: () => process.kill(process.pid, "SIGINT")
-      });
+      this.#region = new TerminalRegion(this.#output);
     } else {
       this.#output.write(`${options.command}\t${options.scope}\n`);
     }
@@ -105,38 +119,59 @@ class CliOperationReporter implements OperationReporter {
 
   start(operation: OperationStart): void {
     const label = `${operation.category}: ${operation.detail ?? operation.target}`;
+
     if (this.#terminal) {
-      if (this.#spinnerActive) this.#spinner?.message(label);
-      else {
-        this.#spinner?.start(label);
-        this.#spinnerActive = true;
-      }
+      if (operation.category !== "reference")
+        this.#region?.start("operation", Number.MAX_SAFE_INTEGER, label);
+
       return;
     }
+
     if (this.#verbose) {
       const fields = ["working", operation.category, operation.action, operation.target];
+
       if (operation.detail !== undefined) fields.push(operation.detail);
       this.#output.write(fields.map(singleLine).join("\t") + "\n");
     }
   }
 
+  lifecycle(event: OperationLifecycleEvent): void {
+    if (!this.#terminal || this.#finished) return;
+
+    if (event.type === "start") {
+      this.#region?.start(
+        event.key,
+        event.ordinal,
+        event.operation.detail ?? event.operation.target
+      );
+
+      return;
+    }
+
+    this.#region?.complete(event.key, event.outcome);
+  }
+
   complete(outcome: OperationOutcome): void {
     this.#outcomes.push(outcome);
+
+    if (this.#terminal && outcome.category === "reference") return;
+
+    if (this.#terminal) this.#region?.remove("operation");
+
     if (!this.#verbose) return;
-    this.pause();
-    this.#writeOutcome(outcome);
+    this.#withRegionSuspended(() => this.#writeOutcome(outcome));
   }
 
   pause(): void {
-    if (!this.#spinnerActive) return;
-    this.#spinner?.clear();
-    this.#spinnerActive = false;
+    this.#region?.pause();
   }
 
   finish(): boolean {
     if (this.#finished) return false;
     this.#finished = true;
     this.pause();
+    this.#region?.commit();
+
     const changes = uniqueOutcomes(
       this.#outcomes.filter(
         (outcome) =>
@@ -144,15 +179,26 @@ class CliOperationReporter implements OperationReporter {
           (this.#dryRun ? outcome.status === "planned" : operationChanged(outcome))
       )
     );
+
     const attention = uniqueOutcomes(
       this.#outcomes.filter(
         (outcome) => outcome.significance === "meaningful" && attentionStatuses.has(outcome.status)
       )
     );
+
+    const receiptChanges = changes.filter(
+      (outcome) => !this.#terminal || outcome.category !== "reference"
+    );
+
+    const receiptAttention = attention.filter(
+      (outcome) => !this.#terminal || outcome.category !== "reference"
+    );
+
     const blocked = attention.some(
       (outcome) => outcome.status === "blocked" || outcome.status === "failed"
     );
-    if (!this.#verbose) this.#writeReceipt(changes, attention);
+
+    if (!this.#verbose) this.#writeReceipt(receiptChanges, receiptAttention);
 
     const result =
       blocked && !this.#dryRun
@@ -164,7 +210,9 @@ class CliOperationReporter implements OperationReporter {
             : this.#dryRun
               ? `${this.#command} complete — ${changes.length} planned change${changes.length === 1 ? "" : "s"}`
               : `${this.#command} complete — ${changes.length} change${changes.length === 1 ? "" : "s"}`;
+
     this.#writeResult(result);
+
     return this.#dryRun || !blocked;
   }
 
@@ -172,25 +220,50 @@ class CliOperationReporter implements OperationReporter {
     if (this.#finished) return;
     this.#finished = true;
     this.pause();
+    this.#region?.commit(true);
+
     if (!this.#verbose) {
       this.#writeReceipt(
         uniqueOutcomes(
           this.#outcomes.filter(
-            (outcome) => outcome.significance === "meaningful" && operationChanged(outcome)
+            (outcome) =>
+              outcome.significance === "meaningful" &&
+              (!this.#terminal || outcome.category !== "reference") &&
+              operationChanged(outcome)
           )
         ),
         uniqueOutcomes(
           this.#outcomes.filter(
             (outcome) =>
-              outcome.significance === "meaningful" && attentionStatuses.has(outcome.status)
+              outcome.significance === "meaningful" &&
+              (!this.#terminal || outcome.category !== "reference") &&
+              attentionStatuses.has(outcome.status)
           )
         )
       );
     }
+
     const message = error.message;
+
     if (this.#terminal) log.error(message, { output: this.#diagnostics });
     else this.#diagnostics.write(`error\t${singleLine(message)}\n`);
     this.#writeResult(`${this.#command} failed — earlier changes were not rolled back`);
+  }
+
+  #withRegionSuspended(action: () => void): void {
+    if (!this.#terminal) {
+      action();
+
+      return;
+    }
+
+    this.pause();
+
+    try {
+      action();
+    } finally {
+      this.#region?.resume();
+    }
   }
 
   #writeReceipt(
@@ -200,6 +273,7 @@ class CliOperationReporter implements OperationReporter {
     if (changes.length > 0) {
       this.#writeSection("Changes", changes);
     }
+
     if (attention.length > 0) {
       this.#writeSection("Attention", attention);
     }
@@ -208,17 +282,21 @@ class CliOperationReporter implements OperationReporter {
   #writeSection(title: string, outcomes: readonly OperationOutcome[]): void {
     if (this.#terminal) log.info(title, { output: this.#output });
     else this.#output.write(`${title}\n`);
+
     for (const outcome of outcomes) this.#writeOutcome(outcome);
   }
 
   #writeOutcome(outcome: OperationOutcome): void {
     if (this.#terminal) {
       const message = terminalOutcome(outcome);
+
       if (attentionStatuses.has(outcome.status)) log.warn(message, { output: this.#output });
       else if (operationChanged(outcome)) log.success(message, { output: this.#output });
       else log.message(message, { output: this.#output });
+
       return;
     }
+
     this.#output.write(outcomeFields(outcome).map(singleLine).join("\t") + "\n");
   }
 
@@ -254,9 +332,12 @@ export function printInventory(
 ): void {
   if (output.isTTY !== true) {
     for (const row of plainRows) output.write(`${row}\n`);
+
     return;
   }
+
   intro(`${title} · ${scope}`, { output });
+
   for (const item of items) log.message(`${item.label}\n${item.detail}`, { output });
   outro(`${items.length} reference${items.length === 1 ? "" : "s"}`, { output });
 }
