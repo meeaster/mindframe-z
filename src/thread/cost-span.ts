@@ -35,6 +35,7 @@ const NANODOLLARS_PER_USD = 1_000_000_000;
 export function modelProvider(harness: ThreadHarness, model: string): string {
   if (harness === "claude-code") return "anthropic";
   const slash = model.indexOf("/");
+
   return slash === -1 ? "unknown" : model.slice(0, slash);
 }
 
@@ -43,10 +44,13 @@ export function buildMetrics(
   costUsd: number | null
 ): CostSpanMetrics | null {
   const { nonCachedInput, cacheReadInput, cacheWriteInput, output } = breakdown;
+
   if (nonCachedInput === 0 && cacheReadInput === 0 && cacheWriteInput === 0 && output === 0) {
     return null;
   }
+
   const inputTokens = nonCachedInput + cacheReadInput + cacheWriteInput;
+
   return {
     input_tokens: inputTokens,
     output_tokens: output,
@@ -64,6 +68,7 @@ export function buildCostSpanPayload(
   ctx: CostSpanContext
 ): Uint8Array | null {
   const metrics = buildMetrics(breakdown, ctx.costUsd);
+
   if (!metrics) return null;
 
   const startNs = ctx.startTimeMs * 1_000_000;
@@ -135,7 +140,9 @@ function nanodollarSplit(
   if (costUsd === null) {
     return { estimated_total_cost: 0, estimated_input_cost: 0, estimated_output_cost: 0 };
   }
+
   const total = Math.round(costUsd * NANODOLLARS_PER_USD);
+
   // The Claude API only reports a single total; we attribute all of it to output
   // and zero the input breakdown so the rendered span still shows a non-zero cost
   // while leaving the input bucket for a future split once one is available.
@@ -144,13 +151,17 @@ function nanodollarSplit(
 
 function bytesToHex(bytes: Uint8Array): string {
   let hex = "";
+
   for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+
   return hex;
 }
 
 function readUint32(bytes: Uint8Array): number {
   let result = 0;
+
   for (let i = 0; i < 4; i++) result = result * 256 + (bytes[i] ?? 0);
+
   return result;
 }
 

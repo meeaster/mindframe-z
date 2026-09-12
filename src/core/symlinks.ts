@@ -16,14 +16,18 @@ export interface LinkStatus extends LinkPlan {
 export async function verifyLink(plan: LinkPlan): Promise<LinkStatus> {
   try {
     const stat = await lstat(plan.linkPath);
+
     if (!stat.isSymbolicLink()) {
       return { ...plan, state: "conflict", detail: "path exists and is not a symlink" };
     }
+
     const current = await readlink(plan.linkPath);
     const resolved = path.resolve(path.dirname(plan.linkPath), current);
+
     if (resolved === path.resolve(plan.targetPath)) {
       return { ...plan, state: "ok", detail: "already linked", resolvedTarget: resolved };
     }
+
     return {
       ...plan,
       state: "conflict",
@@ -35,17 +39,21 @@ export async function verifyLink(plan: LinkPlan): Promise<LinkStatus> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { ...plan, state: "missing", detail: "missing" };
     }
+
     throw error;
   }
 }
 
 export async function ensureLink(plan: LinkPlan, dryRun = false): Promise<LinkStatus> {
   const status = await verifyLink(plan);
+
   if (status.state === "conflict")
     throw new Error(`Refusing to overwrite ${plan.linkPath}: ${status.detail}`);
+
   if (status.state === "missing" && !dryRun) {
     await createLink(plan);
   }
+
   return status;
 }
 
@@ -59,6 +67,7 @@ export async function createLink(
 ): Promise<OperationOutcome> {
   await mkdir(path.dirname(plan.linkPath), { recursive: true });
   await symlink(plan.targetPath, plan.linkPath);
+
   const outcome: OperationOutcome = {
     category: "link",
     action: "link",
@@ -68,7 +77,9 @@ export async function createLink(
     changes: ["destination"],
     detail: plan.targetPath
   };
+
   onComplete?.(outcome);
+
   return outcome;
 }
 
@@ -81,6 +92,7 @@ export async function replaceWithBackup(
   await mkdir(path.dirname(plan.linkPath), { recursive: true });
   await rename(plan.linkPath, backupPath);
   await symlink(plan.targetPath, plan.linkPath);
+
   const outcome: OperationOutcome = {
     category: "link",
     action: "link",
@@ -90,6 +102,8 @@ export async function replaceWithBackup(
     changes: ["destination"],
     detail: previousTarget ? `${previousTarget} -> ${plan.targetPath}` : plan.targetPath
   };
+
   onComplete?.(outcome);
+
   return outcome;
 }

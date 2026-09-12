@@ -20,6 +20,7 @@ type HookBody = {
 
 async function postHook(body: HookBody): Promise<void> {
   if (!HOOK_URL) return;
+
   try {
     await fetch(HOOK_URL, {
       method: "POST",
@@ -33,6 +34,7 @@ async function postHook(body: HookBody): Promise<void> {
 }
 
 const textPartSchema = z.object({ type: z.literal("text"), text: z.string() }).passthrough();
+
 const permissionInputSchema = z
   .object({
     sessionID: z.string().optional(),
@@ -40,6 +42,7 @@ const permissionInputSchema = z
     metadata: z.unknown().optional()
   })
   .passthrough();
+
 const eventSchema = z
   .object({
     type: z.string().optional(),
@@ -55,6 +58,7 @@ const eventSchema = z
 
 function permissionFields(input: z.input<typeof permissionInputSchema>) {
   const value = permissionInputSchema.parse(input);
+
   return {
     sessionID: value.sessionID ?? "unknown",
     tool: value.tool ?? "unknown",
@@ -82,12 +86,15 @@ const LIFECYCLE_HOOK_NAME = new Map([
 
 function sessionIdFromEvent(event: z.input<typeof eventSchema>): string {
   const parsed = eventSchema.safeParse(event);
+
   if (!parsed.success) return "unknown";
+
   return parsed.data.properties?.sessionID ?? parsed.data.properties?.info?.id ?? "unknown";
 }
 
 function eventType(event: z.input<typeof eventSchema>): string | undefined {
   const parsed = eventSchema.safeParse(event);
+
   return parsed.success ? parsed.data.type : undefined;
 }
 
@@ -109,7 +116,9 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
         .object({ error: z.unknown().optional() })
         .passthrough()
         .parse(output.metadata ?? {});
+
       const failed = metadata.error !== undefined && metadata.error !== null;
+
       const hook: HookBody = {
         hook_event_name: failed ? "PostToolUseFailure" : "PostToolUse",
         session_id: input.sessionID,
@@ -118,18 +127,22 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
         tool_use_id: input.callID,
         tool_response: output.output
       };
+
       if (failed) hook.error = metadata.error;
       await postHook(hook);
     },
 
     "chat.message": async (input, output) => {
       if (output.message.role !== "user") return;
+
       const text = (output.parts ?? [])
         .map((part) => {
           const parsed = textPartSchema.safeParse(part);
+
           return parsed.success ? parsed.data.text : "";
         })
         .join("");
+
       await postHook({
         hook_event_name: "UserPromptSubmit",
         session_id: input.sessionID,
@@ -157,8 +170,10 @@ export default async function lapdogPlugin(_input: PluginInput): Promise<Hooks> 
 
     event: async (input) => {
       const type = eventType(input.event);
+
       if (!type || !LIFECYCLE_EVENTS.has(type)) return;
       const hookEvent = LIFECYCLE_HOOK_NAME.get(type);
+
       if (!hookEvent) return;
       await postHook({
         hook_event_name: hookEvent,

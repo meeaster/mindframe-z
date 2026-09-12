@@ -11,11 +11,16 @@ import {
 } from "./provider-seed.js";
 
 const chatgptHost = "chatgpt.com";
+
 const openaiServiceName = "openai-chatgpt";
+
 // opencode's Codex/ChatGPT public OAuth constants.
 const openaiTokenUrl = "https://auth.openai.com/oauth/token";
+
 const openaiClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
+
 const openaiOauthKey = "OPENAI_OAUTH";
+
 const openaiAccountKey = "OPENAI_ACCOUNT_ID";
 
 export interface OpenaiOauthTokens {
@@ -81,6 +86,7 @@ export function openaiOauthUploadBody(tokens: OpenaiOauthTokens) {
 export async function readHostOpenaiOauth(home: string): Promise<OpenaiOauthTokens> {
   const file = path.join(home, ".local", "share", "opencode", "auth.json");
   let parsed: z.infer<typeof openaiAuthSchema>;
+
   try {
     parsed = openaiAuthSchema.parse(JSON.parse(await readFile(file, "utf8")));
   } catch {
@@ -88,10 +94,13 @@ export async function readHostOpenaiOauth(home: string): Promise<OpenaiOauthToke
       `opencode ChatGPT credential not found at ${file}. Log in to ChatGPT with opencode on the host first.`
     );
   }
+
   const oauth = parsed.openai;
+
   if (!oauth?.access || !oauth.refresh || !oauth.accountId) {
     throw new Error(`No openai access/refresh/accountId in ${file}.`);
   }
+
   return { accessToken: oauth.access, refreshToken: oauth.refresh, accountId: oauth.accountId };
 }
 
@@ -101,6 +110,7 @@ export async function runSeedOpenai(options: SeedOptions): Promise<void> {
   const env = ownerCliEnv(paths.home);
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "mfz-openai-seed-"));
+
   try {
     const yamlPath = path.join(dir, "openai-service.yaml");
     await writeFile(yamlPath, openaiServiceYaml(), "utf8");

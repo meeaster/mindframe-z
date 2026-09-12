@@ -23,9 +23,11 @@ describe("orientation authoring", () => {
 
   it("round-trips empty lists through the 'None.' convention", () => {
     const empty = { ...orientation, constraints: [], questions: [] };
+
     const authored = renderOrientation(empty)
       .replace("<!-- Add Markdown bullets, or leave this section empty. -->", "None.")
       .replace("<!-- Add Markdown bullets, or leave this section empty. -->", "none");
+
     // Assert the substitutions landed. An untouched placeholder is a stripped
     // HTML comment, which also reads as an empty list — so without this the test
     // would still pass while exercising the wrong branch.
@@ -49,6 +51,7 @@ describe("orientation authoring", () => {
       "- Keep mutations explicit.",
       "Keep mutations explicit."
     );
+
     expect(() => parseOrientation(prose)).toThrow(/Constraints must contain Markdown bullets/);
   });
 });
@@ -58,6 +61,7 @@ describe("context map authoring", () => {
     { target: "mindframe-z", role: "implementation", status: "active" },
     { target: "personal-knowledge", role: "context", status: "read-only" }
   ];
+
   const context = [{ target: "threads/index.md", role: "continuity", status: "current" }];
 
   it("round-trips both pointer tables, including empty ones", () => {
@@ -82,6 +86,7 @@ describe("context map authoring", () => {
     const rendered = renderContextMap({
       context: [{ target: "notes", role: "why\nit matters", status: "current" }]
     });
+
     expect(parseContextMap(rendered).context).toEqual([
       { target: "notes", role: "why it matters", status: "current" }
     ]);

@@ -24,6 +24,7 @@ export async function dispatch(
 ): Promise<{ result: AgentRunResult; dispatch: ThreadDispatchRun }> {
   const result = await runner.run(request);
   await writeRunTrace(paths, runId, traceName, result.rawTrace);
+
   return {
     result,
     dispatch: toDispatch(request.role, request.harness, request.model, result)

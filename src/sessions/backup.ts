@@ -34,9 +34,11 @@ async function listArchivedTimes(
 ): Promise<Map<string, number>> {
   const prefix = harnessPrefix(archive, harness);
   const times = new Map<string, number>();
+
   for await (const object of listObjects(client, archive.bucket, prefix)) {
     if (object.Key && object.LastModified) times.set(object.Key, object.LastModified.getTime());
   }
+
   return times;
 }
 
@@ -54,12 +56,15 @@ export async function backupHarness(
 ): Promise<RunSummary> {
   const stored = await listArchivedTimes(client, archive, harness);
   const summary: RunSummary = { uploaded: 0, skipped: 0, failed: 0 };
+
   for (const item of items) {
     const key = objectKey(archive, harness, item.relPath);
+
     if (!needsUpload(item.sourceMs, stored.get(key))) {
       summary.skipped += 1;
       continue;
     }
+
     try {
       const body = await item.load();
       await client.send(
@@ -80,6 +85,7 @@ export async function backupHarness(
       console.error(`failed\t${key}\t${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
   return summary;
 }
 
@@ -99,6 +105,7 @@ export async function runSessionsBackup(options: {
     listClaudeItems(paths),
     listOpencodeItems(paths)
   ]);
+
   const subagents = claudeItems.filter((item) => item.relPath.includes("/subagents/")).length;
   console.log(
     `found ${claudeItems.length - subagents} claude sessions + ${subagents} subagent transcripts, ` +

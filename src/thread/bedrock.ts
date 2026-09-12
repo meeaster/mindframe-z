@@ -47,17 +47,21 @@ function stringField(value: string | undefined): string | undefined {
 // are resolved separately via the helper.
 function extractOtelEnv(env: JsonObject) {
   const entries: Array<readonly [string, string]> = [];
+
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith("OTEL_") && !key.includes("TELEMETRY")) continue;
     const str = stringField(jsonString(value));
+
     if (str) entries.push([key, str]);
   }
+
   return Object.fromEntries(entries);
 }
 
 export async function readBedrockHostSettings(paths: RuntimePaths): Promise<BedrockHostSettings> {
   const settingsPath = path.join(paths.claudeDir, "settings.json");
   let raw: z.infer<typeof rawClaudeSettingsSchema>;
+
   try {
     raw = rawClaudeSettingsSchema.parse(JSON.parse(await readFile(settingsPath, "utf8")));
   } catch (error) {
@@ -65,7 +69,9 @@ export async function readBedrockHostSettings(paths: RuntimePaths): Promise<Bedr
       `Bedrock thread dispatch needs Claude settings at ${settingsPath}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+
   const env = raw.env ?? {};
+
   return {
     awsProfile: stringField(jsonString(env.AWS_PROFILE)) ?? "default",
     awsRegion: stringField(jsonString(env.AWS_REGION)) ?? BEDROCK_REGION_FALLBACK,
@@ -85,6 +91,7 @@ export async function refreshBedrockCredentials(settings: BedrockHostSettings): 
   if (!settings.awsAuthRefresh) {
     throw new Error("Bedrock thread dispatch needs awsAuthRefresh in Claude settings");
   }
+
   await execa(settings.awsAuthRefresh, ["--refresh-if-needed", "--profile", settings.awsProfile], {
     // Inherit stderr so an interactive browser prompt (expired SSO) is visible to
     // the operator; stdout carries the credential JSON we don't need here.
@@ -104,15 +111,18 @@ export async function writeScopedBedrockCredentials(
   const profileHeader = `[${settings.awsProfile}]`;
   const credsFile = await readFile(source, "utf8");
   const section = extractProfileSection(credsFile, profileHeader);
+
   if (!section) {
     throw new Error(
       `AWS profile ${settings.awsProfile} not found in ${source}; run Claude Code or the credential process first`
     );
   }
+
   const dir = path.join(paths.home, ".mindframe-z", "bedrock");
   await mkdir(dir, { recursive: true });
   const target = path.join(dir, "credentials");
   await writeFile(target, section, { mode: 0o600 });
+
   return dir;
 }
 
@@ -126,16 +136,22 @@ export async function resolveOtelHeaders(
   settings: BedrockHostSettings
 ): Promise<string | undefined> {
   if (!settings.otelHeadersHelper) return undefined;
+
   try {
     const { stdout } = await execa(settings.otelHeadersHelper, [], {
       stdio: ["ignore", "pipe", "ignore"]
     });
+
     const parsed = jsonObjectSchema.safeParse(JSON.parse(stdout));
+
     if (!parsed.success) return undefined;
+
     const pairs = Object.entries(parsed.data).flatMap(([key, value]) => {
       const string = jsonString(value);
+
       return string === undefined ? [] : [`${key}=${encodeURIComponent(string)}`];
     });
+
     return pairs.length > 0 ? pairs.join(",") : undefined;
   } catch {
     // Helper missing, non-JSON, or no cached token: ship telemetry without
@@ -162,16 +178,20 @@ export async function bedrockContainerEnv(
     },
     settings.otelEnv
   );
+
   const headers = await resolveOtelHeaders(settings);
+
   return headers ? { ...env, OTEL_EXPORTER_OTLP_HEADERS: headers } : env;
 }
 
 function extractProfileSection(contents: string, header: string): string | undefined {
   const lines = contents.split("\n");
   const start = lines.findIndex((line) => line.trim() === header);
+
   if (start === -1) return undefined;
   const rest = lines.slice(start + 1);
   const next = rest.findIndex((line) => line.trim().startsWith("["));
   const body = next === -1 ? rest : rest.slice(0, next);
+
   return [header, ...body].join("\n").trimEnd() + "\n";
 }

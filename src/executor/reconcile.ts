@@ -91,7 +91,9 @@ export async function readManagedState(
     const parsed = managedStateSchema.parse(
       JSON.parse(await readFile(executorManagedPath(paths, profileName), "utf8"))
     );
+
     const { operation, ...state } = parsed;
+
     return operation === undefined ? state : { ...state, operation };
   } catch {
     return undefined;
@@ -100,6 +102,7 @@ export async function readManagedState(
 
 export async function readManagedStates(paths: RuntimePaths): Promise<ManagedState[]> {
   let entries;
+
   try {
     entries = await readdir(paths.configsDir, { withFileTypes: true });
   } catch {
@@ -107,11 +110,14 @@ export async function readManagedStates(paths: RuntimePaths): Promise<ManagedSta
   }
 
   const states: ManagedState[] = [];
+
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const state = await readManagedState(paths, entry.name);
+
     if (state) states.push({ ...state, profile: entry.name });
   }
+
   return states;
 }
 
@@ -144,6 +150,7 @@ async function writeSnapshots(
     category: "bookkeeping" as const,
     significance: "internal" as const
   };
+
   if (onComplete) Object.assign(options, { onComplete });
   await writeJsonAtomicOutcome(executorDesiredPath(paths, profileName), desired, options);
   await writeJsonAtomicOutcome(executorManagedPath(paths, profileName), managed, options);
@@ -173,6 +180,7 @@ export function planExecutor(
   sharedOwnedSlugs: ReadonlySet<string> = new Set()
 ): ExecutorReconcileResult {
   const desiredSlugs = new Set(desired.integrations.map((server) => server.slug));
+
   return {
     desired,
     added: desired.integrations
@@ -181,6 +189,7 @@ export function planExecutor(
     updated: desired.integrations
       .filter((server) => {
         const managed = previous.integrations[server.slug];
+
         return managed !== undefined && managed.digest !== executorConfigDigest(server);
       })
       .map((server) => server.slug),
@@ -218,6 +227,7 @@ async function planExecutorWithMetadata(
 
   for (const server of desired.integrations) {
     const current = await adapter.getIntegration(server.slug);
+
     const classification = classifyExecutorIntegration(
       server,
       {
@@ -226,6 +236,7 @@ async function planExecutorWithMetadata(
       },
       { requireCredentialedConnections: false, allowConnectionRepair: true }
     );
+
     if (classification.integration === "missing") {
       added.add(server.slug);
       updated.delete(server.slug);
@@ -239,25 +250,31 @@ async function planExecutorWithMetadata(
       added.delete(server.slug);
       updated.delete(server.slug);
     }
+
     for (const connection of classification.connections) {
       if (connection.kind === "missing" && !connection.requiresConnection) {
         addedConnections.add(connectionKey(server.slug, connection.name));
       } else if (connection.kind === "compatible") {
         reusedConnections.add(connectionKey(server.slug, connection.name));
       }
+
       const required = requiredConnection(server, connection);
+
       if (required) requiredConnections.push(required);
     }
+
     blockers.push(...classification.blockers);
   }
 
   for (const slug of base.removed) {
     const current = await adapter.getIntegration(slug);
+
     const removal = classifyExecutorRemoval(
       slug,
       current,
       current ? await adapter.listConnections(slug) : []
     );
+
     if (!removal.removable) blockers.push(...removal.blockers);
   }
 
@@ -285,6 +302,7 @@ async function preflightReconciliation(
 ): Promise<void> {
   for (const server of desired) {
     const current = await adapter.getIntegration(server.slug);
+
     const classification = classifyExecutorIntegration(
       server,
       {
@@ -296,19 +314,24 @@ async function preflightReconciliation(
         allowConnectionRepair: true
       }
     );
+
     if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
   }
 
   const desiredSlugs = new Set(desired.map((server) => server.slug));
+
   for (const slug of Object.keys(previous.integrations)) {
     if (desiredSlugs.has(slug)) continue;
+
     if (options.retainedSlugs?.has(slug)) continue;
     const current = await adapter.getIntegration(slug);
+
     const removal = classifyExecutorRemoval(
       slug,
       current,
       current ? await adapter.listConnections(slug) : []
     );
+
     if (removal.blockers.length > 0) throw new Error(removal.blockers[0]);
   }
 }
@@ -323,6 +346,7 @@ async function reconcileServer(
   onComplete?: OperationCompletion
 ): Promise<void> {
   let current = await adapter.getIntegration(desired.slug);
+
   if (!current) {
     await adapter.addServer(desired);
     result.added.push(desired.slug);
@@ -335,6 +359,7 @@ async function reconcileServer(
     });
     await checkpoint(desired.slug);
     current = await adapter.getIntegration(desired.slug);
+
     if (!current) throw new Error(`Executor registered ${desired.slug} but could not read it back`);
   } else {
     const classification = classifyExecutorIntegration(
@@ -342,8 +367,10 @@ async function reconcileServer(
       { current, connections: await adapter.listConnections(desired.slug) },
       { requireCredentialedConnections: false, allowConnectionRepair: true }
     );
+
     if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
     let changed = false;
+
     if (classification.descriptionChanged) {
       await adapter.updateIntegration(desired.slug, { description: desired.description });
       result.updated.push(desired.slug);
@@ -358,10 +385,12 @@ async function reconcileServer(
       await checkpoint(desired.slug);
       changed = true;
     }
+
     if (classification.configurationChanged) {
       const serverConfig = Object.fromEntries(
         Object.entries(desired.config).filter(([key]) => key !== "authenticationTemplate")
       );
+
       await adapter.configureServer(desired.slug, serverConfig);
       result.updated.push(desired.slug);
       onComplete?.({
@@ -376,9 +405,11 @@ async function reconcileServer(
       changed = true;
       current = (await adapter.getIntegration(desired.slug)) ?? current;
     }
+
     const hasCredentialedConnection = Object.values(desired.connections).some(
       (method) => method !== "none"
     );
+
     if (classification.authenticationChanged && !hasCredentialedConnection) {
       const methods = desired.config.authenticationTemplate ?? [{ slug: "none", kind: "none" }];
       await adapter.configureAuth(desired.slug, methods, "replace");
@@ -394,6 +425,7 @@ async function reconcileServer(
       await checkpoint(desired.slug);
       changed = true;
     }
+
     if (!changed) {
       result.reused.push(desired.slug);
       onComplete?.({
@@ -415,6 +447,7 @@ async function ensureDeclaredConnection(
   onComplete?: OperationCompletion
 ): Promise<void> {
   const current = await adapter.getIntegration(server.slug);
+
   const classification = classifyExecutorIntegration(
     server,
     {
@@ -423,10 +456,12 @@ async function ensureDeclaredConnection(
     },
     { requireCredentialedConnections: false, allowConnectionRepair: true }
   );
+
   const actionable = classification.connections.filter(
     (connection): connection is Extract<ExecutorConnectionClassification, { kind: "missing" }> =>
       connection.kind === "missing"
   );
+
   for (const connection of actionable) {
     if (connection.method === "none") {
       await adapter.createNoAuthConnection(server.slug, connection.name, connection.method);
@@ -442,10 +477,14 @@ async function ensureDeclaredConnection(
       await checkpoint(server.slug);
     }
   }
+
   if (classification.blockers.length > 0) throw new Error(classification.blockers[0]);
+
   for (const connection of classification.connections) {
     const required = requiredConnection(server, connection);
+
     if (required) result.requiredConnections.push(required);
+
     if (connection.kind === "compatible") {
       result.reusedConnections.push(connectionKey(server.slug, connection.name));
       onComplete?.({
@@ -473,35 +512,46 @@ export async function reconcileExecutor(
   const desired = buildExecutorDesiredState(profile, paths.home);
   const managedFilePresent = await pathExists(executorManagedPath(paths, profile.name));
   const previous = await readManaged(paths, profile.name);
+
   const sharedOwnedSlugs = new Set(
     (await readManagedStates(paths))
       .filter((state) => state.profile !== profile.name)
       .flatMap((state) => Object.keys(state.integrations))
   );
+
   if (desired.integrations.length === 0 && Object.keys(previous.integrations).length === 0) {
     if (managedFilePresent && (await readManagedState(paths, profile.name)) === undefined) {
       throw new Error(
         `Executor managed state for ${profile.name} is unreadable; repair or remove it before applying`
       );
     }
+
     return undefined;
   }
+
   const result = emptyResult(desired);
+
   if (options.dryRun) {
     const digestPlan = planExecutor(desired, previous, sharedOwnedSlugs);
     const attached = options.adapter ?? (await attachExecutorAdapter({}));
+
     if (!attached) {
       const plan = {
         ...digestPlan,
         planning: "metadata-unavailable",
         blockers: ["live Executor metadata unavailable; health and durable state are unknown"]
       } satisfies ExecutorReconcileResult;
+
       for (const outcome of executorPlanOutcomes(plan)) options.onComplete?.(outcome);
+
       return plan;
     }
+
     try {
       const plan = await planExecutorWithMetadata(attached, desired, digestPlan);
+
       for (const outcome of executorPlanOutcomes(plan)) options.onComplete?.(outcome);
+
       return plan;
     } finally {
       if (!options.adapter) await attached.close();
@@ -509,6 +559,7 @@ export async function reconcileExecutor(
   }
 
   const adapter = options.adapter ?? (await createExecutorAdapter({}));
+
   const managed: ManagedState = {
     version: 1,
     profile: profile.name,
@@ -520,12 +571,15 @@ export async function reconcileExecutor(
     },
     integrations: { ...previous.integrations }
   };
+
   await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   await preflightReconciliation(adapter, desired.integrations, previous, {
     retainedSlugs: sharedOwnedSlugs
   });
+
   const checkpoint: ReconcileCheckpoint = async (slug) => {
     const server = desired.integrations.find((entry) => entry.slug === slug);
+
     if (!server) return;
     managed.integrations[slug] = {
       digest: executorConfigDigest(server),
@@ -534,6 +588,7 @@ export async function reconcileExecutor(
     };
     await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
   };
+
   for (const server of desired.integrations) {
     await reconcileServer(adapter, server, result, checkpoint, options.onComplete);
     await ensureDeclaredConnection(adapter, server, result, checkpoint, options.onComplete);
@@ -542,6 +597,7 @@ export async function reconcileExecutor(
 
   for (const slug of Object.keys(previous.integrations)) {
     if (desired.integrations.some((server) => server.slug === slug)) continue;
+
     if (sharedOwnedSlugs.has(slug)) {
       result.retained.push(slug);
       delete managed.integrations[slug];
@@ -556,9 +612,12 @@ export async function reconcileExecutor(
       await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
       continue;
     }
+
     const current = await adapter.getIntegration(slug);
+
     if (!current) continue;
     const removal = classifyExecutorRemoval(slug, current, await adapter.listConnections(slug));
+
     if (removal.blockers.length > 0) throw new Error(removal.blockers[0]);
     await adapter.removeIntegration(slug);
     result.removed.push(slug);
@@ -584,18 +643,22 @@ export async function reconcileExecutor(
         detail: `${connection.authentication} connection ${connection.reason}`
       });
     }
+
     throw new Error(requiredConnectionsMessage(result.requiredConnections));
   }
 
   managed.complete = true;
+
   if (managed.operation) managed.operation.status = "complete";
   await writeSnapshots(paths, profile.name, desired, managed, options.onComplete);
+
   return result;
 }
 
 function executorPlanOutcomes(result: ExecutorReconcileResult | undefined): OperationOutcome[] {
   if (!result) return [];
   const outcomes: OperationOutcome[] = [];
+
   const add = (
     status: OperationOutcome["status"],
     target: string,
@@ -609,19 +672,29 @@ function executorPlanOutcomes(result: ExecutorReconcileResult | undefined): Oper
       target,
       significance: "meaningful"
     };
+
     if (detail) outcome.detail = detail;
+
     if (plannedEffect) outcome.plannedEffect = plannedEffect;
     outcomes.push(outcome);
   };
+
   for (const target of new Set(result.added)) add("planned", target, undefined, "add");
+
   for (const target of new Set(result.updated)) add("planned", target, undefined, "update");
+
   for (const target of new Set(result.reused)) add("unchanged", target);
+
   for (const target of new Set(result.removed)) add("planned", target, undefined, "remove");
+
   for (const target of new Set(result.retained))
     add("unchanged", target, "retained by another profile");
+
   for (const target of new Set(result.addedConnections))
     add("planned", target, "connection", "add");
+
   for (const target of new Set(result.reusedConnections)) add("unchanged", target, "connection");
+
   for (const connection of result.requiredConnections) {
     add(
       "blocked",
@@ -629,7 +702,9 @@ function executorPlanOutcomes(result: ExecutorReconcileResult | undefined): Oper
       `${connection.authentication} connection ${connection.reason}`
     );
   }
+
   for (const blocker of result.blockers ?? []) add("blocked", "Executor", blocker);
+
   return outcomes;
 }
 
@@ -645,10 +720,13 @@ function requiredConnection(
   ) {
     return undefined;
   }
+
   const method = server.config.authenticationTemplate?.find(
     (candidate) => candidate.slug === connection.method
   );
+
   if (method?.kind !== "oauth2" && method?.kind !== "apikey") return undefined;
+
   return {
     integration: server.slug,
     name: connection.name,
@@ -662,10 +740,13 @@ export function requiredConnectionsMessage(
 ): string {
   const entries = connections.map((connection) => {
     const authentication = connection.authentication === "oauth" ? "OAuth" : "API key";
+
     const action =
       connection.reason === "missing-oauth-scopes" ? "; reconnect for required scopes" : "";
+
     return `- ${connection.integration}: connection name "${connection.name}" (${authentication}${action})`;
   });
+
   return [
     "Add or update these connections in the Executor app before applying:",
     ...entries,
@@ -675,6 +756,7 @@ export function requiredConnectionsMessage(
 
 export function executorPlanSummary(result: ExecutorReconcileResult | undefined): string {
   if (!result) return "no Executor routes";
+
   const actions = [
     ...result.added.map((name) => `add ${name}`),
     ...result.updated.map((name) => `update ${name}`),
@@ -688,7 +770,9 @@ export function executorPlanSummary(result: ExecutorReconcileResult | undefined)
         `requires ${connection.authentication} connection ${connection.integration}/${connection.name}`
     )
   ];
+
   const summary = actions.length > 0 ? actions.join(", ") : "no Executor changes";
+
   const planning =
     result.planning === "managed-digest-only"
       ? " (managed digest only; live state not checked)"
@@ -697,9 +781,11 @@ export function executorPlanSummary(result: ExecutorReconcileResult | undefined)
         : result.planning === "live-metadata-unverified"
           ? " (metadata attached; health was not refreshed in dry-run)"
           : "";
+
   const blockers =
     result.blockers && result.blockers.length > 0
       ? `; blockers: ${result.blockers.join("; ")}`
       : "";
+
   return `${summary}${planning}${blockers}`;
 }

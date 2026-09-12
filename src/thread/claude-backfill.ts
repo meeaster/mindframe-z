@@ -28,20 +28,25 @@ interface BackfillBody {
 async function readJsonl(file: string): Promise<unknown[]> {
   const entries: unknown[] = [];
   let raw: string;
+
   try {
     raw = await readFile(file, "utf8");
   } catch {
     return entries;
   }
+
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
+
     if (!trimmed) continue;
+
     try {
       entries.push(JSON.parse(trimmed));
     } catch {
       // Partial flush at teardown can leave a truncated final line; skip it.
     }
   }
+
   return entries;
 }
 
@@ -50,8 +55,10 @@ const transcriptEntrySchema = z.object({ cwd: z.string().optional() }).passthrou
 function resolveCwd(entries: unknown[]): string {
   for (const entry of entries) {
     const parsed = transcriptEntrySchema.safeParse(entry);
+
     if (parsed.success && parsed.data.cwd) return parsed.data.cwd;
   }
+
   return "";
 }
 
@@ -62,19 +69,24 @@ function resolveCwd(entries: unknown[]): string {
 async function readSubagents(sessionDir: string, sessionId: string): Promise<SubagentPayload[]> {
   const subDir = path.join(sessionDir, sessionId, "subagents");
   let names: string[];
+
   try {
     names = await readdir(subDir);
   } catch {
     return [];
   }
+
   const subagents: SubagentPayload[] = [];
+
   for (const name of names.sort()) {
     if (!name.endsWith(".jsonl")) continue;
     const entries = await readJsonl(path.join(subDir, name));
+
     if (entries.length > 0) {
       subagents.push({ agent_id: path.basename(name, ".jsonl"), entries });
     }
   }
+
   return subagents;
 }
 
@@ -86,24 +98,30 @@ async function findTranscript(
   sessionId: string
 ): Promise<{ file: string; sessionDir: string } | undefined> {
   let projectDirs: string[];
+
   try {
     projectDirs = await readdir(projectsDir);
   } catch {
     return undefined;
   }
+
   const target = `${sessionId}.jsonl`;
+
   for (const dir of projectDirs) {
     const sessionDir = path.join(projectsDir, dir);
     let files: string[];
+
     try {
       files = await readdir(sessionDir);
     } catch {
       continue;
     }
+
     if (files.includes(target)) {
       return { file: path.join(sessionDir, target), sessionDir };
     }
   }
+
   return undefined;
 }
 
@@ -112,9 +130,12 @@ export async function buildBackfillBody(
   sessionId: string
 ): Promise<BackfillBody | undefined> {
   const located = await findTranscript(projectsDir, sessionId);
+
   if (!located) return undefined;
   const entries = await readJsonl(located.file);
+
   if (entries.length === 0) return undefined;
+
   return {
     session_id: sessionId,
     cwd: resolveCwd(entries),
@@ -137,6 +158,7 @@ export async function backfillClaudeTranscript(
 ): Promise<void> {
   try {
     const body = await buildBackfillBody(projectsDir, sessionId);
+
     if (!body) return;
     await fetch(`${lapdogUrl}/claude/hooks/backfill_session`, {
       method: "POST",

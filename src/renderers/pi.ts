@@ -22,10 +22,12 @@ export async function renderPi(
 
   const settings = profile.profile.pi.settings;
   const agents = await renderInlinedAgents(paths, profile);
+
   const files: RenderResult["files"] = [
     { path: settingsPath, content: jsonFileContent(settings) },
     { path: agentsPath, content: agents }
   ];
+
   const localFiles: NonNullable<RenderResult["localFiles"]> = [
     {
       path: localSettingsPath,
@@ -35,6 +37,7 @@ export async function renderPi(
   ];
 
   const subagentConfig = profile.profile.pi.subagent_config;
+
   if (hasKeys(subagentConfig)) {
     const subagentConfigPath = path.join(configsPi, "extensions", "subagent", "config.json");
     const localSubagentConfigPath = path.join(paths.piDir, "extensions", "subagent", "config.json");

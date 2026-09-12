@@ -7,6 +7,7 @@ export {
   type ExecutorDesiredServer,
   type ExecutorDesiredState
 } from "./model.js";
+
 export {
   createExecutorAdapter,
   attachExecutorAdapter,
@@ -17,12 +18,14 @@ export {
   type ExecutorIntegration,
   type ExecutorTool
 } from "./adapter.js";
+
 export {
   inspectExecutor,
   executorDiagnosticLines,
   type ExecutorDiagnostic,
   type ExecutorDiagnosticConnection
 } from "./diagnostic.js";
+
 export {
   executorPlanSummary,
   planExecutor,
@@ -35,6 +38,7 @@ export {
   type ExecutorReconcileResult,
   type ExecutorRequiredConnection
 } from "./reconcile.js";
+
 export {
   classifyExecutorIntegration,
   classifyExecutorRemoval,

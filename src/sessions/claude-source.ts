@@ -7,6 +7,7 @@ import type { BackupItem } from "./backup-item.js";
 async function statItem(file: string, relPath: string): Promise<BackupItem | undefined> {
   try {
     const info = await stat(file);
+
     return {
       relPath,
       sourceMs: info.mtimeMs,
@@ -27,40 +28,50 @@ async function statItem(file: string, relPath: string): Promise<BackupItem | und
 export async function listClaudeItems(paths: RuntimePaths): Promise<BackupItem[]> {
   const projectsDir = path.join(paths.claudeDir, "projects");
   let projects: string[];
+
   try {
     projects = await readdir(projectsDir);
   } catch {
     return [];
   }
+
   const items: BackupItem[] = [];
+
   for (const project of projects) {
     const dir = path.join(projectsDir, project);
     let entries: Dirent[];
+
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
       continue;
     }
+
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith(".jsonl")) {
         const id = entry.name.slice(0, -".jsonl".length);
         const item = await statItem(path.join(dir, entry.name), `${id}.jsonl`);
+
         if (item) items.push(item);
       } else if (entry.isDirectory()) {
         const subDir = path.join(dir, entry.name, "subagents");
         let subFiles: string[];
+
         try {
           subFiles = await readdir(subDir);
         } catch {
           continue;
         }
+
         for (const name of subFiles) {
           if (!name.endsWith(".jsonl")) continue;
           const item = await statItem(path.join(subDir, name), `${entry.name}/subagents/${name}`);
+
           if (item) items.push(item);
         }
       }
     }
   }
+
   return items;
 }

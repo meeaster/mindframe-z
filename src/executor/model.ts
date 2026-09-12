@@ -20,7 +20,9 @@ export function executorConnectionHasDurableState(
   connection: ExecutorConnectionDurability
 ): boolean {
   const hasCredentialBindings = Object.keys(connection.credentialBindings ?? {}).length > 0;
+
   if (connection.template === "none") return hasCredentialBindings;
+
   return true;
 }
 
@@ -62,6 +64,7 @@ export function executorAuthentication(
 function remoteConfig(server: Extract<McpServer, { type: "remote" }>): ExecutorRemoteConfig {
   const remoteTransport =
     server.executor?.transport ?? (server.transport === "sse" ? "sse" : "auto");
+
   return {
     transport: "remote",
     endpoint: server.url,
@@ -76,13 +79,17 @@ function stdioConfig(
   home: string
 ): ExecutorStdioConfig {
   const [command, ...args] = server.command;
+
   if (!command) throw new Error(`Executor route for ${name} has no local command`);
+
   const config: ExecutorStdioConfig = {
     transport: "stdio",
     command: expandHome(command, home),
     authenticationTemplate: server.executor?.authentication ?? [{ slug: "none", kind: "none" }]
   };
+
   if (args.length > 0) config.args = args.map((arg) => expandHome(arg, home));
+
   return config;
 }
 
@@ -93,7 +100,9 @@ export function desiredExecutorServer(
   if (!entry.executor) {
     throw new Error(`MCP server ${entry.name} is not Executor-routed`);
   }
+
   validateExecutorMcpServer(entry.name, entry.server);
+
   const connections =
     Object.keys(entry.executor.connections).length > 0
       ? entry.executor.connections
@@ -104,6 +113,7 @@ export function desiredExecutorServer(
             );
           })()
         : { main: entry.server.executor?.authentication?.[0]?.slug ?? "none" };
+
   return {
     slug: entry.name,
     name: entry.name,

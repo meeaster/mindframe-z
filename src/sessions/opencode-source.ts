@@ -8,6 +8,7 @@ import type { BackupItem } from "./backup-item.js";
 import { primaryRelPath } from "./archive.js";
 
 const sessionRowSchema = z.object({ id: z.string(), time_updated: z.number() });
+
 const messageTimeRowSchema = z.object({ session_id: z.string(), last_ms: z.number().nullable() });
 
 // Extract one session via the vendor-maintained `opencode export` — never pass
@@ -23,6 +24,7 @@ async function exportSession(id: string, dataHome: string): Promise<Buffer> {
     encoding: "buffer",
     env: { ...process.env, XDG_DATA_HOME: dataHome }
   });
+
   return Buffer.from(result.stdout);
 }
 
@@ -37,13 +39,16 @@ export async function listOpencodeItems(
 ): Promise<BackupItem[]> {
   const dataHome = opencodeDataHome(paths);
   const dbPath = opencodeDbPath(paths);
+
   if (!(await pathExists(dbPath))) return [];
   let db: SqliteDatabase;
+
   try {
     db = openSqlite(dbPath, { readOnly: true });
   } catch {
     return [];
   }
+
   try {
     const sessions = z
       .array(sessionRowSchema)
@@ -54,7 +59,9 @@ export async function listOpencodeItems(
           )
           .all()
       );
+
     const lastMessageMs = new Map<string, number>();
+
     const messageTimes = z
       .array(messageTimeRowSchema)
       .parse(
@@ -64,9 +71,11 @@ export async function listOpencodeItems(
           )
           .all()
       );
+
     for (const row of messageTimes) {
       if (row.last_ms !== null) lastMessageMs.set(row.session_id, row.last_ms);
     }
+
     return sessions.map((session) => ({
       relPath: primaryRelPath("opencode", session.id),
       sourceMs: Math.max(session.time_updated, lastMessageMs.get(session.id) ?? 0),

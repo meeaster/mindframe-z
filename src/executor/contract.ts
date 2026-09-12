@@ -3,7 +3,9 @@ import { executorConnectionNameSchema } from "../core/manifests.js";
 import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
 
 export type ExecutorJsonValue = JsonValue;
+
 export type ExecutorJsonObject = JsonObject;
+
 export const executorJsonObjectSchema = jsonObjectSchema;
 
 export type ExecutorOwner = "user" | "org";
@@ -35,19 +37,25 @@ export function encodeExecutorAuthenticationMethod(method: ExecutorAuthenticatio
 
   const headers: Record<string, ExecutorAuthenticationPart[]> = {};
   const queryParams: Record<string, ExecutorAuthenticationPart[]> = {};
+
   for (const placement of method.placements) {
     const parts: ExecutorAuthenticationPart[] = [
       ...(placement.prefix ? [placement.prefix] : []),
       { type: "variable", name: placement.variable }
     ];
+
     (placement.carrier === "header" ? headers : queryParams)[placement.name] = parts;
   }
+
   const encoded = {
     slug: method.slug,
     type: "apiKey"
   };
+
   if (Object.keys(headers).length > 0) Object.assign(encoded, { headers });
+
   if (Object.keys(queryParams).length > 0) Object.assign(encoded, { queryParams });
+
   return encoded;
 }
 

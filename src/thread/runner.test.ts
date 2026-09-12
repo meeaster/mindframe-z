@@ -20,8 +20,10 @@ import {
 // mount (or a fixture write) at the real user's config.
 async function withXdgDataHome(value: string | undefined, run: () => Promise<void>): Promise<void> {
   const original = process.env.XDG_DATA_HOME;
+
   if (value === undefined) delete process.env.XDG_DATA_HOME;
   else process.env.XDG_DATA_HOME = value;
+
   try {
     await run();
   } finally {
@@ -317,6 +319,7 @@ describe("AgentRunResult shape", () => {
       JSON.stringify({ type: "result", result: "", usage: { input_tokens: 1 } }),
       1
     );
+
     expect(Object.keys(result)).toEqual(
       expect.arrayContaining(["text", "rawTrace", "usage", "durationMs"])
     );
@@ -332,6 +335,7 @@ describe("AgentRunResult shape", () => {
       skills: [],
       prompt: "hi"
     };
+
     expect(request).toBeDefined();
   });
 });

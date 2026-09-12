@@ -27,6 +27,7 @@ export {
   threadRunRecordSchema,
   threadRunsSchema
 } from "./schema.js";
+
 export type { ThreadManifest, ThreadRuns, ThreadRunRecord, ThreadDispatchRun } from "./schema.js";
 
 export interface ParsedModelId {
@@ -47,7 +48,9 @@ export type ResolvedThreadStore = ThreadStore & { root: string; path: string };
 
 function resolvedStoreRoot(paths: RuntimePaths, store: ThreadStore): string {
   const root = expandHome(store.root, paths.home);
+
   if (!path.isAbsolute(root)) throw new Error(`Thread store root must be absolute: ${root}`);
+
   return path.resolve(root);
 }
 
@@ -55,9 +58,11 @@ function rootedStorePath(paths: RuntimePaths, store: ThreadStore): string {
   const resolvedRoot = resolvedStoreRoot(paths, store);
   const resolved = path.resolve(resolvedRoot, store.path);
   const relative = path.relative(resolvedRoot, resolved);
+
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Thread store path escapes configured root: ${store.name}`);
   }
+
   return resolved;
 }
 
@@ -66,16 +71,20 @@ export function resolveThreadStores(
   profile: ResolvedProfile
 ): ResolvedThreadStore[] {
   const map = new Map<string, ThreadStore>();
+
   for (const store of profile.profile.thread.stores) map.set(store.name, store);
+
   for (const store of profile.manifests?.machine.thread.stores ?? []) {
     map.set(store.name, store);
   }
 
   const stores = [...map.values()];
   const machineStores = profile.manifests?.machine.thread.stores ?? [];
+
   const defaultName =
     machineStores.findLast((store) => store.default)?.name ??
     profile.profile.thread.stores.findLast((store) => store.default)?.name;
+
   return stores.map((store) => ({
     ...store,
     root: resolvedStoreRoot(paths, store),
@@ -95,7 +104,9 @@ export function findThreadStore(
   name: string
 ): ResolvedThreadStore {
   const store = stores.find((entry) => entry.name === name);
+
   if (!store) throw new Error(`Unknown thread store: ${name}`);
+
   return store;
 }
 
@@ -104,8 +115,10 @@ export async function prepareThreadStore(
   store: ResolvedThreadStore
 ): Promise<void> {
   void paths;
+
   if (!(await pathExists(store.root)))
     throw new Error(`Thread store repository does not exist: ${store.name} (${store.root})`);
+
   if (!(await pathExists(store.path)))
     throw new Error(`Thread store thread path does not exist: ${store.name} (${store.path})`);
 }
@@ -122,7 +135,9 @@ export async function writeThreadManifest(dir: string, manifest: ThreadManifest)
 
 export async function readThreadRuns(dir: string): Promise<ThreadRuns> {
   const content = await readTextFile(path.join(dir, "runs.json"));
+
   if (content === undefined) return { runs: [] };
+
   return threadRunsSchema.parse(JSON.parse(content));
 }
 
@@ -131,13 +146,17 @@ export async function writeThreadRuns(dir: string, runs: ThreadRuns): Promise<vo
 }
 
 const FALLBACK_DISCOVER = "claude-code:sonnet@high";
+
 const FALLBACK_GATHER = "claude-code:haiku@low";
+
 const FALLBACK_TRIAGE = "claude-code:haiku@low";
+
 const FALLBACK_SYNTHESIZE = "claude-code:sonnet@high";
 
 export function parseModelId(id: string): ParsedModelId {
   const colon = id.indexOf(":");
   const at = id.lastIndexOf("@");
+
   if (
     colon <= 0 ||
     at <= colon + 1 ||
@@ -147,15 +166,20 @@ export function parseModelId(id: string): ParsedModelId {
   ) {
     throw new Error(`Invalid model ID: ${id} (expected harness:model@effort)`);
   }
+
   const harness = id.slice(0, colon);
+
   if (harness !== "claude-code" && harness !== "opencode") {
     throw new Error(`Unknown harness: ${harness}`);
   }
+
   const model = id.slice(colon + 1, at);
   const effort = id.slice(at + 1);
+
   if (model.trim() !== model || effort.trim() !== effort || !model || !effort) {
     throw new Error(`Invalid model ID: ${id} (expected harness:model@effort)`);
   }
+
   return { harness, model, effort };
 }
 
@@ -184,6 +208,7 @@ export function resolveSynthesisDefaults(
     manifest.synthesis.synthesize ??
     profileDefaults.synthesize ??
     FALLBACK_SYNTHESIZE;
+
   return {
     discover: parseModelId(
       flags.discover ?? manifest.synthesis.discover ?? profileDefaults.discover ?? FALLBACK_DISCOVER
@@ -213,6 +238,7 @@ export function resolveSessionSources(
   flags?: readonly string[] | undefined
 ): ThreadHarness[] {
   if (flags) return assertSessionSources(flags);
+
   return profileDefaults.session_sources ?? DEFAULT_SESSION_SOURCES;
 }
 
@@ -220,27 +246,35 @@ export function resolveSessionSources(
 // here rather than silently filtering it down to a no-skill discovery run.
 function assertSessionSources(flags: readonly string[]): ThreadHarness[] {
   const out = flags.map((source) => threadHarnessSchema.parse(source));
+
   if (out.length === 0)
     throw new Error("--sources must list at least one of: claude-code, opencode");
+
   return out;
 }
 
 export async function hasRemote(dir: string): Promise<boolean> {
   const { stdout } = await execa("git", ["remote"], { cwd: dir });
+
   return stdout.trim().length > 0;
 }
 
 export async function syncThreadStore(store: ResolvedThreadStore): Promise<string[]> {
   const { stdout: dirty } = await execa("git", ["status", "--porcelain"], { cwd: store.root });
+
   if (dirty.trim()) throw new Error(`Cannot sync dirty thread store "${store.name}"`);
+
   if (!(await hasRemote(store.root))) return [];
   await execa("git", ["fetch", "origin"], { cwd: store.root });
+
   const { stdout: upstream } = await execa(
     "git",
     ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
     { cwd: store.root }
   ).catch(() => ({ stdout: "" }));
+
   if (!upstream.trim()) return [];
+
   try {
     await execa("git", ["pull", "--ff-only"], { cwd: store.root });
   } catch (original) {
@@ -251,9 +285,11 @@ export async function syncThreadStore(store: ResolvedThreadStore): Promise<strin
   }
 
   const threads: string[] = [];
+
   for (const entry of await readdir(store.path, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const hasManifest = await pathExists(path.join(store.path, entry.name, "manifest.json"));
+
     if (!hasManifest) continue;
     threads.push(entry.name);
   }
@@ -272,8 +308,10 @@ export async function listThreads(
   profile: ResolvedProfile
 ): Promise<ResolvedThread[]> {
   const threads = new Map<string, ResolvedThread>();
+
   for (const store of resolveThreadStores(paths, profile)) {
     let entries;
+
     try {
       entries = await readdir(store.path, { withFileTypes: true });
     } catch (error) {
@@ -283,32 +321,41 @@ export async function listThreads(
           cause: error
         });
       }
+
       throw error;
     }
+
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
       const dir = path.join(store.path, entry.name);
+
       if (!(await pathExists(path.join(dir, "manifest.json")))) continue;
       const manifest = await readThreadManifest(dir);
+
       if (manifest.slug !== entry.name) {
         throw new Error(
           `Thread manifest slug does not match its store directory: ${store.name}/${entry.name}`
         );
       }
+
       if (manifest.store !== store.name) {
         throw new Error(
           `Thread manifest store mismatch at ${store.name}/${entry.name}: recorded ${manifest.store}`
         );
       }
+
       const existing = threads.get(manifest.slug);
+
       if (existing) {
         throw new Error(
           `Thread slug "${manifest.slug}" exists in multiple stores: ${existing.store.name}, ${store.name}`
         );
       }
+
       threads.set(manifest.slug, { dir, store });
     }
   }
+
   return [...threads.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([, thread]) => thread);
@@ -323,7 +370,9 @@ export async function findThread(
   const thread = (await listThreads(paths, profile)).find(
     (entry) => path.basename(entry.dir) === slug
   );
+
   if (!thread) throw new Error(`Unknown thread: ${slug}`);
+
   return thread;
 }
 
@@ -336,8 +385,10 @@ export async function withThreadMutation<T>(
   if (thread.store.publication === "direct") return fn(thread);
   const workspace = await mkdtemp(path.join(tmpdir(), "mfz-thread-run-"));
   const dir = path.join(workspace, path.basename(thread.dir));
+
   try {
     await cp(thread.dir, dir, { recursive: true });
+
     return await fn({ ...thread, dir });
   } finally {
     await rm(workspace, { recursive: true, force: true });
@@ -373,8 +424,10 @@ export async function readSessionFile(
 // and the digest dispatch (which reads the full files, never the derived log).
 export async function readSessionFiles(dir: string): Promise<string[]> {
   const sessionsDir = path.join(dir, "sessions");
+
   try {
     const files = (await readdir(sessionsDir)).filter((file) => file.endsWith(".md")).sort();
+
     return await Promise.all(files.map((file) => readFile(path.join(sessionsDir, file), "utf8")));
   } catch {
     return [];

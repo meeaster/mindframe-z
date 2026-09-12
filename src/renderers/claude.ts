@@ -23,6 +23,7 @@ import { claudeExecutorEntry } from "./executor.js";
 
 function claudePermissionPattern(absPath: string): string {
   const normalized = absPath.replace(/\/+$/, "") || "/";
+
   return `${normalized.startsWith("/") ? "/" : ""}${normalized}/**`;
 }
 
@@ -36,9 +37,11 @@ function mergeClaudePermissions(
     const current = Array.isArray(merged[key])
       ? merged[key].filter((value): value is string => {
           const result = z.string().safeParse(value);
+
           return result.success;
         })
       : [];
+
     merged[key] = [...new Set([...current, ...(generated[key] ?? [])])];
   }
 
@@ -47,6 +50,7 @@ function mergeClaudePermissions(
 
 function stripEnvRef(value: string): string {
   const name = parseEnvRef(value);
+
   return name === null ? value : `\${${name}}`;
 }
 
@@ -56,6 +60,7 @@ function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], ho
       type: server.server.transport === "sse" ? "sse" : "http",
       url: server.server.url
     };
+
     if (server.server.headers) {
       Object.assign(entry, {
         headers: Object.fromEntries(
@@ -63,13 +68,17 @@ function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], ho
         )
       });
     }
+
     return entry;
   }
 
   const [command, ...args] = server.server.command.map((part) => expandHome(part, home));
   const entry = { type: "stdio", command };
+
   if (args.length > 0) Object.assign(entry, { args });
+
   if (server.server.env) Object.assign(entry, { env: server.server.env });
+
   return entry;
 }
 
@@ -142,9 +151,11 @@ export async function renderClaude(
     `@${path.join(configsProfile, "AGENTS.md")}`,
     `@${referenceIndexPath(paths)}`
   ];
+
   if (extraFolders.length > 0) {
     claudeMdLines.push(`@${extraFoldersIndexPath(paths)}`);
   }
+
   claudeMdLines.push(
     "",
     "## Claude Code",
@@ -154,11 +165,16 @@ export async function renderClaude(
   const claudeMd = claudeMdLines.join("\n") + "\n";
 
   const permissions: Record<string, string[]> = {};
+
   if (allowPermissions.length > 0) permissions.allow = allowPermissions;
+
   if (denyPermissions.length > 0) permissions.deny = denyPermissions;
+
   const { permissions: machinePermissions, ...machineClaudeRest } =
     profile.manifests.machine.claude;
+
   const profileSettings = { ...profile.profile.claude.settings };
+
   if (profile.profile.claude.model) profileSettings.model = profile.profile.claude.model;
   const settings = jsonObjectSchema.parse(deepMerge(profileSettings, machineClaudeRest));
   settings.permissions = mergeClaudePermissions(
@@ -168,9 +184,11 @@ export async function renderClaude(
     ),
     z.record(z.string(), z.array(z.string())).safeParse(machinePermissions).data ?? {}
   );
+
   if (additionalDirectories.length > 0) {
     settings.additionalDirectories = additionalDirectories;
   }
+
   const managedClaudeMcp = jsonObjectSchema.parse(
     Object.fromEntries(
       filterMcpForTarget(profile, "claude-code").map((server) => [
@@ -179,6 +197,7 @@ export async function renderClaude(
       ])
     )
   );
+
   if (requiresExecutorBridge(profile, "claude-code"))
     managedClaudeMcp[executorBridgeName] = claudeExecutorEntry(profile);
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
@@ -187,9 +206,11 @@ export async function renderClaude(
   const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data;
   const existingExecutor = existingMcpServers?.[executorBridgeName];
   const existingExecutorObject = jsonObjectSchema.safeParse(existingExecutor).data;
+
   const existingExecutorEnv = existingExecutorObject
     ? jsonObjectSchema.safeParse(existingExecutorObject.env).data
     : undefined;
+
   const hasGeneratedExecutor =
     existingExecutorObject !== undefined &&
     existingExecutorObject.type === "stdio" &&
@@ -200,11 +221,14 @@ export async function renderClaude(
       "EXECUTOR_DATA_DIR" in existingExecutorEnv) ||
       (existingExecutorObject.args[0] === "mcp" &&
         existingExecutorObject.args.includes("--elicitation-mode")));
+
   const managedClaudeServerNames = new Set([
     ...profile.mcpServers.map((server) => server.name),
     ...(requiresExecutorBridge(profile) || hasGeneratedExecutor ? [executorBridgeName] : [])
   ]);
+
   const mergedSettings = deepMerge(await readJsonObject(localSettingsPath), settings);
+
   const mergedClaudeJson = mergeClaudeMcp(
     existingClaudeJson,
     managedClaudeMcp,

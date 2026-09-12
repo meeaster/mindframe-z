@@ -21,12 +21,15 @@ const ownerSessionSchema = z.object({ token: z.string().min(1).optional() }).pas
 
 export async function readOwnerSessionToken(home: string): Promise<string> {
   const file = path.join(home, ".agent-vault", "session.json");
+
   try {
     const parsed = ownerSessionSchema.parse(JSON.parse(await readFile(file, "utf8")));
+
     if (parsed.token) return parsed.token;
   } catch {
     // Fall through to the explicit error below.
   }
+
   throw new Error(`Agent Vault owner session not found at ${file}. Run 'mfz sandbox init' first.`);
 }
 
@@ -36,17 +39,20 @@ export async function readOwnerSessionToken(home: string): Promise<string> {
  */
 export async function ensureBrokerForSeeding(options: SeedOptions): Promise<RuntimePaths> {
   const paths = createRuntimePaths(options);
+
   if (!(await hasSandboxOperationalSecrets(paths))) {
     throw new Error(
       `Sandbox is not initialized. Run 'mfz sandbox init' first. Expected secrets file: ${sandboxSecretsFile(paths)}`
     );
   }
+
   const profile = await resolveProfile(paths, options.profile);
   const runtime = await resolveSandboxRuntimeInputs(paths, profile);
   await ensureSandboxServices(paths, profile, {
     ...runtime,
     services: runtime.services.slice(0, 1)
   });
+
   return paths;
 }
 
@@ -60,11 +66,13 @@ export async function uploadOauthCredential(
   body: Record<string, string>
 ): Promise<void> {
   const sessionToken = await readOwnerSessionToken(home);
+
   const response = await fetch(`${agentVaultApiAddress()}/v1/credentials/oauth/tokens`, {
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
+
   if (!response.ok) {
     throw new Error(
       `Agent Vault rejected the OAuth credential (HTTP ${response.status}): ${(await response.text()).trim()}`

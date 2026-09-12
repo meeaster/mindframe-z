@@ -29,22 +29,31 @@ class FakeArchiveS3 {
 
   async send(command: ListObjectsV2Command | GetObjectCommand): Promise<FakeS3Response> {
     if (this.objects === "unreachable") throw new Error("network unreachable");
+
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
+
       const contents = [...this.objects.keys()]
         .filter((key) => key.startsWith(prefix))
         .map((key) => ({ Key: key }));
+
       return { Contents: contents, IsTruncated: false };
     }
+
     if (command instanceof GetObjectCommand) {
       const key = command.input.Key;
+
       if (key === undefined) throw new Error("FakeArchiveS3: missing object key");
       this.gotten.push(key);
+
       if (this.failGetKeys.has(key)) throw new Error(`simulated failure fetching key: ${key}`);
       const body = this.objects.get(key);
+
       if (body === undefined) throw new Error(`no such key: ${key}`);
+
       return { Body: { transformToByteArray: async () => new Uint8Array(body) } };
     }
+
     throw new Error("FakeArchiveS3: unsupported command");
   }
 }
@@ -57,16 +66,19 @@ function asS3Client(fake: FakeArchiveS3): S3Client {
   const client = new S3Client({ region: "us-east-1" });
   // SAFETY: The fake handles exactly the commands hydrateSession sends in these tests.
   client.send = fake.send.bind(fake) as S3Client["send"];
+
   return client;
 }
 
 describe("hydrateSession", () => {
   it("pulls a session by prefix, preserving the subtree including subagents", async () => {
     const home = await makeTempDir();
+
     const objects = new Map<string, Buffer>([
       ["claude-code/sess-1.jsonl", Buffer.from("main transcript")],
       ["claude-code/sess-1/subagents/agent-1.jsonl", Buffer.from("subagent transcript")]
     ]);
+
     const fake = new FakeArchiveS3(objects);
 
     const ok = await hydrateSession(
@@ -94,6 +106,7 @@ describe("hydrateSession", () => {
     await writeFile(path.join(root, "claude-code", "cached.jsonl"), "already here", "utf8");
 
     let called = false;
+
     const ok = await hydrateSession(
       testRuntimePaths(home),
       [archive("default")],
@@ -137,6 +150,7 @@ describe("hydrateSession", () => {
   it("falls through to the next archive when the first is unreachable", async () => {
     const home = await makeTempDir();
     const unreachable = new FakeArchiveS3("unreachable");
+
     const reachable = new FakeArchiveS3(
       new Map([["claude-code/sess-2.jsonl", Buffer.from("content")]])
     );
@@ -162,10 +176,12 @@ describe("hydrateSession", () => {
     // The primary transcript sorts before /subagents/ keys, so without atomic staging
     // this would otherwise leave a primary-only cache that isHydrated reports complete.
     const home = await makeTempDir();
+
     const objects = new Map<string, Buffer>([
       ["claude-code/sess-3.jsonl", Buffer.from("main transcript")],
       ["claude-code/sess-3/subagents/agent-1.jsonl", Buffer.from("subagent transcript")]
     ]);
+
     const fake = new FakeArchiveS3(
       objects,
       new Set(["claude-code/sess-3/subagents/agent-1.jsonl"])
@@ -221,9 +237,11 @@ describe("hydrateSession", () => {
       "sess-5",
       () => asS3Client(empty)
     );
+
     expect(first).toBe(false);
 
     let called = false;
+
     const second = await hydrateSession(
       testRuntimePaths(home),
       [archive("default")],
@@ -243,11 +261,13 @@ describe("hydrateSession", () => {
     const home = await makeTempDir();
     const pinned = archive("pinned");
     pinned.profile = "work-sso";
+
     const readable = new FakeArchiveS3(
       new Map([["claude-code/sess-6.jsonl", Buffer.from("content")]])
     );
 
     let pinnedClientConstructed = false;
+
     const ok = await hydrateSession(
       testRuntimePaths(home),
       [pinned, archive("secondary")],
@@ -255,6 +275,7 @@ describe("hydrateSession", () => {
       "sess-6",
       (a) => {
         if (a.name === "pinned") pinnedClientConstructed = true;
+
         return asS3Client(readable);
       }
     );
@@ -269,6 +290,7 @@ describe("hydrateSession", () => {
     pinned.profile = "work-sso";
 
     let called = false;
+
     const ok = await hydrateSession(
       testRuntimePaths(home),
       [pinned],

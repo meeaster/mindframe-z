@@ -23,8 +23,11 @@ interface ExistingFile {
 async function inspectFile(file: string): Promise<ExistingFile> {
   try {
     const info = await lstat(file);
+
     if (info.isSymbolicLink()) return { kind: "symlink" };
+
     if (!info.isFile()) return { kind: "other" };
+
     return { kind: "file", content: await readFile(file), mode: info.mode & 0o777 };
   } catch (error) {
     // SAFETY: Node filesystem failures expose their stable errno code on thrown errors.
@@ -41,8 +44,11 @@ export async function writeFileOutcome(
   const existing = await inspectFile(file);
   const intended = Buffer.from(content);
   const changes: OperationChange[] = [];
+
   if (existing.kind !== "file") changes.push("path-type");
+
   if (existing.kind !== "file" || !existing.content?.equals(intended)) changes.push("content");
+
   if (
     existing.kind === "file" &&
     options.mode !== undefined &&
@@ -57,21 +63,27 @@ export async function writeFileOutcome(
     target: file,
     significance: options.significance ?? "meaningful"
   };
+
   if (changes.length === 0) {
     const outcome = { ...base, status: "unchanged" as const };
     options.onComplete?.(outcome);
+
     return outcome;
   }
 
   if (existing.kind === "symlink") await unlink(file);
   await writeTextFile(file, content);
+
   if (options.mode !== undefined) await chmod(file, options.mode);
+
   const outcome = {
     ...base,
     status: existing.kind === "missing" ? ("created" as const) : ("updated" as const),
     changes
   };
+
   options.onComplete?.(outcome);
+
   return outcome;
 }
 
@@ -83,8 +95,11 @@ export async function planFileOutcome(
   const existing = await inspectFile(file);
   const intended = Buffer.from(content);
   const changes: OperationChange[] = [];
+
   if (existing.kind !== "file") changes.push("path-type");
+
   if (existing.kind !== "file" || !existing.content?.equals(intended)) changes.push("content");
+
   if (
     existing.kind === "file" &&
     options.mode !== undefined &&
@@ -92,6 +107,7 @@ export async function planFileOutcome(
   ) {
     changes.push("permissions");
   }
+
   const outcome: OperationOutcome = {
     category: options.category ?? "file",
     action: "write",
@@ -100,7 +116,9 @@ export async function planFileOutcome(
     significance: options.significance ?? "meaningful",
     changes
   };
+
   options.onComplete?.(outcome);
+
   return outcome;
 }
 
@@ -109,20 +127,25 @@ export async function removePathOutcome(
   options: Pick<WriteFileOptions, "category" | "significance" | "onComplete"> = {}
 ): Promise<OperationOutcome> {
   const existing = await inspectFile(target);
+
   const base = {
     category: options.category ?? "file",
     action: "remove" as const,
     target,
     significance: options.significance ?? "meaningful"
   };
+
   if (existing.kind === "missing") {
     const outcome = { ...base, status: "unchanged" as const, detail: "already absent" };
     options.onComplete?.(outcome);
+
     return outcome;
   }
+
   await rm(target, { force: true, recursive: true });
   const outcome = { ...base, status: "removed" as const };
   options.onComplete?.(outcome);
+
   return outcome;
 }
 
@@ -131,6 +154,7 @@ export async function planRemovePathOutcome(
   options: Pick<WriteFileOptions, "category" | "significance" | "onComplete"> = {}
 ): Promise<OperationOutcome> {
   const existing = await inspectFile(target);
+
   const outcome: OperationOutcome = {
     category: options.category ?? "file",
     action: "remove",
@@ -138,8 +162,10 @@ export async function planRemovePathOutcome(
     target,
     significance: options.significance ?? "meaningful"
   };
+
   if (existing.kind === "missing") outcome.detail = "already absent";
   options.onComplete?.(outcome);
+
   return outcome;
 }
 
@@ -151,24 +177,31 @@ export async function writeJsonAtomicOutcome<T>(
   const existing = await inspectFile(file);
   const content = Buffer.from(jsonFileContent(value));
   const unchanged = existing.kind === "file" && existing.content?.equals(content);
+
   const base = {
     category: options.category ?? "file",
     action: "write" as const,
     target: file,
     significance: options.significance ?? "meaningful"
   };
+
   if (unchanged) {
     const outcome = { ...base, status: "unchanged" as const };
     options.onComplete?.(outcome);
+
     return outcome;
   }
+
   if (existing.kind === "symlink") await unlink(file);
   await writeJsonFileAtomic(file, value);
+
   const outcome: OperationOutcome = {
     ...base,
     status: existing.kind === "missing" ? "created" : "updated",
     changes: existing.kind === "file" ? ["content"] : ["path-type", "content"]
   };
+
   options.onComplete?.(outcome);
+
   return outcome;
 }

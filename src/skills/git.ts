@@ -17,6 +17,7 @@ import { skillCacheRoot, type RuntimePaths } from "../core/paths.js";
 import type { SkillEntry } from "../core/manifests.js";
 
 const execFile = promisify(execFileCallback);
+
 const fullCommitPattern = /^[0-9a-f]{40}$/;
 
 function errorCode(error: Error): string | undefined {
@@ -28,18 +29,23 @@ export function normalizedRepository(value: string): string {
   if (value.trim() !== value || /\s/u.test(value)) {
     throw new Error(`Repository must not contain whitespace: ${value}`);
   }
+
   let url: URL;
+
   try {
     url = new URL(value);
   } catch {
     throw new Error(`Invalid repository URL: ${value}`);
   }
+
   if (url.protocol !== "https:" || url.username || url.password || !url.hostname) {
     throw new Error(`Repository must use HTTPS without credentials: ${value}`);
   }
+
   url.search = "";
   url.hash = "";
   url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+
   return url.toString();
 }
 
@@ -64,11 +70,13 @@ function gitEnv(): NodeJS.ProcessEnv {
     "LC_ALL",
     "TZ"
   ]);
+
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       ([key]) => allowed.has(key) && process.env[key] !== undefined
     )
   );
+
   return {
     ...env,
     GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
@@ -86,6 +94,7 @@ async function gitText(cache: string, args: string[]): Promise<string> {
     env: gitEnv(),
     timeout: 120_000
   });
+
   return result.stdout.trim();
 }
 
@@ -94,43 +103,61 @@ function safeCacheConfig(config: string): boolean {
     ["core", new Set(["repositoryformatversion", "filemode", "bare", "logallrefupdates"])],
     ['remote "origin"', new Set(["url", "fetch"])]
   ]);
+
   let section: Set<string> | undefined;
+
   for (const line of config.split(/\r?\n/u)) {
     const trimmed = line.trim();
+
     if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
     const header = trimmed.match(/^\[([^\]]+)\]$/u);
+
     if (header) {
       section = sections.get(header[1] ?? "");
+
       if (!section) return false;
       continue;
     }
+
     const key = trimmed.match(/^([A-Za-z][A-Za-z0-9-]*)\s*=/u)?.[1]?.toLowerCase();
+
     if (!section || !key || !section.has(key)) return false;
   }
+
   return true;
 }
 
 async function cacheIsSafe(cache: string): Promise<boolean> {
   let stat;
+
   try {
     stat = await lstat(cache);
   } catch (error) {
     if (error instanceof Error && errorCode(error) === "ENOENT") return true;
+
     if (error instanceof Error && error.message.startsWith("Unsafe Git cache path:")) throw error;
+
     return false;
   }
+
   if (stat.isSymbolicLink() || !stat.isDirectory())
     throw new Error(`Unsafe Git cache path: ${cache}`);
+
   try {
     const configStat = await lstat(path.join(cache, "config"));
+
     if (configStat.isSymbolicLink() || !configStat.isFile()) {
       throw new Error(`Unsafe Git cache path: ${path.join(cache, "config")}`);
     }
+
     const config = await readFile(path.join(cache, "config"), "utf8");
+
     return safeCacheConfig(config);
   } catch (error) {
     if (error instanceof Error && errorCode(error) === "ENOENT") return false;
+
     if (error instanceof Error && error.message.startsWith("Unsafe Git cache path:")) throw error;
+
     return false;
   }
 }
@@ -139,18 +166,23 @@ async function ensureBareCache(paths: RuntimePaths, repository: string): Promise
   const cache = cachePath(paths, repository);
   await assertNoSymlinkAncestors(paths.home, cache);
   await mkdir(skillCacheRoot(paths), { recursive: true });
+
   if (!(await cacheIsSafe(cache))) await rm(cache, { recursive: true, force: true });
+
   try {
     await lstat(path.join(cache, "HEAD"));
   } catch {
     await execa("git", ["init", "--bare", cache], { env: gitEnv(), timeout: 30_000 });
   }
+
   try {
     const current = await gitText(cache, ["remote", "get-url", "origin"]);
+
     if (current !== repository) await gitText(cache, ["remote", "set-url", "origin", repository]);
   } catch {
     await gitText(cache, ["remote", "add", "origin", repository]);
   }
+
   return cache;
 }
 
@@ -160,6 +192,7 @@ export async function fetchCommit(
   revision: string
 ): Promise<{ cache: string; commit: string }> {
   const normalized = normalizedRepository(repository);
+
   if (!safeGitRevision(revision)) throw new Error(`Unsafe Git revision: ${revision}`);
   const cache = await ensureBareCache(paths, normalized);
   await gitText(cache, [
@@ -184,7 +217,9 @@ export async function fetchCommit(
     revision
   ]);
   const commit = await gitText(cache, ["rev-parse", "FETCH_HEAD^{commit}"]);
+
   if (!fullCommitPattern.test(commit)) throw new Error(`Git returned an invalid commit: ${commit}`);
+
   return { cache, commit };
 }
 
@@ -197,11 +232,14 @@ interface GitTreeEntry {
 function nulRecords(bytes: Buffer): Buffer[] {
   const records: Buffer[] = [];
   let start = 0;
+
   for (let index = 0; index <= bytes.length; index += 1) {
     if (index !== bytes.length && bytes[index] !== 0) continue;
+
     if (index > start) records.push(bytes.subarray(start, index));
     start = index + 1;
   }
+
   return records;
 }
 
@@ -216,6 +254,7 @@ async function listGitTree(
 ): Promise<GitTreeEntry[]> {
   if (!fullCommitPattern.test(commit))
     throw new Error(`Git tree requires a full commit SHA: ${commit}`);
+
   const output = await execa(
     "git",
     [
@@ -233,32 +272,42 @@ async function listGitTree(
     ],
     { env: gitEnv(), encoding: "buffer", timeout: 30_000 }
   );
+
   const bytes = Buffer.isBuffer(output.stdout) ? output.stdout : Buffer.from(output.stdout);
   const prefix = `${subtree}/`;
   const entries: GitTreeEntry[] = [];
+
   for (const record of nulRecords(bytes)) {
     const tab = record.indexOf(9);
+
     if (tab < 0) throw new Error("Malformed Git tree entry");
     const [mode, type, object] = record.subarray(0, tab).toString("ascii").split(" ");
     const fullPath = decodePathBytes(record.subarray(tab + 1));
+
     if (type !== "blob" || (mode !== "100644" && mode !== "100755")) {
       throw new Error(
         `Vendored subtree contains unsupported Git entry: ${fullPath} (${mode} ${type})`
       );
     }
+
     const exactFile = fullPath === subtree;
+
     if (!exactFile && !fullPath.startsWith(prefix))
       throw new Error(`Git entry escaped selected subtree: ${fullPath}`);
+
     const relativePath = exactFile
       ? fullPath.slice(fullPath.lastIndexOf("/") + 1)
       : fullPath.slice(prefix.length);
+
     entries.push({
       mode,
       object: object ?? "",
       path: safeGitRelative(relativePath)
     });
   }
+
   if (entries.length === 0) throw new Error(`Selected subtree does not exist: ${subtree}`);
+
   return entries.sort((a, b) => comparePosixBytes(a.path, b.path));
 }
 
@@ -268,6 +317,7 @@ async function gitBlob(cache: string, object: string): Promise<Buffer> {
     encoding: "buffer",
     maxBuffer: 128 * 1024 * 1024
   });
+
   return Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout);
 }
 
@@ -277,23 +327,29 @@ export async function readGitSkillFiles(
   subtree: string
 ): Promise<SkillFileRecord[]> {
   const entries = await listGitTree(cache, commit, subtree);
+
   if (entries.length > MAX_SKILL_FILES)
     throw new Error("Skill source exceeds the file-count limit");
   const aliases = new Set<string>();
   let totalBytes = 0;
   const files: SkillFileRecord[] = [];
+
   for (const entry of entries) {
     const bytes = await gitBlob(cache, entry.object);
     totalBytes += bytes.byteLength;
+
     if (totalBytes > MAX_SKILL_BYTES) throw new Error("Skill source exceeds the 32 MiB size limit");
     const alias = entry.path.normalize("NFC").toLocaleLowerCase("en-US");
+
     if (aliases.has(alias)) throw new Error(`Skill source contains colliding paths: ${entry.path}`);
     aliases.add(alias);
     files.push({ path: entry.path, mode: entry.mode, bytes });
   }
+
   if (!files.some((file) => file.path === "SKILL.md")) {
     throw new Error("Skill source must contain SKILL.md at its root");
   }
+
   return files;
 }
 
@@ -302,6 +358,8 @@ export async function readPinnedGitSkillFiles(
   entry: Extract<SkillEntry, { source: "git" }>
 ): Promise<SkillFileRecord[]> {
   const { cache, commit } = await fetchCommit(paths, entry.repo, entry.commit);
+
   if (commit !== entry.commit) throw new Error(`Git did not return pinned commit ${entry.commit}`);
+
   return readGitSkillFiles(cache, entry.commit, entry.subtree);
 }

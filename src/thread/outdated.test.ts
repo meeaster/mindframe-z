@@ -90,6 +90,7 @@ function testProfile(home: string): ResolvedProfile {
       }
     }
   };
+
   // SAFETY: listOutdatedThreads only reads the profile.thread store configuration.
   return fixture as ResolvedProfile;
 }
@@ -179,6 +180,7 @@ describe("listOutdatedThreads", () => {
     await writeFile(path.join(sweepDir, "ledger.json"), "ledger\n", "utf8");
     await writeFile(path.join(destinationDir, "marker"), "destination\n", "utf8");
     const manifestPath = path.join(home, "threads", "thread", "manifest.json");
+
     const before = await Promise.all([
       readFile(manifestPath, "utf8"),
       readFile(path.join(sweepDir, "ledger.json"), "utf8"),
@@ -292,6 +294,7 @@ describe("thread outdated cli", () => {
       ]
     });
     await expect(readFile(manifestPath, "utf8")).resolves.toBe(manifestBefore);
+
     for (const statePath of [
       threadCliLogPath(paths),
       threadRunsRoot(paths),

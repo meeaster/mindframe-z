@@ -4,7 +4,9 @@ import path from "node:path";
 import { execa } from "execa";
 
 const agentVaultRepo = "https://github.com/Infisical/agent-vault.git";
+
 export const brokerImageName = "local-ai-dev-sandbox-agent-vault";
+
 export const bedrockProxyImageName = "local-ai-dev-sandbox-bedrock-sigv4-proxy";
 
 /**
@@ -14,9 +16,11 @@ export const bedrockProxyImageName = "local-ai-dev-sandbox-bedrock-sigv4-proxy";
 export async function resolveAgentVaultVersion(): Promise<string> {
   const { stdout } = await execa("agent-vault", ["--version"]);
   const version = stdout.match(/\d+\.\d+\.\d+/)?.[0];
+
   if (!version) {
     throw new Error(`Could not parse agent-vault version from: ${stdout.trim()}`);
   }
+
   return version;
 }
 
@@ -27,6 +31,7 @@ export function brokerImageRef(version: string): string {
 async function imageExists(ref: string): Promise<boolean> {
   try {
     await execa("docker", ["image", "inspect", ref]);
+
     return true;
   } catch {
     return false;
@@ -45,9 +50,11 @@ export async function ensureBrokerImage(
 ): Promise<string> {
   const version = await resolveAgentVaultVersion();
   const ref = brokerImageRef(version);
+
   if (!options.force && (await imageExists(ref))) return ref;
 
   const workdir = await mkdtemp(path.join(os.tmpdir(), "mfz-agent-vault-"));
+
   try {
     await execa(
       "git",
@@ -71,6 +78,7 @@ export async function ensureBrokerImage(
   } finally {
     await rm(workdir, { recursive: true, force: true });
   }
+
   return ref;
 }
 
@@ -84,6 +92,7 @@ export async function ensureBedrockProxyImage(
   options: { readonly force?: boolean } = {}
 ): Promise<string> {
   const ref = `${bedrockProxyImageName}:latest`;
+
   if (!options.force && (await imageExists(ref))) return ref;
 
   const context = path.join(root, "sandbox");
@@ -99,5 +108,6 @@ export async function ensureBedrockProxyImage(
     ],
     { stdio: "inherit" }
   );
+
   return ref;
 }

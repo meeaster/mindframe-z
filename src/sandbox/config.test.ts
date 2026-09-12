@@ -16,6 +16,7 @@ import {
 
 async function testPaths(): Promise<RuntimePaths> {
   const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-sandbox-test-"));
+
   return {
     root: home,
     home,

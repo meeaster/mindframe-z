@@ -3,6 +3,7 @@ import type { ContextContributor, TextMeasurement } from "./model.js";
 
 export function measureText(text: string): TextMeasurement {
   const characters = text.length;
+
   return {
     characters,
     bytes: Buffer.byteLength(text, "utf8"),
@@ -15,6 +16,7 @@ export function measuredContributor(
   text: string
 ): ContextContributor {
   const measurement = measureText(text);
+
   return {
     ...contributor,
     ...measurement,

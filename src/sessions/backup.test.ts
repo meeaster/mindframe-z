@@ -31,6 +31,7 @@ describe("defaultArchive / resolveDefaultArchive", () => {
       { ...bucketArchive, name: "b", default: true },
       { ...bucketArchive, name: "c", default: true }
     ];
+
     expect(defaultArchive(archives)?.name).toBe("c");
   });
 
@@ -39,6 +40,7 @@ describe("defaultArchive / resolveDefaultArchive", () => {
       { ...bucketArchive, name: "a", default: false },
       { ...bucketArchive, name: "b", default: false }
     ];
+
     expect(defaultArchive(archives)?.name).toBe("a");
   });
 
@@ -99,31 +101,40 @@ class FakeS3 {
   ): Promise<FakeS3Response> {
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
+
       const contents = [...this.objects.entries()]
         .filter(([key]) => key.startsWith(prefix))
         .map(([key, lastModified]) => ({ Key: key, LastModified: new Date(lastModified) }));
+
       return { Contents: contents, IsTruncated: false };
     }
+
     if (command instanceof PutObjectCommand) {
       const body = command.input.Body;
       const key = command.input.Key;
+
       if (!Buffer.isBuffer(body) || key === undefined) {
         throw new Error("FakeS3: invalid put object input");
       }
+
       this.objects.set(key, Date.now());
       this.puts.push({
         Key: key,
         Body: body,
         ServerSideEncryption: command.input.ServerSideEncryption
       });
+
       return {};
     }
+
     if (command instanceof GetPublicAccessBlockCommand) {
       if (this.accessBlock === "unreadable") {
         throw new Error("NoSuchPublicAccessBlockConfiguration");
       }
+
       return { PublicAccessBlockConfiguration: this.accessBlock };
     }
+
     throw new Error("FakeS3: unsupported command");
   }
 }
@@ -137,6 +148,7 @@ function asS3Client(fake: FakeS3): S3Client {
   const client = new S3Client({ region: "us-east-1" });
   // SAFETY: The fake handles exactly the commands backup and preflight send in these tests.
   client.send = fake.send.bind(fake) as S3Client["send"];
+
   return client;
 }
 
@@ -153,6 +165,7 @@ describe("assertBucketHardened", () => {
       BlockPublicPolicy: false,
       RestrictPublicBuckets: true
     });
+
     await expect(assertBucketHardened(asS3Client(client), bucketArchive)).rejects.toThrow(
       /Block Public Access/
     );
@@ -205,10 +218,12 @@ function item(relPath: string, sourceMs: number, body = "content"): BackupItem {
 describe("backupHarness", () => {
   it("uploads new sessions, skips unchanged, uploads changed, and reports counts", async () => {
     const now = Date.now();
+
     const store = new Map<string, number>([
       ["claude-code/unchanged.jsonl", now],
       ["claude-code/changed.jsonl", now - 10 * 60_000]
     ]);
+
     const client = asS3Client(new FakeS3(store));
 
     const summary = await backupHarness(client, bucketArchive, "claude-code", [
@@ -243,6 +258,7 @@ describe("backupHarness", () => {
 
   it("does not abort the sweep when one session fails to upload", async () => {
     const client = new FakeS3(new Map());
+
     const failing: BackupItem = {
       relPath: "broken.jsonl",
       sourceMs: Date.now(),
@@ -379,10 +395,13 @@ describe("listOpencodeItems", () => {
       "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL)"
     );
     const insertSession = db.prepare("INSERT INTO session (id, time_updated) VALUES (?, ?)");
+
     for (const s of sessions) insertSession.run(s.id, s.time_updated);
+
     const insertMessage = db.prepare(
       "INSERT INTO message (id, session_id, time_created) VALUES (?, ?, ?)"
     );
+
     for (const m of messages) insertMessage.run(m.id, m.session_id, m.time_created);
     db.close();
   }

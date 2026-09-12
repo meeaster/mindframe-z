@@ -41,7 +41,9 @@ export async function writeGitIdentityFragment(
 ): Promise<OperationOutcome> {
   const fragmentPath = gitIdentityFragmentPath(paths);
   const options: WriteFileOptions = {};
+
   if (onComplete) options.onComplete = onComplete;
+
   return writeFileOutcome(fragmentPath, renderGitIdentityFragment(machine), options);
 }
 
@@ -51,7 +53,9 @@ export async function planGitIdentityFragment(
   onComplete?: OperationCompletion
 ): Promise<OperationOutcome> {
   const options: WriteFileOptions = {};
+
   if (onComplete) options.onComplete = onComplete;
+
   return planFileOutcome(
     gitIdentityFragmentPath(paths),
     renderGitIdentityFragment(machine),
@@ -65,7 +69,9 @@ export async function ensureGitConfigInclude(
 ): Promise<OperationOutcome> {
   const { configPath, content } = await intendedGitConfig(paths);
   const options: WriteFileOptions = {};
+
   if (onComplete) options.onComplete = onComplete;
+
   return writeFileOutcome(configPath, content, options);
 }
 
@@ -75,7 +81,9 @@ export async function planGitConfigInclude(
 ): Promise<OperationOutcome> {
   const { configPath, content } = await intendedGitConfig(paths);
   const options: WriteFileOptions = {};
+
   if (onComplete) options.onComplete = onComplete;
+
   return planFileOutcome(configPath, content, options);
 }
 
@@ -86,6 +94,7 @@ async function intendedGitConfig(paths: RuntimePaths): Promise<{
   const configPath = globalGitConfigPath(paths);
   const includeLine = renderGitIncludeLine(paths);
   let existing = "";
+
   try {
     existing = await readFile(configPath, "utf8");
   } catch {
@@ -96,11 +105,13 @@ async function intendedGitConfig(paths: RuntimePaths): Promise<{
   const managedInclude = includeLine.trim();
   const managedIncludeIndexes: number[] = [];
   let inUnconditionalInclude = false;
+
   for (const [index, line] of lines.entries()) {
     if (/^\s*\[/.test(line)) {
       inUnconditionalInclude = /^\s*\[\s*include\s*\]\s*(?:[#;].*)?$/i.test(line);
       continue;
     }
+
     if (inUnconditionalInclude && line.trim() === managedInclude) {
       managedIncludeIndexes.push(index);
     }
@@ -111,11 +122,13 @@ async function intendedGitConfig(paths: RuntimePaths): Promise<{
   if (managedIncludeIndexes.length > 1) {
     const redundantManagedIncludes = new Set(managedIncludeIndexes.slice(1));
     const content = lines.filter((_line, index) => !redundantManagedIncludes.has(index)).join("\n");
+
     return { configPath, content };
   }
 
   const content = [existing.trimEnd(), "", "[include]", includeLine, ""]
     .filter((part, index) => part !== "" || index > 0)
     .join("\n");
+
   return { configPath, content };
 }

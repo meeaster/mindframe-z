@@ -6,6 +6,7 @@ import type { Archive } from "../core/manifests.js";
 // before the freshness sweep.
 export async function assertBucketHardened(client: S3Client, archive: Archive): Promise<void> {
   let config;
+
   try {
     const result = await client.send(new GetPublicAccessBlockCommand({ Bucket: archive.bucket }));
     config = result.PublicAccessBlockConfiguration;
@@ -21,12 +22,14 @@ export async function assertBucketHardened(client: S3Client, archive: Archive): 
         "account-level setting alone does not satisfy this check. Aborting; nothing uploaded."
     );
   }
+
   const allBlocked = Boolean(
     config?.BlockPublicAcls &&
     config?.IgnorePublicAcls &&
     config?.BlockPublicPolicy &&
     config?.RestrictPublicBuckets
   );
+
   if (!allBlocked) {
     throw new Error(
       `Bucket '${archive.bucket}' does not have all four Block Public Access flags enabled. ` +

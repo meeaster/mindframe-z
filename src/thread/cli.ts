@@ -66,6 +66,7 @@ function assertThreadSlug(slug: string): string {
 export async function runThreadStores(options: ThreadOptions & { json?: boolean }): Promise<void> {
   await withThreadLog(options, "thread stores", async ({ paths, profile }) => {
     const stores = resolveThreadStores(paths, profile);
+
     if (options.json) console.log(JSON.stringify({ stores }, null, 2));
     else
       for (const store of stores)
@@ -89,8 +90,10 @@ export async function runThreadMigration(
         "Thread migration is dry-run only until a reviewed store worktree is selected"
       );
     }
+
     const stores = resolveThreadStores(paths, profile);
     const selected = options.store ? [findThreadStore(stores, options.store)] : stores;
+
     if (options.publish) {
       const publications = await Promise.all(
         selected.map((store) => {
@@ -99,6 +102,7 @@ export async function runThreadMigration(
               `Store ${store.name} uses direct publication; select a reviewed workflow explicitly`
             );
           }
+
           return publishStoreMigration({
             paths,
             storeName: store.name,
@@ -108,10 +112,13 @@ export async function runThreadMigration(
           });
         })
       );
+
       if (options.json) console.log(JSON.stringify({ publications }, null, 2));
       else for (const publication of publications) console.log(`pull-request\t${publication.url}`);
+
       return;
     }
+
     const results = await Promise.all(
       selected.map((store) =>
         migrateStore({
@@ -122,6 +129,7 @@ export async function runThreadMigration(
         })
       )
     );
+
     if (options.json) {
       console.log(JSON.stringify({ stores: results }, null, 2));
     } else {
@@ -154,21 +162,29 @@ export async function runThreadCreate(
   await withThreadLog(options, `thread create ${slug}`, async ({ paths, profile }) => {
     assertThreadSlug(slug);
     const stores = resolveThreadStores(paths, profile);
+
     const store = options.store
       ? findThreadStore(stores, options.store)
       : defaultThreadStore(stores);
+
     if (!store) throw new Error("No thread stores configured");
     assertThreadStoreWritable(store);
     await prepareThreadStore(paths, store);
+
     if ((await listThreads(paths, profile)).some((thread) => path.basename(thread.dir) === slug))
       throw new Error(`Thread already exists: ${slug}`);
     const dir = path.join(store.path, slug);
+
     if (await pathExists(path.join(dir, "manifest.json")))
       throw new Error(`Thread already exists: ${slug}`);
     const synthesis: ThreadManifest["synthesis"] = {};
+
     if (options.discover) synthesis.discover = options.discover;
+
     if (options.gather) synthesis.gather = options.gather;
+
     if (options.synthesize) synthesis.synthesize = options.synthesize;
+
     const manifest: ThreadManifest = {
       slug,
       charter: options.charter,
@@ -178,9 +194,11 @@ export async function runThreadCreate(
       excluded: [],
       synthesis
     };
+
     if (store.publication !== "direct") {
       const workspace = await mkdtemp(path.join(tmpdir(), "mfz-thread-run-"));
       const stagedDir = path.join(workspace, slug);
+
       try {
         await writeThreadManifest(stagedDir, manifest);
         await writeThreadRuns(stagedDir, { runs: [] });
@@ -197,6 +215,7 @@ export async function runThreadCreate(
         await commitThreadChanges(store, slug, dir, `chore(thread): create ${slug}`, true)
       );
     }
+
     console.log(`created\t${slug}\t${store.name}`);
   });
 }
@@ -204,9 +223,11 @@ export async function runThreadCreate(
 export async function runThreadList(options: ThreadOptions & { json?: boolean }): Promise<void> {
   await withThreadLog(options, "thread list", async ({ paths, profile }) => {
     const threads = await listThreads(paths, profile);
+
     const entries = await Promise.all(
       threads.map(async (thread) => {
         const manifest = await readThreadManifest(thread.dir);
+
         return {
           slug: manifest.slug,
           store: thread.store.name,
@@ -214,6 +235,7 @@ export async function runThreadList(options: ThreadOptions & { json?: boolean })
         };
       })
     );
+
     if (options.json) console.log(JSON.stringify({ threads: entries }, null, 2));
     else
       for (const thread of entries)
@@ -226,22 +248,29 @@ export async function runThreadOutdated(
 ): Promise<void> {
   const paths = createRuntimePaths(options);
   const runtimeMigration = await migrateThreadRuntimeState(paths);
+
   for (const conflict of runtimeMigration.conflicts) {
     console.warn(`thread runtime state conflict: ${conflict.source} -> ${conflict.target}`);
   }
+
   const profile = await resolveProfile(paths, options.profile);
   const report = { threads: await listOutdatedThreads(paths, profile) };
+
   if (options.json) {
     console.log(JSON.stringify(report, null, 2));
+
     return;
   }
+
   for (const thread of report.threads)
     for (const session of thread.sessions) {
       const change = session.change === "grew" ? "grew" : "tail changed";
+
       const detail =
         session.change === "grew"
           ? `${session.behind_messages} message${session.behind_messages === 1 ? "" : "s"} behind`
           : "not quantifiable";
+
       console.log(`${thread.slug}\t${session.source}:${session.id}\t${change}\t${detail}`);
     }
 }
@@ -267,10 +296,13 @@ export async function runThreadDiscover(
     const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, emptyManifest(), {
       discover: options.discover
     });
+
     const { harness, model, effort } = settings.discover;
     const sessionSources = resolveSessionSources(profile.profile.thread.defaults, options.sources);
+
     const runner =
       options.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
+
     const runId = `run-${Date.now()}-${randomUUID()}`;
     const startedAt = new Date().toISOString();
     await writeRunStatus(paths, {
@@ -281,6 +313,7 @@ export async function runThreadDiscover(
       started_at: startedAt,
       cost_usd: null
     });
+
     const { result } = await dispatch(runner, paths, runId, "discover", {
       role: "discover",
       harness,
@@ -291,6 +324,7 @@ export async function runThreadDiscover(
       sessionSources,
       prompt: `Sessions to search: ${sessionSources.join(", ")}.\n\n${prompt}`
     });
+
     await writeRunStatus(paths, {
       id: runId,
       mode: "discover",
@@ -300,6 +334,7 @@ export async function runThreadDiscover(
       finished_at: new Date().toISOString(),
       cost_usd: result.usage.cost_usd
     });
+
     if (options.json) console.log(JSON.stringify({ candidates_text: result.text }, null, 2));
     else console.log(result.text);
   });
@@ -317,6 +352,7 @@ export async function runThreadIngest(
 ): Promise<void> {
   await withThreadLog(options, `thread ingest ${options.thread}`, async ({ paths, profile }) => {
     const slug = assertThreadSlug(options.thread);
+
     const result = await withThreadLock(paths, slug, `thread ingest ${slug}`, () =>
       ingestThread({
         paths,
@@ -329,8 +365,10 @@ export async function runThreadIngest(
         runner: options.runner
       })
     );
+
     if (result.refreshed.length > 0)
       console.log(`refresh (changed):\t${result.refreshed.join("\t")}`);
+
     if (result.vanished.length > 0)
       console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
     printThreadPublication(result.publication);
@@ -350,6 +388,7 @@ export async function runThreadRefresh(
 ): Promise<void> {
   await withThreadLog(options, `thread refresh ${options.thread}`, async ({ paths, profile }) => {
     const slug = assertThreadSlug(options.thread);
+
     const result = await withThreadLock(paths, slug, `thread refresh ${slug}`, () =>
       ingestThread({
         paths,
@@ -364,12 +403,16 @@ export async function runThreadRefresh(
         runner: options.runner
       })
     );
+
     if (result.vanished.length > 0)
       console.log(`skip (vanished/shrank):\t${result.vanished.join("\t")}`);
+
     if (result.sessionCount === 0) {
       console.log(`up to date\t${result.slug}\tnothing drifted`);
+
       return;
     }
+
     printThreadPublication(result.publication);
     console.log(`refreshed\t${result.slug}\t${result.sessionCount} sessions`);
   });
@@ -391,19 +434,25 @@ export async function runThreadSweep(
       triageModel: options.triageModel,
       runner: options.runner
     });
+
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
+
       return;
     }
+
     if (report.baseline_staked) console.log(`baseline staked\t${report.baseline_at}`);
     console.log(`sessions since last sweep\t${report.counts_since_last_sweep.sessions}`);
     console.log(`triage dispatches\t${report.triage_dispatches}`);
     console.log(`pending proposals\t${report.proposals.length}\tmfz thread pending`);
+
     for (const drift of groupByThread(report.drifted))
       console.log(
         `${drift.thread}\t${drift.count} members drifted\tmfz thread refresh --thread ${drift.thread}`
       );
+
     for (const item of report.deferred) console.log(`deferred\t${item.id}\t${item.reason}`);
+
     for (const item of report.malformed) console.log(`malformed\t${item.id}\t${item.line}`);
   });
 }
@@ -413,10 +462,13 @@ export async function runThreadPending(
 ): Promise<void> {
   await withThreadLog(options, "thread pending", async ({ paths, profile }) => {
     const proposals = await listPending(paths, profile);
+
     if (options.json) {
       console.log(JSON.stringify({ proposals }, null, 2));
+
       return;
     }
+
     for (const proposal of proposals)
       console.log(
         `${proposal.stale ? "stale" : "pending"}\t${proposal.id}\t${proposal.thread}\t${proposal.reason}`
@@ -451,6 +503,7 @@ export async function runThreadRegenerate(
 ): Promise<void> {
   await withThreadLog(options, `thread regenerate ${slug}`, async ({ paths, profile }) => {
     const threadSlug = assertThreadSlug(slug);
+
     const result = await withThreadLock(paths, threadSlug, `thread regenerate ${threadSlug}`, () =>
       regenerateThread({
         paths,
@@ -461,6 +514,7 @@ export async function runThreadRegenerate(
         runner: options.runner
       })
     );
+
     printThreadPublication(result.publication);
     console.log(`regenerated\t${result.slug}\t$${result.totalCostUsd ?? "?"}`);
   });
@@ -488,13 +542,18 @@ export async function runThreadRuns(
               )
               .join("\n")
       );
+
       return;
     }
+
     if (options.runId && options.trace) {
       console.log(await readRunTrace(paths, options.runId));
+
       return;
     }
+
     const statuses = await listRunStatuses(paths);
+
     if (options.json) console.log(JSON.stringify({ runs: statuses }, null, 2));
     else
       for (const run of statuses)
@@ -534,12 +593,15 @@ export async function runThreadSync(
     } else {
       const threads = await listThreads(paths, profile);
       const threadMap = new Map(threads.map((thread) => [path.basename(thread.dir), thread]));
+
       for (const slug of options.slugs) {
         const thread = threadMap.get(assertThreadSlug(slug));
+
         if (!thread) {
           console.warn(`thread not found: ${slug}`);
           continue;
         }
+
         targetDests.add(thread.store.name);
       }
     }
@@ -548,6 +610,7 @@ export async function runThreadSync(
       const store = findThreadStore(stores, destName);
       await prepareThreadStore(paths, store);
       const updated = await syncThreadStore(store);
+
       if (updated.length === 0) {
         console.log(`sync\t${destName}\tup to date`);
       } else {
@@ -562,8 +625,10 @@ export async function runThreadObserveUp(options: ThreadOptions): Promise<void> 
     const result = await startLapdogContainer(paths);
     console.log(`lapdog\t${result}`);
     console.log(`dashboard\t${lapdogDashboardUrl()}`);
+
     if (result === "started") {
       const ready = await waitForLapdog();
+
       if (!ready) {
         console.log("warning: lapdog did not become reachable within the wait window");
       }
@@ -583,6 +648,7 @@ export async function runThreadObserveStatus(
 ): Promise<void> {
   await withThreadLog(options, "thread observe status", async () => {
     const status = await lapdogStatus();
+
     if (options.json) {
       console.log(JSON.stringify(status, null, 2));
     } else {
@@ -603,9 +669,11 @@ async function withThreadLog(
   const paths = createRuntimePaths(options);
   const profile = await resolveProfile(paths, options.profile);
   const runtimeMigration = await migrateThreadRuntimeState(paths);
+
   for (const conflict of runtimeMigration.conflicts) {
     console.warn(`thread runtime state conflict: ${conflict.source} -> ${conflict.target}`);
   }
+
   try {
     await action({ paths, profile });
     await appendThreadCliLog(paths, command, "ok");
@@ -629,6 +697,7 @@ function emptyManifest(): ThreadManifest {
 
 function printThreadPublication(publication: ThreadPublication): void {
   if (publication.kind === "pull-request") console.log(`pull-request\t${publication.url}`);
+
   if (publication.kind === "local-branch")
     console.log(`local-branch\t${publication.branch}\t${publication.commit}`);
 }
@@ -637,6 +706,8 @@ function groupByThread(
   items: ReadonlyArray<{ thread: string }>
 ): Array<{ thread: string; count: number }> {
   const counts = new Map<string, number>();
+
   for (const item of items) counts.set(item.thread, (counts.get(item.thread) ?? 0) + 1);
+
   return [...counts].map(([thread, count]) => ({ thread, count }));
 }

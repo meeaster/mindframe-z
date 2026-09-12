@@ -101,12 +101,14 @@ async function ingestSession(
   const { source, bare } = parseSessionId(id);
   const key = `${source}:${bare}`;
   const prior = context.priorBySession.get(key);
+
   const revisable =
     context.strategy === "delta" &&
     context.changedSet.has(key) &&
     prior?.last_message_id !== undefined
       ? await readSessionFile(context.threadDir, source, bare)
       : undefined;
+
   const priorFile = revisable?.includes("## Phases") === true ? revisable : undefined;
   const cursor = priorFile !== undefined ? prior?.last_message_id : undefined;
   const transcriptPath = await resolveTranscriptPath(context.paths, source, bare);
@@ -121,7 +123,9 @@ async function ingestSession(
     sessionSources: [source],
     prompt: gatherPrompt(bare, context.manifest.charter, cursor, transcriptPath)
   });
+
   const watermark = await readWatermark(context.paths, { source, id: bare });
+
   if (
     classifyGather(gather.result.text, {
       cursor,
@@ -148,7 +152,9 @@ async function ingestSession(
     skills: ["thread-contract"],
     prompt: synthesizePrompt(bare, context.manifest.charter, gather.result.text, priorFile)
   });
+
   await writeSessionFile(context.threadDir, source, bare, synth.result.text);
+
   return {
     dossier: { source, id: bare, text: gather.result.text },
     entry: {
@@ -168,6 +174,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
 
   const locatedThread = await findThread(paths, profile, req.threadSlug);
   assertThreadStoreWritable(locatedThread.store);
+
   return withThreadMutation(locatedThread, async (thread) => {
     const manifest = await readThreadManifest(thread.dir);
 
@@ -177,7 +184,9 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       sessionIds,
       profile.manifests.machine.archives
     );
+
     const { refreshed, vanished } = detected;
+
     // `--all` forces every present session (skipping only those vanished from the store);
     // otherwise the work set is the named ids plus the sessions that drifted.
     const workSet = req.all
@@ -185,7 +194,9 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
           .map((session) => `${session.source}:${session.id}`)
           .filter((key) => !vanished.includes(key))
       : detected.workSet;
+
     const changedSet = new Set(refreshed);
+
     if (workSet.length === 0) {
       // A refresh (or --all) with nothing to do is a successful no-op; a plain ingest that
       // named no session is a misuse.
@@ -206,6 +217,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       gather: req.gather,
       synthesize: req.synthesize
     });
+
     const gatherModel = settings.gather;
     const synthModel = settings.synthesize;
     const synthId = `${synthModel.harness}:${synthModel.model}@${synthModel.effort}`;
@@ -221,6 +233,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     const mode = req.all ? "refresh --all" : req.refresh ? "refresh" : "ingest";
     const runId = `run-${Date.now()}-${randomUUID()}`;
     const startedAt = new Date().toISOString();
+
     const status: ThreadRunStatus = {
       id: runId,
       thread: manifest.slug,
@@ -230,6 +243,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       started_at: startedAt,
       cost_usd: null
     };
+
     await writeRunStatus(paths, status);
 
     const sessionContext: SessionIngestContext = {
@@ -245,6 +259,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       synthModel,
       synthId
     };
+
     const perSession = await Promise.all(workSet.map((id) => ingestSession(id, sessionContext)));
 
     const dispatches: ThreadDispatchRun[] = perSession.flatMap((item) => item.dispatches);
@@ -258,6 +273,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
     // Run it exactly once when at least one file was written this run, as today.
     if (perSession.some((item) => item.wrote)) {
       await writeRunStatus(paths, { ...status, current_step: "digest" });
+
       const digestDispatch = await regenerateViews({
         runner,
         paths,
@@ -271,6 +287,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
         previousDigest: req.all ? undefined : await readPreviousDigest(thread.dir),
         repos: repoLocators(profile)
       });
+
       dispatches.push(digestDispatch);
     }
 
@@ -296,6 +313,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       current_step: "publish",
       cost_usd: total
     });
+
     const publication = await commitThreadChanges(
       thread.store,
       manifest.slug,
@@ -303,6 +321,7 @@ export async function ingestThread(req: IngestRequest): Promise<IngestResult> {
       `chore(thread): ${mode} ${manifest.slug}`,
       !req.noPush
     );
+
     await writeRunStatus(paths, {
       ...status,
       current_step: "complete",
@@ -346,18 +365,22 @@ async function classifySession(
 ): Promise<WatermarkStatus> {
   const current = await readWatermark(paths, { source: session.source, id: session.id });
   const status = classifyWatermark(session, current);
+
   if (status !== "vanished" || archives.length === 0) return status;
 
   const hydrated = await hydrate(paths, archives, session.source, session.id);
+
   if (!hydrated) return status;
 
   const rehydrated = await readWatermark(paths, { source: session.source, id: session.id });
   const rehydratedStatus = classifyWatermark(session, rehydrated);
+
   if (rehydratedStatus === "shrank") {
     console.warn(
       `session ${session.source}:${session.id} hydrated from archive, but its tail predates the ledger cursor (stale-recover) — left untouched`
     );
   }
+
   return rehydratedStatus;
 }
 
@@ -378,14 +401,19 @@ export async function resolveRefreshSet(
       status: await classifySession(paths, session, archives, hydrate)
     }))
   );
+
   const refreshed = statuses.filter((s) => s.status === "changed").map((s) => s.key);
+
   const vanished = statuses
     .filter((s) => s.status === "vanished" || s.status === "shrank")
     .map((s) => s.key);
+
   const named = sessionIds.map((id) => {
     const { source, bare } = parseSessionId(id);
+
     return `${source}:${bare}`;
   });
+
   return { workSet: dedupe([...named, ...refreshed]), refreshed, vanished };
 }
 
@@ -400,11 +428,14 @@ async function resolveTranscriptPath(
 ): Promise<string | undefined> {
   if (source === "claude-code") {
     const local = await locateClaudeTranscript(paths, id);
+
     if (local !== undefined) return path.posix.join(CONTAINER_SESSION_STORE, local);
   }
+
   if (await pathExists(cachedSessionPath(paths, source, id))) {
     return path.posix.join(CONTAINER_ARCHIVE_CACHE, source, primaryRelPath(source, id));
   }
+
   return undefined;
 }
 
@@ -419,6 +450,7 @@ function gatherPrompt(
   // Name the exact transcript file when we resolved it, so gather reads it directly
   // instead of searching the store (where a weak model can pick the wrong root).
   const at = transcriptPath !== undefined ? ` Its transcript is the file ${transcriptPath}.` : "";
+
   return cursor !== undefined
     ? `Read session ${bare}, but only the messages after message id ${cursor} — everything up to and including that message is already summarized.${at} If nothing in that range is charter-relevant, output exactly ${IRRELEVANT_DELTA_SENTINEL} and nothing else. Charter: ${charter}`
     : `Read session ${bare}.${at} Charter: ${charter}`;
@@ -440,6 +472,7 @@ function classifyGather(
   }
 ): "short-circuit" | "proceed" {
   const { cursor, watermark, transcriptPath, id, runId } = ctx;
+
   // The sentinel is recognized only on a whole-output exact match — a dossier that merely
   // mentions the token still synthesizes — and checked before the empty-dossier guard.
   if (dossier.trim() === IRRELEVANT_DELTA_SENTINEL) {
@@ -451,6 +484,7 @@ function classifyGather(
       `Gather returned the ${IRRELEVANT_DELTA_SENTINEL} sentinel for ${id} on a full (non-delta) gather (see run ${runId} trace) — a contract violation, not a real dossier. Aborting before synthesis.`
     );
   }
+
   // An empty dossier means gather never read the session (e.g. a denied read
   // it failed to recover from). Synthesis would then have only the charter to
   // work from and would launder it into invented session facts, so fail loudly
@@ -460,6 +494,7 @@ function classifyGather(
       `Gather produced an empty dossier for ${id} — the session was not read (see run ${runId} trace). Aborting before synthesis to avoid fabricating from the charter.`
     );
   }
+
   // The host confirms this session exists — a transcript path was resolved, or its
   // watermark is readable from the store (covers a present OpenCode session via the
   // sqlite route) — yet gather reported it missing: the agent read the wrong store
@@ -473,6 +508,7 @@ function classifyGather(
       } (see run ${runId} trace) — it read the wrong store. Aborting before synthesis.`
     );
   }
+
   return "proceed";
 }
 
@@ -527,6 +563,7 @@ function parseSessionId(id: string): SessionId {
   const colon = id.indexOf(":");
   const source = colon === -1 ? "" : id.slice(0, colon);
   const bare = colon === -1 ? "" : id.slice(colon + 1);
+
   if ((source === "claude-code" || source === "opencode") && bare !== "") return { source, bare };
   throw new Error(
     `Session id "${id}" must be source-qualified — pass claude-code:<id> or opencode:<id>.`
@@ -543,5 +580,6 @@ function totalCost(dispatches: readonly ThreadDispatchRun[]): number | null {
   const costs = dispatches
     .map((dispatch) => dispatch.cost_usd)
     .filter((cost): cost is number => cost !== null);
+
   return costs.length > 0 ? costs.reduce((total, cost) => total + cost, 0) : null;
 }

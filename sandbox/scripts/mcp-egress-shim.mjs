@@ -5,12 +5,19 @@ import net from "node:net";
 import tls from "node:tls";
 
 const listenHost = process.env.MCP_SHIM_LISTEN_HOST ?? "127.0.0.1";
+
 const listenPort = Number(process.env.MCP_SHIM_LISTEN_PORT ?? "0");
+
 const upstream = new URL(requireEnv("MCP_SHIM_UPSTREAM"));
+
 const vaultHint = requireEnv("MCP_SHIM_VAULT");
+
 const vaultToken = requireEnv("AGENT_VAULT_TOKEN");
+
 const proxyHost = process.env.MCP_SHIM_PROXY_HOST ?? "host.docker.internal";
+
 const proxyPort = Number(process.env.MCP_SHIM_PROXY_PORT ?? "14322");
+
 const shimName = process.env.MCP_SHIM_NAME ?? "mcp";
 
 if (upstream.protocol !== "https:") {
@@ -18,7 +25,9 @@ if (upstream.protocol !== "https:") {
 }
 
 const upstreamPort = Number(upstream.port || "443");
+
 const proxyAuthorization = `Basic ${Buffer.from(`${vaultToken}:${vaultHint}`).toString("base64")}`;
+
 class AgentVaultTunnelAgent extends https.Agent {
   createConnection(_options, callback) {
     log("connect", {
@@ -44,6 +53,7 @@ class AgentVaultTunnelAgent extends https.Agent {
     proxy.on("data", function onData(chunk) {
       buffered = Buffer.concat([buffered, chunk]);
       const headerEnd = buffered.indexOf("\r\n\r\n");
+
       if (headerEnd === -1) return;
 
       proxy.off("data", onData);
@@ -54,6 +64,7 @@ class AgentVaultTunnelAgent extends https.Agent {
       if (status !== "200") {
         proxy.destroy();
         callback(new Error(`Agent Vault CONNECT failed with status ${status ?? "unknown"}`));
+
         return;
       }
 
@@ -63,6 +74,7 @@ class AgentVaultTunnelAgent extends https.Agent {
         socket: proxy,
         servername: upstream.hostname
       });
+
       tlsSocket.once("secureConnect", () => callback(null, tlsSocket));
       tlsSocket.once("error", callback);
     });
@@ -117,10 +129,13 @@ const server = http.createServer((req, res) => {
       upstreamHost: upstream.hostname,
       vaultHint
     });
+
     if (res.headersSent) {
       res.destroy(error);
+
       return;
     }
+
     res.writeHead(502, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "mcp_shim_upstream_error", message: error.message }));
   });
@@ -135,6 +150,7 @@ server.listen(listenPort, listenHost, () => {
 });
 
 process.on("SIGTERM", shutdown);
+
 process.on("SIGINT", shutdown);
 
 function shutdown() {
@@ -144,7 +160,9 @@ function shutdown() {
 
 function requireEnv(name) {
   const value = process.env[name];
+
   if (!value) throw new Error(`${name} is required`);
+
   return value;
 }
 
@@ -159,10 +177,13 @@ function filterHopByHopHeaders(headers) {
     "transfer-encoding",
     "upgrade"
   ]);
+
   const output = {};
+
   for (const [key, value] of Object.entries(headers)) {
     if (!blocked.has(key.toLowerCase()) && value !== undefined) output[key] = value;
   }
+
   return output;
 }
 

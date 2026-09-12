@@ -64,6 +64,7 @@ export function repoLocators(profile: ResolvedProfile): RepoLocator[] {
     localPath: path.join(profile.referencesDir, ref.name),
     url: ref.url
   }));
+
   const extras = profile.extraFolders
     .filter((folder) => folder.url !== undefined)
     .map((folder) => ({
@@ -71,6 +72,7 @@ export function repoLocators(profile: ResolvedProfile): RepoLocator[] {
       localPath: expandHome(folder.path),
       url: folder.url!
     }));
+
   return [...references, ...extras];
 }
 
@@ -82,16 +84,19 @@ export async function regenerateViews(req: RegenerateViewsRequest): Promise<Thre
   const { runner, paths, runId, threadDir, slug, charter, digestModel, previousDigest } = req;
   const sessions = await readSessionFiles(threadDir);
   await writeFile(path.join(threadDir, "log.md"), renderEventLog(sessions), "utf8");
+
   const anchor =
     previousDigest !== undefined
       ? `\n\nPrevious digest (a prior rendering — NOT a source of facts; the session files above are your only source). Reconcile the sessions from scratch as instructed, then use this only to hold form steady: keep its wording, section prose, bullet order, and its \`## Design\` ASCII diagram wherever the sessions still support them, so an unchanged thread yields an unchanged digest. Where newer sessions add, overturn, or invalidate content, revise or drop it — never carry forward a fact the sessions no longer support. The diagram is not sacred: when newer sessions introduce structure a different diagram would capture better, redraw it.\n\n${previousDigest}`
       : "";
+
   const repos =
     req.repos && req.repos.length > 0
       ? `\n\nLocal repos (a lookup, NOT a source). When a source in the session files is one of these repos — cited by its name or by any path ending in that name, since sessions may mount it at a different path than the one below — record its upstream URL in \`## Sources\` so a reader can reopen it. Resolve only a repo a session actually consulted; never add one it did not.\n${req.repos
           .map((repo) => `- ${repo.name} — ${repo.localPath} → ${repo.url}`)
           .join("\n")}`
       : "";
+
   const digest = await dispatch(runner, paths, runId, "digest", {
     role: "digest",
     harness: digestModel.harness,
@@ -101,7 +106,9 @@ export async function regenerateViews(req: RegenerateViewsRequest): Promise<Thre
     skills: ["thread-contract"],
     prompt: `Thread: ${slug}\n\nThe charter is the thread's topic hint — what the thread is about. It is NOT a source of facts; never lift specifics from it. The session files below are your only source material.\n\nCharter (topic hint, not a source): ${charter}\n\nSession files (your only source):\n${sessions.join("\n")}${anchor}${repos}`
   });
+
   await writeFile(path.join(threadDir, "digest.md"), digest.result.text + "\n", "utf8");
+
   return digest.dispatch;
 }
 
@@ -129,15 +136,19 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
   const { paths, profile } = req;
   const locatedThread = await findThread(paths, profile, req.threadSlug);
   assertThreadStoreWritable(locatedThread.store);
+
   return withThreadMutation(locatedThread, async (thread) => {
     const manifest = await readThreadManifest(thread.dir);
+
     const settings = resolveSynthesisDefaults(profile.profile.thread.defaults, manifest, {
       synthesize: req.synthesize,
       digest: req.digest
     });
+
     const runner = req.runner ?? new DockerAgentRunner(paths, profile.profile.thread.credentials);
     const runId = `run-${Date.now()}-${randomUUID()}`;
     const startedAt = new Date().toISOString();
+
     const status: ThreadRunStatus = {
       id: runId,
       thread: manifest.slug,
@@ -147,6 +158,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
       started_at: startedAt,
       cost_usd: null
     };
+
     await writeRunStatus(paths, status);
 
     const digestDispatch = await regenerateViews({
@@ -177,6 +189,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
       current_step: "publish",
       cost_usd: total
     });
+
     const publication = await commitThreadChanges(
       thread.store,
       manifest.slug,
@@ -184,6 +197,7 @@ export async function regenerateThread(req: RegenerateRequest): Promise<Regenera
       `chore(thread): regenerate ${manifest.slug}`,
       !req.noPush
     );
+
     await writeRunStatus(paths, {
       ...status,
       current_step: "complete",

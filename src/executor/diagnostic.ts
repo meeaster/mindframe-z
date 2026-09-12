@@ -8,6 +8,7 @@ import { readManagedState, type ManagedState } from "./reconcile.js";
 import { classifyExecutorIntegration, classifyExecutorRemoval } from "./lifecycle.js";
 
 export type ExecutorRuntimeStatus = "not-required" | "absent" | "unavailable" | "attachable";
+
 export type ExecutorManagedStatus = "absent" | "invalid" | "incomplete" | "complete";
 
 export interface ExecutorDiagnosticConnection {
@@ -32,7 +33,9 @@ export interface ExecutorDiagnostic {
 async function installedVersion(binary: string): Promise<string> {
   try {
     const result = await execa(binary, ["--version"], { reject: false });
+
     if (result.exitCode !== 0) return "missing";
+
     return result.stdout.trim() || "unknown";
   } catch {
     return "missing";
@@ -44,7 +47,9 @@ function managedStatus(
   state: ManagedState | undefined
 ): ExecutorManagedStatus {
   if (!filePresent) return "absent";
+
   if (!state) return "invalid";
+
   return state.complete === true ? "complete" : "incomplete";
 }
 
@@ -61,6 +66,7 @@ export async function inspectExecutor(
   const managedFilePresent = await pathExists(executorManagedPath(paths, profile.name));
   const managed = await readManagedState(paths, profile.name);
   const active = required || managedFilePresent;
+
   const diagnostic: ExecutorDiagnostic = {
     required,
     profile: profile.name,
@@ -73,33 +79,42 @@ export async function inspectExecutor(
     connections: [],
     blockers: []
   };
+
   if (diagnostic.managed === "invalid") {
     diagnostic.blockers.push("Executor managed state is unreadable and requires repair");
   }
+
   if (!active) return diagnostic;
 
   const adapter = await attachExecutorAdapter(options.fetch ? { fetch: options.fetch } : {});
+
   if (!adapter) {
     diagnostic.runtime = (await pathExists(dataDir)) ? "unavailable" : "absent";
+
     if (required || diagnostic.managed !== "absent") {
       diagnostic.blockers.push("Executor runtime is not attachable without starting a daemon");
     }
+
     return diagnostic;
   }
 
   diagnostic.runtime = "attachable";
   const desired = buildExecutorDesiredState(profile, paths.home);
   const desiredSlugs = new Set(desired.integrations.map((integration) => integration.slug));
+
   try {
     for (const integration of desired.integrations) {
       const current = await adapter.getIntegration(integration.slug);
+
       const classification = classifyExecutorIntegration(integration, {
         current,
         connections: current ? await adapter.listConnections(integration.slug) : []
       });
+
       if (!classification.current) {
         diagnostic.blockers.push(`Executor integration ${integration.slug} is not registered`);
       }
+
       for (const connection of classification.connections) {
         const observed = connection.kind === "missing" ? undefined : connection.connection;
         diagnostic.connections.push({
@@ -110,6 +125,7 @@ export async function inspectExecutor(
           missingOAuthScopes: observed ? [...observed.missingOAuthScopes] : []
         });
       }
+
       for (const connection of classification.undeclaredDurableConnections) {
         diagnostic.connections.push({
           integration: integration.slug,
@@ -119,11 +135,14 @@ export async function inspectExecutor(
           missingOAuthScopes: [...connection.missingOAuthScopes]
         });
       }
+
       diagnostic.blockers.push(...classification.blockers);
     }
+
     for (const slug of Object.keys(managed?.integrations ?? {})) {
       if (desiredSlugs.has(slug)) continue;
       const current = await adapter.getIntegration(slug);
+
       if (!current) continue;
       const removal = classifyExecutorRemoval(slug, current, await adapter.listConnections(slug));
       diagnostic.blockers.push(...removal.blockers);
@@ -133,11 +152,13 @@ export async function inspectExecutor(
   } finally {
     await adapter.close();
   }
+
   return diagnostic;
 }
 
 export function executorDiagnosticLines(diagnostic: ExecutorDiagnostic): string[] {
   if (!diagnostic.required && diagnostic.managed === "absent") return [];
+
   return [
     `executor version\t${diagnostic.installedVersion}`,
     `executor data\t${diagnostic.dataDir}`,

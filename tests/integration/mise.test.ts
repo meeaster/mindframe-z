@@ -30,6 +30,7 @@ describe("mise integration", () => {
         "utf8"
       )
     );
+
     expect(ownership.targets).toHaveProperty("mise");
     await expect(
       access(path.join(home, ".config", "mise", ".mfz-owned.json"))
@@ -79,10 +80,12 @@ describe("mise integration", () => {
     await cli("mfz", root, home, ["apply", "--target", "mise", "--no-link"]);
 
     const base = await readFile(configsPath(home, "personal", "mise", "10-base.toml"), "utf8");
+
     const personal = await readFile(
       configsPath(home, "personal", "mise", "20-personal.toml"),
       "utf8"
     );
+
     expect(base).toBe(
       '[bootstrap.hooks]\npre-packages = "prepare-base"\n\n[bootstrap.packages]\n"apt:curl" = "latest"\n'
     );

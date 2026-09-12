@@ -37,6 +37,8 @@ export async function syncCodex(
     ...CODEX_DERIVED_KEYS,
     ...Object.keys(profile.profile.codex.config)
   ]);
+
   candidates.push(...unmanagedCandidates(existing, "codex", "codex.config", managedKeys));
+
   return { candidates };
 }

@@ -64,12 +64,15 @@ export async function listRunStatuses(
   paths: RuntimePaths
 ): Promise<Array<ThreadRunStatus & { state: string }>> {
   const root = threadRunsRoot(paths);
+
   try {
     const entries = await readdir(root, { withFileTypes: true });
     const statuses: Array<ThreadRunStatus & { state: string }> = [];
+
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const file = path.join(root, entry.name, "status.json");
+
       try {
         const status = threadRunStatusSchema.parse(JSON.parse(await readFile(file, "utf8")));
         statuses.push({
@@ -80,6 +83,7 @@ export async function listRunStatuses(
         continue;
       }
     }
+
     return statuses.sort((a, b) => b.started_at.localeCompare(a.started_at));
   } catch {
     return [];
@@ -89,6 +93,7 @@ export async function listRunStatuses(
 async function pidState(pid: number): Promise<string> {
   try {
     process.kill(pid, 0);
+
     return "running";
   } catch {
     return "crashed";
@@ -98,11 +103,13 @@ async function pidState(pid: number): Promise<string> {
 export async function readRunTrace(paths: RuntimePaths, runId: string): Promise<string> {
   const dir = threadRunPath(paths, runId);
   let output = "";
+
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.isFile() && entry.name.endsWith(".jsonl")) {
       output += `# ${entry.name}\n${await readFile(path.join(dir, entry.name), "utf8")}\n`;
     }
   }
+
   return output;
 }
 
@@ -115,6 +122,7 @@ export async function writeRunDossiers(
 ): Promise<void> {
   const dir = path.join(threadRunPath(paths, runId), "dossiers");
   await mkdir(dir, { recursive: true });
+
   for (const dossier of dossiers) {
     await writeFile(path.join(dir, `${dossier.source}-${dossier.id}.md`), dossier.text, "utf8");
   }

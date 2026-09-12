@@ -18,8 +18,11 @@ const tomlValueSchema: z.ZodType = z.lazy(() =>
     z.record(z.string(), tomlValueSchema)
   ])
 );
+
 const tomlObjectSchema = z.record(z.string(), tomlValueSchema);
+
 type TomlObject = z.infer<typeof tomlObjectSchema>;
+
 const frontmatterValueSchema: z.ZodType = z.lazy(() =>
   z.union([
     z.string(),
@@ -31,7 +34,9 @@ const frontmatterValueSchema: z.ZodType = z.lazy(() =>
     z.record(z.string(), frontmatterValueSchema)
   ])
 );
+
 const frontmatterObjectSchema = z.record(z.string(), frontmatterValueSchema);
+
 type FrontmatterObject = z.infer<typeof frontmatterObjectSchema>;
 
 /**
@@ -45,6 +50,7 @@ type FrontmatterObject = z.infer<typeof frontmatterObjectSchema>;
 export async function pathExists(target: string): Promise<boolean> {
   try {
     await access(target);
+
     return true;
   } catch {
     return false;
@@ -98,15 +104,19 @@ export async function readTextFile(file: string): Promise<string | undefined> {
  */
 export function parseJsonlObjects(content: string): JsonObject[] {
   const records: JsonObject[] = [];
+
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
+
     try {
       const parsed = jsonObjectSchema.safeParse(JSON.parse(line));
+
       if (parsed.success) records.push(parsed.data);
     } catch {
       // A truncated or non-JSON line is not a record; keep scanning the rest.
     }
   }
+
   return records;
 }
 
@@ -117,6 +127,7 @@ async function readObjectFile<T>(
   schema: z.ZodType<T>
 ): Promise<T> {
   let content: string;
+
   try {
     content = await readFile(file, "utf8");
   } catch (error) {
@@ -147,9 +158,11 @@ export async function readJsoncObject(filePath: string): Promise<JsonObject> {
     (content) => {
       const errors: ParseError[] = [];
       const parsed = parseJsonc(content, errors, { allowTrailingComma: true });
+
       if (errors.length > 0) {
         throw new Error(errors.map((error) => printParseErrorCode(error.error)).join(", "));
       }
+
       return jsonObjectSchema.parse(parsed);
     },
     jsonObjectSchema
@@ -161,6 +174,7 @@ export async function readJsoncObject(filePath: string): Promise<JsonObject> {
  * parse step. */
 export function parseTomlObject(content: string): TomlObject {
   const parsed = parseToml(content);
+
   return tomlObjectSchema.parse(parsed);
 }
 
@@ -181,8 +195,10 @@ export async function readTomlObject(file: string): Promise<TomlObject> {
 export function parseFrontmatter(content: string): FrontmatterObject {
   if (!content.startsWith("---")) return {};
   const end = content.indexOf("\n---", 3);
+
   if (end < 0) return {};
   const parsed = frontmatterObjectSchema.safeParse(parseYaml(content.slice(3, end)));
+
   return parsed.success ? parsed.data : {};
 }
 

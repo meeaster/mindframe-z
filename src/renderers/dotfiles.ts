@@ -7,6 +7,7 @@ import { hasManagedZsh, zshLocalFile, zshSecretsFile } from "../core/zsh.js";
 
 function renderHarnessLaunchers(paths: RuntimePaths): string[] {
   const store = JSON.stringify(path.join(paths.home, ".mindframe-z", "overrides.json"));
+
   return [
     "_mfz_project_root() {",
     "  git rev-parse --show-toplevel 2>/dev/null || pwd",
@@ -58,6 +59,7 @@ function renderHarnessLaunchers(paths: RuntimePaths): string[] {
 
 function renderZshrc(paths: RuntimePaths, content: string): string {
   const userBin = path.join(paths.home, ".local", "bin");
+
   return [
     "# Managed by mindframe-z. Edit the profile-owned .zshrc source, then run mfz apply.",
     `if [[ ":$PATH:" != *":${userBin}:"* ]]; then`,
@@ -84,6 +86,7 @@ function renderZshrc(paths: RuntimePaths, content: string): string {
 
 function renderBashrc(paths: RuntimePaths, content: string): string {
   const userBin = path.join(paths.home, ".local", "bin");
+
   return [
     "# Managed by mindframe-z. Edit the profile-owned .bashrc source, then run mfz apply.",
     `case ":$PATH:" in`,
@@ -98,7 +101,9 @@ function renderBashrc(paths: RuntimePaths, content: string): string {
 
 function renderDotfile(paths: RuntimePaths, filename: string, content: string): string {
   if (filename === ".zshrc") return renderZshrc(paths, content);
+
   if (filename === ".bashrc") return renderBashrc(paths, content);
+
   return content;
 }
 
@@ -115,7 +120,9 @@ export async function renderDotfiles(
       path: path.join(configsDotfiles, filename),
       content: renderDotfile(paths, filename, content)
     };
+
     if (filename.startsWith(".local/bin/")) file.mode = 0o755;
+
     return file;
   });
 
@@ -135,8 +142,10 @@ export async function renderDotfiles(
     ],
     links
   };
+
   if (hasManagedZsh(profile)) {
     result.localFiles = [{ path: zshSecretsFile(paths), content: "", ifMissing: true }];
   }
+
   return result;
 }

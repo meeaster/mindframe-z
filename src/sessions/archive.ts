@@ -16,11 +16,13 @@ export function defaultArchive(archives: readonly Archive[]): Archive | undefine
 // the wrong AWS identity.
 export function resolveDefaultArchive(archives: readonly Archive[]): Archive {
   const archive = defaultArchive(archives);
+
   if (!archive) {
     throw new Error(
       "No archives configured. Add an `archives` entry to ~/.mindframe-z/config.yml."
     );
   }
+
   if (archive.profile) {
     throw new Error(
       `Archive '${archive.name}' pins AWS profile '${archive.profile}', which is not supported yet ` +
@@ -28,6 +30,7 @@ export function resolveDefaultArchive(archives: readonly Archive[]): Archive {
         `from archive '${archive.name}' or use an archive without one.`
     );
   }
+
   return archive;
 }
 
@@ -35,10 +38,12 @@ export function resolveDefaultArchive(archives: readonly Archive[]): Archive {
 // backup's freshness sweep and hydration's prefix-pull need, so neither reimplements it.
 export async function* listObjects(client: S3Client, bucket: string, prefix: string) {
   let token: string | undefined;
+
   do {
     const page = await client.send(
       new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token })
     );
+
     for (const object of page.Contents ?? []) yield object;
     token = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (token);

@@ -29,6 +29,7 @@ interface ParsedSandboxTarget {
 
 export function parseSandboxTarget(target: string | undefined): ParsedSandboxTarget {
   if (!target || target === "shell") return { target: "shell", args: [] };
+
   if (target === "cc" || target === "oc" || target === "init") return { target, args: [] };
   throw new Error(`Unknown sandbox command: ${target}`);
 }
@@ -42,6 +43,7 @@ export async function runSandboxLaunch(options: {
   readonly rebuild?: boolean | undefined;
 }): Promise<void> {
   const paths = createRuntimePaths(options);
+
   if (!(await hasSandboxOperationalSecrets(paths))) {
     throw new Error(
       `Sandbox is not initialized. Run 'mfz sandbox init' first. Expected secrets file: ${sandboxSecretsFile(paths)}`
@@ -52,12 +54,14 @@ export async function runSandboxLaunch(options: {
   const profile = await resolveProfile(paths, options.profile);
   const buildPlan = await sandboxImageBuildPlan(paths, profile);
   await ensureSandboxImage(buildPlan, { force: options.rebuild });
+
   const runtime = await resolveSandboxRuntimeInputs(paths, profile, {
     target: options.target,
     args: options.args,
     agentToken: secrets[sandboxAgentTokenVar],
     tty: Boolean(process.stdin.isTTY && process.stdout.isTTY)
   });
+
   await ensureSandboxServices(paths, profile, runtime);
   await ensureSandboxState(paths, profile, runtime.credentialMode);
   await execa("docker", runtime.dockerRunArgs, { stdio: "inherit" });
@@ -70,8 +74,10 @@ export async function runSandboxInit(options: {
 }): Promise<void> {
   const paths = createRuntimePaths(options);
   const secretsFile = sandboxSecretsFile(paths);
+
   if (await hasSandboxOperationalSecrets(paths)) {
     console.log(`sandbox already initialized\t${secretsFile}`);
+
     return;
   }
 
@@ -98,6 +104,7 @@ export async function runSandboxInit(options: {
     },
     { home: paths.home }
   );
+
   await setSandboxAgentToken(paths, token);
 
   console.log(`sandbox initialized\t${secretsFile}`);

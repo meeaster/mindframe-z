@@ -13,6 +13,7 @@ export async function findProjectRoot(cwd = process.cwd()): Promise<string | und
   try {
     const { stdout } = await execa("git", ["rev-parse", "--show-toplevel"], { cwd });
     const root = stdout.trim();
+
     return root.length > 0 ? root : undefined;
   } catch {
     return undefined;

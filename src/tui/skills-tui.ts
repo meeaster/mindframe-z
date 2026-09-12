@@ -28,7 +28,9 @@ const targets: SkillToggleTarget[] = ["claude-code", "codex"];
 
 function truncateText(text: string, maxLen: number): string {
   if (maxLen <= 0) return "";
+
   if (text.length <= maxLen) return text;
+
   return text.slice(0, Math.max(0, maxLen - 1)) + "…";
 }
 
@@ -63,15 +65,18 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
       profile.agents.find(
         (agent): agent is SkillToggleTarget => agent === "claude-code" || agent === "codex"
       ) ?? "claude-code";
+
     const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const resolvedOutput = streams.output ?? process.stderr;
+
     const promptOptions: MultiSelectOptions<SkillOption> = {
       options,
       output: resolvedOutput,
       initialValues: options.filter((o) => states[targetState.value][o.value]).map((o) => o.value),
       render() {
         const value = this.value ?? [];
+
         if (this.state === "cancel") {
           return `${styleText("bold", "Skill toggles")} cancelled`;
         }
@@ -80,11 +85,13 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
           const count = `${value.length}/${this.options.length}`;
           const title = `Skill toggles (${targetState.value}, ${count} enabled)`;
           const saved = styleText("green", "✓ saved");
+
           return `${styleText("bold", title)} ${saved}`;
         }
 
         const count = `${value.length}/${this.options.length}`;
         const title = `Skill toggles (${targetState.value}, ${count} enabled)`;
+
         const help = styleText(
           "dim",
           "Space toggle · a all · Tab target · Enter save · q/Esc quit"
@@ -95,15 +102,19 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
         }
 
         const columns = getColumns(resolvedOutput);
+
         const style = (option: SkillOption, active: boolean) => {
           const checked = value.includes(option.value) ? "◉" : "○";
           const prefix = `${active ? "›" : " "} ${checked} ${option.label}`;
           const available = columns - prefix.length - 1;
+
           const hintText = option.hint
             ? ` ${truncateText(option.hint, Math.max(0, available))}`
             : "";
+
           const name = active ? styleText("cyan", option.label) : option.label;
           const hint = hintText ? styleText("dim", hintText) : "";
+
           return `${active ? "›" : " "} ${checked} ${name}${hint}`;
         };
 
@@ -118,6 +129,7 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
         return `${styleText("bold", title)}\n${lines.join("\n")}\n${help}`;
       }
     };
+
     if (streams.input !== undefined) promptOptions.input = streams.input;
     super(promptOptions);
     this.target = initialTarget;
@@ -130,19 +142,23 @@ class SkillsTogglePrompt extends MultiSelectPrompt<SkillOption> {
 
   get result(): SkillsPromptResult {
     this.captureCurrentState();
+
     return { saved: this.saved, states: this.states };
   }
 
   protected _shouldSubmit(_char: string | undefined, key: Key): boolean {
     if (key.name === "return" || key.name === "enter") {
       this.saved = true;
+
       return true;
     }
+
     return false;
   }
 
   private handleKey(char: string | undefined, key: Key): void {
     if (key.name === "tab") this.switchTarget();
+
     if (char === "q" || key.name === "escape") this.state = "cancel";
   }
 
@@ -172,17 +188,22 @@ export async function runSkillsTui(
   if (!targets.some((target) => profile.agents.includes(target))) {
     throw new Error("Skill toggles are only supported for Claude Code and Codex");
   }
+
   const configPaths = await resolveSkillConfigPaths(paths);
+
   const [claudeCodeState, codexState] = await Promise.all([
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code"),
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "codex")
   ]);
+
   const states = {
     "claude-code": claudeCodeState,
     codex: codexState
   } satisfies Record<SkillToggleTarget, SkillToggleState>;
+
   const prompt = new SkillsTogglePrompt(profile, states, streams);
   const result = await prompt.prompt();
+
   if (isCancel(result) || !prompt.result.saved) return;
 
   await writeChangedSkillOverridesForTargets(paths, configPaths, profile, prompt.result.states);

@@ -33,6 +33,7 @@ export function validateMcpTuiStates(
 ): void {
   for (const server of profile.mcpServers) {
     if (server.agents === undefined || server.agents["claude-code"] === undefined) continue;
+
     if (states["claude-code"]?.[server.name] === false) {
       assertMcpToggleSupported("claude-code", false);
     }
@@ -64,28 +65,36 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
   ) {
     const initialTarget =
       targets.find((target) => profile.agents.includes(target)) ?? "claude-code";
+
     const targetState = { value: initialTarget };
     const options = optionsForTarget(profile, initialTarget);
     const output = streams.output ?? process.stderr;
+
     const promptOptions: MultiSelectOptions<McpOption> = {
       options,
       output,
       initialValues: options.filter((o) => states[targetState.value][o.value]).map((o) => o.value),
       render() {
         const value = this.value ?? [];
+
         if (this.state === "cancel") return `${styleText("bold", "MCP toggles")} cancelled`;
         const count = `${value.length}/${this.options.length}`;
         const title = `MCP toggles (${targetState.value}, ${count} enabled)`;
+
         if (this.state === "submit")
           return `${styleText("bold", title)} ${styleText("green", "✓ saved")}`;
+
         const help = styleText(
           "dim",
           "Space toggle · a all · Tab target · Enter save · q/Esc quit"
         );
+
         if (this.options.length === 0) {
           return `${styleText("bold", title)}\n${styleText("dim", "No MCP servers for this target")}\n${help}`;
         }
+
         const columns = getColumns(output);
+
         const lines = limitOptions({
           cursor: this.cursor,
           options: this.options,
@@ -95,18 +104,22 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
             const checked = value.includes(option.value) ? "◉" : "○";
             const name = active ? styleText("cyan", option.label) : option.label;
             const prefix = `${active ? "›" : " "} ${checked} ${option.label}`;
+
             const hint = option.hint
               ? styleText(
                   "dim",
                   ` ${option.hint.slice(0, Math.max(0, columns - prefix.length - 2))}`
                 )
               : "";
+
             return `${active ? "›" : " "} ${checked} ${name}${hint}`;
           }
         });
+
         return `${styleText("bold", title)}\n${lines.join("\n")}\n${help}`;
       }
     };
+
     if (streams.input !== undefined) promptOptions.input = streams.input;
     super(promptOptions);
     this.target = initialTarget;
@@ -118,19 +131,23 @@ class McpTogglePrompt extends MultiSelectPrompt<McpOption> {
 
   get result(): McpTuiResult {
     this.captureCurrentState();
+
     return { saved: this.saved, states: this.states };
   }
 
   protected _shouldSubmit(_char: string | undefined, key: Key): boolean {
     if (key.name === "return" || key.name === "enter") {
       this.saved = true;
+
       return true;
     }
+
     return false;
   }
 
   private handleKey(char: string | undefined, key: Key): void {
     if (key.name === "tab") this.switchTarget();
+
     if (char === "q" || key.name === "escape") this.state = "cancel";
   }
 
@@ -158,20 +175,27 @@ export async function runMcpTui(
   streams: { input?: Readable; output?: Writable } = {}
 ): Promise<void> {
   const projectRoot = await findProjectRoot();
+
   if (!projectRoot) throw new Error("mfz mcp tui must be run inside a git repository");
+
   if (!targets.some((target) => profile.agents.includes(target))) {
     throw new Error("MCP toggles are only supported for Claude Code and Codex");
   }
+
   const store = await readOverrideStore(paths.home);
+
   const initialStates = {
     "claude-code": effectiveProjectState(store, projectRoot, profile, "claude-code", "mcp"),
     codex: effectiveProjectState(store, projectRoot, profile, "codex", "mcp")
   } satisfies Record<(typeof targets)[number], McpState>;
+
   const prompt = new McpTogglePrompt(profile, initialStates, streams);
   const result = await prompt.prompt();
+
   if (isCancel(result) || !prompt.result.saved) return;
   const nextStates = prompt.result.states;
   validateMcpTuiStates(profile, nextStates);
+
   for (const target of targets) {
     await writeProjectOverrideDelta(paths, profile, projectRoot, target, "mcp", nextStates[target]);
   }

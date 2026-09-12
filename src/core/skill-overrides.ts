@@ -22,6 +22,7 @@ type ConfigValue =
   | undefined
   | ConfigValue[]
   | ConfigObject;
+
 interface ConfigObject {
   [key: string]: ConfigValue;
 }
@@ -38,7 +39,9 @@ const configValueSchema: z.ZodType<ConfigValue> = z.lazy(() =>
     z.record(z.string(), configValueSchema)
   ])
 );
+
 const configObjectSchema: z.ZodType<ConfigObject> = z.record(z.string(), configValueSchema);
+
 const codexEntrySchema = z.object({ path: z.string(), enabled: z.boolean() });
 
 type SkillCodec = {
@@ -61,13 +64,17 @@ function readCodexEntries(data: ConfigObject, context: SkillOverrideContext): Sk
   const skills = record(data.skills);
   const entries = Array.isArray(skills.config) ? skills.config : [];
   const result: SkillEntries = {};
+
   for (const entry of entries) {
     const item = codexEntrySchema.safeParse(entry);
+
     if (!item.success) continue;
     const name = path.basename(path.dirname(item.data.path));
+
     if (context.skillNames && !context.skillNames.has(name)) continue;
     result[name] = item.data.enabled ? "on" : "off";
   }
+
   return result;
 }
 
@@ -83,17 +90,20 @@ function writeCodexEntries(
 
   for (const [name, enabled] of Object.entries(entries)) {
     const skillPath = context.skillPaths?.[name];
+
     if (!skillPath) {
       throw new Error(
         `Cannot toggle ${name} for codex: installed SKILL.md path could not be resolved`
       );
     }
+
     managedPaths.add(skillPath);
     nextConfig.push({ path: skillPath, enabled: enabled !== "off" });
   }
 
   for (const entry of existingConfig) {
     const skillPath = record(entry).path;
+
     if (!isString(skillPath) || !managedPaths.has(skillPath)) nextConfig.push(entry);
   }
 
@@ -106,15 +116,20 @@ export async function readConfigFile(
 ): Promise<ConfigObject> {
   try {
     const raw = await readFile(file, "utf8");
+
     const parsed =
       format === "toml" ? parseToml(raw) : format === "jsonc" ? parseJsonc(raw) : JSON.parse(raw);
+
     const result = configObjectSchema.safeParse(parsed);
+
     if (!result.success) throw new Error(`${file} must contain an object`);
+
     return result.data;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return {};
     }
+
     throw error;
   }
 }
@@ -131,14 +146,17 @@ export async function writeConfigFile(
 function stringRecord(value: ConfigValue | undefined): SkillEntries {
   if (!isMergeObject(value)) return {};
   const result: SkillEntries = {};
+
   for (const [key, entry] of Object.entries(value)) {
     if (isString(entry)) result[key] = entry;
   }
+
   return result;
 }
 
 function record(value: ConfigValue | undefined): ConfigObject {
   const parsed = configValueSchema.safeParse(value);
+
   return parsed.success && isMergeObject(parsed.data) ? parsed.data : {};
 }
 
@@ -172,6 +190,7 @@ function encodeOverrides(
   state: Record<string, boolean>
 ): Record<string, string> {
   const codec = codecs[target];
+
   return Object.fromEntries(
     Object.entries(state).map(([name, enabled]) => [name, codec.encode(enabled)])
   );
@@ -183,6 +202,7 @@ export function readSkillOverrides(
   context: SkillOverrideContext = {}
 ): Record<string, boolean> {
   const codec = codecs[target];
+
   return Object.fromEntries(
     Object.entries(codec.read(data, context)).map(([name, value]) => [name, codec.decode(value)])
   );
@@ -195,6 +215,7 @@ export function mergeSkillOverrides(
   context: SkillOverrideContext = {}
 ): ConfigObject {
   const codec = codecs[target];
+
   return codec.write(
     data,
     { ...codec.read(data, context), ...encodeOverrides(target, state) },
@@ -257,11 +278,14 @@ export async function writeSkillOverridesFile(
 export async function readSkillOverridesFile(file: string): Promise<Record<string, boolean>> {
   const data = await readConfigFile(file, "json");
   const result: Record<string, boolean> = {};
+
   for (const [name, enabled] of Object.entries(data)) {
     const parsed = z.boolean().safeParse(enabled);
+
     if (!parsed.success)
       throw new Error(`${file} must map skill names to boolean values; ${name} is invalid`);
     result[name] = parsed.data;
   }
+
   return result;
 }

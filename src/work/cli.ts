@@ -72,16 +72,22 @@ export async function runWorkCreate(
     options,
     async () => {
       const paths = createRuntimePaths(options);
+
       const input: Parameters<typeof createWorkUnit>[1] = {
         slug,
         title: options.title ?? titleFromSlug(slug),
         objective: ""
       };
+
       if (options.scope) input.scope = workScopeSchema.parse(options.scope);
+
       if (options.project) input.project = options.project;
+
       if (options.phase) input.phase = workPhaseSchema.parse(options.phase);
+
       if (options.thread) input.thread = options.thread;
       const unit = await createWorkUnit(paths, input);
+
       return { unit, files: workAuthoringPaths(paths, slug) };
     },
     ({ unit, files }) => [
@@ -99,6 +105,7 @@ export async function runWorkInstructions(slug: string, options: WorkOptions): P
     async () => {
       const paths = createRuntimePaths(options);
       await readWorkUnit(paths, slug);
+
       return {
         unit: slug,
         action: "update",
@@ -139,6 +146,7 @@ export async function runWorkCheckpointInstructions(
     async () => {
       const paths = createRuntimePaths(options);
       await readWorkUnit(paths, slug);
+
       return {
         unit: slug,
         action: "checkpoint",
@@ -216,11 +224,13 @@ export async function runWorkShow(slug: string, options: WorkOptions): Promise<v
     options,
     async () => {
       const paths = createRuntimePaths(options);
+
       const [unit, checkpoints, receipts] = await Promise.all([
         readWorkUnit(paths, slug),
         readWorkCheckpoints(paths, slug),
         readWorkReceipts(paths, slug)
       ]);
+
       return { unit, checkpoint_count: checkpoints.length, receipt_count: receipts.length };
     },
     ({ unit, checkpoint_count, receipt_count }) => [
@@ -279,6 +289,7 @@ export async function runWorkAttach(
     async () => {
       const session = parseSession(options.session);
       await attachWorkSession(createRuntimePaths(options), slug, session);
+
       return { session, unit: slug };
     },
     ({ session, unit }) => `attached\t${session.source}:${session.id}\t${unit}`
@@ -296,6 +307,7 @@ export async function runWorkSwitch(
     async () => {
       const session = parseSession(options.session);
       await switchWorkSession(createRuntimePaths(options), slug, session);
+
       return { session, unit: slug };
     },
     ({ session, unit }) => `switched\t${session.source}:${session.id}\t${unit}`
@@ -308,6 +320,7 @@ export async function runWorkDetach(options: WorkOptions & { session: string }):
     async () => {
       const session = parseSession(options.session);
       await detachWorkSession(createRuntimePaths(options), session);
+
       return { session };
     },
     ({ session }) => `detached\t${session.source}:${session.id}`
@@ -339,6 +352,7 @@ export async function runWorkReload(
     async () => {
       const session = parseSession(options.session);
       await reloadWorkOrientation(createRuntimePaths(options), session, options.boundary);
+
       return { session };
     },
     ({ session }) => `reload pending\t${session.source}:${session.id}`
@@ -362,12 +376,15 @@ export async function runWorkReceipt(
       if (options.outcome !== "delivered" && options.outcome !== "failed") {
         throw new Error("--outcome must be delivered or failed");
       }
+
       if (options.outcome === "failed" && !options.error)
         throw new Error("--error is required for a failed receipt");
       const revision = Number(options.orientationRevision);
+
       if (!Number.isInteger(revision) || revision < 1)
         throw new Error("--orientation-revision must be a positive whole number");
       const session = parseSession(options.session);
+
       return {
         receipt: await appendWorkReceipt(createRuntimePaths(options), session, {
           boundary: options.boundary,

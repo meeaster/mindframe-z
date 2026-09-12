@@ -14,10 +14,13 @@ const transactionItemSchema = z
     newMoved: z.boolean()
   })
   .strict();
+
 const transactionJournalSchema = z
   .object({ version: z.literal(1), committed: z.boolean(), items: z.array(transactionItemSchema) })
   .strict();
+
 type TransactionItem = z.infer<typeof transactionItemSchema>;
+
 type TransactionJournal = z.infer<typeof transactionJournalSchema>;
 
 function errorCode(error: Error): string | undefined {
@@ -26,10 +29,12 @@ function errorCode(error: Error): string | undefined {
 }
 
 const transactionName = ".mfz-vendor-promotion.yml";
+
 const lockName = ".mfz-vendor-promotion.lock";
 
 function pathWithin(root: string, value: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(value));
+
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
@@ -65,6 +70,7 @@ async function writeJournal(root: string, journal: TransactionJournal): Promise<
 async function exists(file: string): Promise<boolean> {
   try {
     await lstat(file);
+
     return true;
   } catch (error) {
     if (error instanceof Error && errorCode(error) === "ENOENT") return false;
@@ -77,6 +83,7 @@ async function cleanup(journal: TransactionJournal, root: string): Promise<void>
     await rm(item.temporary, { recursive: item.recursive, force: true });
     await rm(item.backup, { recursive: item.recursive, force: true });
   }
+
   await rm(journalPath(root), { force: true });
   await rm(`${journalPath(root)}.tmp`, { force: true });
   await rm(lockPath(root), { recursive: true, force: true });
@@ -86,6 +93,7 @@ async function restore(journal: TransactionJournal, root: string): Promise<void>
   for (const item of [...journal.items].reverse()) {
     const backupExists = await exists(item.backup);
     const temporaryExists = await exists(item.temporary);
+
     if (
       backupExists ||
       item.newMoved ||
@@ -93,16 +101,20 @@ async function restore(journal: TransactionJournal, root: string): Promise<void>
     ) {
       await rm(item.destination, { recursive: item.recursive, force: true });
     }
+
     if (backupExists) {
       await rename(item.backup, item.destination);
     }
+
     await rm(item.temporary, { recursive: item.recursive, force: true });
   }
+
   await cleanup(journal, root);
 }
 
 export async function recoverVendoredPromotion(root: string): Promise<void> {
   let journal: TransactionJournal;
+
   try {
     journal = transactionJournalSchema.parse(YAML.parse(await readFile(journalPath(root), "utf8")));
   } catch (error) {
@@ -111,11 +123,15 @@ export async function recoverVendoredPromotion(root: string): Promise<void> {
       `Invalid vendored promotion journal: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+
   validateJournal(root, journal);
+
   if (journal.committed) {
     await cleanup(journal, root);
+
     return;
   }
+
   await restore(journal, root);
 }
 
@@ -125,19 +141,23 @@ export async function commitVendoredPromotion(
   beforeCommit?: () => Promise<void>
 ): Promise<void> {
   await mkdir(path.join(root, "skills"), { recursive: true });
+
   try {
     await mkdir(lockPath(root));
   } catch (error) {
     if (error instanceof Error && errorCode(error) === "EEXIST") {
       throw new Error(`Another vendored promotion is active for ${root}`);
     }
+
     throw error;
   }
+
   const journal: TransactionJournal = {
     version: 1,
     committed: false,
     items: []
   };
+
   try {
     for (const item of items) {
       journal.items.push({
@@ -147,9 +167,11 @@ export async function commitVendoredPromotion(
         newMoved: false
       });
     }
+
     validateJournal(root, journal);
     await writeJournal(root, journal);
     await beforeCommit?.();
+
     for (const item of journal.items) {
       try {
         await rename(item.destination, item.backup);
@@ -157,11 +179,13 @@ export async function commitVendoredPromotion(
       } catch (error) {
         if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
       }
+
       await writeJournal(root, journal);
       await rename(item.temporary, item.destination);
       item.newMoved = true;
       await writeJournal(root, journal);
     }
+
     journal.committed = true;
     await writeJournal(root, journal);
     await cleanup(journal, root);
@@ -173,6 +197,7 @@ export async function commitVendoredPromotion(
         `Vendored promotion failed and recovery is required: ${error instanceof Error ? error.message : String(error)}; ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
       );
     }
+
     throw error;
   }
 }

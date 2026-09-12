@@ -67,6 +67,7 @@ function isUnreachableError(error: Error): boolean {
   // SAFETY: execa errors extend Error and expose stderr as an optional string.
   const stderr = (error as Error & { stderr?: string }).stderr ?? "";
   const message = `${error.message}\n${stderr}`;
+
   return /could not reach server|ECONNREFUSED|connection refused/i.test(message);
 }
 
@@ -104,6 +105,7 @@ export async function provisionBroker(
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
+
   await execa(agentVaultBin, loginArgs(params), { env, input: password });
 
   // Idempotent: a resumed init finds the vault already present. A genuinely
@@ -116,10 +118,12 @@ export async function provisionBroker(
 
   const { stdout } = await execa(agentVaultBin, agentCreateArgs(params), { env });
   const token = stdout.trim();
+
   if (!token) {
     throw new Error("Agent Vault returned an empty agent token");
   }
 
   await execa(agentVaultBin, caFetchArgs(params), { env });
+
   return token;
 }

@@ -32,8 +32,10 @@ describe("Claude context history", () => {
     await mkdir(fallbackProject, { recursive: true });
     const now = new Date().toISOString();
     const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
     const record = (value: JsonObject) =>
       JSON.stringify({ cwd: root, timestamp: now, sessionId: "main", version: "2.1", ...value });
+
     const lines = [
       "not-json",
       record({
@@ -108,6 +110,7 @@ describe("Claude context history", () => {
         message: { role: "assistant", usage: { input_tokens: 100 } }
       })
     ];
+
     lines.push(
       JSON.stringify({
         cwd: root,

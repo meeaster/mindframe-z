@@ -77,9 +77,11 @@ async function publicationFixture(): Promise<PublicationFixture> {
       synthesis: {}
     }) + "\n"
   );
+
   const { stdout: statusBefore } = await execa("git", ["status", "--porcelain"], {
     cwd: canonicalDir
   });
+
   const { stdout: headBefore } = await execa("git", ["rev-parse", "HEAD"], {
     cwd: canonicalDir
   });
@@ -105,15 +107,19 @@ async function expectCanonicalUnchanged(fixture: PublicationFixture): Promise<vo
   const { stdout: branch } = await execa("git", ["branch", "--show-current"], {
     cwd: fixture.canonicalDir
   });
+
   const { stdout: head } = await execa("git", ["rev-parse", "HEAD"], {
     cwd: fixture.canonicalDir
   });
+
   const { stdout: status } = await execa("git", ["status", "--porcelain"], {
     cwd: fixture.canonicalDir
   });
+
   const { stdout: worktrees } = await execa("git", ["worktree", "list", "--porcelain"], {
     cwd: fixture.canonicalDir
   });
+
   expect(branch.trim()).toBe("local-work");
   expect(head.trim()).toBe(fixture.headBefore);
   expect(status).toBe(fixture.statusBefore);
@@ -143,6 +149,7 @@ describe("thread publication", () => {
     );
 
     expect(result).toMatchObject({ kind: "pull-request", url: "https://example.test/pull/1" });
+
     if (result.kind !== "pull-request") throw new Error("expected pull request");
     await expectCanonicalUnchanged(fixture);
     const reviewDir = path.join(path.dirname(fixture.bareDir), "review");
@@ -204,10 +211,13 @@ if [ "$2" = "create" ]; then printf '%s\n' 'https://example.test/pull/1'; fi
     );
 
     expect(result.kind).toBe("local-branch");
+
     if (result.kind !== "local-branch") throw new Error("expected local branch");
+
     const { stdout } = await execa("git", ["rev-parse", result.branch], {
       cwd: fixture.canonicalDir
     });
+
     expect(stdout.trim()).toBe(result.commit);
     await expectCanonicalUnchanged(fixture);
   });
@@ -218,6 +228,7 @@ if [ "$2" = "create" ]; then printf '%s\n' 'https://example.test/pull/1'; fi
     await chmod(fixture.gh, 0o755);
 
     let publicationError: unknown;
+
     try {
       await commitThreadChanges(
         fixture.destination,
@@ -231,19 +242,24 @@ if [ "$2" = "create" ]; then printf '%s\n' 'https://example.test/pull/1'; fi
     }
 
     expect(publicationError).toBeInstanceOf(ThreadPublicationError);
+
     if (!(publicationError instanceof ThreadPublicationError)) {
       throw new Error("expected publication recovery metadata");
     }
+
     const recovery = publicationError;
     expect(recovery.pushed).toBe(true);
+
     const { stdout: localCommit } = await execa("git", ["rev-parse", recovery.branch], {
       cwd: fixture.canonicalDir
     });
+
     const { stdout: remoteCommit } = await execa(
       "git",
       ["ls-remote", "origin", `refs/heads/${recovery.branch}`],
       { cwd: fixture.canonicalDir }
     );
+
     expect(localCommit.trim()).toBe(recovery.commit);
     expect(remoteCommit).toContain(recovery.commit);
     await expectCanonicalUnchanged(fixture);

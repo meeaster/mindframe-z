@@ -14,6 +14,7 @@ import {
 import { executorJsonObjectSchema } from "./contract.js";
 
 const adapters: ExecutorAdapter[] = [];
+
 const executorInstalled = await execa("executor", ["--version"], { reject: false })
   .then((result) => result.exitCode === 0)
   .catch(() => false);
@@ -21,6 +22,7 @@ const executorInstalled = await execa("executor", ["--version"], { reject: false
 async function withExecutorDataDir<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
   const previous = process.env.EXECUTOR_DATA_DIR;
   process.env.EXECUTOR_DATA_DIR = dataDir;
+
   try {
     return await run();
   } finally {
@@ -38,6 +40,7 @@ describe("Executor adapter contract", () => {
     const output = redactExecutorError(
       "Bearer bearer-secret access_token=access-secret refresh_token=refresh-secret api-key=api-secret credential_provider=provider-secret client_secret=snake-secret client-secret=hyphen-secret clientSecret=camel-secret https://example.test/callback?code=code-secret&state=state-secret"
     );
+
     expect(output).not.toContain("bearer-secret");
     expect(output).not.toContain("access-secret");
     expect(output).not.toContain("refresh-secret");
@@ -76,6 +79,7 @@ describe("Executor adapter contract", () => {
           { status: 200 }
         )
     });
+
     await expect(connectionAdapter.listConnections("example")).rejects.toThrow(/invalid response/);
 
     const toolAdapter = createExecutorHttpAdapter({
@@ -97,6 +101,7 @@ describe("Executor adapter contract", () => {
           { status: 200 }
         )
     });
+
     await expect(toolAdapter.refreshConnection("example", "publicsafety")).resolves.toHaveLength(1);
   });
 
@@ -106,6 +111,7 @@ describe("Executor adapter contract", () => {
       token: "loopback-secret",
       fetch: async () => new Response("[]", { status: 200 })
     });
+
     await expect(adapter.createNoAuthConnection("example", "public.safety")).rejects.toThrow(
       /address-safe/
     );
@@ -165,6 +171,7 @@ describe("Executor adapter contract", () => {
         expect(second.baseUrl).toBe(first.baseUrl);
         expect(other.baseUrl).toBe(first.baseUrl);
         expect(other.dataDir).toBe(first.dataDir);
+
         const manifest = z
           .object({ scopeDir: z.string().nullable().optional() })
           .parse(
@@ -172,6 +179,7 @@ describe("Executor adapter contract", () => {
               await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
             )
           );
+
         expect(manifest.scopeDir).toBeNull();
         await Promise.all([first.close(), second.close(), other.close()]);
       });
@@ -182,9 +190,11 @@ describe("Executor adapter contract", () => {
 
   it("uses metadata-only HTTP calls and never submits guessed credentials", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+
     const requestFetch: typeof globalThis.fetch = async (input, init) => {
       const url = String(input);
       calls.push({ url, init });
+
       if (url.endsWith("/api/mcp/servers/example")) {
         return new Response(
           JSON.stringify({
@@ -198,8 +208,10 @@ describe("Executor adapter contract", () => {
           { status: 200 }
         );
       }
+
       return new Response("{}", { status: 200 });
     };
+
     const adapter = createExecutorHttpAdapter({
       baseUrl: "http://127.0.0.1:1234",
       token: "loopback-secret",
@@ -228,6 +240,7 @@ describe("Executor adapter contract", () => {
       token: "secret",
       fetch: async () => new Response("not-json", { status: 200 })
     });
+
     await expect(malformed.getIntegration("example")).rejects.toThrow(/malformed JSON/);
 
     const unauthorized = createExecutorHttpAdapter({
@@ -236,6 +249,7 @@ describe("Executor adapter contract", () => {
       fetch: async () =>
         new Response("Bearer bearer-secret access_token=access-secret", { status: 401 })
     });
+
     await expect(unauthorized.getIntegration("example")).rejects.toThrow(/\[redacted\]/);
     await expect(unauthorized.getIntegration("example")).rejects.not.toThrow(
       /bearer-secret|access-secret/
@@ -252,16 +266,19 @@ describe("Executor adapter contract", () => {
           });
         })
     });
+
     await expect(timedOut.getIntegration("example")).rejects.toThrow(/request aborted/);
   });
 
   it("uses replacement auth mode and the MCP removal endpoint", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+
     const adapter = createExecutorHttpAdapter({
       baseUrl: "http://127.0.0.1:1234",
       token: "loopback-secret",
       fetch: async (input, init) => {
         calls.push({ url: String(input), init });
+
         return new Response("{}", { status: 200 });
       }
     });
@@ -276,14 +293,17 @@ describe("Executor adapter contract", () => {
 
   it("encodes API-key placements through the adapter contract without values", async () => {
     let body: z.infer<typeof executorJsonObjectSchema> | undefined;
+
     const adapter = createExecutorHttpAdapter({
       baseUrl: "http://127.0.0.1:1234",
       token: "loopback-secret",
       fetch: async (_input, init) => {
         body = executorJsonObjectSchema.parse(JSON.parse(String(init?.body)));
+
         return new Response("{}", { status: 200 });
       }
     });
+
     await adapter.configureAuth(
       "example",
       [

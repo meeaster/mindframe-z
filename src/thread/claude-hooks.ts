@@ -37,6 +37,7 @@ export interface ClaudeSettings {
 export function buildClaudeSettings(): ClaudeSettings {
   // SAFETY: every member of CLAUDE_HOOK_EVENTS is assigned before the object is returned.
   const hooks = {} as ClaudeSettings["hooks"];
+
   for (const event of CLAUDE_HOOK_EVENTS) {
     hooks[event] = [
       {
@@ -51,6 +52,7 @@ export function buildClaudeSettings(): ClaudeSettings {
       }
     ];
   }
+
   return { hooks };
 }
 

@@ -17,24 +17,33 @@ function quote(value: string): string {
 
 function renderCompose(services: readonly SandboxServiceDefinition[]): string {
   const lines = ["services:"];
+
   for (const service of services) {
     lines.push(`  ${service.name}:`, `    image: ${quote(service.image)}`);
+
     if (service.command.length > 0) {
       lines.push("    command:");
+
       for (const item of service.command) lines.push(`      - ${quote(item)}`);
     }
+
     if (Object.keys(service.environment).length > 0) {
       lines.push("    environment:");
+
       for (const [name, value] of Object.entries(service.environment)) {
         lines.push(`      ${name}: ${quote(value)}`);
       }
     }
+
     if (service.ports.length > 0) {
       lines.push("    ports:");
+
       for (const port of service.ports) lines.push(`      - ${quote(port)}`);
     }
+
     if (service.volumes.length > 0) {
       lines.push("    volumes:");
+
       for (const volume of service.volumes) lines.push(`      - ${quote(volume)}`);
     }
   }
@@ -42,10 +51,13 @@ function renderCompose(services: readonly SandboxServiceDefinition[]): string {
   const volumes = [
     ...new Set(services.flatMap((service) => service.volumes.map((volume) => volume.split(":")[0])))
   ];
+
   if (volumes.length > 0) {
     lines.push("volumes:");
+
     for (const volume of volumes) lines.push(`  ${volume}: {}`);
   }
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -56,6 +68,7 @@ export async function writeSandboxCompose(
 ): Promise<string> {
   const file = sandboxComposeFile(paths, profile);
   await writeTextFile(file, renderCompose(runtime.services));
+
   return file;
 }
 
@@ -65,9 +78,11 @@ export async function ensureSandboxServices(
   runtime: SandboxRuntimeInputs
 ): Promise<void> {
   await ensureBrokerImage();
+
   if (runtime.services.some((service) => service.name === "bedrock-sigv4-proxy")) {
     await ensureBedrockProxyImage(paths.root);
   }
+
   const composeFile = await writeSandboxCompose(paths, profile, runtime);
   await execa(
     "docker",

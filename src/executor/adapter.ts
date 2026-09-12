@@ -105,6 +105,7 @@ const executorServerManifestSchema = z.object({
     .object({ origin: z.string(), auth: z.object({ token: z.string() }).optional() })
     .optional()
 });
+
 const executorAuthSchema = z.object({ token: z.string() });
 
 async function readJson<T>(file: string, schema: z.ZodType<T>): Promise<T | undefined> {
@@ -117,7 +118,9 @@ async function readJson<T>(file: string, schema: z.ZodType<T>): Promise<T | unde
 
 function canonicalLoopbackOrigin(origin: string): string {
   const url = new URL(origin);
+
   if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+
   return url.origin;
 }
 
@@ -130,22 +133,28 @@ async function freePort(): Promise<number> {
   // SAFETY: a listening TCP server returns AddressInfo or null; string is only used for IPC paths.
   const port = (server.address() as import("node:net").AddressInfo | null)?.port ?? 0;
   await new Promise<void>((resolve) => server.close(() => resolve()));
+
   if (!port) throw executorError("Unable to allocate a local Executor port");
+
   return port;
 }
 
 async function waitFor<T>(read: () => Promise<T | undefined>, timeout = 15_000): Promise<T> {
   const deadline = Date.now() + timeout;
+
   while (Date.now() < deadline) {
     const value = await read();
+
     if (value !== undefined) return value;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+
   throw executorError("Executor daemon did not become ready before the timeout");
 }
 
 async function validateBinary(binary: string): Promise<void> {
   let result;
+
   try {
     result = await execa(binary, ["--version"], { reject: false });
   } catch (error) {
@@ -153,12 +162,14 @@ async function validateBinary(binary: string): Promise<void> {
       `Executor is unavailable: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+
   if (result.exitCode !== 0)
     throw executorError(`Executor is unavailable: ${result.stderr || result.stdout}`);
 }
 
 async function startDaemon(binary: string, origin: string): Promise<ChildProcess> {
   const url = new URL(origin);
+
   const child = spawn(
     binary,
     ["daemon", "run", "--foreground", "--port", url.port, "--log-level", "error"],
@@ -167,7 +178,9 @@ async function startDaemon(binary: string, origin: string): Promise<ChildProcess
       stdio: "ignore"
     }
   );
+
   child.unref();
+
   return child;
 }
 
@@ -182,12 +195,14 @@ async function resolveRuntime(
   const auth = await readJson(tokenPath, executorAuthSchema);
   const existingOrigin = existing?.connection?.origin;
   const existingToken = auth?.token ?? existing?.connection?.auth?.token;
+
   if (existingOrigin && existingToken) {
     try {
       const response = await requestFetch(`${existingOrigin}/api/integrations`, {
         headers: { authorization: `Bearer ${existingToken}` },
         signal: AbortSignal.timeout(2_000)
       });
+
       if (response.ok)
         return { origin: canonicalLoopbackOrigin(existingOrigin), token: existingToken };
     } catch {
@@ -198,17 +213,21 @@ async function resolveRuntime(
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   const daemon = await startDaemon(binary, origin);
+
   return waitFor(async () => {
     const tokenRecord = await readJson(tokenPath, executorAuthSchema);
     const manifest = await readJson(manifestPath, executorServerManifestSchema);
     const token = tokenRecord?.token ?? manifest?.connection?.auth?.token;
     const advertised = manifest?.connection?.origin ?? origin;
+
     if (!token) return undefined;
+
     try {
       const response = await requestFetch(`${advertised}/api/integrations`, {
         headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(1_000)
       });
+
       return response.ok ? { origin: canonicalLoopbackOrigin(advertised), token } : undefined;
     } catch {
       return undefined;
@@ -227,6 +246,7 @@ export async function createExecutorAdapter(
   await validateBinary(binary);
   const dataDir = executorDataDir();
   const runtime = await resolveRuntime(binary, dataDir, options.fetch ?? globalThis.fetch);
+
   return createHttpExecutorAdapter({
     baseUrl: runtime.origin,
     token: runtime.token,
@@ -241,24 +261,30 @@ export async function attachExecutorAdapter(options: {
   fetch?: typeof globalThis.fetch;
 }): Promise<ExecutorAdapter | null> {
   const dataDir = executorDataDir();
+
   const manifest = await readJson(
     path.join(dataDir, "server-control", "server.json"),
     executorServerManifestSchema
   );
+
   const auth = await readJson(
     path.join(dataDir, "server-control", "auth.json"),
     executorAuthSchema
   );
+
   const origin = manifest?.connection?.origin;
   const token = auth?.token ?? manifest?.connection?.auth?.token;
+
   if (!origin || !token) return null;
 
   const requestFetch = options.fetch ?? globalThis.fetch;
+
   try {
     const response = await requestFetch(`${origin}/api/integrations`, {
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(2_000)
     });
+
     if (!response.ok) return null;
   } catch {
     return null;

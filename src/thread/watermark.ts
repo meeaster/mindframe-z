@@ -49,15 +49,18 @@ export async function locateClaudeTranscript(
 ): Promise<string | undefined> {
   const projectsDir = path.join(paths.claudeDir, "projects");
   let entries: string[];
+
   try {
     entries = await readdir(projectsDir);
   } catch {
     return undefined;
   }
+
   for (const entry of entries) {
     if (await pathExists(path.join(projectsDir, entry, `${id}.jsonl`)))
       return path.posix.join("projects", entry, `${id}.jsonl`);
   }
+
   return undefined;
 }
 
@@ -66,13 +69,16 @@ async function readClaudeWatermark(
   id: string
 ): Promise<Watermark | undefined> {
   const sub = await locateClaudeTranscript(paths, id);
+
   if (sub !== undefined) {
     return tailSignatureFromJsonl(await readFile(path.join(paths.claudeDir, sub), "utf8"));
   }
+
   // Absent from the live store — fall back to a hydrated archive-cache copy, if one
   // exists. The only behavioral change hydration makes to readWatermark.
   const cached = cachedSessionPath(paths, "claude-code", id);
   const content = await readTextFile(cached);
+
   return content === undefined ? undefined : tailSignatureFromJsonl(content);
 }
 
@@ -82,23 +88,29 @@ async function readClaudeWatermark(
 function tailSignatureFromJsonl(content: string): Watermark | undefined {
   let count = 0;
   let last: { uuid?: string | undefined; timestamp?: string | undefined } | undefined;
+
   for (const line of content.split("\n")) {
     if (line.trim() === "") continue;
+
     let record: {
       type?: string | undefined;
       uuid?: string | undefined;
       timestamp?: string | undefined;
     };
+
     try {
       record = watermarkClaudeRecordSchema.parse(JSON.parse(line));
     } catch {
       continue;
     }
+
     if (record.type !== "user" && record.type !== "assistant") continue;
     count += 1;
     last = record;
   }
+
   if (count === 0 || last?.uuid === undefined || last.timestamp === undefined) return undefined;
+
   return { message_count: count, last_message_id: last.uuid, last_activity_at: last.timestamp };
 }
 
@@ -108,15 +120,20 @@ function tailSignatureFromJsonl(content: string): Watermark | undefined {
 // the same fields the db-backed reader uses (message.id / message.time_created).
 export function tailSignatureFromExport(content: string): Watermark | undefined {
   let parsed: z.infer<typeof watermarkExportSchema>;
+
   try {
     parsed = watermarkExportSchema.parse(JSON.parse(content));
   } catch {
     return undefined;
   }
+
   const messages = parsed.messages ?? [];
+
   if (messages.length === 0) return undefined;
   const last = messages[messages.length - 1]?.info;
+
   if (last?.id === undefined || last.time?.created === undefined) return undefined;
+
   return {
     message_count: messages.length,
     last_message_id: last.id,
@@ -132,8 +149,10 @@ export async function resolveLegacyWatermark(
 ): Promise<Watermark | undefined> {
   if (session.source === "claude-code") {
     const content = await readTranscriptContent(paths, session.source, session.id);
+
     return content === undefined ? undefined : claudeBoundary(content, cursor);
   }
+
   return openCodeBoundary(paths, session.id, cursor);
 }
 
@@ -144,9 +163,12 @@ async function readTranscriptContent(
 ): Promise<string | undefined> {
   if (source === "claude-code") {
     const live = await locateClaudeTranscript(paths, id);
+
     if (live !== undefined) return readFile(path.join(paths.claudeDir, live), "utf8");
   }
+
   const cached = cachedSessionPath(paths, source, id);
+
   return readTextFile(cached);
 }
 
@@ -154,25 +176,32 @@ function claudeBoundary(content: string, cursor: string | number): Watermark | u
   // Legacy record-count cursors count valid JSONL records only.
   const records = parseJsonlObjects(content).flatMap((record) => {
     const parsed = watermarkClaudeRecordSchema.safeParse(record);
+
     return parsed.success ? [parsed.data] : [];
   });
 
   const numericCursor = z.number().safeParse(cursor);
+
   const boundary = numericCursor.success
     ? records.slice(0, numericCursor.data)
     : records.filter((record) => {
         const timestamp = record.timestamp === undefined ? NaN : Date.parse(record.timestamp);
         const cutoff = Date.parse(String(cursor));
+
         return Number.isFinite(timestamp) && Number.isFinite(cutoff) && timestamp <= cutoff;
       });
+
   const messages = boundary.filter(
     (record) =>
       (record.type === "user" || record.type === "assistant") &&
       record.uuid !== undefined &&
       record.timestamp !== undefined
   );
+
   const last = messages.at(-1);
+
   if (last?.uuid === undefined || last.timestamp === undefined) return undefined;
+
   return {
     message_count: messages.length,
     last_message_id: last.uuid,
@@ -187,12 +216,16 @@ async function openCodeBoundary(
 ): Promise<Watermark | undefined> {
   const numericCursor = z.number().safeParse(cursor);
   const cutoff = numericCursor.success ? numericCursor.data : Date.parse(String(cursor));
+
   if (!Number.isFinite(cutoff)) return undefined;
   const dbPath = opencodeDbPath(paths);
+
   if (await pathExists(dbPath)) {
     let db: SqliteDatabase;
+
     try {
       db = openSqlite(dbPath, { readOnly: true });
+
       const rows = db
         .prepare(
           "SELECT id, time_created FROM message WHERE session_id = $id AND time_created <= $cutoff ORDER BY time_created ASC, id ASC"
@@ -203,7 +236,9 @@ async function openCodeBoundary(
             .object({ id: z.string().optional(), time_created: z.number().finite().optional() })
             .parse(row)
         );
+
       const last = rows.at(-1);
+
       if (last?.id !== undefined && last.time_created !== undefined) {
         return {
           message_count: rows.length,
@@ -224,22 +259,29 @@ async function openCodeBoundary(
 
   const cached = cachedSessionPath(paths, "opencode", id);
   let parsed: z.infer<typeof watermarkExportSchema>;
+
   try {
     // Any unusable export — absent, unreadable, or not JSON — means "no boundary
     // from the cache" here, so the read stays inside this catch rather than
     // propagating the way the other cache reads do.
     const content = await readTextFile(cached);
+
     if (content === undefined) return undefined;
     parsed = watermarkExportSchema.parse(JSON.parse(content));
   } catch {
     return undefined;
   }
+
   const messages = (parsed.messages ?? []).filter((message) => {
     const created = message.info?.time?.created;
+
     return created !== undefined && created <= cutoff;
   });
+
   const last = messages.at(-1)?.info;
+
   if (last?.id === undefined || last.time?.created === undefined) return undefined;
+
   return {
     message_count: messages.length,
     last_message_id: last.id,
@@ -254,11 +296,13 @@ async function readOpencodeWatermark(
   id: string
 ): Promise<Watermark | undefined> {
   const fromDb = await readOpencodeWatermarkFromDb(paths, id);
+
   if (fromDb !== undefined) return fromDb;
   // Absent from the live db (or no db at all) — fall back to a hydrated archive-cache
   // copy (an `opencode export` artifact), if one exists.
   const cached = cachedSessionPath(paths, "opencode", id);
   const content = await readTextFile(cached);
+
   return content === undefined ? undefined : tailSignatureFromExport(content);
 }
 
@@ -267,13 +311,16 @@ async function readOpencodeWatermarkFromDb(
   id: string
 ): Promise<Watermark | undefined> {
   const dbPath = opencodeDbPath(paths);
+
   if (!(await pathExists(dbPath))) return undefined;
   let db: SqliteDatabase;
+
   try {
     db = openSqlite(dbPath, { readOnly: true });
   } catch {
     return undefined;
   }
+
   try {
     const row = db
       .prepare(
@@ -283,6 +330,7 @@ async function readOpencodeWatermarkFromDb(
          FROM message WHERE session_id = $id`
       )
       .get({ id });
+
     const parsedRow = z
       .object({
         count: z.number().int(),
@@ -290,8 +338,10 @@ async function readOpencodeWatermarkFromDb(
         last_ms: z.number().nullable()
       })
       .parse(row);
+
     if (parsedRow.count === 0 || parsedRow.last_id === null || parsedRow.last_ms === null)
       return undefined;
+
     return {
       message_count: parsedRow.count,
       last_message_id: parsedRow.last_id,
@@ -322,13 +372,17 @@ export function classifyWatermark(
   if (stored.message_count === undefined || stored.last_message_id === undefined) {
     return "unchanged";
   }
+
   if (current === undefined) return "vanished";
+
   if (current.message_count < stored.message_count) return "shrank";
+
   if (
     current.message_count !== stored.message_count ||
     current.last_message_id !== stored.last_message_id
   ) {
     return "changed";
   }
+
   return "unchanged";
 }

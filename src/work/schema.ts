@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const workSlugSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "Invalid work unit slug");
+
 export const workPhaseSchema = z.enum(["explore", "design", "prototype", "implement", "validate"]);
+
 export const sessionSourceSchema = z.string().regex(/^[a-z][a-z0-9-]*$/, "Invalid session source");
 
 export const sourceQualifiedSessionSchema = z.object({
@@ -68,6 +70,7 @@ export const workUnitSchema = z
         message: "is required for project scope"
       });
     }
+
     if (unit.scope === "global" && unit.project) {
       context.addIssue({
         code: "custom",
@@ -119,13 +122,23 @@ export const workReceiptSchema = z.object({
 });
 
 export type WorkPhase = z.infer<typeof workPhaseSchema>;
+
 export type WorkScope = z.infer<typeof workScopeSchema>;
+
 export type SourceQualifiedSession = z.infer<typeof sourceQualifiedSessionSchema>;
+
 export type WorkContextPointer = z.infer<typeof workContextPointerSchema>;
+
 export type WorkOrientation = z.infer<typeof workOrientationSchema>;
+
 export type WorkUnit = z.infer<typeof workUnitSchema>;
+
 export type DeliveryState = z.infer<typeof deliveryStateSchema>;
+
 export type SessionBinding = z.infer<typeof sessionBindingSchema>;
+
 export type WorkBindingIndex = z.infer<typeof workBindingIndexSchema>;
+
 export type WorkCheckpoint = z.infer<typeof workCheckpointSchema>;
+
 export type WorkReceipt = z.infer<typeof workReceiptSchema>;

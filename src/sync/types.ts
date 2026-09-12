@@ -2,7 +2,9 @@ import { z } from "zod";
 import { TomlDate } from "smol-toml";
 
 export type SyncScalar = boolean | null | number | string | TomlDate;
+
 export type SyncValue = SyncScalar | SyncValue[] | SyncDocument;
+
 export interface SyncDocument {
   [key: string]: SyncValue;
 }

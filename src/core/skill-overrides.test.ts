@@ -50,6 +50,7 @@ describe("skill override merge vs replace", () => {
       instructions: string[];
       skillOverrides: Record<string, string>;
     };
+
     expect(merged.instructions).toEqual(["/tmp/AGENTS.md"]);
     expect(merged.skillOverrides).toEqual({ keep: "on", added: "off" });
 
@@ -57,6 +58,7 @@ describe("skill override merge vs replace", () => {
     const replaced = replaceSkillOverrides("claude-code", config, { added: false }) as {
       skillOverrides: Record<string, string>;
     };
+
     expect(replaced.skillOverrides).toEqual({ added: "off" });
   });
 
@@ -70,6 +72,7 @@ describe("skill override merge vs replace", () => {
         beta: false
       }
     ) as { model: string; skillOverrides: Record<string, string> };
+
     expect(merged.model).toBe("sonnet");
     expect(merged.skillOverrides).toEqual({ alpha: "on", beta: "off" });
   });

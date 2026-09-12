@@ -24,10 +24,12 @@ import {
 import { lapdogImageRef, lapdogNetworkName } from "./lapdog.js";
 
 const oldPath = process.env.PATH;
+
 const oldStateDir = process.env.FAKE_DOCKER_STATE_DIR;
 
 afterEach(() => {
   process.env.PATH = oldPath;
+
   if (oldStateDir === undefined) delete process.env.FAKE_DOCKER_STATE_DIR;
   else process.env.FAKE_DOCKER_STATE_DIR = oldStateDir;
   vi.restoreAllMocks();
@@ -41,11 +43,13 @@ async function writeFakeDocker(home: string): Promise<string> {
   await mkdir(binDir, { recursive: true });
   await mkdir(stateDir, { recursive: true });
   const docker = path.join(binDir, "docker");
+
   const inspectJson = JSON.stringify({
     State: { Running: true },
     Config: { Image: lapdogImageRef },
     NetworkSettings: { Networks: { [lapdogNetworkName]: null } }
   });
+
   const lines = [
     "#!/usr/bin/env sh",
     "STATE=${FAKE_DOCKER_STATE_DIR:?FAKE_DOCKER_STATE_DIR not set}",
@@ -76,10 +80,12 @@ async function writeFakeDocker(home: string): Promise<string> {
     "fi",
     "exit 0"
   ];
+
   await writeFile(docker, lines.join("\n") + "\n", "utf8");
   await chmod(docker, 0o755);
   process.env.FAKE_DOCKER_STATE_DIR = stateDir;
   await writeFile(path.join(stateDir, "docker.log"), "", "utf8");
+
   return stateDir;
 }
 
@@ -116,12 +122,14 @@ async function makeFixtureRoot(): Promise<string> {
   await execa("git", ["config", "user.name", "Test"], { cwd: root });
   await execa("git", ["add", "."], { cwd: root });
   await execa("git", ["commit", "-m", "seed"], { cwd: root });
+
   return root;
 }
 
 const logs: string[] = [];
 
 const storesOutputSchema = z.object({ stores: z.array(z.object({ name: z.string() })) });
+
 const manifestOutputSchema = z.object({
   sessions: z.array(
     z.object({
@@ -132,9 +140,11 @@ const manifestOutputSchema = z.object({
     })
   )
 });
+
 const runsOutputSchema = z.object({
   runs: z.array(z.object({ id: z.string(), thread: z.string(), state: z.string() }))
 });
+
 const observeOutputSchema = z.object({ reachable: z.boolean(), dashboardUrl: z.string() });
 
 function captureConsole(): void {
@@ -161,6 +171,7 @@ describe("thread cli", () => {
     const manifest = JSON.parse(
       await readFile(path.join(root, "threads", "thread-a", "manifest.json"), "utf8")
     );
+
     await expect(
       readFile(path.join(home, ".mindframe-z", "threads", "thread-a", "manifest.json"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -193,6 +204,7 @@ describe("thread cli", () => {
   it("uses the fake runner seam for discovery", async () => {
     captureConsole();
     const home = await makeTempDir();
+
     const runner: AgentRunner = {
       async run() {
         return {
@@ -221,9 +233,11 @@ describe("thread cli", () => {
     const runsRoot = path.join(home, ".mindframe-z", "threads", "runs");
     const runDirs = await import("node:fs/promises").then((fs) => fs.readdir(runsRoot));
     expect(runDirs).toHaveLength(1);
+
     const status = JSON.parse(
       await readFile(path.join(runsRoot, runDirs[0]!, "status.json"), "utf8")
     );
+
     expect(status).toMatchObject({ mode: "discover", current_step: "complete", cost_usd: 0.01 });
     await expect(
       readFile(path.join(runsRoot, runDirs[0]!, "discover.jsonl"), "utf8")
@@ -241,22 +255,26 @@ describe("thread cli", () => {
       ["sess-a", "2026-01-02 09:00"],
       ["sess-b", "2026-01-01 08:00"]
     ]);
+
     // Each session file is H1 + sections (no frontmatter). TS lifts the title from
     // the H1 and stamps synthesizer from the resolved synthesize ID.
     const synthFile = (id: string) =>
       `# Session ${id} — Title ${id}\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [${timestamps.get(id)}] **Choice for ${id}** that wins. (${id} · turn 1)\n`;
 
     const calls: { role: string; prompt: string; skills: readonly string[] }[] = [];
+
     const runner: AgentRunner = {
       async run(request) {
         calls.push({ role: request.role, prompt: request.prompt, skills: request.skills });
         const id = /(sess-[ab])/.exec(request.prompt)?.[1] ?? "sess-a";
+
         const text =
           request.role === "gather"
             ? `DOSSIER-${id}: verbatim transcript material`
             : request.role === "synthesize"
               ? synthFile(id)
               : "# Digest — t\n\n## Current State\nsettled.\n";
+
         return {
           text,
           rawTrace: "{}\n",
@@ -293,7 +311,9 @@ describe("thread cli", () => {
     const digests = calls.filter((c) => c.role === "digest");
     expect(gathers).toHaveLength(2);
     expect(synths).toHaveLength(2);
+
     for (const gather of gathers) expect(gather.skills).toEqual(["thread-sessions"]);
+
     for (const synth of synths) {
       expect(synth.skills).toEqual(["thread-contract"]);
       expect(synth.prompt).toContain("DOSSIER-");
@@ -315,6 +335,7 @@ describe("thread cli", () => {
     const manifest = manifestOutputSchema.parse(
       JSON.parse(await readFile(path.join(threadDir, "manifest.json"), "utf8"))
     );
+
     const ledgerA = manifest.sessions.find((s) => s.id === "sess-a");
     expect(ledgerA).toMatchObject({
       source: "claude-code",
@@ -347,16 +368,20 @@ describe("thread cli", () => {
 
     const synthFile =
       "# Session sess-a — Title A\n\n## Thread Relevance\n\nBelongs.\n\n## Gaps\n\nNone.\n\n## Decisions\n\n- [2026-01-02 09:00] **Choice A** that wins. (sess-a · turn 1)\n";
+
     let calls: { role: string; prompt: string }[] = [];
+
     const runner: AgentRunner = {
       async run(request) {
         calls.push({ role: request.role, prompt: request.prompt });
+
         const text =
           request.role === "gather"
             ? "DOSSIER: material"
             : request.role === "synthesize"
               ? synthFile
               : "# Digest — t\n\n## Current State\nregenerated body.\n";
+
         return {
           text,
           rawTrace: "{}\n",
@@ -407,11 +432,13 @@ describe("thread cli", () => {
       "decision (sess-a · turn 1)"
     );
     const runsRoot = threadRunsRoot(createRuntimePaths({ root, home }));
+
     const statuses = await Promise.all(
       (await readdir(runsRoot)).map(async (runId) =>
         JSON.parse(await readFile(path.join(runsRoot, runId, "status.json"), "utf8"))
       )
     );
+
     expect(statuses).toContainEqual(
       expect.objectContaining({
         mode: "regenerate",
@@ -425,6 +452,7 @@ describe("thread cli", () => {
   it("pins synthesis overrides on create and refuses a duplicate", async () => {
     captureConsole();
     const home = await makeTempDir();
+
     const opts = {
       root: await makeFixtureRoot(),
       home,
@@ -435,9 +463,11 @@ describe("thread cli", () => {
     } as const;
 
     await runThreadCreate("pinned", opts);
+
     const manifest = JSON.parse(
       await readFile(path.join(opts.root, "threads", "pinned", "manifest.json"), "utf8")
     );
+
     expect(manifest.synthesis).toMatchObject({
       synthesize: "opencode:opus@high"
     });
@@ -553,6 +583,7 @@ describe("thread observe lifecycle", () => {
     const stateDir = await writeFakeDocker(home);
     process.env.PATH = `${path.join(home, "bin")}:${oldPath ?? ""}`;
     const paths = createRuntimePaths({ root, home });
+
     return body(paths, stateDir);
   }
 

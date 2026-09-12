@@ -3,7 +3,9 @@ import path from "node:path";
 import { execa } from "execa";
 
 const root = process.cwd();
+
 const outDir = path.join(root, "release");
+
 const entry = path.join(root, "src", "cli", "mfz-bun.ts");
 
 // Cross-compile a self-contained binary per platform. `bun build --compile` embeds
@@ -17,6 +19,7 @@ const targets = [
 ];
 
 await rm(outDir, { recursive: true, force: true });
+
 await mkdir(outDir, { recursive: true });
 
 for (const target of targets) {

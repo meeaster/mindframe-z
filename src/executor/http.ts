@@ -26,6 +26,7 @@ const healthSchema = z.object({
   detail: z.string().optional(),
   missingOAuthScopes: z.array(z.string()).optional()
 });
+
 const integrationSchema = z.object({
   slug: z.string(),
   description: z.string(),
@@ -34,6 +35,7 @@ const integrationSchema = z.object({
   canRefresh: z.boolean(),
   config: executorJsonObjectSchema
 });
+
 const connectionSchema = z
   .object({
     owner: z.enum(["user", "org"]),
@@ -60,6 +62,7 @@ const connectionSchema = z
       connection.integration,
       connection.name
     );
+
     if (connection.address !== expected) {
       context.addIssue({
         code: "custom",
@@ -67,6 +70,7 @@ const connectionSchema = z
       });
     }
   });
+
 const toolSchema = z
   .object({
     address: z.string(),
@@ -79,10 +83,12 @@ const toolSchema = z
   })
   .superRefine((tool, context) => {
     const prefix = executorConnectionAddress(tool.owner, tool.integration, tool.connection);
+
     if (!tool.address.startsWith(`${prefix}.`)) {
       context.addIssue({ code: "custom", message: "tool address does not match its identity" });
     }
   });
+
 class HttpExecutorAdapter implements ExecutorAdapter {
   constructor(
     public readonly baseUrl: string,
@@ -101,27 +107,33 @@ class HttpExecutorAdapter implements ExecutorAdapter {
   ): Promise<T> {
     try {
       const headers = { authorization: `Bearer ${this.token}` };
+
       const request = {
         method,
         headers,
         signal: AbortSignal.timeout(this.timeoutMs)
       };
+
       if (body !== undefined) {
         Object.assign(headers, { "content-type": "application/json" });
         Object.assign(request, { body: JSON.stringify(body) });
       }
+
       const response = await this.requestFetch(`${this.baseUrl}/api${endpoint}`, request);
       const text = await response.text();
+
       if (!response.ok)
         throw executorError(
           `Executor API ${method} ${endpoint} failed: ${response.status} ${text}`
         );
       let parsed: unknown;
+
       try {
         parsed = JSON.parse(text);
       } catch {
         throw executorError(`Executor API ${method} ${endpoint} returned malformed JSON`);
       }
+
       try {
         return schema.parse(parsed);
       } catch {
@@ -151,6 +163,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
 
   async addServer(server: ExecutorDesiredServer): Promise<void> {
     const config = server.config;
+
     const body =
       config.transport === "remote"
         ? {
@@ -175,10 +188,14 @@ class HttpExecutorAdapter implements ExecutorAdapter {
               ),
               slug: server.slug
             };
+
             if (config.args) Object.assign(stdioBody, { args: config.args });
+
             if (config.env) Object.assign(stdioBody, { env: config.env });
+
             return stdioBody;
           })();
+
     await this.request("POST", "/mcp/servers", z.unknown(), body);
   }
 
@@ -228,6 +245,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
 
   async refreshConnection(integration: string, name: string): Promise<ExecutorTool[]> {
     assertExecutorConnectionIdentifier(name);
+
     return this.request(
       "POST",
       `/connections/user/${encodeURIComponent(integration)}/${encodeURIComponent(name)}/refresh`,
@@ -237,6 +255,7 @@ class HttpExecutorAdapter implements ExecutorAdapter {
 
   async checkHealth(integration: string, name: string): Promise<ExecutorHealth> {
     assertExecutorConnectionIdentifier(name);
+
     return this.request(
       "POST",
       `/connections/user/${encodeURIComponent(integration)}/${encodeURIComponent(name)}/health`,

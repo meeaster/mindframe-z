@@ -30,31 +30,42 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile) {
       if (server.type === "remote") {
         const literalHeaders: Record<string, string> = {};
         const envHeaders: Record<string, string> = {};
+
         for (const [header, value] of Object.entries(server.headers ?? {})) {
           const envVar = parseEnvRef(value);
+
           if (envVar !== null) {
             envHeaders[header] = envVar;
           } else {
             literalHeaders[header] = value;
           }
         }
+
         const entry = { url: server.url, enabled };
+
         if (Object.keys(literalHeaders).length > 0)
           Object.assign(entry, { http_headers: literalHeaders });
+
         if (Object.keys(envHeaders).length > 0)
           Object.assign(entry, { env_http_headers: envHeaders });
+
         return [name, entry];
       }
 
       const [command, ...args] = server.command.map((part) => expandHome(part, paths.home));
       const entry = { command, enabled };
+
       if (args.length > 0) Object.assign(entry, { args });
+
       if (server.env) Object.assign(entry, { env: server.env });
+
       return [name, entry];
     })
   );
+
   if (requiresExecutorBridge(profile, "codex"))
     mcp[executorBridgeName] = codexExecutorEntry(profile);
+
   return mcp;
 }
 
@@ -85,7 +96,9 @@ function renderCodexPermissions(paths: RuntimePaths, profile: ResolvedProfile) {
 
 function codexFolderPermission(read: string, edit: string): "deny" | "read" | "write" {
   if (read === "deny" || edit === "deny") return "deny";
+
   if (edit === "allow") return "write";
+
   return "read";
 }
 
@@ -95,7 +108,9 @@ export function renderCodexPlugins(
   return Object.fromEntries(
     Object.entries(profile.profile.codex.plugins).map(([id, plugin]) => {
       const entry = { enabled: plugin.enabled };
+
       if (plugin.toggleable !== undefined) Object.assign(entry, { toggleable: plugin.toggleable });
+
       return [id, entry];
     })
   );
@@ -111,28 +126,34 @@ export async function renderCodex(
 
   const plugins = renderCodexPlugins(profile);
   const hasPlugins = Object.keys(plugins).length > 0;
+
   const generatedConfig = {
     ...renderCodexPermissions(paths, profile),
     mcp_servers: renderCodexMcp(paths, profile)
   };
+
   if (hasPlugins) Object.assign(generatedConfig, { plugins });
   const config = deepMerge(profile.profile.codex.config, generatedConfig);
+
   const skillDefaults = Object.fromEntries(
     profile.enabledSkills
       .filter((skill) => skill.targets.includes("codex"))
       .map((skill) => [skill.name, skill.agents.codex === true])
   );
+
   const skillPaths = Object.fromEntries(
     Object.keys(skillDefaults).map((name) => [
       name,
       path.join(paths.home, ".agents", "skills", name, "SKILL.md")
     ])
   );
+
   const renderedConfig = mergeSkillOverrides("codex", config, skillDefaults, { skillPaths });
   const configContent = stringify(renderedConfig);
   const agentsContent = await renderInlinedAgents(paths, profile);
   const localConfigPath = path.join(paths.codexDir, "config.toml");
   const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), renderedConfig);
+
   if (hasPlugins) {
     mergedLocalConfig.plugins = plugins;
   } else {

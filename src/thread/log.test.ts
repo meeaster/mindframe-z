@@ -58,6 +58,7 @@ describe("renderEventLog", () => {
     const log = renderEventLog([
       `## Decisions\n\n- [2026-01-01 00:00] **Adopt X** for speed. It also reads cleaner. (z · turn 1)\n`
     ]);
+
     expect(log).toBe("- [2026-01-01 00:00] decision (z · turn 1): Adopt X for speed.");
   });
 
@@ -65,6 +66,7 @@ describe("renderEventLog", () => {
     const log = renderEventLog([
       `## Decisions\n\n- [2026-01-01 00:00] A decision with no citation at all.\n`
     ]);
+
     expect(log).toBe("");
   });
 });

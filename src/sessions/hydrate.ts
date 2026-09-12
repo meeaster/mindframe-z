@@ -33,16 +33,19 @@ async function downloadSessionAtomic(
   cacheRoot: string
 ): Promise<void> {
   const staging = path.join(cacheRoot, ".staging", `${harness}-${randomUUID()}`);
+
   try {
     for (const key of keys) {
       const rel = key.slice(stripPrefix.length);
       const dest = path.join(staging, rel);
       await mkdir(path.dirname(dest), { recursive: true });
       const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+
       if (object.Body === undefined) throw new Error(`empty response body for key: ${key}`);
       const bytes = await object.Body.transformToByteArray();
       await writeFile(dest, Buffer.from(bytes));
     }
+
     for (const key of keys) {
       const rel = key.slice(stripPrefix.length);
       const dest = path.join(cacheRoot, harness, rel);
@@ -79,10 +82,12 @@ export async function hydrateSession(
   clientFor: (archive: Archive) => S3Client = (archive) => new S3Client({ region: archive.region })
 ): Promise<boolean> {
   if (await isHydrated(paths, harness, id)) return true;
+
   if (await pathExists(absentMarkerPath(paths, harness, id))) return false;
 
   let checkedAny = false;
   let allConfirmedAbsent = true;
+
   for (const archive of archives) {
     // resolveDefaultArchive rejects a profile-pinned archive outright on the write
     // path, since @aws-sdk/credential-provider-ini isn't wired; reading one here with
@@ -93,11 +98,14 @@ export async function hydrateSession(
 
     const prefix = harnessPrefix(archive, harness) + id;
     const client = clientFor(archive);
+
     try {
       const keys: string[] = [];
+
       for await (const object of listObjects(client, archive.bucket, prefix)) {
         if (object.Key) keys.push(object.Key);
       }
+
       if (keys.length === 0) continue;
       await downloadSessionAtomic(
         client,
@@ -107,6 +115,7 @@ export async function hydrateSession(
         harness,
         archiveCacheRoot(paths)
       );
+
       return true;
     } catch {
       // This archive is unreachable (network, permissions, wrong region), or the
@@ -119,5 +128,6 @@ export async function hydrateSession(
   if (checkedAny && allConfirmedAbsent) {
     await writeTextFile(absentMarkerPath(paths, harness, id), "");
   }
+
   return false;
 }

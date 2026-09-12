@@ -14,6 +14,7 @@ describe("apply link conflicts", () => {
 
   async function backupsOf(filename: string): Promise<string[]> {
     const entries = await readdir(home);
+
     return entries.filter((entry) => entry.startsWith(`${filename}.mindframe-z.bak-`));
   }
 

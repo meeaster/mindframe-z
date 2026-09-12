@@ -92,24 +92,29 @@ export class DockerAgentRunner implements AgentRunner {
       const settings = await readBedrockHostSettings(this.paths);
       await refreshBedrockCredentials(settings);
       const credsDir = await writeScopedBedrockCredentials(this.paths, settings);
+
       return { env: await bedrockContainerEnv(settings), credsDir };
     })();
+
     return this.bedrockContext;
   }
 
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
     const bedrock = this.credentialMode === "bedrock" ? await this.prepareBedrock() : undefined;
+
     if (!bedrock) assertSubscriptionAuth(request.harness);
     await ensureThreadToolsImage(await threadToolsImageBuildPlan(this.paths));
     const probeReachable = await isLapdogReachable();
     const started = Date.now();
     const { tool, args, env } = buildHarnessCommand(request);
+
     // Capture the transcript only when lapdog is up and the harness writes one
     // we can replay (Claude Code). The dir is removed in `finally` regardless.
     const transcriptDir =
       probeReachable && request.harness === "claude-code"
         ? await mkdtemp(path.join(os.tmpdir(), "mfz-claude-projects-"))
         : undefined;
+
     try {
       const rawTrace = await runProcess(
         "docker",
@@ -131,8 +136,10 @@ export class DockerAgentRunner implements AgentRunner {
         ],
         request.prompt
       );
+
       const durationMs = Date.now() - started;
       const parsed = parseHarnessResult(request.harness, rawTrace, durationMs);
+
       if (probeReachable) {
         void emitLapdogCostSpan(
           request,
@@ -142,12 +149,14 @@ export class DockerAgentRunner implements AgentRunner {
           durationMs,
           parsed.result.sessionId
         );
+
         // Replay the transcript before returning (and before `finally` removes
         // the dir) so the per-inference span tree lands under the real session.
         if (transcriptDir && parsed.result.sessionId) {
           await backfillClaudeTranscript(lapdogUrl(), transcriptDir, parsed.result.sessionId);
         }
       }
+
       return parsed.result;
     } finally {
       if (transcriptDir) await rm(transcriptDir, { recursive: true, force: true });
@@ -158,6 +167,7 @@ export class DockerAgentRunner implements AgentRunner {
 export function buildHarnessCommand(request: AgentRunRequest) {
   if (request.harness === "claude-code") {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", request.model];
+
     if (request.effort) args.push("--effort", request.effort);
     args.push(
       "--allowedTools",
@@ -180,13 +190,17 @@ export function buildHarnessCommand(request: AgentRunRequest) {
       "--mcp-config",
       '{"mcpServers":{}}'
     );
+
     return { tool: "claude", args, env: {} };
   }
 
   const args = ["run", "--format", "json", "--agent", "thread-readonly", "--model", request.model];
+
   if (request.effort) args.push("--variant", request.effort);
+
   for (const file of request.files ?? []) args.push("-f", file);
   args.push(skillPrompt(request.persona, request.skills, request.sessionSources));
+
   return { tool: "opencode", args, env: { OPENCODE_DISABLE_AUTOCOMPACT: "true" } };
 }
 
@@ -204,6 +218,7 @@ export function parseHarnessResult(
   const events = parseJsonlObjects(rawTrace)
     .map((event) => harnessEventSchema.safeParse(event))
     .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+
   return harness === "claude-code"
     ? parseClaudeResult(events, rawTrace, durationMs)
     : parseOpenCodeResult(events, rawTrace, durationMs);
@@ -224,6 +239,7 @@ function parseClaudeResult(
   // session_id; take the first non-empty one so cost attribution survives a
   // trace whose result event happens to omit it.
   const sessionId = events.map((event) => textField(event.session_id)).find(Boolean);
+
   return {
     result: {
       text: textField(result?.result),
@@ -257,11 +273,14 @@ function parseOpenCodeResult(
     })
     .filter(Boolean)
     .join("");
+
   const stepFinishes = events
     .map((event) => event.part)
     .filter((part): part is NonNullable<typeof part> => part?.type === "step-finish");
+
   const input = sumNullable(stepFinishes.map((part) => tokenField(part, "input"))) ?? 0;
   const output = sumNullable(stepFinishes.map((part) => tokenField(part, "output"))) ?? 0;
+
   return {
     result: {
       text,
@@ -290,14 +309,17 @@ function skillPrompt(
 ): string {
   const sources = new Set(sessionSources ?? []);
   const stores: string[] = [];
+
   if (sources.has("claude-code")) {
     stores.push(`This dispatch reads the Claude Code store at ${CONTAINER_SESSION_STORE}.`);
   }
+
   if (sources.has("opencode")) {
     stores.push(
       "This dispatch reads the OpenCode store at /mnt/opencode-data/opencode/opencode.db."
     );
   }
+
   return [
     persona,
     skills.length ? `Load skills: ${skills.join(", ")}.` : "No extra skills.",
@@ -324,13 +346,17 @@ async function credentialMountArgs(
   if (bedrockCredsDir) {
     return ["--volume", `${bedrockCredsDir}:/home/sandbox/.aws:ro`];
   }
+
   if (harness === "claude-code") {
     const file = path.join(paths.claudeDir, ".credentials.json");
     await assertExists(file);
+
     return ["--volume", `${file}:/home/sandbox/.claude/.credentials.json:ro`];
   }
+
   const file = path.join(opencodeDataHome(paths), "opencode", "auth.json");
   await assertExists(file);
+
   return ["--volume", `${file}:/home/sandbox/.local/share/opencode/auth.json:ro`];
 }
 
@@ -339,22 +365,29 @@ export const credentialMountArgsForTest = credentialMountArgs;
 async function sessionStoreMountArgs(paths: RuntimePaths): Promise<string[]> {
   const mounts: string[] = [];
   const claudeHistory = path.join(paths.claudeDir, "history.jsonl");
+
   if (await pathExists(claudeHistory)) {
     mounts.push("--volume", `${claudeHistory}:/mnt/claude-sessions/history.jsonl:ro`);
   }
+
   const claudeProjects = path.join(paths.claudeDir, "projects");
+
   if (await pathExists(claudeProjects)) {
     mounts.push("--volume", `${claudeProjects}:/mnt/claude-sessions/projects:ro`);
   }
+
   const claudeTranscripts = path.join(paths.claudeDir, "transcripts");
+
   if (await pathExists(claudeTranscripts)) {
     mounts.push("--volume", `${claudeTranscripts}:/mnt/claude-sessions/transcripts:ro`);
   }
 
   const opencodeData = path.join(opencodeDataHome(paths), "opencode");
+
   if (await pathExists(opencodeData)) {
     mounts.push("--volume", `${opencodeData}:/mnt/opencode-data/opencode:ro`);
   }
+
   return mounts;
 }
 
@@ -368,12 +401,15 @@ export const sessionStoreMountArgsForTest = sessionStoreMountArgs;
 async function skillMountArgs(skills: readonly string[]): Promise<string[]> {
   const root = await resolvePackageRoot();
   const args: string[] = [];
+
   for (const skill of new Set(skills)) {
     const dir = path.join(root, "src", "thread", skill);
     const skillFile = path.join(dir, "SKILL.md");
+
     if (!(await pathExists(skillFile))) {
       throw new Error(`Skill "${skill}" not found at ${skillFile}`);
     }
+
     args.push(
       "--volume",
       `${dir}:/home/sandbox/.claude/skills/${skill}:ro`,
@@ -381,6 +417,7 @@ async function skillMountArgs(skills: readonly string[]): Promise<string[]> {
       `${dir}:/home/sandbox/.agents/skills/${skill}:ro`
     );
   }
+
   return args;
 }
 
@@ -413,6 +450,7 @@ function runProcess(command: string, args: string[], stdin: string): Promise<str
       else {
         const detail =
           stderr || extractHarnessError(stdout) || `${command} exited with status ${code}`;
+
         reject(new Error(detail));
       }
     });
@@ -423,17 +461,23 @@ function runProcess(command: string, args: string[], stdin: string): Promise<str
 function extractHarnessError(stdout: string): string | undefined {
   for (const line of stdout.split("\n").reverse()) {
     if (!line.trim()) continue;
+
     try {
       const parsed = harnessEventSchema.safeParse(JSON.parse(line));
+
       if (!parsed.success) continue;
       const obj = parsed.data;
+
       // Claude Code: result event with error text
       if (obj.type === "result" && obj.result) return obj.result;
+
       if (obj.type === "result" && obj.error) return String(obj.error);
+
       // Claude Code: API retry exhaustion
       if (obj.type === "system" && obj.subtype === "api_retry" && obj.error) {
         return `API error: ${obj.error}${obj.error_status ? ` (status ${obj.error_status})` : ""}`;
       }
+
       // OpenCode: error event with NamedError envelope
       const parsedError = z
         .object({
@@ -448,24 +492,31 @@ function extractHarnessError(stdout: string): string | undefined {
         })
         .passthrough()
         .safeParse(obj.error);
+
       if (obj.type === "error" && parsedError.success) {
         const err = parsedError.data;
         const data = err.data;
         const message = data?.message;
+
         if (err.name === "ProviderAuthError") {
           const provider = data && "providerID" in data ? String(data.providerID) : "provider";
+
           return `Authentication failed for ${provider}: ${message ?? "credentials missing or expired"}`;
         }
+
         if (err.name === "APIError" && data?.statusCode !== undefined) {
           return `API error (status ${data.statusCode}): ${message ?? "request failed"}`;
         }
+
         if (message) return message;
+
         if (err.name) return String(err.name);
       }
     } catch {
       // not JSON, skip
     }
   }
+
   return undefined;
 }
 
@@ -479,6 +530,7 @@ function numberField(value: number | null | undefined): number | null {
 
 function sumNullable(values: Array<number | null>): number | null {
   const numbers = values.filter((value): value is number => value !== null);
+
   return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : null;
 }
 
@@ -491,6 +543,7 @@ function tokenField(
 
 export function lapdogDockerArgs(reachable: boolean): string[] {
   if (!reachable) return [];
+
   return ["--network", lapdogNetworkName, "--env", `LAPDOG_URL=${lapdogContainerUrl()}`];
 }
 
@@ -511,6 +564,7 @@ async function emitLapdogCostSpan(
       costUsd,
       sessionId
     });
+
     if (payload) await emitCostSpan(lapdogUrl(), payload);
   } catch {
     // fail-open: any throw from msgpack encode or fetch must never affect a dispatch.

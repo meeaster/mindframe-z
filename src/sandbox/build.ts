@@ -7,6 +7,7 @@ import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 
 export const sandboxImageName = "local-ai-dev-sandbox-agent:latest";
+
 export const sandboxBuildHashLabel = "dev.mindframe-z.sandbox.build-hash";
 
 export interface SandboxImageBuildInputs {
@@ -42,11 +43,13 @@ async function writeGeneratedBuildContext(plan: SandboxImageBuildPlan): Promise<
     path.join(plan.root, "sandbox", "scripts"),
     path.join(plan.contextDir, "scripts")
   );
+
   for (const [name, content] of Object.entries(plan.inputs.resolvedMiseTree)) {
     const target = path.join(plan.contextDir, "generated", name);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, content, "utf8");
   }
+
   await writeFile(
     path.join(plan.contextDir, "generated", "agents.txt"),
     `${plan.inputs.agents.join("\n")}\n`,
@@ -73,7 +76,9 @@ export async function currentSandboxImageHash(
       "--format",
       `{{ index .Config.Labels ${JSON.stringify(sandboxBuildHashLabel)} }}`
     ]);
+
     const hash = result.stdout.trim();
+
     return hash || undefined;
   } catch {
     return undefined;
@@ -85,6 +90,7 @@ export async function ensureSandboxImage(
   options: { readonly force?: boolean | undefined } = {}
 ): Promise<"built" | "current"> {
   const currentHash = await currentSandboxImageHash(plan.image);
+
   if (!options.force && currentHash === plan.hash) return "current";
   await writeGeneratedBuildContext(plan);
 
@@ -106,21 +112,26 @@ export async function ensureSandboxImage(
     ],
     { cwd: plan.root, stdio: "inherit" }
   );
+
   return "built";
 }
 
 async function readContextFiles(root: string, dir: string): Promise<Record<string, string>> {
   const entries = await readdir(dir, { withFileTypes: true });
   const files: Record<string, string> = {};
+
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       Object.assign(files, await readContextFiles(root, fullPath));
       continue;
     }
+
     if (!entry.isFile()) continue;
     files[path.relative(root, fullPath)] = await readFile(fullPath, "utf8");
   }
+
   return files;
 }
 
@@ -129,6 +140,7 @@ async function optionalContextFiles(
   dirs: readonly string[]
 ): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
+
   for (const dir of dirs) {
     try {
       if ((await stat(dir)).isDirectory()) Object.assign(files, await readContextFiles(root, dir));
@@ -136,12 +148,14 @@ async function optionalContextFiles(
       // Optional helper directories can disappear as the image is refactored.
     }
   }
+
   return files;
 }
 
 function hashBuildInputs(inputs: SandboxImageBuildInputs): string {
   const hash = createHash("sha256");
   hash.update(JSON.stringify(inputs));
+
   return hash.digest("hex");
 }
 
@@ -152,6 +166,7 @@ export async function sandboxImageBuildPlan(
   const dockerfilePath = path.join(paths.root, "sandbox", "image", "Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");
   const miseRender = await renderTarget(paths, profile, "mise", { sandbox: true });
+
   const resolvedMiseTree = Object.fromEntries(
     miseRender.files
       .filter((file) => file.path.includes(`${path.sep}mise${path.sep}`))
@@ -160,12 +175,14 @@ export async function sandboxImageBuildPlan(
           path.join(paths.configsDir, profile.name, "mise"),
           file.path
         );
+
         return [
           relative.startsWith("tasks/") ? relative : path.join("conf.d", relative),
           file.content
         ];
       })
   );
+
   const inputs: SandboxImageBuildInputs = {
     dockerfile,
     contextFiles: await optionalContextFiles(paths.root, [
@@ -179,6 +196,7 @@ export async function sandboxImageBuildPlan(
       opencode: "install"
     }
   };
+
   const hash = hashBuildInputs(inputs);
 
   return {

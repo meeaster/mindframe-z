@@ -114,28 +114,38 @@ export async function migrateThreadDirectory(
   const raw = JSON.parse(await readFile(path.join(request.sourceDir, "manifest.json"), "utf8"));
   const legacy = legacyManifestSchema.parse(raw);
   const recordedStore = legacy.store ?? legacy.destination;
+
   if (recordedStore !== undefined && recordedStore !== request.storeName) {
     throw new Error(
       `Thread ${legacy.slug} records store ${recordedStore}, expected ${request.storeName}`
     );
   }
+
   const relative = path.relative(request.storePath, request.sourceDir);
+
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Thread ${legacy.slug} is outside configured store ${request.storeName}`);
   }
 
   const sessions = [];
+
   for (const session of legacy.sessions) {
     const watermark = await legacyWatermark(request.paths, session);
+
     const converted: z.infer<typeof threadManifestSchema>["sessions"][number] = {
       id: session.id,
       source: session.source
     };
+
     if (session.title !== undefined) converted.title = session.title;
+
     if (session.project !== undefined) converted.project = session.project;
+
     if (session.time_range !== undefined) converted.time_range = session.time_range;
     const synthesizer = session.synthesizer ?? session.extracted_by;
+
     if (synthesizer) converted.synthesizer = synthesizer;
+
     if (watermark !== undefined) Object.assign(converted, watermark);
     sessions.push(converted);
   }
@@ -149,23 +159,29 @@ export async function migrateThreadDirectory(
     excluded: legacy.excluded.map<z.infer<typeof threadManifestSchema>["excluded"][number]>(
       (entry) => {
         const id = z.string().safeParse(entry);
+
         return id.success ? { id: id.data } : legacyExclusionSchema.parse(entry);
       }
     ),
     synthesis: legacy.synthesis
   };
+
   if (legacy.title !== undefined) manifestInput.title = legacy.title;
+
   if (legacy.read_subagents !== undefined) manifestInput.read_subagents = legacy.read_subagents;
   const manifest = threadManifestSchema.parse(manifestInput);
 
   const targetDir = request.targetDir ?? request.sourceDir;
+
   if (targetDir !== request.sourceDir) await cp(request.sourceDir, targetDir, { recursive: true });
   await writeFile(path.join(targetDir, "manifest.json"), jsonFileContent(manifest), "utf8");
 
   const runs = await migrateRuns(request.sourceDir, manifest.slug, legacy.runs);
+
   if (runs.runs.length > 0 || (await fileExists(path.join(request.sourceDir, "runs.json")))) {
     await writeFile(path.join(targetDir, "runs.json"), jsonFileContent(runs), "utf8");
   }
+
   return {
     manifest,
     importedRuns: legacy.runs.length,
@@ -175,18 +191,22 @@ export async function migrateThreadDirectory(
 
 export async function migrateStore(request: MigrateStoreRequest): Promise<MigratedStore> {
   const threadDirs = [];
+
   for (const entry of await readdir(request.storePath, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+
     if (await fileExists(path.join(request.storePath, entry.name, "manifest.json"))) {
       threadDirs.push(path.join(request.storePath, entry.name));
     }
   }
 
   const temporary = await mkdtemp(path.join(os.tmpdir(), "mfz-thread-migration-"));
+
   try {
     const preparedStore = path.join(temporary, "store");
     await cp(request.storePath, preparedStore, { recursive: true });
     const threads: MigratedThread[] = [];
+
     for (const sourceDir of threadDirs) {
       const targetDir = path.join(preparedStore, path.basename(sourceDir));
       threads.push(
@@ -199,14 +219,18 @@ export async function migrateStore(request: MigrateStoreRequest): Promise<Migrat
         })
       );
     }
+
     if (!request.dryRun && request.writeBack) {
       await copyDirectoryContents(preparedStore, request.outputPath ?? request.storePath);
     }
+
     const result: MigratedStore = {
       storeName: request.storeName,
       threads
     };
+
     if (request.outputPath !== undefined) result.outputPath = request.outputPath;
+
     return result;
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -228,14 +252,17 @@ export async function publishStoreMigration(args: {
   base: string;
 }): Promise<PublishedStoreMigration> {
   const relativeStore = path.relative(args.storeRoot, args.storePath);
+
   if (!relativeStore || relativeStore.startsWith("..") || path.isAbsolute(relativeStore)) {
     throw new Error(`Thread store path escapes repository root: ${args.storeName}`);
   }
+
   await execa("git", ["fetch", "origin", args.base], { cwd: args.storeRoot });
   const workspace = await mkdtemp(path.join(os.tmpdir(), "mfz-thread-store-migration-"));
   const checkout = path.join(workspace, "checkout");
   const branch = `automation/thread-store-migration-${args.storeName}-${Date.now()}`;
   let worktreeAdded = false;
+
   try {
     await execa(
       "git",
@@ -254,16 +281,19 @@ export async function publishStoreMigration(args: {
     });
     await writeThreadIndex(checkoutStorePath);
     await execa("git", ["add", "-A", "--", relativeStore], { cwd: checkout });
+
     const staged = await execa("git", ["diff", "--cached", "--quiet"], { cwd: checkout }).then(
       () => false,
       (error) => error instanceof ExecaError && error.exitCode === 1
     );
+
     if (!staged) throw new Error(`Store ${args.storeName} migration produced no changes`);
     await execa("git", ["commit", "-m", `chore(thread): migrate ${args.storeName} store`], {
       cwd: checkout
     });
     const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: checkout });
     await execa("git", ["push", "origin", `HEAD:refs/heads/${branch}`], { cwd: checkout });
+
     const { stdout: url } = await execa(
       "gh",
       [
@@ -280,6 +310,7 @@ export async function publishStoreMigration(args: {
       ],
       { cwd: checkout }
     );
+
     return { storeName: args.storeName, branch, commit: commit.trim(), url: url.trim() };
   } finally {
     if (worktreeAdded) {
@@ -287,6 +318,7 @@ export async function publishStoreMigration(args: {
         cwd: args.storeRoot
       }).catch(() => undefined);
     }
+
     await rm(workspace, { recursive: true, force: true });
     await execa("git", ["worktree", "prune"], { cwd: args.storeRoot }).catch(() => undefined);
   }
@@ -297,6 +329,7 @@ async function legacyWatermark(
   session: z.infer<typeof legacySessionSchema>
 ): Promise<Watermark | undefined> {
   const canonical = [session.message_count, session.last_message_id, session.last_activity_at];
+
   if (canonical.every((field) => field !== undefined)) {
     return {
       message_count: session.message_count!,
@@ -304,20 +337,25 @@ async function legacyWatermark(
       last_activity_at: session.last_activity_at!
     };
   }
+
   if (canonical.some((field) => field !== undefined)) {
     throw new Error(`Session ${session.source}:${session.id} has a partial canonical watermark`);
   }
+
   if (session.high_water === undefined) return undefined;
+
   const watermark = await resolveLegacyWatermark(
     paths,
     { source: session.source, id: session.id },
     session.high_water
   );
+
   if (watermark === undefined) {
     throw new Error(
       `Unable to resolve ${session.source}:${session.id} legacy cursor ${JSON.stringify(session.high_water)}`
     );
   }
+
   return watermark;
 }
 
@@ -327,13 +365,16 @@ async function migrateRuns(
   embedded: z.infer<typeof legacyRunSchema>[]
 ): Promise<ThreadRuns> {
   const file = path.join(sourceDir, "runs.json");
+
   const existing = (await fileExists(file))
     ? JSON.parse(await readFile(file, "utf8"))
     : { runs: [] };
+
   const existingRuns = z
     .object({ runs: z.array(z.union([legacyRunSchema, threadRunRecordSchema])) })
     .parse(existing)
     .runs.map((run) => ("kind" in run ? run : { kind: "native", ...run }));
+
   const imported = embedded.map((run, index) => {
     const importedRun: Extract<ThreadRuns["runs"][number], { kind: "imported" }> = {
       kind: "imported",
@@ -343,21 +384,30 @@ async function migrateRuns(
       mode: run.mode,
       sessions: run.sessions
     };
+
     if (run.model !== undefined) importedRun.model = run.model;
+
     if (run.duration_ms !== undefined) importedRun.duration_ms = run.duration_ms;
+
     if (run.num_turns !== undefined) importedRun.num_turns = run.num_turns;
+
     if (run.usage !== undefined) importedRun.usage = run.usage;
+
     if (run.cost_usd !== undefined) importedRun.cost_usd = run.cost_usd;
+
     return importedRun;
   });
+
   return threadRunsSchema.parse({ runs: [...existingRuns, ...imported] });
 }
 
 async function contentHashes(dir: string): Promise<Record<string, string>> {
   const hashes: Record<string, string> = {};
+
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.name === "manifest.json" || entry.name === "runs.json") continue;
     const full = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       for (const [name, digest] of Object.entries(await contentHashes(full))) {
         hashes[path.join(entry.name, name)] = digest;
@@ -368,6 +418,7 @@ async function contentHashes(dir: string): Promise<Record<string, string>> {
         .digest("hex");
     }
   }
+
   return hashes;
 }
 
@@ -383,6 +434,7 @@ async function copyDirectoryContents(source: string, target: string): Promise<vo
 async function fileExists(file: string): Promise<boolean> {
   try {
     await readFile(file);
+
     return true;
   } catch {
     return false;

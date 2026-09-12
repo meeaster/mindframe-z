@@ -9,12 +9,14 @@ import { readThreadManifest, readThreadRuns } from "./storage.js";
 async function writeClaudeTranscript(home: string, id: string): Promise<void> {
   const dir = path.join(home, ".claude", "projects", "fixture");
   await mkdir(dir, { recursive: true });
+
   const records = [
     { type: "user", uuid: "u1", timestamp: "2026-07-01T00:00:00.000Z" },
     { type: "system", uuid: "system-1", timestamp: "2026-07-01T00:01:00.000Z" },
     { type: "assistant", uuid: "a1", timestamp: "2026-07-01T00:02:00.000Z" },
     { type: "user", uuid: "u2", timestamp: "2026-07-01T00:03:00.000Z" }
   ];
+
   await writeFile(
     path.join(dir, `${id}.jsonl`),
     records.map((record) => JSON.stringify(record)).join("\n") + "\n"
@@ -65,6 +67,7 @@ describe("thread manifest migration", () => {
       storeName: "personal",
       storePath
     });
+
     expect(result.importedRuns).toBe(1);
     const manifest = await readThreadManifest(sourceDir);
     expect(manifest.store).toBe("personal");
@@ -93,6 +96,7 @@ describe("thread manifest migration", () => {
     const storePath = path.join(home, "store", "threads");
     const sourceDir = path.join(storePath, "legacy");
     await mkdir(sourceDir, { recursive: true });
+
     const original =
       JSON.stringify(
         {
@@ -106,6 +110,7 @@ describe("thread manifest migration", () => {
         null,
         2
       ) + "\n";
+
     await writeFile(path.join(sourceDir, "manifest.json"), original);
     await expect(
       migrateThreadDirectory({

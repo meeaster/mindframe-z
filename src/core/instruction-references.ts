@@ -20,6 +20,7 @@ export function instructionReferencesSection(
   profile: ResolvedProfile
 ): string | undefined {
   if (profile.instructionReferences.length === 0) return undefined;
+
   return [
     "## On-Demand Instructions",
     "",

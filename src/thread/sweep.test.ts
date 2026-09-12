@@ -27,6 +27,7 @@ function profile(home: string, quiescenceMinutes = 0): ResolvedProfile {
       }
     }
   };
+
   // SAFETY: sweep only reads profile.profile.thread from this focused fixture.
   return fixture as ResolvedProfile;
 }
@@ -35,6 +36,7 @@ function runner(text: string, calls: string[] = []): AgentRunner {
   return {
     async run(request) {
       calls.push(request.prompt);
+
       return {
         text,
         rawTrace: JSON.stringify({ text }) + "\n",
@@ -90,11 +92,13 @@ async function writeClaudeSession(
 ): Promise<void> {
   const dir = path.join(home, ".claude", "projects", "-fixture");
   await mkdir(dir, { recursive: true });
+
   const lines = messageIds.map((uuid, index) => ({
     type: index % 2 === 0 ? "user" : "assistant",
     uuid,
     timestamp: new Date(1777414400000 + index * 1000).toISOString()
   }));
+
   const file = path.join(dir, `${id}.jsonl`);
   await writeFile(file, lines.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
   await utimes(file, mtime, mtime);
@@ -264,6 +268,7 @@ describe("thread sweep", () => {
       path.join(home, "threads", "thread-a", "manifest.json"),
       "utf8"
     );
+
     await runSweep({
       paths: testRuntimePaths(home),
       profile: profile(home),
@@ -499,6 +504,7 @@ describe("thread sweep", () => {
       profile: profile(home),
       runner: runner("thread-a fits session matches")
     });
+
     const ledgerBefore = await readFile(
       path.join(home, ".mindframe-z", "threads", "sweep", "ledger.json"),
       "utf8"

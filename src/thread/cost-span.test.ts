@@ -50,7 +50,9 @@ const spanSchema = z
     meta_struct: z.object({ _llmobs: z.instanceof(Uint8Array) })
   })
   .passthrough();
+
 const tracePayloadSchema = z.array(z.array(spanSchema));
+
 const envelopeSchema = z
   .object({
     name: z.string(),
@@ -63,6 +65,7 @@ const envelopeSchema = z
 
 function payloadBytes(payload: Uint8Array | null): Uint8Array {
   if (!(payload instanceof Uint8Array)) throw new Error("expected an encoded cost span payload");
+
   return payload;
 }
 
@@ -111,6 +114,7 @@ describe("buildMetrics", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       0.0054
     );
+
     expect(metrics?.estimated_total_cost).toBe(5_400_000);
     expect(metrics?.estimated_input_cost).toBe(0);
     expect(metrics?.estimated_output_cost).toBe(5_400_000);
@@ -121,6 +125,7 @@ describe("buildMetrics", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 0 },
       null
     );
+
     expect(metrics?.estimated_total_cost).toBe(0);
   });
 
@@ -146,6 +151,7 @@ describe("buildCostSpanPayload", () => {
       ...baseCtx,
       sessionId: "sess-abc"
     });
+
     expect(payload).toBeInstanceOf(Uint8Array);
     const bytes = payloadBytes(payload);
 
@@ -182,6 +188,7 @@ describe("buildCostSpanPayload", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       { ...baseCtx, durationMs: 0 }
     );
+
     const traces = decodeTracePayload(payloadBytes(payload));
     const span = traces[0]![0]!;
     expect(span.duration).toBe(1);
@@ -189,15 +196,18 @@ describe("buildCostSpanPayload", () => {
 
   it("emits distinct span ids across calls", () => {
     const ids = new Set<number>();
+
     for (let i = 0; i < 10; i++) {
       const payload = buildCostSpanPayload(
         "claude-code",
         { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
         { ...baseCtx, startTimeMs: 1_700_000_000_000 + i }
       );
+
       const traces = decodeTracePayload(payloadBytes(payload));
       ids.add(traces[0]![0]!.span_id);
     }
+
     expect(ids.size).toBe(10);
   });
 });
@@ -205,10 +215,13 @@ describe("buildCostSpanPayload", () => {
 describe("emitCostSpan", () => {
   it("POSTs the msgpack payload to /v0.4/traces with the required headers", async () => {
     const calls: Array<[string, RequestInit]> = [];
+
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       calls.push([String(input), init ?? {}]);
+
       return new Response("", { status: 200 });
     });
+
     vi.stubGlobal("fetch", fetchMock);
 
     const payload = buildCostSpanPayload(
@@ -216,6 +229,7 @@ describe("emitCostSpan", () => {
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       baseCtx
     );
+
     await emitCostSpan("http://localhost:8126", payloadBytes(payload));
 
     expect(calls).toHaveLength(1);
@@ -238,11 +252,13 @@ describe("emitCostSpan", () => {
         throw new Error("ECONNREFUSED");
       })
     );
+
     const payload = buildCostSpanPayload(
       "claude-code",
       { nonCachedInput: 1, cacheReadInput: 0, cacheWriteInput: 0, output: 1 },
       baseCtx
     );
+
     await expect(
       emitCostSpan("http://localhost:8126", payloadBytes(payload))
     ).resolves.toBeUndefined();

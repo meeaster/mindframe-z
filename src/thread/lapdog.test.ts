@@ -21,10 +21,12 @@ import {
 } from "./lapdog.js";
 
 const oldPath = process.env.PATH;
+
 const oldStateDir = process.env.FAKE_DOCKER_STATE_DIR;
 
 afterEach(() => {
   process.env.PATH = oldPath;
+
   if (oldStateDir === undefined) delete process.env.FAKE_DOCKER_STATE_DIR;
   else process.env.FAKE_DOCKER_STATE_DIR = oldStateDir;
   vi.restoreAllMocks();
@@ -37,11 +39,13 @@ async function writeFakeDocker(home: string): Promise<string> {
   await mkdir(binDir, { recursive: true });
   await mkdir(stateDir, { recursive: true });
   const docker = path.join(binDir, "docker");
+
   const inspectJson = JSON.stringify({
     State: { Running: true },
     Config: { Image: lapdogImageRef },
     NetworkSettings: { Networks: { [lapdogNetworkName]: null } }
   });
+
   const lines = [
     "#!/usr/bin/env sh",
     "STATE=${FAKE_DOCKER_STATE_DIR:?FAKE_DOCKER_STATE_DIR not set}",
@@ -77,15 +81,18 @@ async function writeFakeDocker(home: string): Promise<string> {
     "fi",
     "exit 0"
   ];
+
   await writeFile(docker, lines.join("\n") + "\n", "utf8");
   await chmod(docker, 0o755);
   process.env.FAKE_DOCKER_STATE_DIR = stateDir;
   await writeFile(path.join(stateDir, "docker.log"), "", "utf8");
+
   return stateDir;
 }
 
 async function readFakeLog(stateDir: string): Promise<string> {
   const { readFile } = await import("node:fs/promises");
+
   return readFile(path.join(stateDir, "docker.log"), "utf8");
 }
 

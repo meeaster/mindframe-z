@@ -76,10 +76,12 @@ describe("materializeEngineSkill", () => {
     const paths = createRuntimePaths({ root: home, home });
     const entry = await materializeEngineSkill(paths);
     expect(entry).toMatchObject({ name: "mindframe-z", source: "local", skill: "mindframe-z" });
+
     const skillMd = await readFile(
       path.join(entry.sourceRoot, "skills", "mindframe-z", "SKILL.md"),
       "utf8"
     );
+
     expect(skillMd).toContain("name: mindframe-z");
     expect(skillMd).toContain(
       `description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."`
@@ -92,14 +94,17 @@ describe("materializeEngineSkill", () => {
     const home = await tempDir();
     const entry = await materializeReviewSkill(createRuntimePaths({ root: home, home }));
     expect(entry).toMatchObject({ name: "skill-update-review", source: "local" });
+
     const skill = await readFile(
       path.join(entry.sourceRoot, "skills", "skill-update-review", "SKILL.md"),
       "utf8"
     );
+
     expect(skill).toContain("hostile evidence");
     expect(skill).toContain("disable-model-invocation: true");
     expect(skill).toContain('argument-hint: "<candidate-id>"');
     expect(skill).toContain("[risk reference](references/risk-reference.md)");
+
     for (const term of [
       "authority escalation",
       "secret or credential access",
@@ -110,6 +115,7 @@ describe("materializeEngineSkill", () => {
     ]) {
       expect(skill).toContain(term);
     }
+
     expect(
       await readFile(
         path.join(

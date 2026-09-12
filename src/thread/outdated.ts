@@ -25,6 +25,7 @@ export async function listOutdatedThreads(
   profile: ResolvedProfile
 ): Promise<OutdatedThread[]> {
   const threads: OutdatedThread[] = [];
+
   for (const thread of await listThreads(paths, profile)) {
     const manifest = await readThreadManifest(thread.dir);
 
@@ -32,6 +33,7 @@ export async function listOutdatedThreads(
       await Promise.all(
         manifest.sessions.map(async (session): Promise<OutdatedSession | undefined> => {
           const current = await readWatermark(paths, { source: session.source, id: session.id });
+
           if (classifyWatermark(session, current) !== "changed" || current === undefined) {
             return undefined;
           }

@@ -35,11 +35,13 @@ async function createValidated(
 describe("work storage", () => {
   it("records Personal global and project scope", async () => {
     const paths = testRuntimePaths(await makeTempDir());
+
     const global = await createWorkUnit(paths, {
       slug: "global-context",
       title: "Global context",
       objective: "Coordinate Personal work."
     });
+
     const project = await createWorkUnit(paths, {
       slug: "project-context",
       title: "Project context",
@@ -71,6 +73,7 @@ describe("work storage", () => {
 
   it("keeps cross-repository pointers as routed references", async () => {
     const paths = testRuntimePaths(await makeTempDir());
+
     const unit = await createWorkUnit(paths, {
       slug: "cross-repo",
       title: "Cross repository work",
@@ -183,6 +186,7 @@ Implement storage.
 
     expect(unit.orientation.revision).toBe(2);
     expect(context).toMatchObject({ bound: true, freshness: "stale" });
+
     if (context.bound) expect(context.pending_orientation?.revision).toBe(2);
   });
 
@@ -301,10 +305,12 @@ Enable the lifecycle skill.
       phase: "implement",
       orientation
     });
+
     const checkpointFile = path.join(
       workAuthoringPaths(paths, "checkpointed").checkpoints,
       "manual.md"
     );
+
     await writeFile(
       checkpointFile,
       renderCheckpoint({
@@ -343,6 +349,7 @@ Enable the lifecycle skill.
       objective: orientation.outcome,
       orientation
     });
+
     const checkpoint = {
       unit: "legacy-checkpoints",
       session: { source: "opencode", id: "legacy" },
@@ -350,6 +357,7 @@ Enable the lifecycle skill.
       text: "Preserve this checkpoint.",
       created_at: "2026-07-23T02:00:00.000Z"
     };
+
     await writeFile(
       path.join(paths.workRoot, "units", "legacy-checkpoints", "checkpoints.jsonl"),
       `${JSON.stringify(checkpoint)}\n`,
@@ -406,6 +414,7 @@ Enable the lifecycle skill.
       orientation
     });
     const directory = workAuthoringPaths(paths, "duplicate-checkpoints").checkpoints;
+
     const content = renderCheckpoint({
       id: "duplicate",
       session: { source: "opencode", id: "duplicate" },
@@ -413,6 +422,7 @@ Enable the lifecycle skill.
       text: "Same identity.",
       created_at: "2026-07-23T03:00:00.000Z"
     });
+
     await Promise.all([
       writeFile(path.join(directory, "one.md"), content, "utf8"),
       writeFile(path.join(directory, "two.md"), content, "utf8")
@@ -426,10 +436,12 @@ Enable the lifecycle skill.
   it("does not expose unvalidated checkpoint files", async () => {
     const paths = testRuntimePaths(await makeTempDir());
     await createValidated(paths, "unvalidated-checkpoint");
+
     const file = path.join(
       workAuthoringPaths(paths, "unvalidated-checkpoint").checkpoints,
       "pending.md"
     );
+
     await writeFile(
       file,
       renderCheckpoint({

@@ -33,6 +33,7 @@ async function readEffectiveGitValue(configPath: string, key: string): Promise<s
       GIT_CONFIG_NOSYSTEM: "1"
     }
   });
+
   return result.stdout;
 }
 
@@ -76,6 +77,7 @@ describe("git config rendering", () => {
     const gitConfig = path.join(home, ".gitconfig");
     const includeLine = `\tpath = ${gitIdentityFragmentPath(paths)}`;
     await writeGitIdentityFragment(paths, machine({ name: "Host User" }));
+
     const original = [
       '[includeIf "gitdir:/does-not-match/"]',
       includeLine,
@@ -83,6 +85,7 @@ describe("git config rendering", () => {
       includeLine,
       ""
     ].join("\n");
+
     await writeFile(gitConfig, original, "utf8");
 
     const outcome = await ensureGitConfigInclude(paths);

@@ -25,15 +25,19 @@ export async function resolveSkillConfigPaths(
   cwd = process.cwd()
 ): Promise<SkillConfigPaths> {
   const repoRoot = await findProjectRoot(cwd);
+
   const global = {
     "claude-code": path.join(paths.claudeDir, "settings.json"),
     codex: path.join(paths.codexDir, "config.toml")
   };
+
   const state = {
     "claude-code": globalSkillStatePath(paths, "claude-code"),
     codex: globalSkillStatePath(paths, "codex")
   };
+
   if (!repoRoot) return { scope: "global", home: paths.home, active: global, global, state };
+
   return {
     scope: "repo",
     repoRoot,

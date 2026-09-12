@@ -37,8 +37,11 @@ export const sweepStateSchema = z.object({
 });
 
 export type VerdictGrade = z.infer<typeof verdictGradeSchema>;
+
 export type VerdictRow = z.infer<typeof verdictRowSchema>;
+
 export type VerdictLedger = z.infer<typeof verdictLedgerSchema>;
+
 export type SweepState = z.infer<typeof sweepStateSchema>;
 
 export interface ParsedSourceQualifiedId {
@@ -54,9 +57,11 @@ export function parseSourceQualifiedId(id: string): ParsedSourceQualifiedId {
   const colon = id.indexOf(":");
   const source = id.slice(0, colon);
   const bareId = id.slice(colon + 1);
+
   if ((source !== "claude-code" && source !== "opencode") || colon === -1 || bareId === "") {
     throw new Error(`Invalid session id: ${id}`);
   }
+
   return { source, bareId };
 }
 
@@ -74,6 +79,7 @@ export function isVerdictStanding(
   charterHash: string
 ): boolean {
   if (row.verdict === "reject") return true;
+
   return (
     watermark !== undefined &&
     row.charter_hash === charterHash &&
@@ -92,7 +98,9 @@ function statePath(paths: RuntimePaths): string {
 
 export async function readVerdictLedger(paths: RuntimePaths): Promise<VerdictLedger> {
   const content = await readTextFile(ledgerPath(paths));
+
   if (content === undefined) return { verdicts: [] };
+
   return verdictLedgerSchema.parse(JSON.parse(content));
 }
 
@@ -105,7 +113,9 @@ export async function writeVerdictLedger(
 
 export async function readSweepState(paths: RuntimePaths): Promise<SweepState> {
   const content = await readTextFile(statePath(paths));
+
   if (content === undefined) return {};
+
   return sweepStateSchema.parse(JSON.parse(content));
 }
 
@@ -115,7 +125,9 @@ export async function writeSweepState(paths: RuntimePaths, state: SweepState): P
 
 export function upsertVerdicts(ledger: VerdictLedger, rows: readonly VerdictRow[]): VerdictLedger {
   const byKey = new Map(ledger.verdicts.map((row) => [verdictKey(row), row]));
+
   for (const row of rows) byKey.set(verdictKey(row), row);
+
   return {
     verdicts: [...byKey.values()].sort((a, b) => verdictKey(a).localeCompare(verdictKey(b)))
   };

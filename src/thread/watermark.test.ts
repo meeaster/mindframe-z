@@ -29,6 +29,7 @@ async function writeClaudeTranscript(home: string, id: string): Promise<void> {
     { type: "assistant", uuid: "a1", timestamp: "2026-06-04T17:06:48.203Z", sessionId: id },
     { type: "ai-title", uuid: "t1", timestamp: "2026-06-04T17:07:00.000Z" }
   ];
+
   await writeRawClaudeTranscript(
     home,
     id,
@@ -50,6 +51,7 @@ async function writeOpencodeDb(
     "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL)"
   );
   const insert = db.prepare("INSERT INTO message (id, session_id, time_created) VALUES (?, ?, ?)");
+
   for (const row of rows) insert.run(row.id, sessionId, row.time_created);
   db.close();
 }
@@ -105,11 +107,13 @@ describe("readWatermark", () => {
     // element. Same underlying rows must produce the same {message_count, last_message_id}.
     const home = await makeTempDir();
     const id = "ses_parity";
+
     const rows = [
       { id: "msg_1", time_created: 1000 },
       { id: "msg_2", time_created: 3000 },
       { id: "msg_3", time_created: 2000 }
     ];
+
     await writeOpencodeDb(home, id, rows);
 
     const fromDb = await readWatermark(testRuntimePaths(home), { source: "opencode", id });
@@ -120,6 +124,7 @@ describe("readWatermark", () => {
         .sort((a, b) => a.time_created - b.time_created)
         .map((row) => ({ info: { id: row.id, time: { created: row.time_created } } }))
     };
+
     const fromExport = tailSignatureFromExport(JSON.stringify(exportJson));
 
     expect(fromExport).toEqual(fromDb);
@@ -164,10 +169,12 @@ describe("readWatermark", () => {
     const home = await makeTempDir();
     const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "claude-code");
     await mkdir(dir, { recursive: true });
+
     const lines = [
       { type: "user", uuid: "u1", timestamp: "2026-06-04T17:06:36.796Z" },
       { type: "assistant", uuid: "a1", timestamp: "2026-06-04T17:06:48.203Z" }
     ];
+
     await writeFile(
       path.join(dir, "cached-session.jsonl"),
       lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
@@ -190,6 +197,7 @@ describe("readWatermark", () => {
     const home = await makeTempDir();
     const dir = path.join(archiveCacheRoot(testRuntimePaths(home)), "opencode");
     await mkdir(dir, { recursive: true });
+
     const exportJson = {
       info: { id: "ses_cached" },
       messages: [
@@ -197,6 +205,7 @@ describe("readWatermark", () => {
         { info: { id: "msg_2", time: { created: 2000 } } }
       ]
     };
+
     await writeFile(path.join(dir, "ses_cached.json"), JSON.stringify(exportJson), "utf8");
 
     const wm = await readWatermark(testRuntimePaths(home), {
@@ -329,6 +338,7 @@ describe("resolveLegacyWatermark", () => {
 
 describe("classifyWatermark", () => {
   const stored = { message_count: 3, last_message_id: "a1" };
+
   const wm = (over: Partial<Watermark>): Watermark => ({
     message_count: 3,
     last_message_id: "a1",

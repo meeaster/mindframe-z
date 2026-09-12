@@ -3,6 +3,7 @@
 // is exercised. It intentionally uses synthetic contributors, not real stores.
 
 export type HarnessName = "opencode" | "claude-code";
+
 export type LoadingClass =
   | "startup"
   | "per-step"
@@ -84,6 +85,7 @@ const loadingOrder: LoadingClass[] = [
 export function measureText(text: string): TextSize {
   const characters = text.length;
   const bytes = new TextEncoder().encode(text).byteLength;
+
   return {
     characters,
     bytes,
@@ -108,6 +110,7 @@ function unknownCount(contributors: Contributor[], loading: LoadingClass): numbe
 
 function formatSize(size: TextSize | undefined): string {
   if (!size) return "unknown size";
+
   return `~${size.estimatedTokens} est tok; ${size.characters} chars; ${size.bytes} B`;
 }
 
@@ -116,33 +119,42 @@ function formatLoadingClass(report: HarnessReport, loading: LoadingClass): strin
     .filter((contributor) => contributor.loading === loading)
     .sort((left, right) => {
       const tokenDelta = (right.size?.estimatedTokens ?? -1) - (left.size?.estimatedTokens ?? -1);
+
       return tokenDelta || left.name.localeCompare(right.name);
     });
+
   if (contributors.length === 0) return [];
 
   const total = knownTokens(report.contributors, loading);
   const unknown = unknownCount(report.contributors, loading);
+
   const subtotal = unknown
     ? total === 0
       ? `${unknown} unknown`
       : `${total} est tok + ${unknown} unknown`
     : `${total} est tok`;
+
   const lines = [`  ${loading}  [${subtotal}]`];
+
   for (const contributor of contributors) {
     const note = contributor.note ? ` - ${contributor.note}` : "";
     lines.push(
       `    ${contributor.category}: ${contributor.name} (${formatSize(contributor.size)})${note}`
     );
   }
+
   return lines;
 }
 
 function formatHistory(history: HistorySummary): string[] {
   const prompt = promptInput(history);
+
   const average =
     history.usageBearingRequests === 0 ? undefined : prompt / history.usageBearingRequests;
+
   const maximum =
     history.maxPromptInputTokens === undefined ? "unknown" : `${history.maxPromptInputTokens} tok`;
+
   const lines = [
     `  history: last ${history.windowDays} days; ${history.sessions} sessions; ${history.childSessions} child/subagent sessions`,
     `    requests: ${history.modelRequests} observed model steps; usage-bearing: ${history.usageBearingRequests}`,
@@ -152,14 +164,17 @@ function formatHistory(history: HistorySummary): string[] {
     `    output: ${history.outputTokens} tok; compactions: ${history.compactions}`,
     "    capability observations:"
   ];
+
   for (const capability of history.capabilities) {
     const status = !capability.current
       ? "historical only; not in current profile"
       : capability.calls === 0
         ? "no use observed in this window"
         : `${capability.calls} call${capability.calls === 1 ? "" : "s"}`;
+
     lines.push(`      ${capability.kind} ${capability.name}: ${status}`);
   }
+
   return lines;
 }
 
@@ -168,6 +183,7 @@ export function formatReport(report: ContextReport, filter: HarnessName | "all")
     filter === "all"
       ? report.harnesses
       : report.harnesses.filter((harness) => harness.harness === filter);
+
   const lines = [
     `scenario: ${report.scenario}`,
     `profile: ${report.profile}`,
@@ -180,9 +196,12 @@ export function formatReport(report: ContextReport, filter: HarnessName | "all")
 
   for (const harness of harnesses) {
     lines.push(harness.harness, "=".repeat(harness.harness.length));
+
     for (const note of harness.scopeNotes) lines.push(`  scope: ${note}`);
     lines.push("  static contributors:");
+
     for (const loading of loadingOrder) lines.push(...formatLoadingClass(harness, loading));
+
     if (harness.conditionalPathMax) {
       const path = harness.conditionalPathMax;
       lines.push(
@@ -190,12 +209,14 @@ export function formatReport(report: ContextReport, filter: HarnessName | "all")
         `    includes: ${path.contributorNames.join(", ")}`
       );
     }
+
     if (harness.history) lines.push(...formatHistory(harness.history));
     lines.push("");
   }
 
   if (harnesses.length === 0) lines.push("No harness selected in this scenario.", "");
   lines.push("The prototype reports evidence, not a bloat verdict.");
+
   return lines.join("\n");
 }
 
@@ -263,6 +284,7 @@ function opencodeReport(withHistory: boolean): HarnessReport {
         size("deeper instruction", 11).estimatedTokens
     }
   };
+
   if (withHistory) {
     report.history = {
       windowDays: 7,
@@ -283,6 +305,7 @@ function opencodeReport(withHistory: boolean): HarnessReport {
       ]
     };
   }
+
   return report;
 }
 
@@ -338,6 +361,7 @@ function claudeReport(withHistory: boolean): HarnessReport {
       estimatedTokens: size("ui rule", 20).estimatedTokens
     }
   };
+
   if (withHistory) {
     report.history = {
       windowDays: 7,
@@ -358,6 +382,7 @@ function claudeReport(withHistory: boolean): HarnessReport {
       ]
     };
   }
+
   return report;
 }
 
@@ -367,6 +392,7 @@ export function scenarioNames(): string[] {
 
 export function scenarioReport(index: number): ContextReport {
   const scenario = scenarioNames()[index] ?? scenarioNames()[0];
+
   if (scenario === "history overlay") {
     return {
       scenario,
@@ -377,9 +403,11 @@ export function scenarioReport(index: number): ContextReport {
       harnesses: [opencodeReport(true), claudeReport(true)]
     };
   }
+
   if (scenario === "no repository") {
     const opencode = opencodeReport(false);
     const claude = claudeReport(false);
+
     return {
       scenario,
       profile: "personal",
@@ -413,9 +441,11 @@ export function scenarioReport(index: number): ContextReport {
       ]
     };
   }
+
   if (scenario === "unknown measurements") {
     const opencode = opencodeReport(false);
     const claude = claudeReport(false);
+
     return {
       scenario,
       profile: "personal",
@@ -442,6 +472,7 @@ export function scenarioReport(index: number): ContextReport {
       ]
     };
   }
+
   return {
     scenario,
     profile: "personal",

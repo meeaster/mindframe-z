@@ -81,6 +81,7 @@ function integrationConfig(integration: ExecutorIntegration): ExecutorJsonObject
 
 function authTemplates(config: ExecutorJsonObject): ExecutorJsonObject[] {
   const templates = config.authenticationTemplate;
+
   return executorJsonObjectSchema.array().safeParse(templates).data ?? [];
 }
 
@@ -104,7 +105,9 @@ function currentManagedConnection(
   const userConnection = connections.find(
     (connection) => connection.owner === "user" && connection.name === name
   );
+
   if (userConnection) return userConnection;
+
   return connections.find((connection) => connection.owner === "org" && connection.name === name);
 }
 
@@ -120,12 +123,14 @@ function authTemplateChangedForDurableConnection(
   const currentBySlug = new Map(
     authTemplates(integrationConfig(current)).map((method) => [method.slug, method])
   );
+
   const desiredBySlug = new Map(
     desiredAuthTemplates(desired).map((method) => [
       method.slug,
       encodeExecutorAuthenticationMethod(method)
     ])
   );
+
   return [...new Set(connections.map((connection) => connection.template))].some(
     (slug) =>
       !desiredBySlug.has(slug) || !sameJson(currentBySlug.get(slug), desiredBySlug.get(slug))
@@ -153,15 +158,18 @@ export function classifyExecutorIntegration(
   delete currentComparable.authenticationTemplate;
   delete desiredComparable.authenticationTemplate;
   const configurationChanged = current ? !sameJson(currentComparable, desiredComparable) : true;
+
   const authenticationChanged = current
     ? !sameJson(
         authTemplates(currentConfig),
         desiredAuthTemplates(desired).map(encodeExecutorAuthenticationMethod)
       )
     : true;
+
   const connections: ExecutorConnectionClassification[] = Object.entries(desired.connections).map(
     ([name, method]) => {
       const connection = currentManagedConnection(observed.connections, name);
+
       if (!connection) {
         return {
           kind: "missing",
@@ -170,19 +178,24 @@ export function classifyExecutorIntegration(
           requiresConnection: method !== "none"
         };
       }
+
       if (connection.template !== method) {
         return { kind: "wrong-template", name, method, connection };
       }
+
       const authentication = desiredAuthTemplates(desired).find((entry) => entry.slug === method);
+
       const missingDeclaredScopes =
         authentication?.kind === "oauth2"
           ? connection.missingOAuthScopes.filter((scope) =>
               authentication.registrationScopes?.includes(scope)
             )
           : [];
+
       if (missingDeclaredScopes.length > 0) {
         return { kind: "missing-oauth-scopes", name, method, connection };
       }
+
       return {
         kind: "compatible",
         name,
@@ -192,11 +205,13 @@ export function classifyExecutorIntegration(
       };
     }
   );
+
   const undeclaredDurableConnections = observed.connections.filter(
     (connection) =>
       desired.connections[connection.name] === undefined &&
       executorConnectionHasDurableState(connection)
   );
+
   const blockers: string[] = [];
 
   if (current && durable && changedFields.length > 0) {
@@ -204,22 +219,26 @@ export function classifyExecutorIntegration(
       `Executor ${desired.slug} has durable state and changed metadata: ${changedFields.join(", ")}`
     );
   }
+
   if (current && authTemplateChangedForDurableConnection(current, desired, observed.connections)) {
     blockers.push(
       `Executor ${desired.slug} has a durable auth-template change; disconnect referenced connections before applying`
     );
   }
+
   for (const connection of connections) {
     if (connection.kind === "wrong-template") {
       blockers.push(
         `Executor connection ${connectionKey(desired.slug, connection.name)} binds ${connection.connection.template}, but the profile selects ${connection.method}; explicitly clean up or repair that named connection before applying`
       );
     }
+
     if (connection.kind === "missing-oauth-scopes" && !allowConnectionRepair) {
       blockers.push(
         `Executor connection ${connectionKey(desired.slug, connection.name)} is missing OAuth scopes; reconnect it with the same name in the Executor app`
       );
     }
+
     if (
       connection.kind === "missing" &&
       connection.requiresConnection &&
@@ -230,6 +249,7 @@ export function classifyExecutorIntegration(
       );
     }
   }
+
   for (const connection of undeclaredDurableConnections) {
     blockers.push(
       `Executor connection ${connectionKey(desired.slug, connection.name)} is durable but not declared; explicitly disconnect that named connection before removing it from the profile`
@@ -260,6 +280,7 @@ export function classifyExecutorRemoval(
   connections: readonly ExecutorConnection[]
 ): ExecutorRemovalClassification {
   if (!current) return { removable: false, blockers: [] };
+
   if (connections.some(executorConnectionHasDurableState)) {
     return {
       removable: false,
@@ -268,5 +289,6 @@ export function classifyExecutorRemoval(
       ]
     };
   }
+
   return { removable: true, blockers: [] };
 }

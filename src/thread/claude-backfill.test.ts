@@ -14,6 +14,7 @@ async function writeTranscript(
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, `${sessionId}.jsonl`);
   await writeFile(file, lines.map((l) => JSON.stringify(l)).join("\n") + "\n", "utf8");
+
   return file;
 }
 

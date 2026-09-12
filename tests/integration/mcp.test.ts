@@ -41,6 +41,7 @@ describe("mcp toggle integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
+
     expect(store.projects?.[root]?.codex?.mcp).toEqual({ context7: false });
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
@@ -80,6 +81,7 @@ describe("mcp toggle integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
+
     expect(store.projects?.[root]?.codex?.mcp).toEqual({ context7: false });
   });
 

@@ -80,52 +80,69 @@ const validatedJsonSchemaNodeSchema: z.ZodType<JsonSchemaNode> = z.lazy(() =>
 
 export const jsonSchemaNodeSchema = jsonObjectSchema.transform((value, context): JsonSchemaNode => {
   const result = validatedJsonSchemaNodeSchema.safeParse(value);
+
   if (!result.success) {
     context.addIssue({ code: "custom", message: "Invalid JSON Schema document" });
+
     return z.NEVER;
   }
+
   return value;
 });
 
 function strengthenHomeManifestSchema(schema: JsonSchemaNode): void {
   const properties = schema.properties;
+
   if (!properties) throw new Error("mfz_home.schema.json is missing properties");
   const extension = properties.extends;
+
   if (!extension) throw new Error("mfz_home.schema.json is missing the extends property");
   const extensionProperties = extension.properties;
+
   if (!extensionProperties) throw new Error("mfz_home.schema.json is missing extends.properties");
   const upstreamPath = extensionProperties.path;
+
   if (!upstreamPath) throw new Error("mfz_home.schema.json is missing extends.path");
   upstreamPath.pattern = "^(?:/|~/)";
 }
 
 function strengthenProfileMcpSchema(schema: JsonSchemaNode): void {
   const properties = schema.properties;
+
   if (!properties) throw new Error("profile.schema.json is missing properties");
   const mcp = properties.mcp;
+
   if (!mcp) throw new Error("profile.schema.json is missing mcp");
   const entries = jsonSchemaNodeSchema.safeParse(mcp?.additionalProperties).data;
+
   if (!entries?.properties) {
     throw new Error("profile.schema.json is missing mcp");
   }
+
   mcp.additionalProperties = entries;
   const entryProperties = entries.properties;
   const agents = entryProperties.agents;
+
   if (!agents?.anyOf) throw new Error("profile.schema.json is missing mcp agents");
   const agentBranches = agents.anyOf;
   const concise = agentBranches[0]!;
   concise.uniqueItems = true;
 
   const grouped = agentBranches[1]!;
+
   if (!grouped.anyOf) throw new Error("profile.schema.json is missing grouped agents");
+
   for (const variant of grouped.anyOf) {
     const groupedProperties = variant.properties;
+
     if (!groupedProperties?.enabled || !groupedProperties.disabled) {
       throw new Error("profile.schema.json grouped agents lack properties");
     }
+
     groupedProperties.enabled.uniqueItems = true;
     groupedProperties.disabled.uniqueItems = true;
   }
+
   grouped.not = {
     anyOf: ["opencode", "claude-code", "codex"].map((agent) => ({
       required: ["enabled", "disabled"],
@@ -137,6 +154,7 @@ function strengthenProfileMcpSchema(schema: JsonSchemaNode): void {
   };
 
   const executor = entryProperties.executor;
+
   if (!executor?.properties) throw new Error("profile.schema.json is missing executor properties");
   const executorProperties = executor.properties;
   executorProperties.connections = {
@@ -153,37 +171,51 @@ function strengthenProfileMcpSchema(schema: JsonSchemaNode): void {
 
 function strengthenMcpSchema(schema: JsonSchemaNode): void {
   const properties = schema.properties;
+
   if (!properties) throw new Error("mcp.schema.json is missing properties");
   const servers = properties.servers;
+
   if (!servers) throw new Error("mcp.schema.json is missing the servers property");
   const serverEntries = jsonSchemaNodeSchema.safeParse(servers.additionalProperties).data;
   const branches = serverEntries?.anyOf;
+
   if (!Array.isArray(branches)) {
     throw new Error("mcp.schema.json servers must expose anyOf branches");
   }
+
   servers.additionalProperties = serverEntries;
+
   for (const branch of branches) {
     const branchProperties = branch.properties;
+
     if (!branchProperties) throw new Error("mcp.schema.json has a branch without properties");
     const executor = branchProperties.executor;
+
     if (!executor) continue;
     const executorProperties = executor.properties;
+
     if (!executorProperties) throw new Error("mcp.schema.json Executor branch lacks properties");
     const authentication = executorProperties.authentication;
+
     if (!authentication) continue;
     const methods = authentication.items;
     const methodBranches = methods?.anyOf;
+
     if (!Array.isArray(methodBranches)) {
       throw new Error("mcp.schema.json Executor authentication lacks method branches");
     }
+
     const oauth = methodBranches.find((method) => method.properties?.kind?.const === "oauth2");
+
     if (!oauth) throw new Error("mcp.schema.json Executor authentication lacks an oauth2 branch");
+
     const requireWhenPresent = (field: string, required: string): JsonSchemaConditional => ({
       if: { required: [field] },
       // JSON Schema's conditional keyword is intentionally named `then`.
       // oxlint-disable-next-line unicorn/no-thenable
       then: { required: [required] }
     });
+
     oauth.allOf = [
       requireWhenPresent("discoveryUrl", "registrationScopes"),
       requireWhenPresent("registrationScopes", "discoveryUrl")
@@ -198,6 +230,7 @@ type JsonSchemaConditional = JsonObject & {
 
 function strengthenThreadManifestSchema(schema: JsonSchemaNode): void {
   const sessions = schema.properties?.sessions?.items;
+
   if (!sessions) throw new Error("thread-manifest.schema.json is missing sessions");
   const fields = ["message_count", "last_message_id", "last_activity_at"];
   sessions.allOf = [
@@ -215,17 +248,23 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
   await mkdir(schemasDir, { recursive: true });
 
   const written: string[] = [];
+
   for (const entry of schemaFiles) {
     const schema = jsonSchemaNodeSchema.parse(
       z.toJSONSchema(entry.schema, { io: "input", unrepresentable: "any" })
     );
+
     if (entry.filename === "mfz_home.schema.json") strengthenHomeManifestSchema(schema);
+
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
+
     if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
+
     if (entry.filename === "thread-manifest.schema.json") strengthenThreadManifestSchema(schema);
     const outputPath = path.join(schemasDir, entry.filename);
     await writeFile(outputPath, jsonFileContent(schema), "utf8");
     written.push(outputPath);
   }
+
   return written;
 }

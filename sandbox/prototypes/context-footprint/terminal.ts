@@ -26,16 +26,23 @@ async function main(): Promise<void> {
 
   try {
     process.stdout.write("\ncommand> ");
+
     for await (const line of rl) {
       const answer = line.trim().toLowerCase();
+
       if (answer === "q" || answer === "quit") break;
+
       if (answer === "a") state.view = "all";
+
       if (answer === "o") state.view = "opencode";
+
       if (answer === "c") state.view = "claude-code";
       const scenario = Number(answer) - 1;
+
       if (Number.isInteger(scenario) && scenario >= 0 && scenario < scenarioNames().length) {
         state.scenarioIndex = scenario;
       }
+
       clearAndRender(state);
       process.stdout.write("\ncommand> ");
     }

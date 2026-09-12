@@ -17,7 +17,9 @@ export const threadSessionSchema = z
   .strict()
   .superRefine((session, context) => {
     const present = watermarkFields.filter((field) => session[field] !== undefined);
+
     if (present.length === 0 || present.length === watermarkFields.length) return;
+
     for (const field of watermarkFields) {
       if (session[field] === undefined) {
         context.addIssue({
@@ -113,10 +115,15 @@ export const threadRunsSchema = z
   .strict();
 
 export type ThreadManifest = z.infer<typeof threadManifestSchema>;
+
 export type ThreadSession = z.infer<typeof threadSessionSchema>;
+
 export type ThreadExclusion = z.infer<typeof threadExclusionSchema>;
+
 export type ThreadRuns = z.infer<typeof threadRunsSchema>;
+
 export type ThreadRunRecord = z.infer<typeof threadRunRecordSchema>;
+
 export type ThreadDispatchRun = z.infer<typeof threadDispatchRunSchema>;
 
 const tokenUsageSchema = z

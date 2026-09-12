@@ -320,9 +320,11 @@ describe("writeJsonFileAtomic", () => {
     );
 
     const content = await readFile(file, "utf8");
+
     const wholeWrites = Array.from({ length: 8 }, (_, index) =>
       jsonFileContent({ revision: index })
     );
+
     expect(wholeWrites).toContain(content);
     expect(await readdir(dir)).toEqual(["bindings.json"]);
   });

@@ -24,14 +24,18 @@ export async function reconcileLocalIndexes(
   options: LocalIndexOptions = {}
 ): Promise<OperationOutcome[]> {
   const operations = collectOperations(options.onComplete);
+
   if (options.dryRun) {
     await planReferenceIndex(paths, profile, operations.complete);
     await planExtraFoldersIndex(paths, profile, operations.complete);
     await planCapabilityIndexes(paths, profile, operations.complete);
+
     return operations.outcomes;
   }
+
   await writeReferenceIndex(paths, profile, operations.complete);
   await writeExtraFoldersIndex(paths, profile, operations.complete);
   await writeCapabilityIndexes(paths, profile, operations.complete);
+
   return operations.outcomes;
 }

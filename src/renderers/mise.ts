@@ -5,10 +5,12 @@ import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import type { RenderResult, RenderedFile } from "../core/render.js";
+
 function safeComponent(value: string, label: string): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value)) {
     throw new Error(`Invalid Mise ${label}: ${value}`);
   }
+
   return value;
 }
 
@@ -25,14 +27,18 @@ export async function renderMise(
 
   const layers = profile.miseLayers;
   const layerNames = new Set<string>();
+
   for (const [index, layer] of layers.entries()) {
     const name = safeComponent(layer.name, "profile name");
+
     if (!layerNames.add(name)) throw new Error(`Duplicate Mise layer namespace: ${name}`);
     const relative = `${String((index + 1) * 10).padStart(2, "0")}-${name}.toml`;
+
     if (layer.content === undefined) continue;
     const snapshot = path.join(configsMise, relative);
     const host = path.join(hostMise, "conf.d", relative);
     files.push({ path: snapshot, content: layer.content });
+
     if (!options.sandbox) ownedHostPaths.push(host);
   }
 
@@ -40,8 +46,10 @@ export async function renderMise(
     for (const layer of layers) {
       const layerName = safeComponent(layer.name, "profile name");
       const source = path.join(layer.root, "profiles", layer.name, ".config", "mise", "tasks");
+
       async function walk(dir: string, relative = ""): Promise<void> {
         let entries;
+
         try {
           entries = await readdir(dir, { withFileTypes: true });
         } catch (error) {
@@ -49,55 +57,72 @@ export async function renderMise(
           if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
           throw error;
         }
+
         for (const entry of entries) {
           const rel = relative ? path.join(relative, entry.name) : entry.name;
+
           if (entry.isDirectory()) {
             await walk(path.join(dir, entry.name), rel);
             continue;
           }
+
           if (!entry.isFile() || !entry.name.endsWith(".toml")) continue;
+
           for (const part of rel.split(path.sep)) safeComponent(part, "task path component");
           const content = await readFile(path.join(dir, rel), "utf8");
+
           try {
             parse(content);
           } catch (error) {
             throw new Error(`Invalid Mise task at ${path.join(dir, rel)}`, { cause: error });
           }
+
           const snapshot = path.join(configsMise, "tasks", layerName, rel);
           const host = path.join(hostMise, "tasks", layerName, rel);
           files.push({ path: snapshot, content });
+
           if (!options.sandbox) ownedHostPaths.push(host);
         }
       }
+
       await walk(source);
     }
   }
 
   const installableHostPaths: string[] = [];
+
   for (const file of ownedHostPaths) {
     try {
       await access(file);
+
       if (previousOwned.has(file)) installableHostPaths.push(file);
     } catch {
       installableHostPaths.push(file);
     }
   }
+
   const current = new Set(installableHostPaths);
   const safeLocal: RenderedFile[] = [];
+
   if (!options.sandbox) {
     for (const [index, file] of files.entries()) {
       const host = ownedHostPaths[index];
+
       if (!host) continue;
+
       try {
         await access(host);
       } catch {
         safeLocal.push({ ...file, path: host });
         continue;
       }
+
       if (previousOwned.has(host)) safeLocal.push({ ...file, path: host });
     }
   }
+
   const result: RenderResult = { files, links: [] };
+
   if (!options.sandbox) {
     result.localFiles = safeLocal;
     result.localStaleFiles = [...previousOwned].filter((file) => !current.has(file));
@@ -107,5 +132,6 @@ export async function renderMise(
       host: installableHostPaths
     };
   }
+
   return result;
 }

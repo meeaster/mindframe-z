@@ -16,12 +16,14 @@ export function objectField(value: JsonValue | undefined): JsonObject | undefine
 
 export function addOpenCodeUsage(value: JsonValue | undefined): UsageComponents | undefined {
   const tokens = objectField(value);
+
   if (!tokens) return undefined;
   const cache = objectField(tokens.cache);
   const input = numberField(tokens.input);
   const cacheRead = numberField(cache?.read);
   const cacheWrite = numberField(cache?.write);
   const output = numberField(tokens.output);
+
   if (
     input === undefined &&
     cacheRead === undefined &&
@@ -30,21 +32,29 @@ export function addOpenCodeUsage(value: JsonValue | undefined): UsageComponents 
   ) {
     return undefined;
   }
+
   const result: UsageComponents = {};
+
   if (input !== undefined) result.input = input;
+
   if (cacheRead !== undefined) result.cacheRead = cacheRead;
+
   if (cacheWrite !== undefined) result.cacheWrite = cacheWrite;
+
   if (output !== undefined) result.output = output;
+
   return result;
 }
 
 export function addClaudeUsage(value: JsonValue | undefined): UsageComponents | undefined {
   const usage = objectField(value);
+
   if (!usage) return undefined;
   const input = numberField(usage.input_tokens);
   const cacheRead = numberField(usage.cache_read_input_tokens);
   const cacheWrite = numberField(usage.cache_creation_input_tokens);
   const output = numberField(usage.output_tokens);
+
   if (
     input === undefined &&
     cacheRead === undefined &&
@@ -53,11 +63,17 @@ export function addClaudeUsage(value: JsonValue | undefined): UsageComponents | 
   ) {
     return undefined;
   }
+
   const result: UsageComponents = {};
+
   if (input !== undefined) result.input = input;
+
   if (cacheRead !== undefined) result.cacheRead = cacheRead;
+
   if (cacheWrite !== undefined) result.cacheWrite = cacheWrite;
+
   if (output !== undefined) result.output = output;
+
   return result;
 }
 
@@ -70,6 +86,7 @@ export class HistoryCollector {
 
   addSession(id: string, child: boolean, version?: string): void {
     this.sessionsById.set(id, child);
+
     if (version) this.versions.add(version);
   }
 
@@ -80,20 +97,29 @@ export class HistoryCollector {
   addRequest(id: string, usage: UsageComponents | undefined): void {
     if (!this.requests.has(id)) {
       this.requests.set(id, usage);
+
       return;
     }
+
     const existing = this.requests.get(id);
+
     if (!existing) {
       this.requests.set(id, usage);
+
       return;
     }
+
     if (!usage) return;
     const merged: UsageComponents = {};
+
     if (existing.input === undefined && usage.input !== undefined) merged.input = usage.input;
+
     if (existing.cacheRead === undefined && usage.cacheRead !== undefined)
       merged.cacheRead = usage.cacheRead;
+
     if (existing.cacheWrite === undefined && usage.cacheWrite !== undefined)
       merged.cacheWrite = usage.cacheWrite;
+
     if (existing.output === undefined && usage.output !== undefined) merged.output = usage.output;
     Object.assign(merged, existing);
     this.requests.set(id, merged);
@@ -118,18 +144,24 @@ export class HistoryCollector {
     if (count <= 0) return;
     const key = `${category}:${name}:${source ?? ""}`;
     const existing = this.activations.get(key);
+
     if (!existing) {
       const activation: ContextActivation = {
         category,
         name,
         count
       };
+
       if (characters !== undefined) activation.characters = characters;
+
       if (source !== undefined) activation.source = source;
       this.activations.set(key, activation);
+
       return;
     }
+
     existing.count += count;
+
     if (characters !== undefined) existing.characters = (existing.characters ?? 0) + characters;
   }
 
@@ -144,9 +176,12 @@ export class HistoryCollector {
     let outputTokens = 0;
     let maxPromptInputTokens: number | undefined;
     let usageBearingRequests = 0;
+
     for (const usage of this.requests.values()) {
       if (!usage) continue;
+
       if (usage.output !== undefined) outputTokens += usage.output;
+
       if (
         usage.input === undefined &&
         usage.cacheRead === undefined &&
@@ -154,6 +189,7 @@ export class HistoryCollector {
       ) {
         continue;
       }
+
       usageBearingRequests += 1;
       uncachedInputTokens += usage.input ?? 0;
       cacheReadTokens += usage.cacheRead ?? 0;
@@ -161,6 +197,7 @@ export class HistoryCollector {
       const promptInput = (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
       maxPromptInputTokens = Math.max(maxPromptInputTokens ?? 0, promptInput);
     }
+
     const values: Parameters<typeof buildHistory>[1] = {
       sessions: this.sessionsById.size,
       childSessions: [...this.sessionsById.values()].filter(Boolean).length,
@@ -177,7 +214,9 @@ export class HistoryCollector {
       ),
       versions: [...this.versions].sort()
     };
+
     if (maxPromptInputTokens !== undefined) values.maxPromptInputTokens = maxPromptInputTokens;
+
     return buildHistory(windowDays, values);
   }
 }

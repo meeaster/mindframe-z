@@ -15,6 +15,7 @@ const remote = (url: string, extras: ServerExtras = {}): McpServer => ({
   url,
   ...extras
 });
+
 const local = (command: string[], extras: ServerExtras = {}): McpServer => ({
   description: "",
   type: "local",

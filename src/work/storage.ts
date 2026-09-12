@@ -39,10 +39,15 @@ import {
 export * from "./schema.js";
 
 const manifestName = "manifest.json";
+
 const checkpointsName = "checkpoints.jsonl";
+
 const checkpointIndexName = "checkpoint-index.json";
+
 const receiptsName = "receipts.jsonl";
+
 const legacyWorkCheckpointSchema = workCheckpointSchema.omit({ id: true });
+
 const checkpointIndexSchema = z.object({
   schema_version: z.literal(1),
   checkpoints: z.array(
@@ -53,6 +58,7 @@ const checkpointIndexSchema = z.object({
     })
   )
 });
+
 const filesystemErrorSchema = z.object({ code: z.string() });
 
 function now(): string {
@@ -65,9 +71,11 @@ export function sessionKey(session: SourceQualifiedSession): string {
 
 export function parseSession(value: string): SourceQualifiedSession {
   const separator = value.indexOf(":");
+
   if (separator <= 0 || separator === value.length - 1) {
     throw new Error(`Invalid source-qualified session: ${value}`);
   }
+
   return sourceQualifiedSessionSchema.parse({
     source: value.slice(0, separator),
     id: value.slice(separator + 1)
@@ -102,6 +110,7 @@ interface WorkAuthoringPaths {
 
 export function workAuthoringPaths(paths: RuntimePaths, slug: string): WorkAuthoringPaths {
   const dir = unitDir(paths, slug);
+
   return {
     orientation: path.join(dir, orientationFileName),
     context_map: path.join(dir, contextMapFileName),
@@ -111,6 +120,7 @@ export function workAuthoringPaths(paths: RuntimePaths, slug: string): WorkAutho
 
 function filesystemErrorCode(error: Error): string | undefined {
   const parsed = filesystemErrorSchema.safeParse(error);
+
   return parsed.success ? parsed.data.code : undefined;
 }
 
@@ -122,6 +132,7 @@ async function appendJsonl(file: string, value: WorkReceipt): Promise<void> {
 async function readJsonl<T>(file: string, schema: z.ZodType<T>): Promise<T[]> {
   try {
     const content = await readFile(file, "utf8");
+
     return content
       .split("\n")
       .filter((line) => line.length > 0)
@@ -154,6 +165,7 @@ async function withBindingLock<T>(paths: RuntimePaths, action: () => Promise<T>)
   const lock = `${workBindingsPath(paths)}.lock`;
   const deadline = Date.now() + 5_000;
   await mkdir(path.dirname(lock), { recursive: true });
+
   while (true) {
     try {
       await mkdir(lock);
@@ -166,9 +178,11 @@ async function withBindingLock<T>(paths: RuntimePaths, action: () => Promise<T>)
       ) {
         throw new Error(`Failed to acquire work binding lock: ${String(error)}`);
       }
+
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
+
   try {
     return await action();
   } finally {
@@ -193,9 +207,11 @@ export async function createWorkUnit(
 ): Promise<WorkUnit> {
   const slug = workSlugSchema.parse(input.slug);
   const file = manifestPath(paths, slug);
+
   if (await pathExists(file)) throw new Error(`Work unit already exists: ${slug}`);
   const timestamp = now();
   const phase = input.phase ?? "explore";
+
   const inputRecord = {
     schema_version: 1,
     domain: "personal",
@@ -220,7 +236,9 @@ export async function createWorkUnit(
     created_at: timestamp,
     updated_at: timestamp
   };
+
   if (input.project) Object.assign(inputRecord, { project: workSlugSchema.parse(input.project) });
+
   if (input.thread) Object.assign(inputRecord, { thread: input.thread });
   const unit = workUnitSchema.parse(inputRecord);
   await writeJsonFileAtomic(file, unit);
@@ -234,6 +252,7 @@ export async function createWorkUnit(
       "utf8"
     )
   ]);
+
   return unit;
 }
 
@@ -243,12 +262,15 @@ export async function readWorkUnit(paths: RuntimePaths, slug: string): Promise<W
 
 export async function listWorkUnits(paths: RuntimePaths): Promise<WorkUnit[]> {
   const unitsRoot = paths.workUnitsRoot;
+
   try {
     const entries = await readdir(unitsRoot, { withFileTypes: true });
+
     const slugs = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
+
     return await Promise.all(slugs.map((slug) => readWorkUnit(paths, slug)));
   } catch (error) {
     if (error instanceof Error && filesystemErrorCode(error) === "ENOENT") return [];
@@ -259,6 +281,7 @@ export async function listWorkUnits(paths: RuntimePaths): Promise<WorkUnit[]> {
 async function writeUnit(paths: RuntimePaths, unit: WorkUnit): Promise<WorkUnit> {
   const next = workUnitSchema.parse({ ...unit, updated_at: now() });
   await writeJsonFileAtomic(manifestPath(paths, unit.slug), next);
+
   return next;
 }
 
@@ -269,6 +292,7 @@ export async function setWorkPhase(
 ): Promise<WorkUnit> {
   const unit = await readWorkUnit(paths, slug);
   const nextPhase = workPhaseSchema.parse(phase);
+
   return writeUnit(paths, {
     ...unit,
     phase: nextPhase,
@@ -306,6 +330,7 @@ function sameLegacyCheckpoint(
   legacy: Omit<WorkCheckpoint, "id">
 ): boolean {
   const { id: _id, ...withoutId } = checkpoint;
+
   return JSON.stringify(withoutId) === JSON.stringify(legacy);
 }
 
@@ -317,6 +342,7 @@ async function readAuthoredCheckpoints(
   const checkpoints: AuthoredCheckpoint[] = [];
   const issues: string[] = [];
   const identities = new Map<string, string>();
+
   for (const entry of entries
     .filter((item) => item.isFile() && item.name.endsWith(".md"))
     .sort((a, b) => a.name.localeCompare(b.name))) {
@@ -325,6 +351,7 @@ async function readAuthoredCheckpoints(
       const checkpoint = parseCheckpoint(content, slug);
       const identity = checkpointIdentity(checkpoint);
       const duplicate = identities.get(identity);
+
       if (duplicate) throw new Error(`duplicates checkpoint identity from ${duplicate}`);
       identities.set(identity, entry.name);
       checkpoints.push({ file: entry.name, hash: hashAuthoredFile(content), checkpoint });
@@ -334,30 +361,38 @@ async function readAuthoredCheckpoints(
       );
     }
   }
+
   return { checkpoints, issues };
 }
 
 async function migrateLegacyCheckpoints(paths: RuntimePaths, slug: string): Promise<boolean> {
   const legacy = await readJsonl(checkpointsPath(paths, slug), legacyWorkCheckpointSchema);
+
   if (legacy.length === 0) return false;
   const directory = workAuthoringPaths(paths, slug).checkpoints;
   await mkdir(directory, { recursive: true });
   const authored = await readAuthoredCheckpoints(directory, slug);
+
   if (authored.issues.length > 0) return false;
+
   const byIdentity = new Map(
     authored.checkpoints.map((item) => [legacyCheckpointIdentity(item.checkpoint), item.checkpoint])
   );
+
   for (const [index, checkpoint] of legacy.entries()) {
     const identity = legacyCheckpointIdentity(checkpoint);
     const existing = byIdentity.get(identity);
+
     if (existing) {
       if (!sameLegacyCheckpoint(existing, checkpoint)) {
         throw new Error(
           `Legacy checkpoint conflicts with authored checkpoint identity ${identity}`
         );
       }
+
       continue;
     }
+
     const id = `legacy-${String(index + 1).padStart(4, "0")}-${checkpoint.boundary}`;
     const migrated = { ...checkpoint, id };
     const file = `${id}.md`;
@@ -367,6 +402,7 @@ async function migrateLegacyCheckpoints(paths: RuntimePaths, slug: string): Prom
     });
     byIdentity.set(identity, migrated);
   }
+
   return true;
 }
 
@@ -376,6 +412,7 @@ async function authoredStatus(paths: RuntimePaths, slug: string): Promise<WorkAu
   const issues: string[] = [];
   let orientationHash: string | null = null;
   let contextHash: string | null = null;
+
   try {
     const content = await readFile(files.orientation, "utf8");
     parseOrientation(content);
@@ -383,25 +420,33 @@ async function authoredStatus(paths: RuntimePaths, slug: string): Promise<WorkAu
   } catch (error) {
     issues.push(`orientation.md: ${error instanceof Error ? error.message : String(error)}`);
   }
+
   const authoredCheckpoints = await readAuthoredCheckpoints(files.checkpoints, slug);
   issues.push(...authoredCheckpoints.issues);
   const checkpointFiles = new Set(authoredCheckpoints.checkpoints.map((item) => item.file));
+
   for (const file of Object.keys(unit.checkpoint_hashes)) {
     if (!checkpointFiles.has(file))
       issues.push(`checkpoints/${file}: validated checkpoint was removed`);
   }
+
   for (const item of authoredCheckpoints.checkpoints) {
     const stored = unit.checkpoint_hashes[item.file];
+
     if (stored !== undefined && stored !== item.hash) {
       issues.push(`checkpoints/${item.file}: validated checkpoint was modified`);
     }
   }
+
   const legacyCount = (await readJsonl(checkpointsPath(paths, slug), legacyWorkCheckpointSchema))
     .length;
+
   const checkpointInvalid = issues.some((issue) => issue.startsWith("checkpoints/"));
+
   const validatedCheckpoints = authoredCheckpoints.checkpoints.filter(
     (item) => unit.checkpoint_hashes[item.file] === item.hash
   ).length;
+
   const checkpointState = checkpointInvalid
     ? "invalid"
     : authoredCheckpoints.checkpoints.length === 0 && legacyCount > 0
@@ -409,6 +454,7 @@ async function authoredStatus(paths: RuntimePaths, slug: string): Promise<WorkAu
       : validatedCheckpoints === authoredCheckpoints.checkpoints.length
         ? "current"
         : "unvalidated";
+
   try {
     const content = await readFile(files.context_map, "utf8");
     parseContextMap(content);
@@ -416,6 +462,7 @@ async function authoredStatus(paths: RuntimePaths, slug: string): Promise<WorkAu
   } catch (error) {
     issues.push(`context-map.md: ${error instanceof Error ? error.message : String(error)}`);
   }
+
   const state = (hash: string | null, stored: string | undefined) =>
     hash === null
       ? "invalid"
@@ -424,8 +471,10 @@ async function authoredStatus(paths: RuntimePaths, slug: string): Promise<WorkAu
         : hash === stored
           ? "current"
           : "changed";
+
   const orientationState = state(orientationHash, unit.orientation_hash);
   const contextState = state(contextHash, unit.context_hash);
+
   return {
     unit,
     valid: issues.length === 0,
@@ -459,25 +508,31 @@ export async function validateWorkUnit(
 ): Promise<WorkAuthoringStatus> {
   const migratedLegacy = await migrateLegacyCheckpoints(paths, slug);
   const status = await authoredStatus(paths, slug);
+
   if (!status.valid || !status.orientation.hash || !status.context_map.hash) {
     throw new Error(`Work unit ${slug} is invalid:\n${status.issues.join("\n")}`);
   }
+
   const [orientationContent, contextContent] = await Promise.all([
     readFile(status.files.orientation, "utf8"),
     readFile(status.files.context_map, "utf8")
   ]);
+
   if (
     hashAuthoredFile(orientationContent) !== status.orientation.hash ||
     hashAuthoredFile(contextContent) !== status.context_map.hash
   ) {
     throw new Error(`Work unit ${slug} changed during validation; retry validation`);
   }
+
   const parsedOrientation = parseOrientation(orientationContent);
   const parsedContext = parseContextMap(contextContent);
   const authoredCheckpoints = await readAuthoredCheckpoints(status.files.checkpoints, slug);
+
   if (authoredCheckpoints.issues.length > 0) {
     throw new Error(`Work unit ${slug} is invalid:\n${authoredCheckpoints.issues.join("\n")}`);
   }
+
   for (const item of authoredCheckpoints.checkpoints) {
     if (
       hashAuthoredFile(await readFile(path.join(status.files.checkpoints, item.file), "utf8")) !==
@@ -486,15 +541,19 @@ export async function validateWorkUnit(
       throw new Error(`Work unit ${slug} changed during validation; retry validation`);
     }
   }
+
   const orientationChanged =
     status.unit.orientation_hash !== undefined && status.orientation.state === "changed";
+
   const revision = orientationChanged
     ? status.unit.orientation.revision + 1
     : status.unit.orientation.revision;
+
   await writeJsonFileAtomic(checkpointIndexPath(paths, slug), {
     schema_version: 1,
     checkpoints: authoredCheckpoints.checkpoints
   });
+
   const next = await writeUnit(paths, {
     ...status.unit,
     objective: parsedOrientation.outcome,
@@ -507,6 +566,7 @@ export async function validateWorkUnit(
       authoredCheckpoints.checkpoints.map((item) => [item.file, item.hash])
     )
   });
+
   if (migratedLegacy) {
     try {
       await unlink(checkpointsPath(paths, slug));
@@ -514,10 +574,12 @@ export async function validateWorkUnit(
       if (!(error instanceof Error) || filesystemErrorCode(error) !== "ENOENT") throw error;
     }
   }
+
   if (orientationChanged) {
     await withBindingLock(paths, async () => {
       const index = await readBindingIndex(paths);
       const updatedAt = now();
+
       for (const [key, binding] of Object.entries(index.bindings)) {
         if (binding.unit !== slug) continue;
         index.bindings[key] = {
@@ -530,9 +592,11 @@ export async function validateWorkUnit(
           }
         };
       }
+
       await writeBindingIndex(paths, index);
     });
   }
+
   return {
     ...(await authoredStatus(paths, slug)),
     unit: next
@@ -541,6 +605,7 @@ export async function validateWorkUnit(
 
 async function requireValidatedWorkUnit(paths: RuntimePaths, slug: string): Promise<WorkUnit> {
   const status = await authoredStatus(paths, slug);
+
   if (
     !status.valid ||
     status.orientation.state !== "current" ||
@@ -551,6 +616,7 @@ async function requireValidatedWorkUnit(paths: RuntimePaths, slug: string): Prom
       `Work unit ${slug} has unvalidated authored files; run mfz work validate ${slug}`
     );
   }
+
   return status.unit;
 }
 
@@ -563,11 +629,13 @@ export async function attachWorkSession(
   await withBindingLock(paths, async () => {
     const index = await readBindingIndex(paths);
     const key = sessionKey(session);
+
     if (index.bindings[key]) {
       throw new Error(
         `Session ${key} is already bound to ${index.bindings[key].unit}; use work switch explicitly`
       );
     }
+
     const timestamp = now();
     index.bindings[key] = {
       session,
@@ -594,6 +662,7 @@ export async function switchWorkSession(
     const index = await readBindingIndex(paths);
     const key = sessionKey(session);
     const previous = index.bindings[key];
+
     if (!previous)
       throw new Error(`Session ${key} is not bound to a work unit; use work attach instead`);
     const timestamp = now();
@@ -619,6 +688,7 @@ export async function detachWorkSession(
   await withBindingLock(paths, async () => {
     const index = await readBindingIndex(paths);
     const key = sessionKey(session);
+
     if (!index.bindings[key]) throw new Error(`Session ${key} is not bound to a work unit`);
     delete index.bindings[key];
     await writeBindingIndex(paths, index);
@@ -634,6 +704,7 @@ export async function reloadWorkOrientation(
     const index = await readBindingIndex(paths);
     const key = sessionKey(session);
     const binding = index.bindings[key];
+
     if (!binding) throw new Error(`Session ${key} is not bound to a work unit`);
     const unit = await readWorkUnit(paths, binding.unit);
     index.bindings[key] = {
@@ -654,18 +725,25 @@ export async function readWorkCheckpoints(
   slug: string
 ): Promise<WorkCheckpoint[]> {
   const unit = await readWorkUnit(paths, slug);
+
   if (Object.keys(unit.checkpoint_hashes).length === 0) return [];
+
   const index = checkpointIndexSchema.parse(
     JSON.parse(await readFile(checkpointIndexPath(paths, slug), "utf8"))
   );
+
   const byFile = new Map(index.checkpoints.map((item) => [item.file, item]));
+
   const checkpoints = Object.entries(unit.checkpoint_hashes).map(([file, expectedHash]) => {
     const item = byFile.get(file);
+
     if (!item || item.hash !== expectedHash) {
       throw new Error(`Checkpoint index is not synchronized for ${file}`);
     }
+
     return item.checkpoint;
   });
+
   return checkpoints.sort((left, right) => left.created_at.localeCompare(right.created_at));
 }
 
@@ -685,21 +763,26 @@ export async function appendWorkReceipt(
     const index = await readBindingIndex(paths);
     const key = sessionKey(session);
     const binding = index.bindings[key];
+
     if (!binding) throw new Error(`Session ${key} is not bound to a work unit`);
     const unit = await readWorkUnit(paths, binding.unit);
+
     if (input.orientation_revision !== unit.orientation.revision) {
       throw new Error(
         `Orientation revision ${input.orientation_revision} is not current for ${unit.slug}`
       );
     }
+
     const receipt = workReceiptSchema.parse({
       unit: unit.slug,
       session,
       ...input,
       created_at: now()
     });
+
     await appendJsonl(receiptsPath(paths, unit.slug), receipt);
     let delivery: DeliveryState;
+
     if (input.outcome === "failed") {
       delivery = {
         state: "failed",
@@ -718,14 +801,17 @@ export async function appendWorkReceipt(
         updated_at: now()
       };
     }
+
     index.bindings[key] = { ...binding, delivery };
     await writeBindingIndex(paths, index);
+
     return receipt;
   });
 }
 
 export async function readWorkReceipts(paths: RuntimePaths, slug: string): Promise<WorkReceipt[]> {
   await readWorkUnit(paths, slug);
+
   return readJsonl(receiptsPath(paths, slug), workReceiptSchema);
 }
 
@@ -745,6 +831,7 @@ export async function resolveWorkContext(
     }
 > {
   const binding = (await readBindingIndex(paths)).bindings[sessionKey(session)];
+
   if (!binding) {
     return {
       session,
@@ -753,11 +840,14 @@ export async function resolveWorkContext(
         "Work tracking is optional. Durable work may justify a human-confirmed work-unit attachment."
     };
   }
+
   const unit = await readWorkUnit(paths, binding.unit);
+
   const freshness =
     binding.delivery.orientation_revision === unit.orientation.revision
       ? binding.delivery.state
       : "stale";
+
   return {
     session,
     bound: true,

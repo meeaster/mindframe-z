@@ -77,6 +77,7 @@ describe("thread tools image build", () => {
       "SubagentStop",
       "UserPromptSubmit"
     ]);
+
     for (const [event, entry] of Object.entries(parsed.hooks)) {
       const block = entry[0]!;
       expect(block.hooks[0]!.command).toContain("${LAPDOG_URL}/claude/hooks");
@@ -112,6 +113,7 @@ describe("thread tools image build", () => {
 
     const oldPath = process.env.PATH;
     process.env.PATH = `${binDir}:${oldPath ?? ""}`;
+
     try {
       await expect(ensureThreadToolsImage(plan)).resolves.toBe("current");
       await expect(ensureThreadToolsImage(plan, { force: true })).resolves.toBe("built");

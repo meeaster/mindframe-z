@@ -30,6 +30,7 @@ import threadSessionsSkillAsset from "./thread-sessions/SKILL.md" with { type: "
 export async function materializeEmbeddedPackageRoot(): Promise<string> {
   const home = process.env.MFZ_HOME ?? os.homedir();
   const dir = path.join(home, ".mindframe-z", "cache", "thread-context");
+
   const assets: Array<[string, string]> = [
     [threadToolsDockerfilePath, dockerfileAsset],
     [threadToolsOpencodeConfigPath, opencodeConfigAsset],
@@ -37,11 +38,13 @@ export async function materializeEmbeddedPackageRoot(): Promise<string> {
     [threadContractSkillPath, threadContractSkillAsset],
     [threadSessionsSkillPath, threadSessionsSkillAsset]
   ];
+
   for (const [relPath, asset] of assets) {
     const target = path.join(dir, relPath);
     await mkdir(path.dirname(target), { recursive: true });
     await Bun.write(target, Bun.file(asset));
   }
+
   return dir;
 }
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { readSkillFiles } from "../src/skills/tree.ts";
 
 const root = await mkdtemp(path.join(os.tmpdir(), "mfz-bun-skill-"));
+
 try {
   await mkdir(path.join(root, "références"));
   await writeFile(

@@ -14,6 +14,7 @@ import type { OperationCompletion, OperationOutcome } from "./operations.js";
 // overrides the engine's (user content wins).
 
 export const engineSkillName = "mindframe-z";
+
 export const skillUpdateReviewName = "skill-update-review";
 
 const engineSkillMarkdown = `---
@@ -90,6 +91,7 @@ export async function materializeEngineSkill(
   await assertNoSymlinkAncestors(paths.home, dir);
   await mkdir(dir, { recursive: true });
   await writeTrustedFile(path.join(dir, "SKILL.md"), engineSkillMarkdown);
+
   return {
     name: engineSkillName,
     source: "local",
@@ -111,6 +113,7 @@ export async function materializeReviewSkill(
     path.join(dir, "references", "risk-reference.md"),
     skillUpdateReviewReferenceMarkdown
   );
+
   return {
     name: skillUpdateReviewName,
     source: "local",
@@ -123,6 +126,7 @@ export async function materializeReviewSkill(
 async function writeTrustedFile(file: string, content: string): Promise<void> {
   try {
     const stat = await lstat(file);
+
     if (stat.isSymbolicLink() || !stat.isFile()) {
       throw new Error(`Engine skill path is not a regular file: ${file}`);
     }
@@ -130,10 +134,12 @@ async function writeTrustedFile(file: string, content: string): Promise<void> {
     // SAFETY: lstat rejects with an ErrnoException carrying the filesystem error code.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+
   await writeFile(file, content, "utf8");
 }
 
 const guidanceBegin = "<!-- mfz:home-guidance:begin -->";
+
 const guidanceEnd = "<!-- mfz:home-guidance:end -->";
 
 const homeGuidance = `${guidanceBegin}
@@ -153,16 +159,20 @@ export async function ensureHomeGuidance(
   const existing = (await readTextFile(agentsPath)) ?? "";
   const begin = existing.indexOf(guidanceBegin);
   const end = existing.indexOf(guidanceEnd);
+
   const next =
     begin !== -1 && end !== -1 && end > begin
       ? existing.slice(0, begin) + homeGuidance.trimEnd() + existing.slice(end + guidanceEnd.length)
       : existing === ""
         ? homeGuidance
         : `${existing.trimEnd()}\n\n${homeGuidance}`;
+
   const writeOptions: WriteFileOptions = { category: "guidance" };
+
   if (onComplete) writeOptions.onComplete = onComplete;
   const outcomes = [await writeFileOutcome(agentsPath, next, writeOptions)];
   const claudePath = path.join(homeRoot, "CLAUDE.md");
+
   if (await pathExists(claudePath)) {
     const outcome: OperationOutcome = {
       category: "guidance",
@@ -172,15 +182,18 @@ export async function ensureHomeGuidance(
       significance: "meaningful",
       detail: "preserved existing file"
     };
+
     outcomes.push(outcome);
     onComplete?.(outcome);
   } else {
     outcomes.push(await writeFileOutcome(claudePath, "@AGENTS.md\n", writeOptions));
   }
+
   return outcomes;
 }
 
 export async function hasHomeGuidance(homeRoot: string): Promise<boolean> {
   const agentsPath = path.join(homeRoot, "AGENTS.md");
+
   return ((await readTextFile(agentsPath)) ?? "").includes(guidanceBegin);
 }

@@ -83,8 +83,10 @@ Run the next test.
 `,
     "utf8"
   );
+
   const table = (rows: string[] = []) =>
     ["| Target | Role | Status |", "| --- | --- | --- |", ...rows].join("\n");
+
   await writeFile(
     path.join(dir, "context-map.md"),
     `# Context Map
@@ -106,6 +108,7 @@ ${table(input.context)}
 describe("work commands", () => {
   it("keeps sessions unbound until explicit attachment and exposes context as JSON", async () => {
     const { root, home } = await setupIntegrationFixture();
+
     const create = await cli("mfz", root, home, [
       "work",
       "create",
@@ -118,15 +121,18 @@ describe("work commands", () => {
       "passive-thread",
       "--json"
     ]);
+
     expect(json(create.stdout).files?.orientation).toMatch(/orientation\.md$/);
     const instructions = await cli("mfz", root, home, ["work", "instructions", "update", "alpha"]);
     expect(instructions.stdout).toContain("Required orientation sections:");
+
     const checkpointInstructions = await cli("mfz", root, home, [
       "work",
       "instructions",
       "checkpoint",
       "alpha"
     ]);
+
     expect(checkpointInstructions.stdout).toContain("Required frontmatter:");
     expect(checkpointInstructions.stdout).toContain("  id");
     expect(checkpointInstructions.stdout).toContain("Authoring guidance:");
@@ -153,6 +159,7 @@ describe("work commands", () => {
       "opencode:session-a",
       "--json"
     ]);
+
     expect(json(unbound.stdout).context).toMatchObject({
       bound: false,
       session: { source: "opencode", id: "session-a" }
@@ -166,6 +173,7 @@ describe("work commands", () => {
       "opencode:session-a",
       "--json"
     ]);
+
     expect(json(attached.stdout)).toMatchObject({ ok: true, unit: "alpha" });
 
     const context = await cli("mfz", root, home, [
@@ -175,6 +183,7 @@ describe("work commands", () => {
       "opencode:session-a",
       "--json"
     ]);
+
     expect(json(context.stdout).context).toMatchObject({
       bound: true,
       freshness: "pending",
@@ -185,6 +194,7 @@ describe("work commands", () => {
 
   it("requires switch to replace bindings, retains checkpoints, and reports failed JSON operations", async () => {
     const { root, home } = await setupIntegrationFixture();
+
     for (const [slug, title] of [
       ["alpha", "Alpha"],
       ["beta", "Beta"]
@@ -192,6 +202,7 @@ describe("work commands", () => {
       await cli("mfz", root, home, ["work", "create", slug, "--title", title, "--phase", "design"]);
       await authorWorkUnit(root, home, slug, { outcome: `${title} objective.` });
     }
+
     await cli("mfz", root, home, ["work", "attach", "alpha", "--session", "opencode:session-a"]);
 
     const rejected = await cli("mfz", root, home, [
@@ -202,12 +213,14 @@ describe("work commands", () => {
       "opencode:session-a",
       "--json"
     ]);
+
     expect(json(rejected.stdout)).toMatchObject({
       ok: false,
       error: { message: expect.stringMatching(/already bound to alpha/) }
     });
 
     await cli("mfz", root, home, ["work", "phase", "alpha", "--phase", "implement"]);
+
     const reversed = await cli("mfz", root, home, [
       "work",
       "phase",
@@ -216,6 +229,7 @@ describe("work commands", () => {
       "design",
       "--json"
     ]);
+
     expect(
       z
         .object({ phase_history: z.array(z.object({ phase: z.string() })) })
@@ -232,6 +246,7 @@ describe("work commands", () => {
       "alpha",
       "checkpoints"
     );
+
     await writeFile(
       path.join(checkpointDirectory, "compaction.md"),
       `---
@@ -250,6 +265,7 @@ Completed compaction summary.
 
     const checkpoints = await cli("mfz", root, home, ["work", "checkpoints", "alpha", "--json"]);
     expect(json(checkpoints.stdout).checkpoints).toHaveLength(1);
+
     const context = await cli("mfz", root, home, [
       "work",
       "context",
@@ -257,6 +273,7 @@ Completed compaction summary.
       "opencode:session-a",
       "--json"
     ]);
+
     expect(z.object({ slug: z.string() }).parse(json(context.stdout).context?.unit).slug).toBe(
       "beta"
     );
@@ -296,6 +313,7 @@ Completed compaction summary.
       orientation: "Exact orientation.",
       outcome: "delivered"
     });
+
     const context = await cli("mfz", root, home, [
       "work",
       "context",
@@ -303,6 +321,7 @@ Completed compaction summary.
       "opencode:receipt-session",
       "--json"
     ]);
+
     expect(json(context.stdout).context).toMatchObject({
       freshness: "delivered",
       pending_orientation: null

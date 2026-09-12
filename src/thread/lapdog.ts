@@ -5,10 +5,15 @@ import { z } from "zod";
 import type { RuntimePaths } from "../core/paths.js";
 
 export const lapdogImageRef = "ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest";
+
 export const lapdogContainerName = "lapdog";
+
 export const lapdogNetworkName = "mfz-net";
+
 export const lapdogPort = 8126;
+
 export const lapdogWebUiPort = 8080;
+
 export const lapdogSnapshotDirInContainer = "/snapshots";
 
 export function lapdogUrl(): string {
@@ -30,9 +35,11 @@ export function lapdogSnapshotsPath(paths: RuntimePaths): string {
 export async function ensureLapdogNetwork(): Promise<"created" | "exists"> {
   try {
     await execa("docker", ["network", "inspect", lapdogNetworkName]);
+
     return "exists";
   } catch {
     await execa("docker", ["network", "create", lapdogNetworkName]);
+
     return "created";
   }
 }
@@ -44,6 +51,7 @@ const lapdogContainerInspectSchema = z
     NetworkSettings: z.object({ Networks: z.record(z.string(), z.unknown()).optional() }).optional()
   })
   .passthrough();
+
 type LapdogContainerInspect = z.infer<typeof lapdogContainerInspectSchema>;
 
 async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefined> {
@@ -54,7 +62,9 @@ async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefi
       "--format",
       "{{json .}}"
     ]);
+
     const parsed = lapdogContainerInspectSchema.safeParse(JSON.parse(result.stdout));
+
     return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
@@ -63,11 +73,16 @@ async function inspectLapdogContainer(): Promise<LapdogContainerInspect | undefi
 
 async function isLapdogContainerUsable(): Promise<boolean> {
   const info = await inspectLapdogContainer();
+
   if (!info) return false;
+
   if (info.State?.Running !== true) return false;
+
   if (info.Config?.Image !== lapdogImageRef) return false;
   const networks = info.NetworkSettings?.Networks;
+
   if (!networks || !(lapdogNetworkName in networks)) return false;
+
   return true;
 }
 
@@ -85,6 +100,7 @@ export async function startLapdogContainer(
   if (await isLapdogContainerUsable()) {
     return "already_running";
   }
+
   await removeLapdogContainer();
 
   await execa("docker", [
@@ -107,6 +123,7 @@ export async function startLapdogContainer(
     "--disable-llmobs-data-forwarding",
     `--web-ui-port=${lapdogWebUiPort}`
   ]);
+
   return "started";
 }
 
@@ -135,8 +152,10 @@ export async function isLapdogReachable(options?: {
 }): Promise<boolean> {
   const url = options?.url ?? lapdogUrl();
   const timeoutMs = options?.timeoutMs ?? 2000;
+
   try {
     const response = await fetch(`${url}/info`, { signal: AbortSignal.timeout(timeoutMs) });
+
     return response.ok;
   } catch {
     return false;
@@ -151,9 +170,11 @@ export async function waitForLapdog(options?: {
   const attempts = options?.attempts ?? 30;
   const intervalMs = options?.intervalMs ?? 1000;
   const probeOptions = options?.url !== undefined ? { url: options.url } : {};
+
   for (let i = 1; i <= attempts; i++) {
     if (await isLapdogReachable(probeOptions)) return true;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+
   return false;
 }

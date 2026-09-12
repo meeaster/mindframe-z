@@ -12,7 +12,9 @@ export async function renderInlinedAgents(
   profile: ResolvedProfile
 ): Promise<string> {
   const parts: string[] = [];
+
   for (const file of profile.instructionFiles) parts.push(await readFile(file, "utf8"));
+
   if (profile.profile.capability_groups.length > 0) {
     parts.push(capabilityIndexContent(paths, profile));
   } else {
@@ -27,8 +29,11 @@ export async function renderInlinedAgents(
       }
     }
   }
+
   const referenceSection = instructionReferencesSection(paths, profile);
+
   if (referenceSection) parts.push(referenceSection);
+
   return (
     parts
       .map((part) => part.trim())

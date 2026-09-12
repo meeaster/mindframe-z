@@ -9,10 +9,14 @@ import {
 } from "./provider-seed.js";
 
 const anthropicHost = "api.anthropic.com";
+
 const anthropicServiceName = "anthropic-subscription";
+
 // Claude Code's public OAuth constants (PKCE client, no secret).
 const anthropicTokenUrl = "https://console.anthropic.com/v1/oauth/token";
+
 const claudeCodeOauthClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+
 const claudeOauthCredentialKey = "CLAUDE_AI_OAUTH";
 
 export interface ClaudeOauthTokens {
@@ -59,6 +63,7 @@ export function claudeOauthUploadBody(tokens: ClaudeOauthTokens) {
 export async function readHostClaudeOauth(home: string): Promise<ClaudeOauthTokens> {
   const file = path.join(home, ".claude", ".credentials.json");
   let parsed: { claudeAiOauth?: { accessToken?: string; refreshToken?: string } };
+
   try {
     parsed = JSON.parse(await readFile(file, "utf8"));
   } catch {
@@ -66,10 +71,13 @@ export async function readHostClaudeOauth(home: string): Promise<ClaudeOauthToke
       `Claude subscription credential not found at ${file}. Log in with Claude Code on the host first.`
     );
   }
+
   const oauth = parsed.claudeAiOauth;
+
   if (!oauth?.accessToken || !oauth.refreshToken) {
     throw new Error(`No claudeAiOauth access/refresh tokens in ${file}.`);
   }
+
   return { accessToken: oauth.accessToken, refreshToken: oauth.refreshToken };
 }
 
