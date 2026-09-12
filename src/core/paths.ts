@@ -9,9 +9,12 @@ import { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
 export { expandHome, machineConfigPath, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
 
-export type AgentName = "opencode-v2" | "claude-code" | "codex" | "pi";
-export type ToolTarget = "opencode-v2" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
+export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
+
+export type ToolTarget = "opencode" | "claude-code" | "codex" | "pi" | "mise" | "dotfiles";
+
 export type InfraTarget = "mise" | "dotfiles";
+
 export type ApplyAgent = AgentName | "all";
 
 export interface RuntimePaths {
@@ -43,16 +46,19 @@ export function packageRootFromImport(importMetaUrl: string): string {
   // (dist/src/*, three levels up).
   const start = path.dirname(fileURLToPath(importMetaUrl));
   let dir = start;
+
   while (dir !== path.dirname(dir)) {
     if (existsSync(path.join(dir, "package.json"))) return dir;
     dir = path.dirname(dir);
   }
+
   return path.resolve(start, "../..");
 }
 
 function machineConfig(home: string) {
   try {
     const parsed = YAML.parse(readFileSync(machineConfigPath(home), "utf8"));
+
     return machineSchema.parse(parsed);
   } catch {
     return undefined;
@@ -73,9 +79,11 @@ export function createRuntimePaths(options: PathOptions = {}): RuntimePaths {
   const home = path.resolve(
     expandHome(options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd())
   );
+
   const root = resolveRoot(options.root, home);
   const workRoot = path.join(mindframeZDir(home), "work", "v1");
   const configuredWorkUnitsRoot = options.workUnitsRoot ?? machineConfig(home)?.work.units_root;
+
   return {
     root,
     home,
@@ -121,12 +129,12 @@ export function profileConfigsDir(paths: RuntimePaths, profileName: string): str
   return path.join(paths.configsDir, profileName);
 }
 
-export function opencodeV2SnapshotDir(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "opencode-v2");
+export function opencodeSnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "opencode");
 }
 
 export function activeOpenCodeSnapshotDir(paths: RuntimePaths, profileName: string): string {
-  return opencodeV2SnapshotDir(paths, profileName);
+  return opencodeSnapshotDir(paths, profileName);
 }
 
 export function executorDataDir(): string {
@@ -165,8 +173,8 @@ export function providerSkillSnapshotDir(
   return path.join(profileConfigsDir(paths, profileName), target, "skills");
 }
 
-export function opencodeV2SkillSnapshotDir(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "opencode-v2", "skills");
+export function opencodeSkillSnapshotDir(paths: RuntimePaths, profileName: string): string {
+  return path.join(profileConfigsDir(paths, profileName), "opencode", "skills");
 }
 
 export function skillSnapshotManifestPath(paths: RuntimePaths, profileName: string): string {

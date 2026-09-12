@@ -7,18 +7,26 @@ import { jsonObjectSchema } from "./json.js";
 import { machineConfigPath } from "./path-util.js";
 import { resolveUpstreamHomeRoot } from "./upstream-clones.js";
 
-export const agentSchema = z.enum(["opencode-v2", "claude-code", "codex", "pi"]);
+export const agentSchema = z.enum(["opencode", "claude-code", "codex", "pi"]);
+
 const targetSchema = agentSchema;
+
 const capabilityAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
+
 const agentsMapSchema = z
   .partialRecord(capabilityAgentSchema, z.boolean())
   .refine((agents) => Object.keys(agents).length > 0, {
     message: "agents must contain at least one harness"
   });
+
 const mcpAgentSchema = z.enum(["opencode", "claude-code", "codex"]);
+
 const mcpDisabledAgentSchema = mcpAgentSchema.exclude(["claude-code"]);
+
 type McpAgentName = z.infer<typeof mcpAgentSchema>;
+
 type NormalizedMcpAgents = Partial<Record<McpAgentName, boolean>>;
+
 export const executorConnectionNameSchema = z
   .string()
   .min(1)
@@ -26,6 +34,7 @@ export const executorConnectionNameSchema = z
     /^[a-z][a-z0-9_]*$/,
     "must be a lowercase address-safe Executor connection name without dots, hyphens, or punctuation"
   );
+
 const executorConnectionMapSchema = z
   .record(executorConnectionNameSchema, z.string().min(1))
   .refine((connections) => Object.keys(connections).length > 0, {
@@ -38,12 +47,14 @@ const conciseMcpAgentsSchema = z
   .refine((agents) => new Set(agents).size === agents.length, {
     message: "agents must not contain duplicate harnesses"
   });
+
 const conciseDisabledMcpAgentsSchema = z
   .array(mcpDisabledAgentSchema)
   .min(1)
   .refine((agents) => new Set(agents).size === agents.length, {
     message: "agents must not contain duplicate harnesses"
   });
+
 const groupedMcpAgentsSchema = z
   .union([
     z
@@ -63,6 +74,7 @@ const groupedMcpAgentsSchema = z
     const enabled = agents.enabled ?? [];
     const disabled = agents.disabled ?? [];
     const conflict = disabled.find((agent) => enabled.includes(agent));
+
     if (conflict) {
       context.addIssue({
         code: "custom",
@@ -71,21 +83,25 @@ const groupedMcpAgentsSchema = z
       });
     }
   });
+
 const directMcpAgentsSchema = z
   .union([conciseMcpAgentsSchema, groupedMcpAgentsSchema])
   .transform((agents): NormalizedMcpAgents => {
     if (Array.isArray(agents)) return Object.fromEntries(agents.map((agent) => [agent, true]));
+
     return Object.fromEntries([
       ...(agents.enabled ?? []).map((agent) => [agent, true] as const),
       ...(agents.disabled ?? []).map((agent) => [agent, false] as const)
     ]);
   });
+
 const executorMcpConfigSchema = z
   .object({
     enabled: z.boolean(),
     connections: executorConnectionMapSchema.optional()
   })
   .strict();
+
 const profileMcpConfigSchema = z
   .object({
     agents: directMcpAgentsSchema.optional(),
@@ -96,6 +112,7 @@ const profileMcpConfigSchema = z
     ({ agents, executor }) => agents !== undefined || executor?.enabled === true,
     "MCP server must declare direct agents or enable Executor"
   );
+
 const profileSkillConfigSchema = z
   .object({
     agents: agentsMapSchema.optional(),
@@ -172,6 +189,7 @@ const skillPathSchema = z
           !part.endsWith(" ") &&
           ![...part].some((character) => {
             const code = character.charCodeAt(0);
+
             return code < 0x20 || '<>:"|?*'.includes(character);
           }) &&
           !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(part) &&
@@ -188,6 +206,7 @@ const httpsRepositorySchema = z
   .refine((value) => {
     try {
       const url = new URL(value);
+
       return url.protocol === "https:" && url.username === "" && url.password === "";
     } catch {
       return false;
@@ -207,14 +226,15 @@ const skillFields = {
   description: z.string().default("")
 };
 
-export const vendoredSkillTargets = ["claude-code", "codex", "opencode-v2"] as const;
+export const vendoredSkillTargets = ["claude-code", "codex", "opencode"] as const;
+
 export const vendoredSkillTargetSchema = z.enum(vendoredSkillTargets);
 
 const vendoredSkillVariantsSchema = z
   .object({
     "claude-code": skillPathSchema,
     codex: skillPathSchema,
-    "opencode-v2": skillPathSchema
+    opencode: skillPathSchema
   })
   .strict();
 
@@ -267,20 +287,24 @@ export const skillSchema = z.union([localSkillSchema, vendoredSkillSchema, gitSk
 const vendorCommitSchema = z
   .string()
   .regex(/^[0-9a-f]{40}$/, "must be a full lowercase Git commit SHA");
+
 const skillDigestSchema = z.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 content digest");
+
 export const vendorLockVariantDigestsSchema = z
   .object({
     "claude-code": skillDigestSchema,
     codex: skillDigestSchema,
-    "opencode-v2": skillDigestSchema
+    opencode: skillDigestSchema
   })
   .strict();
+
 const vendorLockSingleEntrySchema = z
   .object({
     commit: vendorCommitSchema,
     digest: skillDigestSchema
   })
   .strict();
+
 const vendorLockVariantsEntrySchema = z
   .object({
     commit: vendorCommitSchema,
@@ -306,6 +330,7 @@ export const skillsManifestSchema = z
   })
   .superRefine(({ skills }, context) => {
     const seen = new Set<string>();
+
     for (const [index, skill] of skills.entries()) {
       if (seen.has(skill.name)) {
         context.addIssue({
@@ -314,6 +339,7 @@ export const skillsManifestSchema = z
           path: ["skills", index, "name"]
         });
       }
+
       seen.add(skill.name);
     }
   });
@@ -343,6 +369,7 @@ const mcpServerBaseSchema = z
                 .superRefine((method, context) => {
                   const hasDiscoveryUrl = method.discoveryUrl !== undefined;
                   const hasRegistrationScopes = method.registrationScopes !== undefined;
+
                   if (hasDiscoveryUrl !== hasRegistrationScopes) {
                     context.addIssue({
                       code: "custom",
@@ -373,6 +400,7 @@ const mcpServerBaseSchema = z
           .min(1)
           .superRefine((methods, context) => {
             const seen = new Set<string>();
+
             for (const [index, method] of methods.entries()) {
               if (seen.has(method.slug)) {
                 context.addIssue({
@@ -381,6 +409,7 @@ const mcpServerBaseSchema = z
                   path: [index, "slug"]
                 });
               }
+
               seen.add(method.slug);
             }
           })
@@ -418,8 +447,10 @@ const capabilityGroupSchema = z
     summary: z.string().min(1)
   })
   .strict();
+
 const capabilityGroupsSchema = z.array(capabilityGroupSchema).superRefine((groups, context) => {
   const seen = new Set<string>();
+
   for (const [index, group] of groups.entries()) {
     if (seen.has(group.name)) {
       context.addIssue({
@@ -428,6 +459,7 @@ const capabilityGroupsSchema = z.array(capabilityGroupSchema).superRefine((group
         path: [index, "name"]
       });
     }
+
     seen.add(group.name);
   }
 });
@@ -584,7 +616,7 @@ const exactVersionSchema = z
     "must be an exact semantic version"
   );
 
-const opencodeV2ConfigSchema = z.object({
+const opencodeConfigSchema = z.object({
   config: jsonObjectSchema.default({}),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: jsonObjectSchema.default({}),
@@ -621,10 +653,12 @@ const instructionReferenceSchema = z
     description: z.string().min(1)
   })
   .strict();
+
 const instructionReferencesSchema = z
   .array(instructionReferenceSchema)
   .superRefine((references, context) => {
     const seen = new Set<string>();
+
     for (const [index, reference] of references.entries()) {
       if (seen.has(reference.name)) {
         context.addIssue({
@@ -633,6 +667,7 @@ const instructionReferencesSchema = z
           path: [index, "name"]
         });
       }
+
       seen.add(reference.name);
     }
   });
@@ -642,7 +677,7 @@ export const profileSchema = z
     name: z.string().min(1),
     extends: z.string().optional(),
     description: z.string().default(""),
-    agents: z.array(agentSchema).default(["opencode-v2", "claude-code", "codex"]),
+    agents: z.array(agentSchema).default(["opencode", "claude-code", "codex"]),
     instructions: z.array(z.string()).default([]),
     instruction_references: instructionReferencesSchema.default([]),
     capability_groups: capabilityGroupsSchema.default([]),
@@ -657,7 +692,7 @@ export const profileSchema = z
       })
       .strict()
       .optional(),
-    opencode_v2: opencodeV2ConfigSchema.default({
+    opencode: opencodeConfigSchema.default({
       config: {},
       dependencies: {},
       cli: {},
@@ -714,31 +749,55 @@ export const machineSchema = z.object({
 });
 
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;
+
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
+
 export type SkillEntry = z.infer<typeof skillSchema>;
+
 export type VendoredSkillTarget = z.infer<typeof vendoredSkillTargetSchema>;
+
 export type VendoredSkillVariantMap = z.infer<typeof vendoredSkillVariantsSchema>;
+
 export type VendorLock = z.infer<typeof vendorLockSchema>;
+
 export type VendorLockEntry = z.infer<typeof vendorLockEntrySchema>;
+
 export type VendorLockVariantDigests = z.infer<typeof vendorLockVariantDigestsSchema>;
+
 export type ToolTargetName = z.infer<typeof targetSchema>;
+
 export type ProfileAgentDefaults = Partial<Record<CapabilityAgentName, boolean>>;
+
 export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;
+
 export type McpServer = z.infer<typeof mcpServerSchema>;
+
 export type ExecutorAuthenticationMethod = NonNullable<
   NonNullable<NonNullable<McpServer["executor"]>["authentication"]>[number]
 >;
+
 export type ExecutorConnectionMap = z.infer<typeof executorConnectionMapSchema>;
+
 export type ProfileManifest = z.infer<typeof profileSchema>;
+
 export type InstructionReference = z.infer<typeof instructionReferenceSchema>;
+
 export type CapabilityGroup = z.infer<typeof capabilityGroupSchema>;
+
 export type MachineManifest = z.infer<typeof machineSchema>;
+
 export type HomeManifest = z.infer<typeof homeManifestSchema>;
+
 export type Archive = z.infer<typeof archiveSchema>;
+
 export type SandboxCredentialMode = z.infer<typeof sandboxCredentialModeSchema>;
+
 export type ThreadStore = z.infer<typeof threadStoreSchema>;
+
 export type ThreadDefaults = z.infer<typeof threadDefaultsSchema>;
+
 export type ThreadHarness = z.infer<typeof threadHarnessSchema>;
+
 export type CapabilityAgentName = z.infer<typeof capabilityAgentSchema>;
 
 export interface LoadedManifests {
@@ -774,6 +833,7 @@ async function parseYaml<T>(file: string, schema: z.ZodType<T>): Promise<T> {
 
 export async function readYaml<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {
   if (!(await pathExists(file))) return fallback;
+
   return parseYaml(file, schema);
 }
 
@@ -789,6 +849,7 @@ function machineDefaults(): MachineManifest {
 // reads should surface their failures.
 async function listProfileDirs(root: string): Promise<string[]> {
   const profilesDir = path.join(root, "profiles");
+
   return (await readDirEntries(profilesDir))
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(profilesDir, entry.name));
@@ -799,8 +860,10 @@ async function validateYamlFile<T>(
   schema: z.ZodType<T>
 ): Promise<ManifestValidationResult | null> {
   if (!(await pathExists(file))) return null;
+
   try {
     await parseYaml(file, schema);
+
     return { file, ok: true };
   } catch (error) {
     return { file, ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -820,6 +883,7 @@ export async function validateManifests(
   ];
 
   const effectiveHome = home ?? process.env.HOME;
+
   if (effectiveHome) {
     files.push({ file: machineConfigPath(effectiveHome), schema: machineSchema });
   }
@@ -829,21 +893,27 @@ export async function validateManifests(
   }
 
   const results: ManifestValidationResult[] = [];
+
   for (const entry of files) {
     const result = await validateYamlFile(entry.file, entry.schema);
+
     if (result) results.push(result);
   }
+
   return results;
 }
 
 async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[string, string]>> {
   const entries = await readdir(dir, { withFileTypes: true });
   const result: Array<[string, string]> = [];
+
   for (const entry of entries) {
     if (entry.name === "profile.yml" || entry.name === "mise.toml") continue;
+
     if (prefix === ".config" && entry.name === "mise") continue;
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     const full = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       for (const [childRel, content] of await readDotfileEntries(full, rel)) {
         result.push([childRel, content]);
@@ -852,6 +922,7 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
       result.push([rel, await readFile(full, "utf8")]);
     }
   }
+
   return result;
 }
 
@@ -861,8 +932,10 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
       `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
     );
   }
+
   const homeManifest = await parseYaml(path.join(root, "mfz_home.yml"), homeManifestSchema);
   const effectiveHome = home ?? process.env.HOME ?? "";
+
   const upstream = homeManifest.extends
     ? await loadManifests(
         await resolveUpstreamHomeRoot({
@@ -874,27 +947,35 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
         home
       )
     : undefined;
+
   const refs = await readYaml(path.join(root, "catalog", "references.yml"), refsManifestSchema, {
     references: []
   });
+
   const skills = await readYaml(path.join(root, "catalog", "skills.yml"), skillsManifestSchema, {
     skills: []
   });
+
   const mcp = await readYaml(path.join(root, "catalog", "mcp.yml"), mcpManifestSchema, {
     servers: {}
   });
+
   const machine = effectiveHome
     ? await readYaml(machineConfigPath(effectiveHome), machineSchema, machineDefaults())
     : machineDefaults();
+
   const profileMap = new Map<string, ProfileManifest>();
   const miseMap = new Map<string, string>();
+
   for (const profileDir of await listProfileDirs(root)) {
     const profileYaml = path.join(profileDir, "profile.yml");
+
     if (!(await pathExists(profileYaml))) continue;
     const profile = await parseYaml(profileYaml, profileSchema);
 
     const miseToml = path.join(profileDir, "mise.toml");
     let mise: string | undefined;
+
     try {
       if (await pathExists(miseToml)) {
         mise = await readFile(miseToml, "utf8");
@@ -907,9 +988,12 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     for (const [rel, content] of await readDotfileEntries(profileDir)) {
       profile.dotfiles[rel] = content;
     }
+
     profileMap.set(profile.name, profile);
+
     if (mise !== undefined) miseMap.set(profile.name, mise);
   }
+
   const loaded: LoadedManifests = {
     homeManifest,
     root,
@@ -921,7 +1005,9 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     miseFiles: miseMap,
     machine
   };
+
   if (upstream) loaded.upstream = withAliasPrefix(upstream, homeManifest.extends!.name);
+
   return loaded;
 }
 
@@ -930,6 +1016,8 @@ function withAliasPrefix(manifests: LoadedManifests, alias: string): LoadedManif
     ...manifests,
     aliasPath: [alias, ...manifests.aliasPath]
   };
+
   if (manifests.upstream) prefixed.upstream = withAliasPrefix(manifests.upstream, alias);
+
   return prefixed;
 }

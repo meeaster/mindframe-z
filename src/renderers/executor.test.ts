@@ -5,14 +5,13 @@ import {
   claudeExecutorEntry,
   codexExecutorEntry,
   executorBridgeArgs,
-  openCodeExecutorEntry,
-  openCodeV2ExecutorEntry
+  openCodeExecutorEntry
 } from "./executor.js";
 
 function profile(): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode-v2", "claude-code", "codex"],
+    agents: ["opencode", "claude-code", "codex"],
     profile: profileSchema.parse({ name: "personal", executor: { timeout_ms: 45_000 } }),
     // SAFETY: executor entry rendering only reads profile executor settings.
     manifests: {} as ResolvedProfile["manifests"],
@@ -23,8 +22,8 @@ function profile(): ResolvedProfile {
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []
@@ -37,12 +36,6 @@ describe("Executor bridge rendering", () => {
 
     expect(executorBridgeArgs(resolved)).toEqual(["mcp", "--elicitation-mode", "browser"]);
     expect(openCodeExecutorEntry(resolved)).toEqual({
-      type: "local",
-      command: ["executor", "mcp", "--elicitation-mode", "browser"],
-      timeout: 45_000,
-      enabled: true
-    });
-    expect(openCodeV2ExecutorEntry(resolved)).toEqual({
       type: "local",
       command: ["executor", "mcp", "--elicitation-mode", "browser"],
       timeout: { startup: 45_000, catalog: 45_000, execution: 45_000 },

@@ -42,18 +42,18 @@ function skill(
 function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): ResolvedProfile {
   return {
     name: "test",
-    agents: ["opencode-v2", "claude-code", "codex"],
+    agents: ["opencode", "claude-code", "codex"],
     profile: {
       name: "test",
       description: "",
-      agents: ["opencode-v2", "claude-code", "codex"],
+      agents: ["opencode", "claude-code", "codex"],
       instructions: [],
       instruction_references: [],
       capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode_v2: {
+      opencode: {
         config: {},
         dependencies: {},
         cli: {},
@@ -104,10 +104,10 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     referencesDir: "/tmp",
     enabledReferences: [],
     enabledSkills,
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
-    enabledOpenCodeV2Plugins: [],
-    enabledOpenCodeV2TuiPlugins: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
+    enabledOpenCodePlugins: [],
+    enabledOpenCodeTuiPlugins: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []
@@ -124,6 +124,7 @@ async function readCodexSkillsConfig(
   const data = codexConfigSchema.parse(
     parseToml(await readFile(path.join(runtimePaths.codexDir, "config.toml"), "utf8"))
   );
+
   return data.skills?.config;
 }
 
@@ -131,6 +132,7 @@ async function writeInstalledSkill(runtimePaths: RuntimePaths, name: string): Pr
   const skillPath = path.join(runtimePaths.home, ".agents", "skills", name, "SKILL.md");
   await mkdir(path.dirname(skillPath), { recursive: true });
   await writeFile(skillPath, `# ${name}\n`, "utf8");
+
   return skillPath;
 }
 
@@ -335,11 +337,13 @@ describe("skill override precedence", () => {
 
     await initGitRepo(root);
     process.chdir(root);
+
     const profile = resolvedProfile([
       skill("default", { "claude-code": true }, ["claude-code"]),
       skill("global", { "claude-code": true }, ["claude-code"]),
       skill("both", { "claude-code": false }, ["claude-code"])
     ]);
+
     await setLocalSkillState(runtimePaths, profile, "claude-code", "both", true);
 
     await expect(resolveSkillToggleState(runtimePaths, profile, "claude-code")).resolves.toEqual({
@@ -375,6 +379,7 @@ describe("skill override delta writes", () => {
 
     await initGitRepo(root);
     process.chdir(root);
+
     const profile = resolvedProfile([
       skill("inherited", { "claude-code": true }, ["claude-code"]),
       skill("changed", { "claude-code": true }, ["claude-code"])
@@ -393,6 +398,7 @@ describe("skill override delta writes", () => {
     const runtimePaths = paths(root);
     await initGitRepo(root);
     process.chdir(root);
+
     const profile = resolvedProfile([
       skill("kept", { "claude-code": true }, ["claude-code"]),
       skill("changed", { "claude-code": true }, ["claude-code"])

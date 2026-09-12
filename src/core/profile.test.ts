@@ -9,7 +9,7 @@ import { deepMerge, mergeProfiles, resolveProfile } from "./profile.js";
 import { createRuntimePaths } from "./paths.js";
 import { digestSkillFiles, readSkillFiles } from "../skills/tree.js";
 
-const variantTargets = ["claude-code", "codex", "opencode-v2"] as const;
+const variantTargets = ["claude-code", "codex", "opencode"] as const;
 
 async function writeVariantSkillFixture(
   root: string,
@@ -24,8 +24,9 @@ async function writeVariantSkillFixture(
   > = {
     "claude-code": [],
     codex: [],
-    "opencode-v2": []
+    opencode: []
   };
+
   for (const target of variantTargets) {
     const directory = path.join(root, "skills", "vendor", name, target);
     const content = `---\nname: ${name}\ndescription: ${target}\n---\n\n# ${target}\n`;
@@ -33,16 +34,21 @@ async function writeVariantSkillFixture(
     await writeFile(path.join(directory, "SKILL.md"), content, "utf8");
     files[target] = await readSkillFiles(directory);
   }
+
   const records = [];
+
   const variants: Record<(typeof variantTargets)[number], string> = {
     "claude-code": "",
     codex: "",
-    "opencode-v2": ""
+    opencode: ""
   };
+
   for (const target of variantTargets) {
     variants[target] = digestSkillFiles(files[target]);
+
     for (const file of files[target]) records.push({ ...file, path: `${target}/${file.path}` });
   }
+
   return { digest: digestSkillFiles(records), variants };
 }
 
@@ -143,6 +149,7 @@ describe("mergeProfiles instruction references", () => {
         }
       ]
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -191,6 +198,7 @@ describe("mergeProfiles capability groups", () => {
         { name: "knowledge", summary: "Knowledge stores." }
       ]
     });
+
     const child = profileSchema.parse({
       name: "child",
       capability_groups: [{ name: "agent-tooling", summary: "Agent tooling sources." }]
@@ -212,6 +220,7 @@ describe("mergeProfiles thread defaults", () => {
       name: "base",
       thread: { defaults: { session_sources: ["claude-code"] } }
     });
+
     const child = profileSchema.parse({ name: "child", extends: "base" });
 
     expect(child.thread.defaults.session_sources).toBeUndefined();
@@ -225,6 +234,7 @@ describe("mergeProfiles thread defaults", () => {
       name: "base",
       thread: { defaults: { session_sources: ["claude-code"] } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -246,6 +256,7 @@ describe("mergeProfiles thread defaults", () => {
 
   it("lets a child override update_strategy when it sets its own", () => {
     const base = profileSchema.parse({ name: "base", thread: { update_strategy: "delta" } });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -338,6 +349,7 @@ describe("MCP direct and Executor selection", () => {
         }
       })
     ).toThrow();
+
     for (const name of ["PublicSafety", "public-safety", "public.safety", "public safety"]) {
       expect(() =>
         profileSchema.parse({
@@ -353,6 +365,7 @@ describe("MCP direct and Executor selection", () => {
       name: "base",
       mcp: { docs: { agents: ["opencode"] } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -374,6 +387,7 @@ describe("MCP direct and Executor selection", () => {
         }
       }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -397,6 +411,7 @@ describe("MCP direct and Executor selection", () => {
       name: "base",
       mcp: { docs: { agents: ["opencode", "codex"] } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -413,6 +428,7 @@ describe("MCP direct and Executor selection", () => {
       name: "base",
       mcp: { docs: { executor: { enabled: true } } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -430,6 +446,7 @@ describe("MCP direct and Executor selection", () => {
       name: "base",
       executor: { timeout_ms: 45_000 }
     });
+
     const child = profileSchema.parse({ name: "child", extends: "base" });
 
     expect(mergeProfiles(base, child).executor).toEqual({ timeout_ms: 45_000 });
@@ -539,6 +556,7 @@ describe("mergeProfiles codex plugins", () => {
       name: "base",
       codex: { plugins: { "github@openai-curated": { enabled: true } } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -556,6 +574,7 @@ describe("mergeProfiles codex plugins", () => {
       name: "base",
       codex: { plugins: { "github@openai-curated": { enabled: true } } }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
@@ -566,23 +585,24 @@ describe("mergeProfiles codex plugins", () => {
   });
 });
 
-describe("mergeProfiles OpenCode V2 plugin options", () => {
+describe("mergeProfiles OpenCode plugin options", () => {
   it("deep-merges options with child values taking precedence", () => {
     const base = profileSchema.parse({
       name: "base",
-      opencode_v2: {
+      opencode: {
         plugin_options: { ledger: { root: "/base", display: { compact: false } } }
       }
     });
+
     const child = profileSchema.parse({
       name: "child",
       extends: "base",
-      opencode_v2: {
+      opencode: {
         plugin_options: { ledger: { root: "/child", display: { label: "Work" } } }
       }
     });
 
-    expect(mergeProfiles(base, child).opencode_v2.plugin_options).toEqual({
+    expect(mergeProfiles(base, child).opencode.plugin_options).toEqual({
       ledger: { root: "/child", display: { compact: false, label: "Work" } }
     });
   });
@@ -784,7 +804,7 @@ describe("home inheritance", () => {
       path.join(root, "profiles", "work", "profile.yml"),
       [
         "name: work",
-        "agents: [opencode-v2, claude-code, codex]",
+        "agents: [opencode, claude-code, codex]",
         "skills:",
         "  selective-skill:",
         "    agents: { opencode: true, claude-code: false, codex: false }",
@@ -817,7 +837,7 @@ describe("home inheritance", () => {
             variants: {
               "claude-code": "dist/claude",
               codex: "dist/codex",
-              "opencode-v2": "dist/opencode"
+              opencode: "dist/opencode"
             }
           }
         ]
@@ -843,7 +863,7 @@ describe("home inheritance", () => {
       path.join(root, "profiles", "work", "profile.yml"),
       [
         "name: work",
-        "agents: [opencode-v2, claude-code, codex]",
+        "agents: [opencode, claude-code, codex]",
         "skills:",
         `  ${name}:`,
         "    agents: { opencode: true, claude-code: true, codex: true }",
@@ -868,7 +888,7 @@ describe("home inheritance", () => {
         variants: {
           "claude-code": { subtree: "dist/claude", digest: digests.variants["claude-code"] },
           codex: { subtree: "dist/codex", digest: digests.variants.codex },
-          "opencode-v2": { subtree: "dist/opencode", digest: digests.variants["opencode-v2"] }
+          opencode: { subtree: "dist/opencode", digest: digests.variants["opencode"] }
         }
       }
     });
@@ -906,7 +926,7 @@ describe("home inheritance", () => {
             variants: {
               "claude-code": "dist/claude",
               codex: "dist/codex",
-              "opencode-v2": "dist/opencode"
+              opencode: "dist/opencode"
             }
           }
         ]
@@ -918,7 +938,7 @@ describe("home inheritance", () => {
       path.join(root, "profiles", "work", "profile.yml"),
       [
         "name: work",
-        "agents: [opencode-v2, claude-code, codex]",
+        "agents: [opencode, claude-code, codex]",
         "skills:",
         `  ${name}:`,
         "    agents: { opencode: true, claude-code: true, codex: true }",

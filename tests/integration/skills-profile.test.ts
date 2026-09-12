@@ -22,7 +22,7 @@ describe("skills profile integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
+        "agents: [opencode]",
         "skills:",
         "  local-skill:",
         "    agents: { opencode: true }",
@@ -104,7 +104,7 @@ describe("skills profile integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
+        "agents: [opencode]",
         "skills:",
         "  local-skill:",
         ""

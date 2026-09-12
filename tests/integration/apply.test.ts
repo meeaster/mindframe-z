@@ -118,7 +118,8 @@ const PiSettings = z
 const SmokeCapture = z.object({
   argv: z.array(z.string()),
   cwd: z.string(),
-  env: z.record(z.string(), z.string())
+  env: z.record(z.string(), z.string()),
+  service: z.object({ port: z.number() })
 });
 
 function parseJson<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
@@ -174,7 +175,7 @@ describe("apply integration", () => {
     const skillsPath = path.join(root, "catalog", "skills.yml");
     await writeFile(
       skillsPath,
-      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: https://example.invalid/skills.git\n    ref: main\n    variants:\n      claude-code: dist/claude\n      codex: dist/codex\n      opencode-v2: dist/opencode\n`,
+      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: https://example.invalid/skills.git\n    ref: main\n    variants:\n      claude-code: dist/claude\n      codex: dist/codex\n      opencode: dist/opencode\n`,
       "utf8"
     );
     await mkdir(path.join(root, "skills"), { recursive: true });
@@ -196,7 +197,7 @@ describe("apply integration", () => {
     await writeFile(
       profilePath,
       profile
-        .replace("agents: [opencode-v2, claude-code]", "agents: [opencode-v2, claude-code, codex]")
+        .replace("agents: [opencode, claude-code]", "agents: [opencode, claude-code, codex]")
         .replace(
           "mcp:\n",
           `  ${name}:\n    agents: { opencode: true, claude-code: true, codex: true }\nmcp:\n`
@@ -304,13 +305,13 @@ describe("apply integration", () => {
       ),
       "utf8"
     );
-    const managedPlugins = configsPath(home, "personal", "opencode-v2", "plugins");
+    const managedPlugins = configsPath(home, "personal", "opencode", "plugins");
     const plugin = path.join(managedPlugins, "config-marker.ts");
     const stalePlugin = path.join(managedPlugins, "stale.ts");
     await mkdir(managedPlugins, { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     await expect(access(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
 
     const gitConfig = path.join(home, ".gitconfig");
@@ -346,7 +347,7 @@ describe("apply integration", () => {
     const firstCommandLink = await linkState(commandLink);
     const firstAgentLink = await linkState(agentLink);
 
-    const repeated = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    const repeated = await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     expect(repeated.stdout).toContain("Result\tmfz apply complete — no changes");
     expect(repeated.stdout).not.toMatch(/^(?:created|updated|removed|linked|relinked)\t/mu);
@@ -358,7 +359,7 @@ describe("apply integration", () => {
     const withoutLinks = await cli("mfz", root, home, [
       "apply",
       "--agent",
-      "opencode-v2",
+      "opencode",
       "--no-link"
     ]);
 
@@ -373,12 +374,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    const deselected = await cli("mfz", root, home, [
-      "apply",
-      "--agent",
-      "opencode-v2",
-      "--no-link"
-    ]);
+    const deselected = await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     expect(deselected.stdout).toContain(`removed\tfile\t${plugin}`);
     await expect(access(plugin)).rejects.toMatchObject({ code: "ENOENT" });
@@ -403,13 +399,13 @@ describe("apply integration", () => {
   it("reconciles references for full --agent and --no-link apply", async () => {
     const source = fixtureReferenceSource(root);
     const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
     const before = await git(checkout, ["rev-parse", "HEAD"]);
     await writeFile(path.join(source, "README.md"), "advanced fixture\n", "utf8");
     await git(source, ["add", "README.md"]);
     await git(source, ["commit", "-m", "advance fixture"]);
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     expect(await git(checkout, ["rev-parse", "HEAD"])).not.toBe(before);
     expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(
@@ -443,7 +439,7 @@ describe("apply integration", () => {
     const outcomes = await applyConfig({
       root,
       home,
-      agent: "opencode-v2",
+      agent: "opencode",
       target: "all",
       dryRun: true,
       noLink: true
@@ -468,7 +464,7 @@ describe("apply integration", () => {
   });
 
   it("plans reference and index work without checking upstream or writing reference state", async () => {
-    await applyConfig({ root, home, agent: "opencode-v2", target: "all", noLink: true });
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
     const paths = createRuntimePaths({ root, home });
     const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
     const source = fixtureReferenceSource(root);
@@ -483,7 +479,7 @@ describe("apply integration", () => {
     const outcomes = await applyConfig({
       root,
       home,
-      agent: "opencode-v2",
+      agent: "opencode",
       target: "all",
       dryRun: true,
       noLink: true
@@ -533,7 +529,7 @@ describe("apply integration", () => {
         {
           root,
           home,
-          agent: "opencode-v2",
+          agent: "opencode",
           target: "all",
           noLink: true,
           onComplete: completed.push.bind(completed)
@@ -596,7 +592,7 @@ describe("apply integration", () => {
         {
           root,
           home,
-          agent: "opencode-v2",
+          agent: "opencode",
           target: "all",
           noLink: true,
           onComplete: completed.push.bind(completed)
@@ -629,9 +625,7 @@ describe("apply integration", () => {
       code: "ENOENT"
     });
     await expect(
-      readFile(
-        path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "opencode.jsonc")
-      )
+      readFile(path.join(home, ".mindframe-z", "configs", "personal", "opencode", "opencode.jsonc"))
     ).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -705,7 +699,7 @@ describe("apply integration", () => {
   });
 
   it("renders and links OpenCode and Claude config into temporary homes", async () => {
-    const managedPlugins = configsPath(home, "personal", "opencode-v2", "plugins");
+    const managedPlugins = configsPath(home, "personal", "opencode", "plugins");
     const stalePlugin = path.join(managedPlugins, "stale.ts");
     await mkdir(managedPlugins, { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
@@ -714,7 +708,7 @@ describe("apply integration", () => {
     expect(result.stdout).toContain("created\tfile");
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 
@@ -725,10 +719,7 @@ describe("apply integration", () => {
     );
     await expect(lstat(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
     expect(
-      await readFile(
-        configsPath(home, "personal", "opencode-v2", "commands", "test-cmd.md"),
-        "utf8"
-      )
+      await readFile(configsPath(home, "personal", "opencode", "commands", "test-cmd.md"), "utf8")
     ).toContain("Run the test command.");
 
     const claude = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
@@ -745,10 +736,10 @@ describe("apply integration", () => {
     });
 
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc")
+      configsPath(home, "personal", "opencode", "opencode.jsonc")
     );
     await expect(realpath(path.join(home, ".config", "opencode", "commands"))).resolves.toBe(
-      configsPath(home, "personal", "opencode-v2", "commands")
+      configsPath(home, "personal", "opencode", "commands")
     );
     await expect(realpath(path.join(home, ".claude", "CLAUDE.md"))).resolves.toBe(
       configsPath(home, "personal", "claude", "CLAUDE.md")
@@ -763,25 +754,25 @@ describe("apply integration", () => {
     expect(localClaudeJson.mcpServers).toMatchObject(claudeMcp);
   });
 
-  it("renders OpenCode V2 independently with native config and skill paths", async () => {
+  it("renders OpenCode independently with native config and skill paths", async () => {
     await writeFile(path.join(home, ".mindframe-z", "config.yml"), "profile: personal\n", "utf8");
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
 
     const profile = (await readFile(profilePath, "utf8"))
-      .replaceAll("agents: [opencode-v2, claude-code]", "agents: [opencode-v2]")
+      .replaceAll("agents: [opencode, claude-code]", "agents: [opencode]")
       .replace("    model: test/model", "    model: v2/test-model")
       .replace("  plugins:\n    - config-marker", "  plugins: []")
-      .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
-      .replace("opencode_v2:\n", "opencode_v2:\n  cli:\n    theme: dark\n");
+      .replace("  context7:\n    agents: [opencode]", "  context7:\n    agents: [opencode]")
+      .replace("opencode:\n", "opencode:\n  cli:\n    theme: dark\n");
 
     await writeFile(profilePath, profile, "utf8");
 
-    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
-    const configPath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const config = parseJson(OpenCodeMcpConfig, await readFile(configPath, "utf8"));
     const mcp = config.mcp;
 
-    expect(result.stderr).not.toContain("OpenCode V1 plugins omitted from OpenCode V2 render");
+    expect(result.stderr).not.toContain("OpenCode V1 plugins omitted from OpenCode render");
     expect(config.model).toBe("v2/test-model");
     expect(config.plugins).toBeUndefined();
     expect(mcp.servers.context7).toMatchObject({
@@ -789,18 +780,17 @@ describe("apply integration", () => {
       url: "https://mcp.context7.com/mcp",
       disabled: false
     });
-    expect(config.skills).toEqual([configsPath(home, "personal", "opencode-v2", "skills")]);
+    expect(config.skills).toEqual([configsPath(home, "personal", "opencode", "skills")]);
     expect(
-      await readFile(
-        configsPath(home, "personal", "opencode-v2", "commands", "test-cmd.md"),
-        "utf8"
-      )
+      await readFile(configsPath(home, "personal", "opencode", "commands", "test-cmd.md"), "utf8")
     ).toContain("Run the test command.");
     await expect(realpath(path.join(home, ".config", "opencode", "opencode.jsonc"))).resolves.toBe(
       configPath
     );
     await expect(
-      access(path.join(home, ".mindframe-z", "configs", "personal", "opencode", "opencode.jsonc"))
+      access(
+        path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "opencode.jsonc")
+      )
     ).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -843,11 +833,11 @@ describe("apply integration", () => {
             ""
           ].join("\n")
         )
-        .replace("opencode_v2:\n", "opencode_v2:\n  global_instructions: true\n"),
+        .replace("opencode:\n", "opencode:\n  global_instructions: true\n"),
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const awareness = await readFile(
       path.join(home, ".mindframe-z", "capabilities", "index.md"),
@@ -871,7 +861,7 @@ describe("apply integration", () => {
     ).resolves.toContain("Local test reference with full routing detail.");
   });
 
-  it("merges and removes only MFZ-owned OpenCode V2 TUI plugins from CLI settings", async () => {
+  it("merges and removes only MFZ-owned OpenCode TUI plugins from CLI settings", async () => {
     await writeFile(path.join(home, ".mindframe-z", "config.yml"), "profile: personal\n", "utf8");
     await mkdir(path.join(root, "opencode", "plugins", "session-cost-tui", "tui"), {
       recursive: true
@@ -889,12 +879,12 @@ describe("apply integration", () => {
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
 
     const profile = (await readFile(profilePath, "utf8"))
-      .replaceAll("agents: [opencode-v2, claude-code]", "agents: [opencode-v2]")
-      .replace("  context7:\n    agents: [opencode-v2]", "  context7:\n    agents: [opencode]")
+      .replaceAll("agents: [opencode, claude-code]", "agents: [opencode]")
+      .replace("  context7:\n    agents: [opencode]", "  context7:\n    agents: [opencode]")
       .replace(
-        "opencode_v2:\n",
+        "opencode:\n",
         [
-          "opencode_v2:",
+          "opencode:",
           "  plugin_options:",
           "    session-cost-tui:",
           "      mode: compact",
@@ -907,7 +897,7 @@ describe("apply integration", () => {
     await writeFile(profilePath, profile, "utf8");
     const cliPath = path.join(home, ".config", "opencode", "cli.json");
     await mkdir(path.dirname(cliPath), { recursive: true });
-    const userPlugin = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "user-plugin")}`;
+    const userPlugin = `file://${configsPath(home, "personal", "opencode", "plugins", "tui", "user-plugin")}`;
     await writeFile(
       cliPath,
       JSON.stringify({
@@ -917,8 +907,8 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
-    const managedPackage = `file://${configsPath(home, "personal", "opencode-v2", "plugins", "tui", "session-cost-tui")}`;
+    const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    const managedPackage = `file://${configsPath(home, "personal", "opencode", "plugins", "tui", "session-cost-tui")}`;
     const managed = { package: managedPackage, options: { mode: "compact" } };
     expect(applied.stdout).toContain(`updated\tfile\t${cliPath}`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
@@ -927,13 +917,13 @@ describe("apply integration", () => {
     });
     expect(
       JSON.parse(
-        await readFile(path.join(home, ".mindframe-z", "opencode-v2-cli-plugins.json"), "utf8")
+        await readFile(path.join(home, ".mindframe-z", "opencode-cli-plugins.json"), "utf8")
       )
     ).toEqual({ version: 1, entries: [managed] });
     expect((await lstat(cliPath)).isSymbolicLink()).toBe(false);
 
     await writeFile(profilePath, profile.replace("mode: compact", "mode: detailed"), "utf8");
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
       plugins: [
@@ -949,27 +939,44 @@ describe("apply integration", () => {
       profile.replace("  tui_plugins:\n    - session-cost-tui\n", ""),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
       plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
     });
   }, 15_000);
 
-  it("smokes OpenCode V2 with an isolated binary environment", async () => {
+  it("smokes OpenCode with an isolated binary environment", async () => {
     const binDir = path.join(home, "bin");
-    const capturePath = path.join(home, "opencode-v2-smoke.json");
-    const binaryPath = path.join(binDir, "opencode2");
+    const capturePath = path.join(home, "opencode-smoke.json");
+    const binaryPath = path.join(binDir, "opencode");
+    const isolated = path.join(home, ".mindframe-z-opencode-smoke");
+    const staleOwner = path.join(home, "user-owned-smoke-state");
+    const stalePath = path.join(isolated, "stale.txt");
+    const userServicePath = path.join(home, ".config", "opencode", "service.json");
+
+    const userService =
+      JSON.stringify({ port: 0xc0de, password: "user-owned-service-secret" }, null, 2) + "\n";
+
     await mkdir(binDir, { recursive: true });
+    await mkdir(staleOwner, { recursive: true });
+    await writeFile(path.join(staleOwner, "stale.txt"), "stale smoke state\n", "utf8");
+    await symlink(staleOwner, isolated, "dir");
+    await mkdir(path.dirname(userServicePath), { recursive: true });
+    await writeFile(userServicePath, userService, "utf8");
     await writeFile(
       binaryPath,
       [
         "#!/usr/bin/env node",
         'const { existsSync, readFileSync, writeFileSync } = require("node:fs");',
+        'const path = require("node:path");',
         "const events = existsSync(process.env.MFZ_SMOKE_CAPTURE) ? JSON.parse(readFileSync(process.env.MFZ_SMOKE_CAPTURE, 'utf8')) : [];",
-        "events.push({ argv: process.argv.slice(2), cwd: process.cwd(), env: process.env });",
+        "const envKeys = ['HOME', 'OPENCODE_TEST_HOME', 'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_PTY_HANDOFF', 'OPENCODE_CONFIG_DIR', 'OPENCODE_DB', 'OPENCODE_DISABLE_DEFAULT_PLUGINS', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME'];",
+        "const env = Object.fromEntries(envKeys.flatMap((key) => process.env[key] === undefined ? [] : [[key, process.env[key]]]));",
+        "const service = JSON.parse(readFileSync(path.join(process.env.OPENCODE_CONFIG_DIR, 'service.json'), 'utf8'));",
+        "events.push({ argv: process.argv.slice(2), cwd: process.cwd(), env, service });",
         "writeFileSync(process.env.MFZ_SMOKE_CAPTURE, JSON.stringify(events));",
-        'console.log("parsed");',
+        'console.log("resolved-config-secret");',
         ""
       ].join("\n"),
       "utf8"
@@ -978,10 +985,13 @@ describe("apply integration", () => {
 
     const ambientDb = path.join(home, "v1", "opencode.db");
 
-    const result = await cli("mfz", root, home, ["smoke-opencode-v2"], {
+    const result = await cli("mfz", root, home, ["smoke-opencode"], {
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       MFZ_SMOKE_CAPTURE: capturePath,
       OPENCODE_DB: ambientDb,
+      OPENCODE_CONFIG: path.join(home, "user-owned-config.json"),
+      OPENCODE_CONFIG_CONTENT: '{"secret":"ambient-config-secret"}',
+      OPENCODE_PTY_HANDOFF: "ambient-handoff",
       XDG_CONFIG_HOME: path.join(home, "v1", "config"),
       XDG_DATA_HOME: path.join(home, "v1", "data"),
       XDG_STATE_HOME: path.join(home, "v1", "state"),
@@ -990,9 +1000,11 @@ describe("apply integration", () => {
 
     const captures = z.array(SmokeCapture).parse(JSON.parse(await readFile(capturePath, "utf8")));
     const capture = captures[0]!;
-    const isolated = path.join(home, ".mindframe-z-opencode-v2-smoke");
-
-    expect(result.stdout).toContain("parsed");
+    expect(result.stdout).toContain("OpenCode config parsed successfully");
+    expect(result.stdout).not.toContain("resolved-config-secret");
+    expect(result.stdout).not.toContain("ambient-config-secret");
+    expect(result.stderr).not.toContain("resolved-config-secret");
+    expect(result.stderr).not.toContain("ambient-config-secret");
     expect(captures.map((event) => event.argv)).toEqual([
       ["debug", "config"],
       ["service", "stop"]
@@ -1000,13 +1012,32 @@ describe("apply integration", () => {
     expect(capture.argv).toEqual(["debug", "config"]);
     expect(capture.cwd).toBe(home);
     expect(capture.env.OPENCODE_TEST_HOME).toBe(home);
-    expect(capture.env.OPENCODE_CONFIG_DIR).toBe(configsPath(home, "personal", "opencode-v2"));
-    expect(capture.env.OPENCODE_DB).toBe(path.join(isolated, "data", "opencode-v2.db"));
+    expect(capture.env.OPENCODE_CONFIG).toBeUndefined();
+    expect(capture.env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
+    expect(capture.env.OPENCODE_PTY_HANDOFF).toBeUndefined();
+    expect(capture.env.OPENCODE_CONFIG_DIR).toBe(path.join(isolated, "config", "opencode"));
+    expect(captures[1]!.env.OPENCODE_CONFIG_DIR).toBe(capture.env.OPENCODE_CONFIG_DIR);
+    expect(capture.service).toEqual({ port: expect.any(Number) });
+    expect(
+      JSON.parse(await readFile(path.join(isolated, "config", "opencode", "service.json"), "utf8"))
+    ).toEqual(capture.service);
+    expect(capture.env.OPENCODE_DB).toBe(path.join(isolated, "data", "opencode.db"));
     expect(capture.env.OPENCODE_DB).not.toBe(ambientDb);
     expect(capture.env.XDG_CONFIG_HOME).toBe(path.join(isolated, "config"));
     expect(capture.env.XDG_DATA_HOME).toBe(path.join(isolated, "data"));
     expect(capture.env.XDG_STATE_HOME).toBe(path.join(isolated, "state"));
     expect(capture.env.XDG_CACHE_HOME).toBe(path.join(isolated, "cache"));
+    await expect(access(stalePath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(path.join(staleOwner, "stale.txt"))).resolves.toBeUndefined();
+    await expect(readFile(userServicePath, "utf8")).resolves.toBe(userService);
+  });
+
+  it("skips the OpenCode smoke check when the stable executable is unavailable", async () => {
+    const result = await cli("mfz", root, home, ["smoke-opencode"], {
+      PATH: "/usr/bin:/bin"
+    });
+
+    expect(result.stdout).toContain("opencode not found; skipped smoke check");
   });
 
   it("renders, links, and removes merged OpenCode runtime dependencies", async () => {
@@ -1014,7 +1045,7 @@ describe("apply integration", () => {
       path.join(root, "profiles", "base", "profile.yml"),
       [
         "name: base",
-        "opencode_v2:",
+        "opencode:",
         "  dependencies:",
         "    '@acme/base': 1.2.3",
         "    shared: 1.0.0",
@@ -1027,8 +1058,8 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
-        "opencode_v2:",
+        "agents: [opencode]",
+        "opencode:",
         "  dependencies:",
         "    '@acme/personal': 2.3.4",
         "    shared: 2.0.0",
@@ -1037,9 +1068,9 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
-    const manifestPath = configsPath(home, "personal", "opencode-v2", "package.json");
+    const manifestPath = configsPath(home, "personal", "opencode", "package.json");
     expect(JSON.parse(await readFile(manifestPath, "utf8"))).toEqual({
       dependencies: { "@acme/base": "1.2.3", "@acme/personal": "2.3.4", shared: "2.0.0" }
     });
@@ -1051,10 +1082,10 @@ describe("apply integration", () => {
     await mkdir(path.join(root, "profiles", "clean"), { recursive: true });
     await writeFile(
       path.join(root, "profiles", "clean", "profile.yml"),
-      ["name: clean", "extends: base", "agents: [opencode-v2]", ""].join("\n"),
+      ["name: clean", "extends: base", "agents: [opencode]", ""].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["--profile", "clean", "apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["--profile", "clean", "apply", "--agent", "opencode"]);
 
     await expect(
       lstat(path.join(home, ".config", "opencode", "package.json"))
@@ -1062,13 +1093,13 @@ describe("apply integration", () => {
       code: "ENOENT"
     });
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "agents: [opencode-v2]", ""].join("\n"),
+      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
@@ -1096,10 +1127,10 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 
@@ -1564,16 +1595,16 @@ describe("apply integration", () => {
   });
 
   it("sync promotes unmanaged rendered OpenCode config keys to the chosen profile", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
-    const opencodePath = configsPath(home, "personal", "opencode-v2", "opencode.jsonc");
+    const opencodePath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const opencode = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     opencode.small_model = "test/small-model";
     await writeFile(opencodePath, JSON.stringify(opencode, null, 2) + "\n", "utf8");
 
     const syncResult = await cli("mfz", root, home, ["sync"], {}, "personal\n");
     expect(syncResult.stdout).toContain(
-      "Updated personal/profile.yml: opencode_v2.config.small_model"
+      "Updated personal/profile.yml: opencode.config.small_model"
     );
 
     const profileYaml = await readFile(
@@ -1583,7 +1614,7 @@ describe("apply integration", () => {
 
     expect(profileYaml).toContain("small_model: test/small-model");
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
     const rerendered = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     expect(rerendered.small_model).toBe("test/small-model");
   });
@@ -1594,7 +1625,7 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, claude-code]",
+        "agents: [opencode, claude-code]",
         "claude:",
         "  model: sonnet",
         "  settings:",
@@ -1780,7 +1811,7 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
+        "agents: [opencode]",
         "instructions:",
         "  - instructions/AGENTS.md",
         "mcp:",
@@ -1794,7 +1825,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     ).resolves.toContain("context7");
     await expect(
       readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
@@ -1807,7 +1838,7 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
+        "agents: [opencode]",
         "instructions:",
         "  - instructions/AGENTS.md",
         "mcp:",
@@ -1821,7 +1852,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--no-link"]);
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 
@@ -1849,7 +1880,7 @@ describe("apply integration", () => {
       path.join(root, "profiles", "personal", "profile.yml"),
       [
         "name: personal",
-        "agents: [opencode-v2, claude-code, codex]",
+        "agents: [opencode, claude-code, codex]",
         "mcp:",
         "  exa:",
         "    agents: [opencode, claude-code, codex]",
@@ -1863,7 +1894,7 @@ describe("apply integration", () => {
     // OpenCode passes the {env:NAME} reference through untouched.
     const opencode = parseJson(
       OpenCodeConfig,
-      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     );
 
     expect(opencode.mcp?.servers).toMatchObject({
@@ -1895,10 +1926,10 @@ describe("apply integration", () => {
   });
 
   it("filters agent rendering with --agent", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     await expect(
-      readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     ).resolves.toContain("test/model");
     await expect(
       readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
@@ -1980,7 +2011,7 @@ describe("apply integration", () => {
     const snapshotSkill = configsPath(
       home,
       "personal",
-      "opencode-v2",
+      "opencode",
       "skills",
       "local-skill",
       "SKILL.md"
@@ -1995,7 +2026,7 @@ describe("apply integration", () => {
     );
     expect(await readFile(snapshotSkill, "utf8")).toBe(oldContent);
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     await expect(
       realpath(path.join(home, ".config", "opencode", "skills", "local-skill"))
     ).resolves.toBe(snapshotSkill.replace(/\/SKILL\.md$/, ""));
@@ -2018,7 +2049,7 @@ describe("apply integration", () => {
       )
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
-      readFile(configsPath(home, "personal", "opencode-v2", "skills", ".mfz-manifest.yml"))
+      readFile(configsPath(home, "personal", "opencode", "skills", ".mfz-manifest.yml"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -2028,7 +2059,7 @@ describe("apply integration", () => {
     const snapshotSkill = configsPath(
       home,
       "personal",
-      "opencode-v2",
+      "opencode",
       "skills",
       "local-skill",
       "SKILL.md"
@@ -2039,7 +2070,7 @@ describe("apply integration", () => {
       recursive: true
     });
 
-    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]).catch(
+    const result = await cli("mfz", root, home, ["apply", "--agent", "opencode"]).catch(
       (error) => error
     );
 
@@ -2048,39 +2079,39 @@ describe("apply integration", () => {
   });
 
   it("removes stale owned links when a target has no remaining skills", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     const link = path.join(home, ".config", "opencode", "skills", "local-skill");
     await expect(realpath(link)).resolves.toBe(
-      configsPath(home, "personal", "opencode-v2", "skills", "local-skill")
+      configsPath(home, "personal", "opencode", "skills", "local-skill")
     );
 
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
-      ["name: personal", "extends: base", "agents: [opencode-v2]", ""].join("\n"),
+      ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     await expect(lstat(link)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
-      lstat(configsPath(home, "personal", "opencode-v2", "skills", "local-skill"))
+      lstat(configsPath(home, "personal", "opencode", "skills", "local-skill"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not rewrite a matching snapshot", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const snapshotSkill = configsPath(
       home,
       "personal",
-      "opencode-v2",
+      "opencode",
       "skills",
       "local-skill",
       "SKILL.md"
     );
 
     const before = (await stat(snapshotSkill)).ino;
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     expect((await stat(snapshotSkill)).ino).toBe(before);
   });
 
@@ -2090,7 +2121,7 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, codex]",
+        "agents: [opencode, codex]",
         "skills:",
         "  local-skill:",
         "    agents: { opencode: true, codex: true }",
@@ -2102,10 +2133,10 @@ describe("apply integration", () => {
 
     const opencode = parseJson(
       OpenCodeConfig,
-      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     );
 
-    expect(opencode.skills).toEqual([configsPath(home, "personal", "opencode-v2", "skills")]);
+    expect(opencode.skills).toEqual([configsPath(home, "personal", "opencode", "skills")]);
 
     const codex = parseToml(
       CodexConfig,
@@ -2124,7 +2155,7 @@ describe("apply integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, codex]",
+        "agents: [opencode, codex]",
         "skills:",
         "  local-skill:",
         "    agents: { opencode: true }",
@@ -2137,7 +2168,7 @@ describe("apply integration", () => {
     await cli("mfz", root, home, ["apply", "--agent", "all"]);
     await expect(lstat(path.join(home, ".agents", "skills", "all-skill"))).resolves.toBeDefined();
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
     await expect(lstat(path.join(home, ".agents", "skills", "all-skill"))).resolves.toBeDefined();
   });
 });

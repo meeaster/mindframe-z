@@ -24,10 +24,12 @@ function profileWithServer(
     url: endpoint,
     transport: "http"
   };
+
   if (authentication) server.executor = { authentication };
+
   return {
     name,
-    agents: ["opencode-v2"],
+    agents: ["opencode"],
     profile: profileSchema.parse({ name }),
     // SAFETY: reconciliation only consumes the resolved MCP entries in this fixture.
     manifests: {} as ResolvedProfile["manifests"],
@@ -38,8 +40,8 @@ function profileWithServer(
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [
       {
         name: "example",
@@ -84,6 +86,7 @@ function fakeAdapter() {
   const integrations = new Map<string, ExecutorIntegration>();
   const connections = new Map<string, ExecutorConnection[]>();
   const mutations: string[] = [];
+
   const adapter: ExecutorAdapter = {
     baseUrl: "http://fake",
     dataDir: "/tmp/fake-data",
@@ -92,6 +95,7 @@ function fakeAdapter() {
     },
     async updateIntegration(slug, input) {
       const integration = integrations.get(slug);
+
       if (integration) integration.description = input.description ?? integration.description;
       mutations.push(`update:${slug}`);
     },
@@ -108,6 +112,7 @@ function fakeAdapter() {
     },
     async configureServer(slug, config) {
       const integration = integrations.get(slug);
+
       if (integration) integration.config = config;
       mutations.push(`configure:${slug}`);
     },
@@ -140,6 +145,7 @@ function fakeAdapter() {
     },
     async refreshConnection() {
       mutations.push("unexpected-refresh");
+
       return [];
     },
     async checkHealth() {
@@ -147,6 +153,7 @@ function fakeAdapter() {
     },
     async close() {}
   };
+
   return { adapter, mutations, integrations, connections };
 }
 
@@ -200,6 +207,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-stdio-default-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile: ResolvedProfile = {
       ...profileWithServer("personal", "https://example.test/mcp"),
       mcpServers: [
@@ -214,6 +222,7 @@ describe("Executor reconciliation", () => {
         }
       ]
     };
+
     integrations.set("forge", {
       slug: "forge",
       description: "Forge",
@@ -247,9 +256,11 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-org-oauth-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
       { slug: "oauth", kind: "oauth2" }
     ]);
+
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -303,6 +314,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-auth-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
       {
         slug: "api-key",
@@ -310,8 +322,10 @@ describe("Executor reconciliation", () => {
         placements: [{ carrier: "header", name: "X-API-Key", variable: "api_key" }]
       }
     ]);
+
     await expect(reconcileExecutor(paths, profile, { adapter })).rejects.toThrow(/Executor app/);
     const integration = integrations.get("example");
+
     if (!integration) throw new Error("missing integration");
     integration.config.authenticationTemplate = [
       {
@@ -333,9 +347,11 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-auth-missing-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, mutations } = fakeAdapter();
+
     const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
       { slug: "oauth", kind: "oauth2" }
     ]);
+
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -359,6 +375,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-assisted-oauth-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
       {
         slug: "oauth",
@@ -367,6 +384,7 @@ describe("Executor reconciliation", () => {
         registrationScopes: ["read"]
       }
     ]);
+
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -467,6 +485,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-named-missing-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer(
       "personal",
       "https://example.test/mcp",
@@ -474,6 +493,7 @@ describe("Executor reconciliation", () => {
       [{ slug: "oauth", kind: "oauth2" }],
       { publicsafety: "oauth", tylertech: "oauth" }
     );
+
     profile.mcpServers.push({
       name: "metrics",
       executor: { connections: { service: "api-key" } },
@@ -528,11 +548,13 @@ describe("Executor reconciliation", () => {
     connections.set("example", [durableConnection("publicsafety", "oauth")]);
 
     let message = "";
+
     try {
       await reconcileExecutor(paths, profile, { adapter });
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
+
     expect(message).toContain('- example: connection name "tylertech" (OAuth)');
     expect(message).toContain('- metrics: connection name "service" (API key)');
     expect(message).toContain("Use the exact connection names shown, then rerun mfz apply.");
@@ -544,9 +566,11 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-scopes-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections } = fakeAdapter();
+
     const profile = profileWithServer("personal", "https://example.test/mcp", "Example", [
       { slug: "oauth", kind: "oauth2", registrationScopes: ["write"] }
     ]);
+
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -626,6 +650,7 @@ describe("Executor reconciliation", () => {
       if (server.slug === "second") throw new Error("second declaration failed");
       await addServer(server);
     };
+
     const completed: OperationOutcome[] = [];
 
     await expect(
@@ -644,6 +669,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-named-siblings-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer(
       "personal",
       "https://example.test/mcp",
@@ -651,6 +677,7 @@ describe("Executor reconciliation", () => {
       [{ slug: "oauth", kind: "oauth2" }],
       { publicsafety: "oauth", tylertech: "oauth" }
     );
+
     integrations.set("example", {
       slug: "example",
       description: "Example",
@@ -684,6 +711,7 @@ describe("Executor reconciliation", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-reconcile-named-removal-"));
     const paths = createRuntimePaths({ root, home: root });
     const { adapter, integrations, connections, mutations } = fakeAdapter();
+
     const profile = profileWithServer(
       "personal",
       "https://example.test/mcp",
@@ -691,6 +719,7 @@ describe("Executor reconciliation", () => {
       [{ slug: "oauth", kind: "oauth2" }],
       { publicsafety: "oauth" }
     );
+
     integrations.set("example", {
       slug: "example",
       description: "Example",

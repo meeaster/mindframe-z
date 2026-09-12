@@ -130,8 +130,8 @@ function makeReferenceProfile(
     referencesDir,
     enabledReferences: references.filter((reference) => enabled.has(reference.name)),
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: [],
@@ -330,7 +330,7 @@ describe("refs integration", () => {
     const refsAbs = path.join(home, ".mindframe-z", "references");
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 
@@ -352,7 +352,7 @@ describe("refs integration", () => {
     await expect(readFile(indexPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 
@@ -394,7 +394,7 @@ describe("refs integration", () => {
     );
 
     const opencode = await readFile(
-      configsPath(home, "personal", "opencode-v2", "opencode.jsonc"),
+      configsPath(home, "personal", "opencode", "opencode.jsonc"),
       "utf8"
     );
 

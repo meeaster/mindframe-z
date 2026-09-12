@@ -56,13 +56,16 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("mfz guide references");
     expect(result.stdout).toContain("mfz guide extra-folders");
     expect(result.stdout).not.toContain("Declare Executor authentication structure");
+
     const routes = Array.from(
       result.stdout.matchAll(/`mfz guide ([a-z-]+)`/g),
       (match) => match[1]
     );
+
     expect(routes.sort()).toEqual([...guideTopicNames].sort());
     const examples = yamlExamples(result.stdout);
     expect(examples).toHaveLength(2);
+
     for (const example of examples) {
       expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
     }
@@ -73,6 +76,7 @@ describe("init and guide integration", () => {
     const help = await mfz(home, ["guide", "--help"]);
     const failure = await mfz(home, ["guide", "unknown-topic"], false);
     expect(failure.exitCode).toBe(1);
+
     for (const topic of guideTopicNames) {
       expect(help.stdout).toContain(topic);
       expect(failure.stderr).toContain(topic);
@@ -87,7 +91,7 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("Never use `--continue`");
     expect(result.stdout).toContain("New sessions and forks are durable top-level sessions");
     expect(result.stdout).toContain("OPENCODE_CONFIG_CONTENT");
-    expect(result.stdout).toContain("There is no `opencode2 run --compact-first` flag");
+    expect(result.stdout).toContain("There is no `opencode run --compact-first` flag");
     expect(result.stdout).toContain("systemctl --user enable --now");
     const [example] = yamlExamples(result.stdout);
     expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
@@ -159,13 +163,7 @@ describe("init and guide integration", () => {
     const machineHome = await makeTempDir();
     const homeRoot = path.join(await makeTempDir(), "my-home");
 
-    const result = await mfz(machineHome, [
-      "init",
-      "--create",
-      homeRoot,
-      "--agents",
-      "opencode-v2"
-    ]);
+    const result = await mfz(machineHome, ["init", "--create", homeRoot, "--agents", "opencode"]);
 
     expect(result.stdout).toContain(`home_path\t${homeRoot}`);
     expect(await readFile(path.join(homeRoot, "mfz_home.yml"), "utf8")).toContain(
@@ -189,7 +187,7 @@ describe("init and guide integration", () => {
   it("clones a home into the managed upstream clone root and points machine config at it", async () => {
     const sourceMachineHome = await makeTempDir();
     const source = path.join(await makeTempDir(), "shared-home");
-    await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode-v2"]);
+    await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode"]);
 
     const machineHome = await makeTempDir();
     const result = await mfz(machineHome, ["init", "--clone", source, "--name", "shared"]);

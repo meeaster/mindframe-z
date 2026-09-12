@@ -28,6 +28,7 @@ import {
 } from "./tree.js";
 
 type VariantTarget = (typeof vendoredSkillTargets)[number];
+
 type VariantFiles = Record<VariantTarget, SkillFileRecord[]>;
 
 function variantFiles(name: string, suffix: string): VariantFiles {
@@ -48,24 +49,27 @@ function variantFiles(name: string, suffix: string): VariantFiles {
         bytes: Buffer.from(`---\nname: ${name}\ndescription: codex ${suffix}\n---\n\n# Codex\n`)
       }
     ],
-    "opencode-v2": [
+    opencode: [
       {
         path: "SKILL.md",
         mode: "100644",
         bytes: Buffer.from(
-          `---\nname: ${name}\ndescription: opencode-v2 ${suffix}\n---\n\n# OpenCode\n`
+          `---\nname: ${name}\ndescription: opencode ${suffix}\n---\n\n# OpenCode\n`
         )
       }
     ]
   };
+
   return files;
 }
 
 function variantRecords(files: VariantFiles): SkillFileRecord[] {
   const records: SkillFileRecord[] = [];
+
   for (const target of vendoredSkillTargets) {
     for (const file of files[target]) records.push({ ...file, path: `${target}/${file.path}` });
   }
+
   return records;
 }
 
@@ -73,17 +77,19 @@ function variantDigests(files: VariantFiles): Record<VariantTarget, string> {
   return {
     "claude-code": digestSkillFiles(files["claude-code"]),
     codex: digestSkillFiles(files.codex),
-    "opencode-v2": digestSkillFiles(files["opencode-v2"])
+    opencode: digestSkillFiles(files["opencode"])
   };
 }
 
 function variantFindings(files: VariantFiles): ReturnType<typeof staticFindings> {
   const findings: ReturnType<typeof staticFindings> = [];
+
   for (const target of vendoredSkillTargets) {
     for (const finding of staticFindings(files[target])) {
       findings.push({ ...finding, path: `${target}/${finding.path}` });
     }
   }
+
   return findings;
 }
 
@@ -96,12 +102,14 @@ function variantEntry(name: string) {
     variants: {
       "claude-code": "dist/claude",
       codex: "dist/codex",
-      "opencode-v2": "dist/opencode"
+      opencode: "dist/opencode"
     }
   });
+
   if (entry.source !== "vendored" || !("variants" in entry)) {
     throw new Error("test fixture did not create a variant vendored entry");
   }
+
   return entry;
 }
 
@@ -117,16 +125,20 @@ async function writeVariantTree(
 }> {
   const source = path.join(root, "skills", "vendor", name);
   const files = variantFiles(name, suffix);
+
   for (const target of vendoredSkillTargets) {
     const directory = path.join(source, target);
     await mkdir(directory, { recursive: true });
+
     for (const file of files[target]) {
       await writeFile(path.join(directory, file.path), file.bytes, {
         mode: file.mode === "100755" ? 0o755 : 0o644
       });
     }
   }
+
   const digests = variantDigests(files);
+
   return { source, files, digests, digest: digestSkillFiles(variantRecords(files)) };
 }
 
@@ -167,6 +179,7 @@ function candidateIdentityForTest(
   baseline: CandidateBaseline
 ): string {
   const hash = createHash("sha256");
+
   const values = [
     "candidate-v2",
     kind,
@@ -180,7 +193,9 @@ function candidateIdentityForTest(
     "baseline",
     JSON.stringify(baseline)
   ];
+
   for (const value of values) hash.update(frame(Buffer.from(value, "utf8")));
+
   return hash.digest("hex");
 }
 
@@ -199,17 +214,20 @@ async function writeVariantCandidate(
   const findingsContent = YAML.stringify({ findings: variantFindings(files) });
   const diff = "";
   const repository = "https://example.invalid/skills.git";
+
   const subtrees = {
     "claude-code": "dist/claude",
     codex: "dist/codex",
-    "opencode-v2": "dist/opencode"
+    opencode: "dist/opencode"
   } satisfies Record<VariantTarget, string>;
+
   const baseline = {
     kind: "variants" as const,
     commit: oldCommit,
     digest,
     variants: digests
   } satisfies CandidateBaseline;
+
   const id = candidateIdentityForTest(
     "variants",
     name,
@@ -221,7 +239,9 @@ async function writeVariantCandidate(
     digest,
     baseline
   );
+
   const digestContent = `${digest}\n`;
+
   const provenance = {
     candidateId: id,
     name,
@@ -230,7 +250,7 @@ async function writeVariantCandidate(
     variants: {
       "claude-code": { subtree: subtrees["claude-code"], digest: digests["claude-code"] },
       codex: { subtree: subtrees.codex, digest: digests.codex },
-      "opencode-v2": { subtree: subtrees["opencode-v2"], digest: digests["opencode-v2"] }
+      opencode: { subtree: subtrees["opencode"], digest: digests["opencode"] }
     },
     commit,
     digest,
@@ -245,8 +265,10 @@ async function writeVariantCandidate(
       digest: sha256(digestContent)
     }
   };
+
   const candidatePath = path.join(skillCandidatesRoot(paths), id);
   await mkdir(path.join(candidatePath, "source"), { recursive: true });
+
   for (const target of vendoredSkillTargets) {
     for (const file of files[target]) {
       await mkdir(path.join(candidatePath, "source", target), { recursive: true });
@@ -255,11 +277,13 @@ async function writeVariantCandidate(
       });
     }
   }
+
   await writeFile(path.join(candidatePath, "provenance.yml"), YAML.stringify(provenance), "utf8");
   await writeFile(path.join(candidatePath, "inventory.yml"), inventoryContent, "utf8");
   await writeFile(path.join(candidatePath, "findings.yml"), findingsContent, "utf8");
   await writeFile(path.join(candidatePath, "diff.patch"), diff, "utf8");
   await writeFile(path.join(candidatePath, "digest"), digestContent, "utf8");
+
   return id;
 }
 
@@ -280,6 +304,7 @@ async function writeLegacyState(
     YAML.stringify({ skills: { [name]: { commit, digest } } }),
     "utf8"
   );
+
   return digest;
 }
 
@@ -301,9 +326,11 @@ function singleEntry(name: string) {
     ref: "main",
     subtree: "dist/legacy"
   });
+
   if (entry.source !== "vendored" || "variants" in entry) {
     throw new Error("test fixture did not create a single-subtree vendored entry");
   }
+
   return entry;
 }
 
@@ -314,14 +341,17 @@ async function gitRepository(
   await execa("git", ["init", "-q", "-b", "main"], { cwd: root });
   await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: root });
   await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: root });
+
   for (const [relative, content] of Object.entries(files)) {
     const file = path.join(root, ...relative.split("/"));
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, content, "utf8");
   }
+
   await execa("git", ["add", "."], { cwd: root });
   await execa("git", ["commit", "-qm", "fixture"], { cwd: root });
   const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: root });
+
   return { root, commit };
 }
 
@@ -360,6 +390,7 @@ async function withLocalGitFetch<T>(remote: string, action: () => Promise<T>): P
   );
   const previousPath = process.env.PATH;
   process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`;
+
   try {
     return await action();
   } finally {
@@ -375,6 +406,7 @@ async function skillDir(): Promise<string> {
     ["---", "name: test-skill", "description: Test skill.", "---", "", "# Test", ""].join("\n"),
     "utf8"
   );
+
   return root;
 }
 
@@ -397,6 +429,7 @@ describe("vendored skill contracts", () => {
       { path: "z.md", mode: "100644" as const, bytes: Buffer.from("z\n") },
       { path: "a.md", mode: "100755" as const, bytes: Buffer.from("a\n") }
     ];
+
     expect(digestSkillFiles(files)).toBe(digestSkillFiles([...files].reverse()));
   });
 
@@ -417,6 +450,7 @@ describe("vendored skill contracts", () => {
     );
     await symlink(external, path.join(home, "skills"));
     const digest = await digestSkillTree(path.join(external, "vendor", "test-skill"));
+
     const entry = skillSchema.parse({
       name: "test-skill",
       source: "vendored",
@@ -424,6 +458,7 @@ describe("vendored skill contracts", () => {
       ref: "main",
       subtree: "skills/test-skill"
     });
+
     if (entry.source !== "vendored") throw new Error("test fixture did not create vendored entry");
     await writeFile(
       path.join(external, "vendor.lock.yml"),
@@ -443,6 +478,7 @@ describe("vendored skill contracts", () => {
       await readFile(path.join(sourceRoot, "SKILL.md"))
     );
     const digest = await digestSkillTree(source);
+
     const entry = skillSchema.parse({
       name: "test-skill",
       source: "vendored",
@@ -450,6 +486,7 @@ describe("vendored skill contracts", () => {
       ref: "main",
       subtree: "skills/test-skill"
     });
+
     if (entry.source !== "vendored") throw new Error("test fixture did not create vendored entry");
     await writeFile(
       path.join(home, "skills", "vendor.lock.yml"),
@@ -506,7 +543,7 @@ describe("vendored skill contracts", () => {
     const fixture = await writeVariantTree(root, name);
     await writeVariantLock(root, name, "a".repeat(40), fixture.digest, fixture.digests);
     await writeFile(
-      path.join(fixture.source, "opencode-v2", "SKILL.md"),
+      path.join(fixture.source, "opencode", "SKILL.md"),
       `---\nname: ${name}\ndescription: tampered\n---\n`,
       "utf8"
     );
@@ -525,11 +562,13 @@ describe("vendored skill contracts", () => {
     const oldContent = `---\nname: ${name}\ndescription: old\n---\n\n# Old\n`;
     const oldDigest = await writeLegacyState(root, name, oldContent, oldCommit);
     await writeVendoredCatalog(root, entry);
+
     const upstream = await gitRepository({
       "dist/claude/SKILL.md": `---\nname: ${name}\ndescription: claude\n---\n\n# Claude\n`,
       "dist/codex/SKILL.md": `---\nname: ${name}\ndescription: codex\n---\n\n# Codex\n`,
       "dist/opencode/SKILL.md": `---\nname: ${name}\ndescription: opencode\n---\n\n# OpenCode\n`
     });
+
     const paths = createRuntimePaths({ root, home });
 
     await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
@@ -538,6 +577,7 @@ describe("vendored skill contracts", () => {
     const checked = await withLocalGitFetch(upstream.root, () =>
       checkVendoredSkill(paths, entry, root)
     );
+
     expect(checked).toMatchObject({
       pinned: { commit: oldCommit, digest: oldDigest },
       observedCommit: upstream.commit,
@@ -547,9 +587,11 @@ describe("vendored skill contracts", () => {
     const candidate = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
+
     if (candidate.provenance.variants === undefined) {
       throw new Error("test fixture did not create a variant candidate");
     }
+
     expect(candidate.provenance).toMatchObject({
       oldCommit,
       oldDigest,
@@ -557,7 +599,7 @@ describe("vendored skill contracts", () => {
       variants: {
         "claude-code": { subtree: "dist/claude" },
         codex: { subtree: "dist/codex" },
-        "opencode-v2": { subtree: "dist/opencode" }
+        opencode: { subtree: "dist/opencode" }
       }
     });
     expect(candidate.provenance.oldVariants).toBeUndefined();
@@ -574,13 +616,15 @@ describe("vendored skill contracts", () => {
     await promoteVendoredSkill(paths, candidate.provenance.candidateId);
 
     await expect(readFile(oldPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
     for (const target of vendoredSkillTargets) {
       await expect(
         readFile(path.join(root, "skills", "vendor", name, target, "SKILL.md"), "utf8")
       ).resolves.toContain(
-        target === "opencode-v2" ? "OpenCode" : target === "claude-code" ? "Claude" : "Codex"
+        target === "opencode" ? "OpenCode" : target === "claude-code" ? "Claude" : "Codex"
       );
     }
+
     await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
     const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
     expect(lock.skills[name]).toEqual({
@@ -589,7 +633,7 @@ describe("vendored skill contracts", () => {
       variants: {
         "claude-code": candidate.provenance.variants["claude-code"].digest,
         codex: candidate.provenance.variants.codex.digest,
-        "opencode-v2": candidate.provenance.variants["opencode-v2"].digest
+        opencode: candidate.provenance.variants["opencode"].digest
       }
     });
   });
@@ -603,15 +647,19 @@ describe("vendored skill contracts", () => {
     const oldFixture = await writeVariantTree(root, name);
     await writeVariantLock(root, name, oldCommit, oldFixture.digest, oldFixture.digests);
     await writeVendoredCatalog(root, entry);
+
     const upstream = await gitRepository({
       "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
     });
+
     const paths = createRuntimePaths({ root, home });
 
     await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
+
     const candidate = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
+
     expect(candidate.provenance).toMatchObject({
       oldCommit,
       oldDigest: oldFixture.digest,
@@ -634,11 +682,13 @@ describe("vendored skill contracts", () => {
     await expect(
       readFile(path.join(root, "skills", "vendor", name, "SKILL.md"), "utf8")
     ).resolves.toContain("description: new");
+
     for (const target of vendoredSkillTargets) {
       await expect(lstat(path.join(root, "skills", "vendor", name, target))).rejects.toMatchObject({
         code: "ENOENT"
       });
     }
+
     await expect(validateVendoredSkill(root, entry)).resolves.toBeUndefined();
     const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
     expect(lock.skills[name]).toEqual({
@@ -653,30 +703,37 @@ describe("vendored skill contracts", () => {
     const name = "baseline-bound";
     const entry = singleEntry(name);
     await writeVendoredCatalog(root, entry);
+
     const upstream = await gitRepository({
       "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
     });
+
     const paths = createRuntimePaths({ root, home });
 
     const withoutBaseline = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
+
     expect(withoutBaseline.provenance.oldCommit).toBeUndefined();
+
     const originalProvenance = await readFile(
       path.join(withoutBaseline.path, "provenance.yml"),
       "utf8"
     );
 
     const oldCommit = "a".repeat(40);
+
     const oldDigest = await writeLegacyState(
       root,
       name,
       `---\nname: ${name}\ndescription: old\n---\n\n# Old\n`,
       oldCommit
     );
+
     const withBaseline = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
+
     expect(withBaseline.provenance.candidateId).not.toBe(withoutBaseline.provenance.candidateId);
     expect(withBaseline.provenance).toMatchObject({ oldCommit, oldDigest });
     expect(await readFile(path.join(withoutBaseline.path, "provenance.yml"), "utf8")).toBe(
@@ -689,6 +746,7 @@ describe("vendored skill contracts", () => {
     const repeated = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
+
     expect(repeated.provenance.candidateId).toBe(withBaseline.provenance.candidateId);
   });
 
@@ -699,27 +757,33 @@ describe("vendored skill contracts", () => {
     const entry = singleEntry(name);
     await writeVendoredCatalog(root, entry);
     const firstCommit = "a".repeat(40);
+
     const firstDigest = await writeLegacyState(
       root,
       name,
       `---\nname: ${name}\ndescription: first\n---\n\n# First\n`,
       firstCommit
     );
+
     const upstream = await gitRepository({
       "dist/legacy/SKILL.md": `---\nname: ${name}\ndescription: new\n---\n\n# New\n`
     });
+
     const paths = createRuntimePaths({ root, home });
+
     const candidate = await withLocalGitFetch(upstream.root, () =>
       stageVendoredSkill(paths, entry, root, upstream.commit)
     );
 
     const secondCommit = "b".repeat(40);
+
     const secondDigest = await writeLegacyState(
       root,
       name,
       `---\nname: ${name}\ndescription: second\n---\n\n# Second\n`,
       secondCommit
     );
+
     await expect(promoteVendoredSkill(paths, candidate.provenance.candidateId)).rejects.toThrow(
       "Candidate baseline does not match the active vendor state"
     );
@@ -865,6 +929,7 @@ describe("vendored skill contracts", () => {
 
   it("rejects non-HTTPS sources before creating a Git cache", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-vendor-unsafe-"));
+
     const entry = {
       name: "unsafe",
       source: "vendored",
@@ -873,6 +938,7 @@ describe("vendored skill contracts", () => {
       subtree: "skills/unsafe",
       description: ""
     } as const;
+
     await expect(
       stageVendoredSkill(createRuntimePaths({ root: home, home }), entry, home)
     ).rejects.toThrow(/HTTPS/);
@@ -905,9 +971,11 @@ describe("vendored skill contracts", () => {
       "utf8"
     );
     await writeFile(path.join(source, "SKILL.md"), oldContent, "utf8");
+
     const oldDigest = digestSkillFiles([
       { path: "SKILL.md", mode: "100644", bytes: Buffer.from(oldContent) }
     ]);
+
     await writeFile(
       path.join(root, "skills", "vendor.lock.yml"),
       YAML.stringify({ skills: { [name]: { commit: "a".repeat(40), digest: oldDigest } } }),
@@ -916,6 +984,7 @@ describe("vendored skill contracts", () => {
 
     const files = [{ path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(newContent) }];
     const digest = digestSkillFiles(files);
+
     const candidateId = candidateIdentityForTest(
       "single",
       name,
@@ -927,15 +996,18 @@ describe("vendored skill contracts", () => {
       digest,
       { kind: "single", commit: "a".repeat(40), digest: oldDigest }
     );
+
     const candidatePath = path.join(
       skillCandidatesRoot(createRuntimePaths({ root, home })),
       candidateId
     );
+
     const candidateSource = path.join(candidatePath, "source");
     await mkdir(candidateSource, { recursive: true });
     await writeFile(path.join(candidateSource, "SKILL.md"), newContent, "utf8");
     const candidateInventory = inventory(files);
     const candidateFindings = staticFindings(files);
+
     const diff = [
       "--- old/SKILL.md",
       "+++ new/SKILL.md",
@@ -943,6 +1015,7 @@ describe("vendored skill contracts", () => {
       ...newContent.split("\n").map((line) => `+${line}`),
       ""
     ].join("\n");
+
     const inventoryContent = YAML.stringify({ files: candidateInventory });
     const findingsContent = YAML.stringify({ findings: candidateFindings });
     const digestContent = `${digest}\n`;
@@ -1005,7 +1078,7 @@ describe("vendored skill contracts", () => {
             variants: {
               "claude-code": "dist/claude",
               codex: "dist/codex",
-              "opencode-v2": "dist/opencode"
+              opencode: "dist/opencode"
             }
           }
         ]
@@ -1015,6 +1088,7 @@ describe("vendored skill contracts", () => {
     const fixture = await writeVariantTree(root, name);
     await writeVariantLock(root, name, oldCommit, fixture.digest, fixture.digests);
     const paths = createRuntimePaths({ root, home });
+
     const candidateId = await writeVariantCandidate(
       paths,
       root,
@@ -1032,6 +1106,7 @@ describe("vendored skill contracts", () => {
       digest: fixture.digest,
       variants: fixture.digests
     });
+
     for (const target of vendoredSkillTargets) {
       await expect(
         readFile(path.join(root, "skills", "vendor", name, target, "SKILL.md"), "utf8")
@@ -1045,6 +1120,7 @@ describe("vendored skill contracts", () => {
     const name = "variant-skill";
     const fixture = await writeVariantTree(root, name);
     const paths = createRuntimePaths({ root, home });
+
     const candidateId = await writeVariantCandidate(
       paths,
       root,
@@ -1053,6 +1129,7 @@ describe("vendored skill contracts", () => {
       "a".repeat(40),
       "b".repeat(40)
     );
+
     await writeFile(
       path.join(skillCandidatesRoot(paths), candidateId, "source", "codex", "SKILL.md"),
       `---\nname: ${name}\ndescription: tampered\n---\n`,

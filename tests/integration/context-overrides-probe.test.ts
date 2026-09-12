@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { cli, makeTempDir, setupIntegrationFixture } from "./support.js";
 
 const JsonRpcRequest = z.object({ id: z.number().optional(), method: z.string().optional() });
+
 const Address = z.object({ port: z.number() });
 
 async function configureLocalProbe(root: string, script: string): Promise<void> {
@@ -49,7 +50,7 @@ async function closeServer(server: ReturnType<typeof createServer>): Promise<voi
 }
 
 describe("context overrides and MCP probes", () => {
-  it("keeps V2 skill visibility independent of legacy OpenCode overrides", async () => {
+  it("keeps skill visibility independent of legacy OpenCode overrides", async () => {
     const { root, home } = await setupIntegrationFixture();
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
     const profile = await readFile(profilePath, "utf8");
@@ -89,11 +90,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       {},
       undefined,
       root
     );
+
     expect(projectResult.stdout).toContain(
       "local-skill  ~22 catalogue; ~18 body inventory on invocation"
     );
@@ -102,15 +104,17 @@ describe("context overrides and MCP probes", () => {
 
     const otherRoot = await makeTempDir();
     await execa("git", ["init", "-q", otherRoot]);
+
     const otherResult = await cli(
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       {},
       undefined,
       otherRoot
     );
+
     expect(otherResult.stdout).not.toContain("Notes:");
     expect(otherResult.stdout).toContain("local-skill  ");
   });
@@ -128,16 +132,11 @@ describe("context overrides and MCP probes", () => {
     const result = await cli("mfz", root, home, ["context"], {}, undefined, root);
 
     expect(result.stdout).toContain("Per request (not established)");
-    expect(result.stdout).toContain(
-      "MCP schema inventory (1 enabled | loading unknown; excluded from Per request)"
-    );
+    expect(result.stdout).toContain("MCP servers (0 enabled; 1 disabled)");
     expect(result.stdout).toContain(
       "MCP schema inventory (2 enabled | loading unknown; excluded from Per request)"
     );
     expect(result.stdout).not.toContain("context7  disabled");
-    expect(result.stdout).toContain(
-      "MCP schema inventory (2 enabled | loading unknown; excluded from Per request)"
-    );
   });
 
   it("does not connect during static analysis and measures a local stdio probe", async () => {
@@ -176,6 +175,7 @@ describe("context overrides and MCP probes", () => {
     const marker = path.join(root, "probe-started");
     const cwdMarker = path.join(root, "probe-cwd");
     const homeMarker = path.join(root, "probe-home");
+
     const env = {
       MCP_PROBE_MARKER: marker,
       MCP_PROBE_CWD_MARKER: cwdMarker,
@@ -186,11 +186,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       env,
       undefined,
       inspectedDirectory
     );
+
     expect(staticResult.stdout).toContain(
       "probe-server  enabled | schemas unmeasured (not probed)"
     );
@@ -200,11 +201,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2", "--probe-mcp"],
+      ["context", "--agent", "opencode", "--probe-mcp"],
       env,
       undefined,
       inspectedDirectory
     );
+
     expect(probeResult.stdout).toContain(`Context | personal | ${inspectedDirectory}`);
     expect(probeResult.stdout).not.toContain("MCP probes");
     expect(probeResult.stdout).toContain(
@@ -235,11 +237,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       {},
       undefined,
       root
     );
+
     expect(result.stdout).toContain("local-skill  ~22 catalogue; ~18 body inventory on invocation");
     expect(result.stdout).not.toContain("model invocation disabled; catalogue is not advertised");
   });
@@ -247,17 +250,21 @@ describe("context overrides and MCP probes", () => {
   it("measures a remote HTTP probe without provider or tool calls", async () => {
     const { root, home } = await setupIntegrationFixture();
     const methods: string[] = [];
+
     const server = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         const body = JsonRpcRequest.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
         methods.push(body.method ?? "");
+
         if (body.method === "notifications/initialized") {
           response.statusCode = 204;
           response.end();
+
           return;
         }
+
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -284,12 +291,14 @@ describe("context overrides and MCP probes", () => {
         );
       });
     });
+
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
     const address = server.address();
     const addressInfo = Address.safeParse(address);
+
     if (!addressInfo.success) throw new Error("HTTP fixture did not bind");
     const catalogPath = path.join(root, "catalog", "mcp.yml");
     const catalog = await readFile(catalogPath, "utf8");
@@ -307,11 +316,12 @@ describe("context overrides and MCP probes", () => {
         "mfz",
         root,
         home,
-        ["context", "--agent", "opencode-v2", "--probe-mcp"],
+        ["context", "--agent", "opencode", "--probe-mcp"],
         {},
         undefined,
         root
       );
+
       expect(result.stdout).toContain("context7  enabled | 1 tool");
       expect(result.stdout).not.toContain("remote private instruction");
       expect(result.stdout).not.toContain("remote private description");
@@ -333,17 +343,20 @@ describe("context overrides and MCP probes", () => {
       "utf8"
     );
     const methods: string[] = [];
+
     const server = createServer((_request, response) => {
       methods.push("request");
       response.statusCode = 401;
       response.end("credential=private-value");
     });
+
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
     });
     const address = server.address();
     const addressInfo = Address.safeParse(address);
+
     if (!addressInfo.success) throw new Error("HTTP fixture did not bind");
     const catalogPath = path.join(fixture.root, "catalog", "mcp.yml");
     const catalog = await readFile(catalogPath, "utf8");
@@ -355,6 +368,7 @@ describe("context overrides and MCP probes", () => {
       ),
       "utf8"
     );
+
     try {
       const result = await cli(
         "mfz",
@@ -365,6 +379,7 @@ describe("context overrides and MCP probes", () => {
         undefined,
         fixture.root
       );
+
       expect(result.stdout).toContain(
         "MCP schema inventory (1 enabled; 1 disabled | loading unknown; excluded from Per request)"
       );
@@ -386,11 +401,12 @@ describe("context overrides and MCP probes", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2", "--probe-mcp"],
+      ["context", "--agent", "opencode", "--probe-mcp"],
       {},
       undefined,
       root
     );
+
     expect(result.stdout).toContain("context7  enabled | unavailable");
   });
 });

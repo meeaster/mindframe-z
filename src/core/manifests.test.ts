@@ -3,9 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  agentSchema,
   homeManifestSchema,
   loadManifests,
   mcpServerSchema,
+  profileSchema,
   skillSchema,
   skillsManifestSchema,
   validateManifests,
@@ -22,6 +24,7 @@ async function tmpHome(): Promise<{ root: string; home: string }> {
   await mkdir(root, { recursive: true });
   await mkdir(home, { recursive: true });
   await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+
   return { root, home };
 }
 
@@ -29,6 +32,7 @@ async function writeProfile(root: string, dir: string, yaml: string): Promise<st
   const full = path.join(root, "profiles", dir);
   await mkdir(full, { recursive: true });
   await writeFile(path.join(full, "profile.yml"), yaml, "utf8");
+
   return full;
 }
 
@@ -246,9 +250,11 @@ describe("loadManifests", () => {
 describe("generated skill schema", () => {
   it("retains transport and ref safety constraints", async () => {
     const schema = await readGeneratedSchema("skills.schema.json");
+
     const vendored = schema.properties?.skills?.items?.anyOf
       ?.flatMap((branch) => branch.anyOf ?? [branch])
       .find((branch) => branch.properties?.source?.const === "vendored");
+
     expect(vendored?.properties?.repo?.pattern).toContain("@");
     expect(vendored?.properties?.ref?.pattern).toContain("\\s");
   });
@@ -257,14 +263,17 @@ describe("generated skill schema", () => {
 describe("generated profile MCP schema", () => {
   it("describes concise and grouped direct authoring constraints", async () => {
     const schema = await readGeneratedSchema("profile.schema.json");
+
     const entryProperties = jsonSchemaNodeSchema.safeParse(
       schema.properties?.mcp?.additionalProperties
     ).data?.properties;
+
     const branches = entryProperties?.agents?.anyOf ?? [];
 
     expect(branches[0]!.uniqueItems).toBe(true);
     const grouped = branches[1]!;
     expect(grouped.not).toBeDefined();
+
     for (const variant of grouped.anyOf ?? []) {
       const disabledItems = variant.properties?.disabled?.items;
       expect(disabledItems?.enum).toEqual(["opencode", "codex"]);
@@ -344,6 +353,7 @@ describe("Executor authentication declarations", () => {
         })
       ).toThrow();
     }
+
     expect(() =>
       mcpServerSchema.parse({
         type: "remote",
@@ -375,9 +385,11 @@ describe("Executor authentication declarations", () => {
     ).toThrow(/must be unique/);
 
     const schema = await readGeneratedSchema("mcp.schema.json");
+
     const branches =
       jsonSchemaNodeSchema.safeParse(schema.properties?.servers?.additionalProperties).data
         ?.anyOf ?? [];
+
     const executor = branches[0]?.properties?.executor;
     expect(executor?.properties).toHaveProperty("authentication");
     const authBranches = executor?.properties?.authentication?.items?.anyOf ?? [];
@@ -432,6 +444,39 @@ describe("validateManifests", () => {
 });
 
 describe("skill manifest schemas", () => {
+  it("rejects retired OpenCode target, profile, and provider variant names", () => {
+    expect(() => agentSchema.parse("opencode-v2")).toThrow();
+    expect(() => profileSchema.parse({ name: "personal", opencode_v2: {} })).toThrow();
+    expect(() =>
+      skillSchema.parse({
+        name: "variant",
+        source: "vendored",
+        repo: "https://example.invalid/skills.git",
+        ref: "main",
+        variants: {
+          "claude-code": "dist/claude",
+          codex: "dist/codex",
+          "opencode-v2": "dist/opencode"
+        }
+      })
+    ).toThrow();
+    expect(() =>
+      vendorLockSchema.parse({
+        skills: {
+          variant: {
+            commit: "a".repeat(40),
+            digest: "b".repeat(64),
+            variants: {
+              "claude-code": "c".repeat(64),
+              codex: "d".repeat(64),
+              "opencode-v2": "e".repeat(64)
+            }
+          }
+        }
+      })
+    ).toThrow();
+  });
+
   it("accepts local, vendored, and independently pinned Git declarations", () => {
     expect(skillSchema.parse({ name: "local", source: "local" })).toMatchObject({
       name: "local",
@@ -466,7 +511,7 @@ describe("skill manifest schemas", () => {
       variants: {
         "claude-code": "dist/claude",
         codex: "dist/codex",
-        "opencode-v2": "dist/opencode"
+        opencode: "dist/opencode"
       }
     });
 
@@ -475,7 +520,7 @@ describe("skill manifest schemas", () => {
       variants: {
         "claude-code": "dist/claude",
         codex: "dist/codex",
-        "opencode-v2": "dist/opencode"
+        opencode: "dist/opencode"
       }
     });
 
@@ -488,7 +533,7 @@ describe("skill manifest schemas", () => {
             variants: {
               "claude-code": "c".repeat(64),
               codex: "d".repeat(64),
-              "opencode-v2": "e".repeat(64)
+              opencode: "e".repeat(64)
             }
           }
         }
@@ -503,10 +548,11 @@ describe("skill manifest schemas", () => {
       repo: "https://example.invalid/skills.git",
       ref: "main"
     };
+
     const complete = {
       "claude-code": "dist/claude",
       codex: "dist/codex",
-      "opencode-v2": "dist/opencode"
+      opencode: "dist/opencode"
     };
 
     expect(() =>
@@ -538,6 +584,7 @@ describe("skill manifest schemas", () => {
     expect(() =>
       skillSchema.parse({ name: "old", source: "git", repo: "https://example.invalid" })
     ).toThrow();
+
     for (const commit of ["A".repeat(40), "a".repeat(39), "a".repeat(41)]) {
       expect(() =>
         skillSchema.parse({
@@ -549,6 +596,7 @@ describe("skill manifest schemas", () => {
         })
       ).toThrow();
     }
+
     for (const field of [
       { repo: "https://user:password@example.invalid/skills.git" },
       { subtree: "skills/../trusted" }
@@ -564,6 +612,7 @@ describe("skill manifest schemas", () => {
         })
       ).toThrow();
     }
+
     expect(() =>
       skillSchema.parse({
         name: "old",

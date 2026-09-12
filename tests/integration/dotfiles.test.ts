@@ -13,6 +13,7 @@ const OpenCodePermissions = z.object({
     })
   )
 });
+
 const ClaudePermissions = z.object({ permissions: z.object({ deny: z.array(z.string()) }) });
 
 describe("dotfiles integration", () => {
@@ -47,8 +48,8 @@ describe("dotfiles integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const fragmentPath = path.join(home, ".mindframe-z", "gitconfig");
     const fragment = await readFile(fragmentPath, "utf8");
@@ -67,7 +68,7 @@ describe("dotfiles integration", () => {
   });
 
   it("omits git identity fields when machine identity is absent", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
 
     const fragment = await readFile(path.join(home, ".mindframe-z", "gitconfig"), "utf8");
     expect(fragment).not.toContain("[user]");
@@ -110,12 +111,13 @@ describe("dotfiles integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode-v2", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
 
     const config = parseJson(
       OpenCodePermissions,
-      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     );
+
     const secretsBoundary = path.join(home, ".mindframe-z", "secrets", "*");
     expect(config.permissions).toContainEqual({
       action: "external_directory",
@@ -147,6 +149,7 @@ describe("dotfiles integration", () => {
       ClaudePermissions,
       await readFile(configsPath(home, "personal", "claude", "settings.json"), "utf8")
     );
+
     const secretsPattern = `/${path.join(home, ".mindframe-z", "secrets")}/**`;
     expect(settings.permissions.deny).toContain(`Read(${secretsPattern})`);
     expect(settings.permissions.deny).toContain(`Edit(${secretsPattern})`);
@@ -305,6 +308,7 @@ describe("dotfiles integration", () => {
       configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json"),
       "utf8"
     );
+
     expect(rendered).toContain('"version":3');
 
     await expect(
@@ -335,6 +339,7 @@ describe("dotfiles integration", () => {
       "user",
       "example.service"
     );
+
     expect(await readFile(snapshot, "utf8")).toContain("Description=Example");
     await expect(
       realpath(path.join(home, ".config", "systemd", "user", "example.service"))

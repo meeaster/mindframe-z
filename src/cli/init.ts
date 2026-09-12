@@ -64,13 +64,13 @@ Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when every declared c
 
 const cronGuideMarkdown = `# Scheduled OpenCode Jobs Guide
 
-Use this guide before adding or changing a recurring \`opencode2 run\` job. Users may call these cron jobs. On this system, use an \`mfz\`-managed systemd user timer rather than \`crontab\`. Do not add a scheduler library, generic job schema, or wrapper CLI for this pattern.
+Use this guide before adding or changing a recurring \`opencode run\` job. Users may call these cron jobs. On this system, use an \`mfz\`-managed systemd user timer rather than \`crontab\`. Do not add a scheduler library, generic job schema, or wrapper CLI for this pattern.
 
 ## Choose a session policy
 
 Choose the smallest policy that fits the job:
 
-| Need | Policy | Where the task runs | \`opencode2 run\` flags |
+| Need | Policy | Where the task runs | \`opencode run\` flags |
 | --- | --- | --- | --- |
 | Independent run with fresh context | New direct session | New Build root | Omit \`--session\` and \`--continue\` |
 | One cumulative conversation | Persistent direct session | Existing Build root | \`--session <id>\` |
@@ -109,7 +109,7 @@ WorkingDirectory=/absolute/project/or/reference/path
 Environment=HOME=%h
 Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:%h/.opencode/bin:/usr/local/bin:/usr/bin:/bin
 StandardInput=file:%h/.config/opencode/jobs/<job>.md
-ExecStart=%h/.opencode/bin/opencode2 run --auto --model <provider/model#variant> --agent build
+ExecStart=%h/.opencode/bin/opencode run --auto --model <provider/model#variant> --agent build
 ~~~
 
 Add \`--session <id>\` for either persistent policy. Add \`--fork\` only for the fork policy. Use Build with \`--auto\` by default. Keep read-only, mutation, approval, and external-side-effect guardrails in the prompt; \`--auto\` approves requests that agent policy does not explicitly deny. Add a job-specific agent only when repeated use proves that the job needs a stable custom system prompt or tighter tool policy.
@@ -145,7 +145,7 @@ When the prompt already contains the complete workflow, avoid redundant skill lo
 Create a persistent root once and record its exact ID in the service. The session location must match the service working directory. Skip this step for new direct sessions; for forks, select the intended baseline session instead.
 
 ~~~sh
-opencode2 api v2.session.create --data '{"title":"Scheduled: <job>","agent":"build","model":{"providerID":"<provider>","id":"<model>","variant":"<variant>"},"location":{"directory":"<absolute-directory>"}}'
+opencode api v2.session.create --data '{"title":"Scheduled: <job>","agent":"build","model":{"providerID":"<provider>","id":"<model>","variant":"<variant>"},"location":{"directory":"<absolute-directory>"}}'
 ~~~
 
 ## If using a scheduled worker
@@ -171,7 +171,7 @@ permission:
 Enable the agent and nested depth in the home profile:
 
 ~~~yaml
-opencode_v2:
+opencode:
   config:
     experimental:
       subagent_depth: 2
@@ -187,7 +187,7 @@ Keep the root prompt short. Pass one complete task prompt to one fresh worker, t
 
 Set the root model with \`--model provider/model#variant\`. A model-free child inherits the parent's model and variant. A configured child model overrides the parent.
 
-Do not use \`OPENCODE_CONFIG_CONTENT\` as per-run agent configuration when \`opencode2 run\` connects to the shared service. The shared server reads that configuration when it starts. The CLI environment attached to a managed-service session is shell environment, not a new location configuration.
+Do not use \`OPENCODE_CONFIG_CONTENT\` as per-run agent configuration when \`opencode run\` connects to the shared service. The shared server reads that configuration when it starts. The CLI environment attached to a managed-service session is shell environment, not a new location configuration.
 
 OpenCode compacts long sessions automatically. Compaction preserves the durable transcript but replaces old model-visible context with a lossy summary and recent tail. Start with automatic compaction.
 
@@ -195,12 +195,12 @@ Compaction is checked before a model request, not during a running model request
 
 ### Only if repeated runs need explicit compaction
 
-Add a compact-before-run wrapper only after repeated runs show stale-context behavior or insufficient headroom. There is no \`opencode2 run --compact-first\` flag. A wrapper must submit compaction, wait for the session to become idle, verify that compaction succeeded, and only then run the scheduled prompt:
+Add a compact-before-run wrapper only after repeated runs show stale-context behavior or insufficient headroom. There is no \`opencode run --compact-first\` flag. A wrapper must submit compaction, wait for the session to become idle, verify that compaction succeeded, and only then run the scheduled prompt:
 
 ~~~sh
-opencode2 api post /api/session/<id>/compact --data '{}'
-opencode2 api post /api/session/<id>/wait
-opencode2 run --session <id> ...
+opencode api post /api/session/<id>/compact --data '{}'
+opencode api post /api/session/<id>/wait
+opencode run --session <id> ...
 ~~~
 
 The wrapper adds a model call and retains a lossy summary plus recent context rather than producing a blank session.
@@ -350,13 +350,13 @@ Add a trusted Git skill:
 
 Add a vendored skill:
 
-1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode-v2\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
+1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
 2. Check without mutation: \`mfz skills check\`.
 3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
 4. Invoke \`/skill-update-review <candidate-id>\`. Candidate files are hostile evidence; inspect every file and deterministic finding without executing anything.
 5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the promoted skill appears for its selected agents and the profile reports healthy links. Promotion does not apply configuration or create links.
 
-Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode-v2/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
+Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 
 Unpinned \`source: git\` entries are legacy migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 
@@ -416,12 +416,16 @@ export const guideTopicNames = [...guideTopics.keys()];
 export async function guide(topic?: string): Promise<void> {
   if (topic !== undefined) {
     const content = guideTopics.get(topic);
+
     if (!content) {
       throw new Error(`Unknown guide topic: ${topic}. Topics: ${guideTopicNames.join(", ")}`);
     }
+
     console.log(content.trimEnd());
+
     return;
   }
+
   console.log(guideMarkdown.trimEnd());
 }
 
@@ -456,7 +460,7 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
     "# Home Instructions\n",
     "utf8"
   );
-  const agentList = agents.length > 0 ? agents : ["opencode-v2", "claude-code", "codex"];
+  const agentList = agents.length > 0 ? agents : ["opencode", "claude-code", "codex"];
   await writeFile(
     path.join(homeRoot, "profiles", "base", "profile.yml"),
     [
@@ -489,9 +493,11 @@ export async function initHome(options: {
   const machineHome = path.resolve(
     options.home ?? process.env.MFZ_HOME ?? process.env.HOME ?? process.cwd()
   );
+
   const configDir = mindframeZDir(machineHome);
   await mkdir(configDir, { recursive: true });
   let homeRoot: string;
+
   if (options.create) {
     homeRoot = path.resolve(options.create);
     await scaffoldHome(
@@ -516,6 +522,7 @@ export async function initHome(options: {
   } else {
     throw new Error("mfz init requires --create <path>, --clone <repo>, or --point <path>");
   }
+
   await writeFile(
     machineConfigPath(machineHome),
     `home_path: ${homeRoot}\nprofile: base\n`,

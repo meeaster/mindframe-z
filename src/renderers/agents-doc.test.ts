@@ -27,8 +27,8 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: [],
@@ -43,11 +43,13 @@ async function setupHome(): Promise<{
   const home = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-agents-doc-"));
   await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
   let seq = 0;
+
   return {
     home,
     async instruction(content: string): Promise<string> {
       const file = path.join(home, `AGENTS.${seq++}.md`);
       await writeFile(file, content, "utf8");
+
       return file;
     }
   };

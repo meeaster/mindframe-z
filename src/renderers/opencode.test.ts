@@ -6,25 +6,26 @@ import { createRuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import { renderTarget } from "../core/render.js";
 import type { JsonObject } from "../core/json.js";
-import { mergeOpenCodeV2CliPlugins, renderOpenCodeV2 } from "./opencode-v2.js";
+import { mergeOpenCodeCliPlugins, renderOpenCode } from "./opencode.js";
 
 function profile(home: string): ResolvedProfile {
   const manifest = profileSchema.parse({
     name: "personal",
-    agents: ["opencode-v2"],
+    agents: ["opencode"],
     dotfiles: { ".zshrc": "managed" },
     extra_folders: [
       { path: path.join(home, "extra"), description: "Extra", read: "ask", edit: "deny" }
     ],
-    opencode_v2: {
+    opencode: {
       config: { model: "v2/model" },
       cli: { theme: "dark" },
       global_instructions: true
     }
   });
+
   return {
     name: "personal",
-    agents: ["opencode-v2"],
+    agents: ["opencode"],
     profile: manifest,
     // SAFETY: this fixture exercises only renderer fields and never reads manifest/source metadata.
     manifests: {} as ResolvedProfile["manifests"],
@@ -35,8 +36,8 @@ function profile(home: string): ResolvedProfile {
     referencesDir: path.join(home, "references"),
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [
       {
         name: "remote",
@@ -65,17 +66,19 @@ function profile(home: string): ResolvedProfile {
   };
 }
 
-function renderedConfig(result: Awaited<ReturnType<typeof renderOpenCodeV2>>): JsonObject {
-  const file = result.files.find((entry) => entry.path.endsWith("opencode-v2/opencode.jsonc"));
-  if (!file) throw new Error("OpenCode V2 config was not rendered");
+function renderedConfig(result: Awaited<ReturnType<typeof renderOpenCode>>): JsonObject {
+  const file = result.files.find((entry) => entry.path.endsWith("opencode/opencode.jsonc"));
+
+  if (!file) throw new Error("OpenCode config was not rendered");
+
   // SAFETY: the renderer serializes this file from a JSON object.
   return JSON.parse(file.content) as JsonObject;
 }
 
-describe("OpenCode V2 renderer", () => {
+describe("OpenCode renderer", () => {
   it("does not render plugin development dependencies", async () => {
-    const home = "/tmp/mfz-opencode-v2-plugin-dependencies";
-    const root = "/tmp/mfz-opencode-v2-plugin-source";
+    const home = "/tmp/mfz-opencode-plugin-dependencies";
+    const root = "/tmp/mfz-opencode-plugin-source";
     const source = path.join(root, "opencode", "plugins", "example", "v2");
     await mkdir(path.join(source, "node_modules", "helper"), { recursive: true });
     await writeFile(path.join(source, "index.ts"), "export default {}\n");
@@ -83,31 +86,24 @@ describe("OpenCode V2 renderer", () => {
     await writeFile(path.join(source, "node_modules", "helper", "index.js"), "export default {}\n");
 
     const paths = createRuntimePaths({ root, home });
-    const result = await renderOpenCodeV2(paths, {
+
+    const result = await renderOpenCode(paths, {
       ...profile(home),
-      enabledOpenCodeV2TuiPlugins: ["example"],
+      enabledOpenCodeTuiPlugins: ["example"],
       // SAFETY: only the plugin map is read by collectPluginFiles in this test.
       sources: { plugins: new Map([["example", { root }]]) } as ResolvedProfile["sources"]
     });
 
     expect(result.localFiles?.map((file) => file.path)).toContain(
-      path.join(
-        paths.configsDir,
-        "personal",
-        "opencode-v2",
-        "plugins",
-        "tui",
-        "example",
-        "index.ts"
-      )
+      path.join(paths.configsDir, "personal", "opencode", "plugins", "tui", "example", "index.ts")
     );
     expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
     expect(result.links.some((link) => link.linkPath.endsWith("node_modules"))).toBe(false);
   });
 
   it("renders the same configured options for server and TUI plugin assets", async () => {
-    const home = "/tmp/mfz-opencode-v2-plugin-options";
-    const root = "/tmp/mfz-opencode-v2-plugin-options-source";
+    const home = "/tmp/mfz-opencode-plugin-options";
+    const root = "/tmp/mfz-opencode-plugin-options-source";
     const source = path.join(root, "opencode", "plugins", "work-ledger");
     await rm(root, { recursive: true, force: true });
     await mkdir(source, { recursive: true });
@@ -119,18 +115,20 @@ describe("OpenCode V2 renderer", () => {
 
     const paths = createRuntimePaths({ root, home });
     const resolved = profile(home);
-    resolved.profile.opencode_v2.plugin_options = {
+    resolved.profile.opencode.plugin_options = {
       "work-ledger": { root: "~/workspace/knowledge/personal-knowledge/ledgers" }
     };
-    const result = await renderOpenCodeV2(paths, {
+
+    const result = await renderOpenCode(paths, {
       ...resolved,
-      enabledOpenCodeV2Plugins: ["work-ledger"],
-      enabledOpenCodeV2TuiPlugins: ["work-ledger"],
+      enabledOpenCodePlugins: ["work-ledger"],
+      enabledOpenCodeTuiPlugins: ["work-ledger"],
       // SAFETY: collectPluginFiles reads only the root field from this renderer fixture.
       sources: {
         plugins: new Map([["work-ledger", { root }]])
       } as ResolvedProfile["sources"]
     });
+
     const options = { root: "~/workspace/knowledge/personal-knowledge/ledgers" };
 
     expect(renderedConfig(result).plugins).toEqual([
@@ -141,35 +139,35 @@ describe("OpenCode V2 renderer", () => {
     ]);
     expect(result.cliPlugins?.entries).toEqual([
       {
-        package: `file://${path.join(home, ".mindframe-z", "configs", "personal", "opencode-v2", "plugins", "tui", "work-ledger")}`,
+        package: `file://${path.join(home, ".mindframe-z", "configs", "personal", "opencode", "plugins", "tui", "work-ledger")}`,
         options
       }
     ]);
   });
 
-  it("links active V2 runtime dependencies from the profile", async () => {
-    const home = "/tmp/mfz-opencode-v2-runtime-dependencies";
+  it("links active OpenCode runtime dependencies from the profile", async () => {
+    const home = "/tmp/mfz-opencode-runtime-dependencies";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
     const resolved = profile(home);
-    resolved.profile.opencode_v2.dependencies = { "@opencode-ai/plugin": "0.0.0-next-17403" };
+    resolved.profile.opencode.dependencies = { "@opencode-ai/plugin": "0.0.0-next-17403" };
 
-    const result = await renderOpenCodeV2(paths, resolved);
-    const manifest = result.files.find((file) => file.path.endsWith("opencode-v2/package.json"));
+    const result = await renderOpenCode(paths, resolved);
+    const manifest = result.files.find((file) => file.path.endsWith("opencode/package.json"));
 
     expect(manifest?.content).toContain('"@opencode-ai/plugin": "0.0.0-next-17403"');
     expect(result.links).toContainEqual({
       linkPath: path.join(paths.opencodeConfigDir, "package.json"),
-      targetPath: path.join(paths.configsDir, "personal", "opencode-v2", "package.json")
+      targetPath: path.join(paths.configsDir, "personal", "opencode", "package.json")
     });
   });
 
   it("renders native MCP, permissions, CLI, and isolated paths without reading V1 plugins", async () => {
-    const home = "/tmp/mfz-opencode-v2-renderer";
+    const home = "/tmp/mfz-opencode-renderer";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     try {
-      const result = await renderOpenCodeV2(paths, profile(home));
+      const result = await renderOpenCode(paths, profile(home));
       const config = renderedConfig(result);
       // SAFETY: nativeMcp always renders the config.mcp object with a servers map.
       const mcp = config.mcp as { servers: JsonObject };
@@ -178,7 +176,7 @@ describe("OpenCode V2 renderer", () => {
         $schema: "https://opencode.ai/config.json",
         model: "v2/model",
         instructions: [],
-        skills: [path.join(paths.configsDir, "personal", "opencode-v2", "skills")]
+        skills: [path.join(paths.configsDir, "personal", "opencode", "skills")]
       });
       expect(config.plugin).toBeUndefined();
       expect(mcp.servers).toEqual({
@@ -255,7 +253,7 @@ describe("OpenCode V2 renderer", () => {
       });
       expect(result.links).toContainEqual({
         linkPath: path.join(paths.opencodeConfigDir, "opencode.jsonc"),
-        targetPath: path.join(paths.configsDir, "personal", "opencode-v2", "opencode.jsonc")
+        targetPath: path.join(paths.configsDir, "personal", "opencode", "opencode.jsonc")
       });
       expect(warning).not.toHaveBeenCalled();
     } finally {
@@ -263,10 +261,10 @@ describe("OpenCode V2 renderer", () => {
     }
   });
 
-  it("renders indexes into the globally discovered V2 AGENTS file", async () => {
-    const home = "/tmp/mfz-opencode-v2-global-instructions";
+  it("renders indexes into the globally discovered OpenCode AGENTS file", async () => {
+    const home = "/tmp/mfz-opencode-global-instructions";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
-    const result = await renderTarget(paths, profile(home), "opencode-v2");
+    const result = await renderTarget(paths, profile(home), "opencode");
     const agents = result.files.find((entry) => entry.path.endsWith("personal/AGENTS.md"));
 
     expect(agents?.content).toContain("# Enabled References");
@@ -278,13 +276,14 @@ describe("OpenCode V2 renderer", () => {
   });
 
   it("copies on-demand instructions and advertises their rendered path", async () => {
-    const root = "/tmp/mfz-opencode-v2-instruction-references-root";
-    const home = "/tmp/mfz-opencode-v2-instruction-references-home";
+    const root = "/tmp/mfz-opencode-instruction-references-root";
+    const home = "/tmp/mfz-opencode-instruction-references-home";
     await rm(root, { recursive: true, force: true });
     await mkdir(path.join(root, "instructions"), { recursive: true });
     const sourcePath = path.join(root, "instructions", "BROWSER.md");
     await writeFile(sourcePath, "# Browser\n\nUse the managed profile.\n");
     const paths = createRuntimePaths({ root, home });
+
     const stalePath = path.join(
       home,
       ".mindframe-z",
@@ -293,6 +292,7 @@ describe("OpenCode V2 renderer", () => {
       "instruction-references",
       "stale.md"
     );
+
     await mkdir(path.dirname(stalePath), { recursive: true });
     await writeFile(stalePath, "stale\n");
     const resolved = profile(home);
@@ -305,8 +305,9 @@ describe("OpenCode V2 renderer", () => {
       }
     ];
 
-    const result = await renderTarget(paths, resolved, "opencode-v2");
+    const result = await renderTarget(paths, resolved, "opencode");
     const agents = result.files.find((entry) => entry.path.endsWith("personal/AGENTS.md"));
+
     const reference = result.files.find((entry) =>
       entry.path.endsWith("instruction-references/browser.md")
     );
@@ -315,6 +316,7 @@ describe("OpenCode V2 renderer", () => {
     expect(agents?.content).toContain(reference?.path);
     expect(reference?.content).toBe("# Browser\n\nUse the managed profile.\n");
     expect(result.staleFiles).toContain(stalePath);
+
     if (!reference) throw new Error("expected rendered instruction reference");
 
     await mkdir(path.dirname(reference.path), { recursive: true });
@@ -323,26 +325,28 @@ describe("OpenCode V2 renderer", () => {
     expect(dotfiles.staleFiles).not.toContain(reference.path);
   });
 
-  it("rejects V2 config ownership collisions", async () => {
-    const home = "/tmp/mfz-opencode-v2-owned";
+  it("rejects OpenCode config ownership collisions", async () => {
+    const home = "/tmp/mfz-opencode-owned";
     const paths = createRuntimePaths({ root: "/tmp/root", home });
     const resolved = profile(home);
-    resolved.profile.opencode_v2.config.permissions = [];
+    resolved.profile.opencode.config.permissions = [];
 
-    await expect(renderOpenCodeV2(paths, resolved)).rejects.toThrow(
-      "OpenCode V2 config field permissions is generated by mindframe-z"
+    await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
+      "OpenCode config field permissions is generated by mindframe-z"
     );
   });
 
-  it("does not register quarantined V2 TUI plugins as server plugins", async () => {
-    const resolved = profile("/tmp/mfz-opencode-v2-tui");
-    resolved.enabledOpenCodeV2TuiPlugins = ["advisor"];
-    const result = await renderOpenCodeV2(
+  it("does not register quarantined OpenCode TUI plugins as server plugins", async () => {
+    const resolved = profile("/tmp/mfz-opencode-tui");
+    resolved.enabledOpenCodeTuiPlugins = ["advisor"];
+
+    const result = await renderOpenCode(
       {
         ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
       },
       resolved
     );
+
     expect(renderedConfig(result).plugins).toBeUndefined();
     expect(result.localFiles?.some((file) => file.path.includes("advisor"))).toBe(false);
   });
@@ -352,7 +356,7 @@ describe("OpenCode V2 renderer", () => {
     const managed = `file://${ownedPath}/session-cost-tui`;
     const userOwnedPath = `file://${ownedPath}/user-plugin`;
     expect(
-      mergeOpenCodeV2CliPlugins(
+      mergeOpenCodeCliPlugins(
         {
           theme: "dark",
           plugins: [
@@ -382,23 +386,25 @@ describe("OpenCode V2 renderer", () => {
     const next = { package: packageUrl, options: { root: "/new" } };
     const user = { package: "npm:user-plugin", options: { enabled: false } };
 
-    expect(mergeOpenCodeV2CliPlugins({ plugins: [previous, user] }, [next], [previous])).toEqual({
+    expect(mergeOpenCodeCliPlugins({ plugins: [previous, user] }, [next], [previous])).toEqual({
       plugins: [user, next]
     });
-    expect(mergeOpenCodeV2CliPlugins({ plugins: [previous, user] }, [], [previous])).toEqual({
+    expect(mergeOpenCodeCliPlugins({ plugins: [previous, user] }, [], [previous])).toEqual({
       plugins: [user]
     });
   });
 
-  it("renders V2 CLI settings for the global CLI config merge", async () => {
-    const resolved = profile("/tmp/mfz-opencode-v2-cli-settings");
-    resolved.profile.opencode_v2.cli = { theme: { name: "dracula" } };
-    const result = await renderOpenCodeV2(
+  it("renders OpenCode CLI settings for the global CLI config merge", async () => {
+    const resolved = profile("/tmp/mfz-opencode-cli-settings");
+    resolved.profile.opencode.cli = { theme: { name: "dracula" } };
+
+    const result = await renderOpenCode(
       {
         ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
       },
       resolved
     );
+
     expect(result.cliPlugins?.settings).toEqual({ theme: { name: "dracula" } });
   });
 });

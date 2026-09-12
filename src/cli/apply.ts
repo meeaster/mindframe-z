@@ -35,10 +35,7 @@ import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
-import {
-  mergeOpenCodeV2CliPlugins,
-  parseOpenCodeV2PluginEntries
-} from "../renderers/opencode-v2.js";
+import { mergeOpenCodeCliPlugins, parseOpenCodePluginEntries } from "../renderers/opencode.js";
 import {
   readActiveProfile,
   readOwnership,
@@ -195,12 +192,12 @@ async function applyRenderedTarget(
   if (result.cliPlugins) {
     const exists = await pathExists(result.cliPlugins.path);
     const registry = await readJsonObject(result.cliPlugins.registryPath);
-    const previousEntries = parseOpenCodeV2PluginEntries(registry.entries);
+    const previousEntries = parseOpenCodePluginEntries(registry.entries);
 
     if (exists || result.cliPlugins.entries.length > 0) {
       const cli = await readJsonObject(result.cliPlugins.path);
 
-      const merged = mergeOpenCodeV2CliPlugins(
+      const merged = mergeOpenCodeCliPlugins(
         { ...cli, ...result.cliPlugins.settings },
         result.cliPlugins.entries,
         previousEntries
@@ -480,7 +477,7 @@ export async function applyConfig(
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: selectedAgents.filter(
         (target): target is SkillTarget =>
-          target === "opencode-v2" || target === "claude-code" || target === "codex"
+          target === "opencode" || target === "claude-code" || target === "codex"
       ),
       dryRun: options.dryRun ?? false,
       link: !options.noLink,

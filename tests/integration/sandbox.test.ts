@@ -127,6 +127,6 @@ describe("sandbox integration", () => {
     await cli("mfz", root, home, ["oc", "run", "ok"], {
       PATH: `${binDir}:${process.env.PATH ?? ""}`
     });
-    expect(await readFile(argsFile, "utf8")).toContain("opencode2\nrun\nok\n");
+    expect(await readFile(argsFile, "utf8")).toContain("opencode\nrun\nok\n");
   });
 });

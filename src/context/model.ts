@@ -1,6 +1,7 @@
 import type { AgentName } from "../core/paths.js";
 
-export type ContextHarness = Extract<AgentName, "opencode-v2" | "claude-code">;
+export type ContextHarness = Extract<AgentName, "opencode" | "claude-code">;
+
 export type LoadingClass =
   | "startup"
   | "per-step"
@@ -8,6 +9,7 @@ export type LoadingClass =
   | "conditional:invocation"
   | "deferred"
   | "unknown";
+
 export type MeasurementKind = "exact-text" | "estimated-tokens" | "observed-usage" | "unknown";
 
 export interface TextMeasurement {
@@ -119,11 +121,14 @@ export function buildHistory(
   }
 ): ContextHistory {
   const { maxPromptInputTokens, ...rest } = values;
+
   const history: ContextHistory = {
     available: true,
     windowDays,
     ...rest
   };
+
   if (maxPromptInputTokens !== undefined) history.maxPromptInputTokens = maxPromptInputTokens;
+
   return history;
 }

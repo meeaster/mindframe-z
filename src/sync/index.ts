@@ -7,9 +7,9 @@ import YAML from "yaml";
 import { z } from "zod";
 import { readDirEntries, readTextFile } from "../core/fs-util.js";
 import { eachUpstream } from "../core/manifests.js";
-import { opencodeV2SnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
+import { opencodeSnapshotDir, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { syncOpencodeV2 } from "./opencode.js";
+import { syncOpenCode } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
 import {
@@ -34,39 +34,51 @@ interface SyncTarget {
 function ensureRecord(parent: SyncDocument, key: string): SyncDocument {
   const existing = parent[key];
   const parsed = syncDocumentSchema.safeParse(existing);
+
   if (parsed.success) {
     parent[key] = parsed.data;
+
     return parsed.data;
   }
+
   const next: SyncDocument = {};
   parent[key] = next;
+
   return next;
 }
 
 export function setNested(obj: SyncDocument, prefix: string, key: string, value: SyncValue): void {
   const parts = prefix.split(".").filter(Boolean);
   const leaf = parts.pop();
+
   if (!leaf) return;
 
   let current = obj;
+
   for (const part of parts) {
     current = ensureRecord(current, part);
   }
+
   ensureRecord(current, leaf)[key] = value;
 }
 
 export function parseProfileChoice(answer: string, profileNames: readonly string[]): ProfileChoice {
   const trimmed = answer.trim().toLowerCase();
+
   if (trimmed === "skip" || trimmed === "" || trimmed === "s") return { kind: "skip" };
+
   if (profileNames.includes(trimmed)) return { kind: "profile", name: trimmed };
   const match = profileNames.find((name) => name.startsWith(trimmed));
+
   return match ? { kind: "profile", name: match } : { kind: "unknown", answer: trimmed };
 }
 
 async function readProfileYaml(root: string, targetProfile: string): Promise<SyncDocument> {
   const yamlPath = path.join(root, "profiles", targetProfile, "profile.yml");
   const content = await readTextFile(yamlPath);
+
   if (content === undefined) return { name: targetProfile };
+
   try {
     return syncDocumentSchema.parse(YAML.parse(content));
   } catch (error) {
@@ -89,16 +101,21 @@ async function promptProfileChoice(
   quoteProfiles = false
 ): Promise<string | null> {
   const rl = readline.createInterface({ input: processStdin, output: processStdout });
+
   try {
     const options = profileNames.map((name) => (quoteProfiles ? `"${name}"` : name)).join(", ");
+
     const choice = parseProfileChoice(
       await rl.question(`${message}\n  Add to [${options}, skip]: `),
       profileNames
     );
+
     if (choice.kind === "profile") return choice.name;
+
     if (choice.kind === "unknown") {
       console.log(`  Unknown profile "${choice.answer}". Use: ${options}, skip`);
     }
+
     return null;
   } finally {
     rl.close();
@@ -111,6 +128,7 @@ async function promptUser(
 ): Promise<string | null> {
   const stringValue = z.string().safeParse(candidate.value);
   const formatted = stringValue.success ? stringValue.data : JSON.stringify(candidate.value);
+
   return promptProfileChoice(
     `Unmanaged ${candidate.target}.${candidate.yamlPrefix}.${candidate.key} = ${formatted}`,
     profileNames,
@@ -128,7 +146,8 @@ async function syncCommands(
 ): Promise<UnknownCommand[]> {
   const entries = await readDirEntries(path.join(paths.root, "opencode", "commands"));
 
-  const enabled = new Set(profile.enabledOpenCodeV2Commands);
+  const enabled = new Set(profile.enabledOpenCodeCommands);
+
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
     .map((entry) => ({ name: entry.name.slice(0, -3) }))
@@ -144,11 +163,13 @@ async function promptCommandUser(
 
 async function enableCommandInProfile(root: string, targetProfile: string, commandName: string) {
   const doc = await readProfileYaml(root, targetProfile);
-  const oc = ensureRecord(doc, "opencode_v2");
+  const oc = ensureRecord(doc, "opencode");
+
   if (!Array.isArray(oc.commands)) oc.commands = [];
   const profileCommands = oc.commands;
-  if (!Array.isArray(profileCommands))
-    throw new Error("Expected opencode_v2.commands to be an array");
+
+  if (!Array.isArray(profileCommands)) throw new Error("Expected opencode.commands to be an array");
+
   if (!profileCommands.includes(commandName)) profileCommands.push(commandName);
   await writeProfileYaml(root, targetProfile, doc);
 }
@@ -156,6 +177,7 @@ async function enableCommandInProfile(root: string, targetProfile: string, comma
 async function isPushable(root: string): Promise<boolean> {
   try {
     await execa("git", ["push", "--dry-run"], { cwd: root, timeout: 30000 });
+
     return true;
   } catch {
     return false;
@@ -169,9 +191,11 @@ async function syncTargets(profile: ResolvedProfile): Promise<SyncTarget[]> {
     profile: name,
     upstream: false
   }));
+
   for (const upstream of eachUpstream(profile.manifests)) {
     if (!(await isPushable(upstream.root))) continue;
     const prefix = upstream.aliasPath.join("/");
+
     for (const name of upstream.profiles.keys()) {
       targets.push({
         label: `${prefix}/${name}`,
@@ -181,6 +205,7 @@ async function syncTargets(profile: ResolvedProfile): Promise<SyncTarget[]> {
       });
     }
   }
+
   return targets;
 }
 
@@ -196,13 +221,16 @@ export async function resolveMoves<T>(
   prompt: (item: T, profiles: string[]) => Promise<string | null>
 ): Promise<{ item: T; targetProfile: string }[]> {
   const moves: { item: T; targetProfile: string }[] = [];
+
   for (const item of items) {
     const chosen =
       targetProfile && availableProfiles.includes(targetProfile)
         ? targetProfile
         : await prompt(item, availableProfiles);
+
     if (chosen) moves.push({ item, targetProfile: chosen });
   }
+
   return moves;
 }
 
@@ -213,13 +241,13 @@ export async function runSync(
 ): Promise<void> {
   const configsProfile = profileConfigsDir(paths, profile.name);
 
-  const ocp = path.join(opencodeV2SnapshotDir(paths, profile.name), "opencode.jsonc");
+  const ocp = path.join(opencodeSnapshotDir(paths, profile.name), "opencode.jsonc");
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
   const [opencodeResult, claudeResult, codexResult, commandCandidates] = await Promise.all([
-    profile.agents.includes("opencode-v2")
-      ? syncOpencodeV2(ocp, profile)
+    profile.agents.includes("opencode")
+      ? syncOpenCode(ocp, profile)
       : Promise.resolve({ candidates: [] }),
     profile.agents.includes("claude-code")
       ? syncClaude(clp, profile)
@@ -227,7 +255,7 @@ export async function runSync(
     profile.agents.includes("codex")
       ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
       : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("opencode-v2") ? syncCommands(paths, profile) : Promise.resolve([])
+    profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
   ]);
 
   const candidates = [
@@ -238,6 +266,7 @@ export async function runSync(
 
   if (candidates.length === 0 && commandCandidates.length === 0) {
     console.log("No unmanaged keys found — everything is in sync.");
+
     return;
   }
 
@@ -246,6 +275,7 @@ export async function runSync(
   const targetByLabel = new Map(availableTargets.map((target) => [target.label, target]));
 
   const manualMoves = await resolveMoves(candidates, targetProfile, availableProfiles, promptUser);
+
   const commandMoves = await resolveMoves(
     commandCandidates,
     targetProfile,
@@ -256,7 +286,8 @@ export async function runSync(
   for (const { item: command, targetProfile } of commandMoves) {
     const target = targetByLabel.get(targetProfile)!;
     await enableCommandInProfile(target.root, target.profile, command.name);
-    console.log(`  Updated ${target.label}/profile.yml: opencode_v2.commands.${command.name}`);
+    console.log(`  Updated ${target.label}/profile.yml: opencode.commands.${command.name}`);
+
     if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 
@@ -266,6 +297,7 @@ export async function runSync(
     setNested(doc, candidate.yamlPrefix, candidate.key, candidate.value);
     await writeProfileYaml(target.root, target.profile, doc);
     console.log(`  Updated ${target.label}/profile.yml: ${candidate.yamlPrefix}.${candidate.key}`);
+
     if (target.upstream) console.log(`  Written to upstream home ${target.label} — uncommitted`);
   }
 

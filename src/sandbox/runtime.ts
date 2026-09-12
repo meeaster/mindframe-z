@@ -19,6 +19,7 @@ import {
 import { resolveSandboxCredentialMode, sandboxCaFile, sandboxVaultName } from "./config.js";
 
 export type SandboxLaunchTarget = "shell" | "cc" | "oc";
+
 export type SandboxMountMode = "ro" | "rw";
 
 export interface SandboxMount {
@@ -88,14 +89,23 @@ type SandboxMcpServer =
     };
 
 const containerHome = "/home/sandbox";
+
 const containerMindframeDir = path.posix.join(containerHome, ".mindframe-z");
+
 const containerReferencesDir = "/references";
+
 const containerExtraDir = "/extra";
+
 const agentVaultApiPort = "14321";
+
 const agentVaultMitmPort = "14322";
+
 const bedrockProxyPort = "8080";
+
 const bedrockRegion = "us-west-2";
+
 const caPath = "/etc/agent-vault/mitm-ca.pem";
+
 const mcpShimBasePort = 17301;
 
 function sandboxStateDir(paths: RuntimePaths, profile: ResolvedProfile): string {
@@ -118,14 +128,17 @@ function slugPath(value: string): string {
 function extraFolderMounts(paths: RuntimePaths, profile: ResolvedProfile): SandboxMount[] {
   const used = new Map<string, number>();
   const hostMindframeDir = path.join(paths.home, ".mindframe-z");
+
   return profile.extraFolders.flatMap((folder) => {
     if (folder.read !== "allow") return [];
     const source = expandHome(folder.path, paths.home);
+
     if (source === hostMindframeDir) return [];
     const baseSlug = slugPath(source);
     const count = used.get(baseSlug) ?? 0;
     used.set(baseSlug, count + 1);
     const slug = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
+
     return [
       {
         source,
@@ -142,20 +155,25 @@ function pathReplacements(
   extraMounts: readonly SandboxMount[]
 ): [string, string][] {
   const configsProfile = profileConfigsDir(paths, profile.name);
+
   const replacements: [string, string][] = [
     [path.join(configsProfile, "AGENTS.md"), path.posix.join(containerMindframeDir, "AGENTS.md")],
     [path.join(paths.home, ".mindframe-z"), containerMindframeDir],
     [profile.referencesDir, containerReferencesDir]
   ];
+
   for (const mount of extraMounts) replacements.push([mount.source, mount.target]);
+
   return replacements.sort((a, b) => b[0].length - a[0].length);
 }
 
 function rewriteSandboxPaths(content: string, replacements: readonly [string, string][]): string {
   let next = content;
+
   for (const [hostPath, containerPath] of replacements) {
     next = next.split(hostPath).join(containerPath);
   }
+
   return next;
 }
 
@@ -187,9 +205,11 @@ async function writeSeed(file: string, content: string): Promise<void> {
   } catch (error) {
     if (error instanceof Error && errnoCode(error) === "EEXIST" && (await lstat(file)).isFile())
       return;
+
     if (!(error instanceof Error) || errnoCode(error) !== "EEXIST") {
       throw new Error(`Failed to seed sandbox state at ${file}`, { cause: error });
     }
+
     throw new Error(`Failed to seed sandbox state at ${file}: existing path is not a file`, {
       cause: error
     });
@@ -206,11 +226,13 @@ async function renderSandboxReferencesIndex(
     "Reference repositories are cloned git repos providing documentation, code, and context for AI agents. They are read-only snapshots — do not edit, modify, reorganize, or write to any file within a reference path. If you need to change reference content, ask the user to update the upstream repo.",
     ""
   ];
+
   for (const ref of profile.enabledReferences) {
     lines.push(
       `- \`${ref.name}\`: ${ref.description} Path: \`${path.posix.join(containerReferencesDir, ref.name)}\`.`
     );
   }
+
   lines.push("");
   await writeFile(path.join(runtimeDir, "mindframe-z", "references.md"), lines.join("\n"), "utf8");
 }
@@ -222,28 +244,34 @@ async function renderSandboxExtraFoldersIndex(
   extraMounts: readonly SandboxMount[]
 ): Promise<void> {
   const indexPath = path.join(runtimeDir, "mindframe-z", "extra_folders.md");
+
   if (extraMounts.length === 0) {
     await writeFile(
       indexPath,
       "# Extra Folders\n\nNo extra folders are mounted in this sandbox.\n",
       "utf8"
     );
+
     return;
   }
 
   const bySource = new Map(extraMounts.map((mount) => [mount.source, mount]));
+
   const lines = [
     "# Extra Folders",
     "",
     "Additional directories outside the workspace that agents are permitted to access. Each entry lists the effective permissions granted. When in doubt about whether a path is accessible, check this file.",
     ""
   ];
+
   for (const folder of profile.extraFolders) {
     const mount = bySource.get(expandHome(folder.path, paths.home));
+
     if (!mount) continue;
     const suffix = folder.description ? ` - ${folder.description}` : "";
     lines.push(`- \`${mount.target}\`${suffix} (read: ${folder.read}, edit: ${folder.edit})`);
   }
+
   lines.push("");
   await writeFile(indexPath, lines.join("\n"), "utf8");
 }
@@ -263,13 +291,16 @@ async function writeSandboxRuntimeConfig(
   await mkdir(path.join(runtimeDir, "claude"), { recursive: true });
   await mkdir(path.join(runtimeDir, "mise"), { recursive: true });
   const mise = await renderTarget(paths, profile, "mise", { sandbox: true });
+
   for (const file of mise.files) {
     const relative = path.relative(path.join(configsProfile, "mise"), file.path);
+
     const target = path.join(
       runtimeDir,
       "mise",
       relative.startsWith("tasks/") ? relative : path.join("conf.d", relative)
     );
+
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, file.content, "utf8");
   }
@@ -281,6 +312,7 @@ async function writeSandboxRuntimeConfig(
 
   const opencodePath = path.join(activeOpenCodeSnapshotDir(paths, profile.name), "opencode.jsonc");
   const opencodeSource = await readOptional(opencodePath);
+
   const opencodeConfig = opencodeSource
     ? parseSandboxJson(opencodePath, rewriteSandboxPaths(opencodeSource, replacements))
     : {
@@ -289,6 +321,7 @@ async function writeSandboxRuntimeConfig(
           path.posix.join(containerMindframeDir, "references.md")
         ]
       };
+
   opencodeConfig.mcp = { servers: mcp.opencode };
   await writeFile(
     path.join(runtimeDir, "opencode", "opencode.jsonc"),
@@ -307,13 +340,16 @@ async function writeSandboxRuntimeConfig(
       ].join("\n"),
     replacements
   );
+
   await writeFile(path.join(runtimeDir, "claude", "CLAUDE.md"), claudeMd, "utf8");
 
   const claudeSettingsPath = path.join(configsProfile, "claude", "settings.json");
   const claudeSettingsSource = await readOptional(claudeSettingsPath);
+
   const claudeSettings = claudeSettingsSource
     ? parseSandboxJson(claudeSettingsPath, rewriteSandboxPaths(claudeSettingsSource, replacements))
     : {};
+
   await writeFile(
     path.join(runtimeDir, "claude", "settings.json"),
     jsonFileContent(claudeSettings),
@@ -337,6 +373,7 @@ function renderedMounts(
   const configsProfile = profileConfigsDir(paths, profile.name);
   const activeOpenCode = activeOpenCodeSnapshotDir(paths, profile.name);
   const dotfiles = profile.profile.dotfiles;
+
   const mounts: SandboxMount[] = [
     {
       source: path.join(runtimeDir, "claude", "CLAUDE.md"),
@@ -427,9 +464,11 @@ export async function ensureSandboxState(
   credentialMode?: SandboxRuntimeInputs["credentialMode"]
 ): Promise<void> {
   const stateDir = sandboxStateDir(paths, profile);
+
   for (const dir of ["claude", "opencode-data", "opencode-state"]) {
     await mkdir(path.join(stateDir, dir), { recursive: true });
   }
+
   await writeSeed(path.join(stateDir, "claude.json"), "{}\n");
 
   // Placeholder opencode ChatGPT-OAuth auth so opencode follows its Codex
@@ -444,6 +483,7 @@ export async function ensureSandboxState(
       accountId: "00000000-0000-0000-0000-000000000000"
     }
   };
+
   await writeSeed(path.join(stateDir, "opencode-data", "auth.json"), jsonFileContent(opencodeAuth));
 
   if (credentialMode === "subscription") {
@@ -459,6 +499,7 @@ export async function ensureSandboxState(
         subscriptionType: "pro"
       }
     };
+
     await writeSeed(
       path.join(stateDir, "claude", ".credentials.json"),
       jsonFileContent(credentials)
@@ -468,6 +509,7 @@ export async function ensureSandboxState(
 
 function stateMounts(paths: RuntimePaths, profile: ResolvedProfile): SandboxMount[] {
   const stateDir = sandboxStateDir(paths, profile);
+
   return [
     {
       source: path.join(stateDir, "claude"),
@@ -538,7 +580,8 @@ function serviceDefinitions(
 }
 
 function launchCommand(target: SandboxLaunchTarget, args: readonly string[]): string[] {
-  const command = target === "cc" ? ["claude"] : target === "oc" ? ["opencode2"] : ["zsh"];
+  const command = target === "cc" ? ["claude"] : target === "oc" ? ["opencode"] : ["zsh"];
+
   return [...command, ...args];
 }
 
@@ -553,16 +596,19 @@ function remoteEnabledMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] 
 
 function headersSignature(headers: Record<string, string> | undefined, serverName: string): string {
   if (!headers) return `server:${serverName}`;
+
   return JSON.stringify(Object.entries(headers).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 function mcpOrigin(server: ResolvedMcpServer): string {
   const url = new URL(server.server.type === "remote" ? server.server.url : "http://local.invalid");
+
   return url.origin;
 }
 
 function shimmedServerNames(profile: ResolvedProfile): Set<string> {
   const byOrigin = new Map<string, ResolvedMcpServer[]>();
+
   for (const server of remoteEnabledMcpServers(profile)) {
     const servers = byOrigin.get(mcpOrigin(server)) ?? [];
     servers.push(server);
@@ -570,19 +616,23 @@ function shimmedServerNames(profile: ResolvedProfile): Set<string> {
   }
 
   const shimmed = new Set<string>();
+
   for (const servers of byOrigin.values()) {
     const identityCount = new Set(
       servers.map((server) => headersSignature(server.server.headers, server.name))
     ).size;
+
     if (servers.length > 1 && identityCount > 1) {
       for (const server of servers) shimmed.add(server.name);
     }
   }
+
   return shimmed;
 }
 
 function localMcpShimUrl(port: number, upstream: string): string {
   const pathname = new URL(upstream).pathname || "/mcp";
+
   return `http://127.0.0.1:${port}${pathname}`;
 }
 
@@ -597,6 +647,7 @@ function sandboxMcpRuntimeConfig(
   const shimmedNames = shimmedServerNames(profile);
   const shims: Record<string, SandboxMcpShimDefinition> = {};
   let port = mcpShimBasePort;
+
   for (const server of remoteEnabledMcpServers(profile)) {
     if (!shimmedNames.has(server.name) || server.server.type !== "remote") continue;
     shims[server.name] = {
@@ -610,7 +661,7 @@ function sandboxMcpRuntimeConfig(
 
   return {
     broker: { basePort: mcpShimBasePort, shims },
-    opencode: sandboxMcpForTarget(paths, profile, "opencode-v2", shims),
+    opencode: sandboxMcpForTarget(paths, profile, "opencode", shims),
     claude: sandboxMcpForTarget(paths, profile, "claude-code", shims)
   };
 }
@@ -618,41 +669,54 @@ function sandboxMcpRuntimeConfig(
 function sandboxMcpForTarget(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  target: "opencode-v2" | "claude-code",
+  target: "opencode" | "claude-code",
   shims: Record<string, SandboxMcpShimDefinition>
 ): Record<string, SandboxMcpServer> {
   return Object.fromEntries(
     filterMcpForTarget(profile, target).map((entry) => {
       const shim = shims[entry.name];
       const headers = sandboxMcpHeaders(entry.server.headers, Boolean(shim));
+
       if (entry.server.type === "remote") {
         const url = shim ? localMcpShimUrl(shim.port, entry.server.url) : entry.server.url;
-        if (target === "opencode-v2") {
+
+        if (target === "opencode") {
           const server = { type: "remote" as const, url, disabled: !entry.enabled };
+
           if (headers) Object.assign(server, { headers });
+
           return [entry.name, server];
         }
+
         const server = {
           type: entry.server.transport === "sse" ? ("sse" as const) : ("http" as const),
           url
         };
+
         if (headers) Object.assign(server, { headers });
+
         return [entry.name, server];
       }
 
-      if (target === "opencode-v2") {
+      if (target === "opencode") {
         const server = {
           type: "local" as const,
           command: entry.server.command.map((part) => expandHome(part, paths.home)),
           disabled: !entry.enabled
         };
+
         if (entry.server.env) Object.assign(server, { env: entry.server.env });
+
         return [entry.name, server];
       }
+
       const [command, ...args] = entry.server.command;
       const server = { type: "stdio" as const, command };
+
       if (args.length > 0) Object.assign(server, { args });
+
       if (entry.server.env) Object.assign(server, { env: entry.server.env });
+
       return [entry.name, server];
     })
   );
@@ -664,7 +728,9 @@ function sandboxMcpHeaders(
 ): Record<string, string> | undefined {
   if (!headers && !shimmed) return undefined;
   const result = { ...headers };
+
   if (shimmed) result.Authorization = "PLACEHOLDER";
+
   return result;
 }
 
@@ -710,15 +776,18 @@ export async function resolveSandboxRuntimeInputs(
       `Sandbox cannot run profile ${profile.name} with Executor-routed MCP servers; use a direct-only profile until the host Executor security boundary is supported`
     );
   }
+
   const credentialMode = await resolveSandboxCredentialMode(paths, profile.manifests.machine);
   const workspace = path.resolve(expandHome(options.workspace ?? process.cwd(), paths.home));
   const noProxy = ["localhost", "127.0.0.1", "host.docker.internal"];
+
   if (credentialMode === "bedrock") noProxy.push("bedrock-sigv4-proxy");
 
   // The scoped Agent Vault token authenticates the container to the MITM proxy
   // (as basic-auth userinfo) and the MCP broker. Tests resolve without a token.
   const agentToken = options.agentToken ?? "PLACEHOLDER";
   const proxyUrl = `http://${agentToken}:${sandboxVaultName}@host.docker.internal:${agentVaultMitmPort}`;
+
   const env = {
     HTTPS_PROXY: proxyUrl,
     HTTP_PROXY: proxyUrl,
@@ -752,6 +821,7 @@ export async function resolveSandboxRuntimeInputs(
   const mcp = sandboxMcpRuntimeConfig(paths, profile);
   const extraMounts = extraFolderMounts(paths, profile);
   const runtimeDir = await writeSandboxRuntimeConfig(paths, profile, mcp, extraMounts);
+
   const mounts = [
     { source: workspace, target: "/workspace", mode: "rw" as const },
     { source: sandboxCaFile(paths), target: caPath, mode: "ro" as const },

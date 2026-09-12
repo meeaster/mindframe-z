@@ -12,6 +12,7 @@ import {
 
 async function tmpPaths(): Promise<RuntimePaths> {
   const root = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-overrides-"));
+
   return {
     root,
     home: path.join(root, "home"),
@@ -38,6 +39,7 @@ function profile(codexDefault: boolean): ResolvedProfile {
     ],
     enabledSkills: []
   };
+
   // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
   return result as ResolvedProfile;
 }
@@ -48,7 +50,7 @@ function profile(codexDefault: boolean): ResolvedProfile {
 // is per-target because only the flip each harness actually supports is worth
 // pinning — Claude Code rejects disabling an MCP server (assertMcpToggleSupported).
 function harnessProfile(
-  target: Exclude<AgentName, "opencode-v2" | "pi">,
+  target: Exclude<AgentName, "opencode" | "pi">,
   mcpDefault: boolean
 ): ResolvedProfile {
   // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
@@ -87,6 +89,7 @@ function harnessProfile(
       }
     ]
   };
+
   // SAFETY: The test only exercises the mcpServers and enabledSkills fields.
   return result as ResolvedProfile;
 }

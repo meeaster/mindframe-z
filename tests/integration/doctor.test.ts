@@ -36,7 +36,7 @@ describe("doctor integration", () => {
 
   it("prints enabled commands in status output", async () => {
     const result = await cli("mfz", root, home, ["status"]);
-    expect(result.stdout).toContain("opencode-v2 commands\ttest-cmd");
+    expect(result.stdout).toContain("opencode commands\ttest-cmd");
   });
 
   it("doctor reports valid manifests", async () => {
@@ -81,7 +81,7 @@ describe("doctor integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2]",
+        "agents: [opencode]",
         "mcp:",
         "  context7:",
         "    executor:",

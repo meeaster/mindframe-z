@@ -58,7 +58,7 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/skill-candidates/
 ```
 
-Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Single-subtree skill source is copied into the shared `configs/<profile>/skills/` snapshot. Provider variants use `configs/<profile>/opencode-v2/skills/` for OpenCode and target-scoped `configs/<profile>/<target>/skills/` snapshots for legacy targets. Harness links point only at those snapshots. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
+Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Single-subtree skill source is copied into the shared `configs/<profile>/skills/` snapshot. Provider variants use `configs/<profile>/opencode/skills/` for OpenCode and target-scoped `configs/<profile>/<target>/skills/` snapshots for legacy targets. Harness links point only at those snapshots. Vendored candidates and bare Git caches are machine-local quarantine state and never active.
 
 ## Apply and reference reconciliation
 
@@ -86,7 +86,7 @@ Normal MCP OAuth discovers metadata from the integration endpoint. Assisted OAut
 
 Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
-- `opencode-v2`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI plugins, commands, agents, native permissions, and nested MCP servers.
+- `opencode`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI plugins, commands, agents, native permissions, and nested MCP servers.
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
@@ -123,7 +123,7 @@ An old direct map with every value `true` becomes a concise list. A map with `fa
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
-OpenCode V2 profiles may define `opencode_v2.plugin_options` by plugin asset name. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
+OpenCode profiles may define `opencode.plugin_options` by plugin asset name. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
 
 ## Sync
 
@@ -135,7 +135,7 @@ Generated Executor snapshots and bridge entries are derived output and are not a
 
 ## Skills
 
-Catalog entries use `source: local`, `source: vendored`, or trusted `source: git`. Local skills are authored in the home. A single-subtree vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree; its selected files live under `skills/vendor/<name>/`. A provider-variant entry records the same repository and ref plus exactly one subtree for each of `claude-code`, `codex`, and `opencode-v2`; its files live under `skills/vendor/<name>/<target>/`. `skills/vendor.lock.yml` records the full commit and aggregate framed SHA-256 digest, plus each provider digest for a variant. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
+Catalog entries use `source: local`, `source: vendored`, or trusted `source: git`. Local skills are authored in the home. A single-subtree vendored entry records an HTTPS repository, mutable tracked ref, and explicit upstream subtree; its selected files live under `skills/vendor/<name>/`. A provider-variant entry records the same repository and ref plus exactly one subtree for each of `claude-code`, `codex`, and `opencode`; its files live under `skills/vendor/<name>/<target>/`. `skills/vendor.lock.yml` records the full commit and aggregate framed SHA-256 digest, plus each provider digest for a variant. Symlinks, gitlinks, special files, submodules, LFS objects, hooks, dependencies, and candidate execution are outside the model.
 
 A Git entry records an HTTPS repository, explicit subtree, and full commit SHA. `mfz apply` fetches that exact commit through the machine-local bare cache. Git is an explicit trust decision by the home author, so it bypasses candidate review and vendor locks. Updating a Git skill means changing its catalog commit and applying again. Git skills still render into the same atomic snapshots as local and vendored skills; harnesses never link directly to the cache.
 

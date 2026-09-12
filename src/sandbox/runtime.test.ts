@@ -14,7 +14,7 @@ function paths(home = "/tmp/mfz-home", root = "/tmp/mfz-root"): RuntimePaths {
     workRoot: path.join(home, ".mindframe-z", "work", "v1"),
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode-v2"),
+    opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -48,18 +48,18 @@ function profile(
 
   return {
     name: "personal",
-    agents: ["opencode-v2", "claude-code"],
+    agents: ["opencode", "claude-code"],
     profile: {
       name: "personal",
       description: "Test profile",
-      agents: ["opencode-v2", "claude-code"],
+      agents: ["opencode", "claude-code"],
       instructions: [],
       instruction_references: [],
       capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode_v2: {
+      opencode: {
         config: {},
         dependencies: {},
         cli: {},
@@ -107,8 +107,8 @@ function profile(
       { name: "local-ref", url: "https://example.invalid/ref.git", description: "Local ref." }
     ],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: options.extraFolder
       ? [
@@ -138,7 +138,9 @@ function remoteMcp(
     description: `${name} MCP`,
     url
   };
+
   if (options.headers) Object.assign(server, { headers: options.headers });
+
   return {
     name,
     agents: Object.fromEntries(
@@ -153,12 +155,7 @@ describe("sandbox runtime inputs", () => {
     const home = await makeTempDir();
     const root = await makeTempDir();
     const runtimePaths = paths(home, root);
-    const configPath = path.join(
-      runtimePaths.configsDir,
-      "personal",
-      "opencode-v2",
-      "opencode.jsonc"
-    );
+    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
     await mkdir(path.dirname(configPath), { recursive: true });
     await writeFile(configPath, '{"broken":', "utf8");
     await mkdir(path.join(root, "instructions"), { recursive: true });
@@ -173,12 +170,7 @@ describe("sandbox runtime inputs", () => {
     const home = await makeTempDir();
     const root = await makeTempDir();
     const runtimePaths = paths(home, root);
-    const configPath = path.join(
-      runtimePaths.configsDir,
-      "personal",
-      "opencode-v2",
-      "opencode.jsonc"
-    );
+    const configPath = path.join(runtimePaths.configsDir, "personal", "opencode", "opencode.jsonc");
     await mkdir(configPath, { recursive: true });
     await mkdir(path.join(root, "instructions"), { recursive: true });
     await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Agents\n", "utf8");
@@ -257,6 +249,7 @@ describe("sandbox runtime inputs", () => {
     const runtime = await resolveSandboxRuntimeInputs(paths(), profile("subscription"), {
       workspace: "/tmp/project"
     });
+
     const byTarget = new Map(runtime.mounts.map((mount) => [mount.target, mount]));
 
     expect(byTarget.get("/workspace")).toMatchObject({ source: "/tmp/project", mode: "rw" });
@@ -288,6 +281,7 @@ describe("sandbox runtime inputs", () => {
       profile("subscription", { home, root, extraFolder: path.join(home, "notes") }),
       { workspace: "/tmp/project" }
     );
+
     const byTarget = new Map(runtime.mounts.map((mount) => [mount.target, mount]));
     const referencesMount = byTarget.get("/home/sandbox/.mindframe-z/references.md");
     const extraMount = byTarget.get("/extra/notes");
@@ -323,6 +317,7 @@ describe("sandbox runtime inputs", () => {
       profile("subscription", { home, root, extraFolder: path.join(home, ".mindframe-z") }),
       { workspace: "/tmp/project" }
     );
+
     const byTarget = new Map(runtime.mounts.map((mount) => [mount.target, mount]));
 
     expect(byTarget.get("/extra/.mindframe-z")).toBeUndefined();
@@ -359,7 +354,7 @@ describe("sandbox runtime inputs", () => {
     expect(runtime.dockerRunArgs).toContain("--rm");
     expect(runtime.dockerRunArgs).toContain("--mount");
     expect(runtime.dockerRunArgs).toContain("NO_PROXY=localhost,127.0.0.1,host.docker.internal");
-    expect(runtime.dockerRunArgs.slice(-3)).toEqual(["opencode2", "run", "ok"]);
+    expect(runtime.dockerRunArgs.slice(-3)).toEqual(["opencode", "run", "ok"]);
     expect(runtime.dockerRunArgs.join("\n")).not.toContain("/home/mark");
   });
 
@@ -368,6 +363,7 @@ describe("sandbox runtime inputs", () => {
       workspace: "/tmp/project",
       target: "oc"
     });
+
     const interactive = await resolveSandboxRuntimeInputs(paths(), profile("subscription"), {
       workspace: "/tmp/project",
       target: "oc",
@@ -417,6 +413,7 @@ describe("sandbox runtime inputs", () => {
     const runtime = await resolveSandboxRuntimeInputs(paths(), resolved, {
       workspace: "/tmp/project"
     });
+
     const opencode = runtime.mcp.opencode;
     const claude = runtime.mcp.claude;
 

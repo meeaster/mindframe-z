@@ -30,7 +30,7 @@ function paths(home: string): RuntimePaths {
     workRoot: path.join(home, ".mindframe-z", "work", "v1"),
     workUnitsRoot: path.join(home, ".mindframe-z", "work", "v1", "units"),
     configsDir: path.join(home, ".mindframe-z", "configs"),
-    opencodeConfigDir: path.join(home, ".config", "opencode-v2"),
+    opencodeConfigDir: path.join(home, ".config", "opencode"),
     claudeDir: path.join(home, ".claude"),
     codexDir: path.join(home, ".codex"),
     piDir: path.join(home, ".pi", "agent"),
@@ -54,18 +54,18 @@ function machine(stores: MachineManifest["thread"]["stores"]): MachineManifest {
 function profile(manifest: MachineManifest, root: string): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode-v2", "claude-code"],
+    agents: ["opencode", "claude-code"],
     profile: {
       name: "personal",
       description: "Test profile",
-      agents: ["opencode-v2", "claude-code"],
+      agents: ["opencode", "claude-code"],
       instructions: [],
       instruction_references: [],
       capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode_v2: {
+      opencode: {
         config: {},
         dependencies: {},
         cli: {},
@@ -120,8 +120,8 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     referencesDir: path.join(root, "references"),
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []
@@ -147,6 +147,7 @@ describe("thread storage", () => {
       model: "sonnet",
       effort: "high"
     });
+
     for (const id of [
       "claude-code:@high",
       "claude-code:sonnet@",
@@ -161,6 +162,7 @@ describe("thread storage", () => {
 
   it("composes stores from profile and machine config with machine precedence", async () => {
     const home = await makeTempDir();
+
     const resolved = resolveThreadStores(
       paths(home),
       profile(
@@ -170,6 +172,7 @@ describe("thread storage", () => {
         home
       )
     );
+
     expect(resolved.map((store) => [store.name, store.default])).toEqual([
       ["personal", false],
       ["work", true]
@@ -186,6 +189,7 @@ describe("thread storage", () => {
 
   it("resolves paths beneath the configured repository root and rejects traversal", async () => {
     const home = await makeTempDir();
+
     const resolved = resolveThreadStores(
       paths(home),
       profile(
@@ -201,6 +205,7 @@ describe("thread storage", () => {
         home
       )
     );
+
     expect(resolved[0]?.path).toBe(path.join(home, "knowledge", "threads"));
     expect(() =>
       machineSchema.parse({
@@ -233,6 +238,7 @@ describe("thread storage", () => {
         }
       ]
     };
+
     await writeThreadRuns(dir, runs);
     expect(await readThreadRuns(dir)).toEqual(runs);
   });
@@ -251,6 +257,7 @@ describe("thread storage", () => {
 
   it("rejects misplaced manifests and duplicate slugs across active stores", async () => {
     const home = await makeTempDir();
+
     const resolved = profile(
       machine([
         { name: "one", root: home, path: "one-threads", publication: "direct", default: true },
@@ -258,6 +265,7 @@ describe("thread storage", () => {
       ]),
       home
     );
+
     resolved.profile.thread.stores = [
       { name: "one", root: home, path: "one-threads", publication: "direct", default: true },
       { name: "two", root: home, path: "two-threads", publication: "direct", default: false }
@@ -335,6 +343,7 @@ describe("thread storage", () => {
     await execa("git", ["config", "user.email", "test@test"], { cwd: root });
     await execa("git", ["config", "user.name", "Test"], { cwd: root });
     await writeThreadManifest(path.join(root, "threads", "direct"), thread("direct", "local"));
+
     const store: ResolvedThreadStore = {
       name: "local",
       root,
@@ -342,6 +351,7 @@ describe("thread storage", () => {
       publication: "direct",
       default: true
     };
+
     const { commitThreadChanges } = await import("./publication.js");
     await commitThreadChanges(store, "direct", path.join(root, "threads", "direct"), "seed", false);
     expect(await readFile(path.join(root, "threads", "index.md"), "utf8")).toContain("direct");

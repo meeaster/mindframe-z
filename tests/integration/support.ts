@@ -10,6 +10,7 @@ import type { RuntimePaths } from "../../src/core/paths.js";
 import { digestSkillFiles, type SkillFileRecord } from "../../src/skills/tree.js";
 
 export const providerVariantTargets = vendoredSkillTargets;
+
 type ProviderVariantTarget = VendoredSkillTarget;
 
 export interface ProviderVariantFixture {
@@ -25,32 +26,39 @@ export async function writeProviderVariantSkill(
   const contents = {
     "claude-code": `---\nname: ${name}\ndescription: Claude variant\n---\n\n# Claude variant\n`,
     codex: `---\nname: ${name}\ndescription: Codex variant\n---\n\n# Codex variant\n`,
-    "opencode-v2": `---\nname: ${name}\ndescription: OpenCode variant\n---\n\n# OpenCode variant\n`
+    opencode: `---\nname: ${name}\ndescription: OpenCode variant\n---\n\n# OpenCode variant\n`
   } satisfies Record<ProviderVariantTarget, string>;
+
   const files = {
     "claude-code": [
       { path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents["claude-code"]) }
     ],
     codex: [{ path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents.codex) }],
-    "opencode-v2": [
-      { path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents["opencode-v2"]) }
+    opencode: [
+      { path: "SKILL.md", mode: "100644" as const, bytes: Buffer.from(contents["opencode"]) }
     ]
   } satisfies Record<ProviderVariantTarget, SkillFileRecord[]>;
+
   const records: SkillFileRecord[] = [];
+
   const digests: Record<ProviderVariantTarget, string> = {
     "claude-code": "",
     codex: "",
-    "opencode-v2": ""
+    opencode: ""
   };
+
   for (const target of providerVariantTargets) {
     const directory = path.join(root, "skills", "vendor", name, target);
     await mkdir(directory, { recursive: true });
+
     for (const file of files[target]) {
       await writeFile(path.join(directory, file.path), file.bytes);
       records.push({ ...file, path: `${target}/${file.path}` });
     }
+
     digests[target] = digestSkillFiles(files[target]);
   }
+
   return { contents, digests, digest: digestSkillFiles(records) };
 }
 
@@ -100,6 +108,7 @@ async function createFixtureReferenceSource(root: string): Promise<string> {
   await writeFile(path.join(source, "README.md"), "local reference fixture\n", "utf8");
   await execa("git", ["add", "README.md"], { cwd: source });
   await execa("git", ["commit", "-m", "initial reference fixture"], { cwd: source });
+
   return source;
 }
 
@@ -109,6 +118,7 @@ export async function setupIntegrationFixture(): Promise<{ root: string; home: s
   const root = await makeTempDir();
   const home = await makeTempDir();
   await writeFixture(root, home);
+
   return { root, home };
 }
 
@@ -125,6 +135,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
   await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
   await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Test Agents\n", "utf8");
+
   for (const [name, description] of [
     ["local-skill", "Local test skill."],
     ["claude-skill", "Claude test skill."],
@@ -138,6 +149,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "utf8"
     );
   }
+
   await writeFile(
     path.join(root, "opencode", "plugins", "config-marker.ts"),
     [
@@ -230,7 +242,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     [
       "name: personal",
       "extends: base",
-      "agents: [opencode-v2, claude-code]",
+      "agents: [opencode, claude-code]",
       "thread:",
       "  stores:",
       "    - name: personal",
@@ -252,7 +264,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
       "mcp:",
       "  context7:",
       "    agents: [opencode, claude-code]",
-      "opencode_v2:",
+      "opencode:",
       "  config:",
       "    model: test/model",
       "  plugins:",
@@ -267,6 +279,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     ].join("\n"),
     "utf8"
   );
+
   if (home) {
     const cfgDir = path.join(home, ".mindframe-z");
     await mkdir(cfgDir, { recursive: true });
@@ -302,7 +315,9 @@ export function cli(
       ...env
     }
   };
+
   if (input !== undefined) Object.assign(options, { input });
+
   return execa(
     process.execPath,
     [
@@ -337,6 +352,7 @@ export function cliWithPtyStdin(
     "sys.stderr.buffer.write(result.stderr)",
     "raise SystemExit(result.returncode)"
   ].join("\n");
+
   return execa(
     "python3",
     [

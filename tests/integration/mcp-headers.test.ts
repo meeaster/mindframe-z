@@ -12,11 +12,13 @@ const OpenCodeConfig = z.object({
     )
   })
 });
+
 const ClaudeMcp = z
   .object({
     exa: z.object({ type: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) })
   })
   .passthrough();
+
 const CodexConfig = z.object({
   mcp_servers: z
     .object({
@@ -71,7 +73,7 @@ describe("mcp remote header rendering", () => {
       path.join(root, "profiles", "personal", "profile.yml"),
       [
         "name: personal",
-        "agents: [opencode-v2, claude-code, codex]",
+        "agents: [opencode, claude-code, codex]",
         "instructions:",
         "  - instructions/AGENTS.md",
         "mcp:",
@@ -88,7 +90,7 @@ describe("mcp remote header rendering", () => {
   it("passes the env token through to OpenCode verbatim", async () => {
     const config = parseJson(
       OpenCodeConfig,
-      await readFile(configsPath(home, "personal", "opencode-v2", "opencode.jsonc"), "utf8")
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
     );
 
     expect(config.mcp.servers.exa?.headers).toEqual({

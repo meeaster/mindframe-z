@@ -5,18 +5,18 @@ import { validateMcpTuiStates, type McpState } from "./mcp-tui.js";
 function profile(): ResolvedProfile {
   return {
     name: "test",
-    agents: ["opencode-v2", "claude-code", "codex"],
+    agents: ["opencode", "claude-code", "codex"],
     profile: {
       name: "test",
       description: "",
-      agents: ["opencode-v2", "claude-code", "codex"],
+      agents: ["opencode", "claude-code", "codex"],
       instructions: [],
       instruction_references: [],
       capability_groups: [],
       references: [],
       skills: {},
       mcp: {},
-      opencode_v2: {
+      opencode: {
         config: {},
         dependencies: {},
         cli: {},
@@ -67,10 +67,10 @@ function profile(): ResolvedProfile {
     referencesDir: "/tmp",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
-    enabledOpenCodeV2Plugins: [],
-    enabledOpenCodeV2TuiPlugins: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
+    enabledOpenCodePlugins: [],
+    enabledOpenCodeTuiPlugins: [],
     extraFolders: [],
     miseLayers: [],
     mcpServers: [

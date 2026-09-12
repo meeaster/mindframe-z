@@ -9,16 +9,8 @@ export function executorTimeout(profile: ResolvedProfile): number {
 }
 
 export function openCodeExecutorEntry(profile: ResolvedProfile) {
-  return {
-    type: "local",
-    command: ["executor", ...executorBridgeArgs(profile)],
-    timeout: executorTimeout(profile),
-    enabled: true
-  };
-}
-
-export function openCodeV2ExecutorEntry(profile: ResolvedProfile) {
   const timeout = executorTimeout(profile);
+
   return {
     type: "local",
     command: ["executor", ...executorBridgeArgs(profile)],

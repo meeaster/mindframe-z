@@ -52,7 +52,7 @@
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$"
                   },
-                  "opencode-v2": {
+                  "opencode": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$"
                   }
@@ -60,7 +60,7 @@
                 "required": [
                   "claude-code",
                   "codex",
-                  "opencode-v2"
+                  "opencode"
                 ],
                 "additionalProperties": false
               }

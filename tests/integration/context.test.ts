@@ -6,11 +6,12 @@ import { cli, setupIntegrationFixture } from "./support.js";
 describe("context command", () => {
   it("reports static context without writing configs or reading history stores", async () => {
     const { root, home } = await setupIntegrationFixture();
+
     const result = await cli(
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       {},
       undefined,
       root
@@ -26,7 +27,7 @@ describe("context command", () => {
     const { root, home } = await setupIntegrationFixture();
     const result = await cli("mfz", root, home, ["context"], {}, undefined, root);
 
-    expect(result.stdout).toContain("opencode-v2");
+    expect(result.stdout).toContain("opencode");
     expect(result.stdout).toContain("claude-code");
   });
 
@@ -43,7 +44,7 @@ describe("context command", () => {
     await writeFile(
       profilePath,
       profile.replace(
-        "opencode_v2:\n",
+        "opencode:\n",
         [
           "  datadog:",
           "    executor:",
@@ -51,7 +52,7 @@ describe("context command", () => {
           "      connections:",
           "        publicsafety: oauth",
           "        tylertech: oauth",
-          "opencode_v2:",
+          "opencode:",
           ""
         ].join("\n")
       ),
@@ -62,11 +63,12 @@ describe("context command", () => {
       "mfz",
       root,
       home,
-      ["context", "--agent", "opencode-v2"],
+      ["context", "--agent", "opencode"],
       {},
       undefined,
       root
     );
+
     expect(result.stdout).toContain("datadog [publicsafety, tylertech]");
   });
 
@@ -89,6 +91,7 @@ describe("context command", () => {
       undefined,
       root
     );
+
     expect(history.stdout).toContain("Telemetry only");
     expect(history.stdout).not.toContain("Instructions/indexes");
     await expect(
@@ -120,7 +123,7 @@ describe("context command", () => {
         "mfz",
         root,
         home,
-        ["--profile", "claude-only", "context", "--agent", "opencode-v2"],
+        ["--profile", "claude-only", "context", "--agent", "opencode"],
         {},
         undefined,
         root

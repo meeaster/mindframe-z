@@ -81,6 +81,7 @@ function groupedProfile(home: string): ResolvedProfile {
       { name: "agent-tooling", summary: "Agent harness and configuration sources." }
     ]
   });
+
   return {
     name: "personal",
     agents: [],
@@ -119,8 +120,8 @@ function groupedProfile(home: string): ResolvedProfile {
       }
     ],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [
       {

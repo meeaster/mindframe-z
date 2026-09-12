@@ -32,7 +32,7 @@ describe("context repository analysis", () => {
     );
     await execa("git", ["init", "-q", root]);
 
-    const opencode = await analyzeRepository(root, root, "opencode-v2");
+    const opencode = await analyzeRepository(root, root, "opencode");
     expect(opencode.contributors.map((entry) => entry.source)).toContain(
       path.join(root, "AGENTS.md")
     );

@@ -10,7 +10,7 @@ describe("context reports", () => {
       projectRoot: "/work",
       harnesses: [
         {
-          harness: "opencode-v2",
+          harness: "opencode",
           scopeNotes: [],
           mcpServers: [{ name: "docs", enabled: true, loading: "per-step" }],
           contributors: [
@@ -66,7 +66,7 @@ describe("context reports", () => {
       homeDirectory: "/home/test",
       harnesses: [
         {
-          harness: "opencode-v2",
+          harness: "opencode",
           scopeNotes: [],
           mcpServers: [],
           contributors: [
@@ -186,9 +186,9 @@ describe("context reports", () => {
       mcpProbes: [
         {
           server: "docs",
-          harnesses: ["opencode-v2", "claude-code"],
+          harnesses: ["opencode", "claude-code"],
           probe: {
-            harness: "opencode-v2",
+            harness: "opencode",
             server: "docs",
             toolCount: 1,
             pages: 1,
@@ -199,7 +199,7 @@ describe("context reports", () => {
       ],
       harnesses: [
         {
-          harness: "opencode-v2",
+          harness: "opencode",
           scopeNotes: [],
           mcpServers: [{ name: "docs", enabled: true, loading: "per-step" }],
           contributors: [
@@ -243,6 +243,7 @@ describe("context reports", () => {
 
   it("reports probe availability separately from unknown Claude loading", () => {
     const serverNames = Array.from({ length: 11 }, (_, index) => `server-${index + 1}`);
+
     const report: ContextReport = {
       profile: "test",
       inspectedDirectory: "/work",
@@ -287,7 +288,7 @@ describe("context reports", () => {
       inspectedDirectory: "/work",
       harnesses: [
         {
-          harness: "opencode-v2",
+          harness: "opencode",
           scopeNotes: [],
           contributors: [],
           mcpServers: [],

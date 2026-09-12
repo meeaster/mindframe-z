@@ -10,7 +10,7 @@ import { executorDiagnosticLines, inspectExecutor } from "./diagnostic.js";
 function profile(): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode-v2"],
+    agents: ["opencode"],
     profile: profileSchema.parse({
       name: "personal",
       mcp: { example: { executor: { enabled: true } } }
@@ -24,8 +24,8 @@ function profile(): ResolvedProfile {
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [
       {
         name: "example",
@@ -93,12 +93,15 @@ describe("Executor diagnostics", () => {
       "utf8"
     );
     const calls: string[] = [];
+
     const diagnostic = await inspectExecutor(paths, profile(), {
       binary: process.execPath,
       fetch: async (input) => {
         const url = String(input);
         calls.push(url);
+
         if (url.endsWith("/api/integrations")) return new Response("{}", { status: 200 });
+
         if (url.endsWith("/api/mcp/servers/example")) {
           return new Response(
             JSON.stringify({
@@ -117,6 +120,7 @@ describe("Executor diagnostics", () => {
             { status: 200 }
           );
         }
+
         return new Response(
           JSON.stringify([
             {

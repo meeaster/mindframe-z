@@ -69,7 +69,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       references: [],
       skills: {},
       mcp: {},
-      opencode_v2: {
+      opencode: {
         config: {},
         dependencies: {},
         cli: {},
@@ -120,8 +120,8 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []
@@ -152,10 +152,12 @@ class MissingSessionRunner implements AgentRunner {
   readonly calls: { role: string }[] = [];
   run(request: AgentRunRequest): Promise<AgentRunResult> {
     this.calls.push({ role: request.role });
+
     const text =
       request.role === "gather"
         ? "The target session does not exist in the local store."
         : "# Session x — should not be reached\n\nbody";
+
     return Promise.resolve({
       text,
       rawTrace: "",
@@ -179,6 +181,7 @@ class RecordingRunner implements AgentRunner {
   ) {}
   run(request: AgentRunRequest): Promise<AgentRunResult> {
     this.calls.push({ role: request.role, prompt: request.prompt });
+
     const text =
       request.role === "synthesize"
         ? "# Session x — Recorded\n\nbody"
@@ -187,6 +190,7 @@ class RecordingRunner implements AgentRunner {
             ? this.gatherText(request.prompt)
             : this.gatherText
           : "digest content";
+
     return Promise.resolve({
       text,
       rawTrace: "",
@@ -209,18 +213,21 @@ async function writeClaudeTranscript(
 ): Promise<{ message_count: number; last_message_id: string; last_activity_at: string }> {
   const dir = path.join(home, ".claude", "projects", "-tmp-project");
   await mkdir(dir, { recursive: true });
+
   const lines = Array.from({ length: turns }, (_, i) => ({
     type: i % 2 === 0 ? "user" : "assistant",
     uuid: `${id}-m${i}`,
     timestamp: `2026-06-27T00:00:${String(i).padStart(2, "0")}.000Z`,
     sessionId: id
   }));
+
   await writeFile(
     path.join(dir, `${id}.jsonl`),
     lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
     "utf8"
   );
   const last = lines[lines.length - 1]!;
+
   return { message_count: turns, last_message_id: last.uuid, last_activity_at: last.timestamp };
 }
 
@@ -230,12 +237,14 @@ async function writeClaudeTranscript(
 async function writeCachedClaudeTranscript(home: string, id: string, turns: number): Promise<void> {
   const dir = path.join(archiveCacheRoot(paths(home)), "claude-code");
   await mkdir(dir, { recursive: true });
+
   const lines = Array.from({ length: turns }, (_, i) => ({
     type: i % 2 === 0 ? "user" : "assistant",
     uuid: `${id}-m${i}`,
     timestamp: `2026-06-27T00:00:${String(i).padStart(2, "0")}.000Z`,
     sessionId: id
   }));
+
   await writeFile(
     path.join(dir, `${id}.jsonl`),
     lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
@@ -263,12 +272,16 @@ describe("resolveRefreshSet hydration", () => {
   it("does not consult the archive for a shrank-but-present session", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "shrank-session", 1);
+
     const manifest = manifestFixture([
       { id: "shrank-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     let hydrateCalled = false;
+
     const spyHydrate: typeof hydrateSession = async () => {
       hydrateCalled = true;
+
       return true;
     };
 
@@ -281,11 +294,14 @@ describe("resolveRefreshSet hydration", () => {
 
   it("recoverable: a hydrated session with a newer tail than the cursor is folded into refreshed", async () => {
     const home = await makeTempDir();
+
     const manifest = manifestFixture([
       { id: "recoverable", source: "claude-code", message_count: 1, last_message_id: "old" }
     ]);
+
     const spyHydrate: typeof hydrateSession = async (p) => {
       await writeCachedClaudeTranscript(p.home, "recoverable", 3);
+
       return true;
     };
 
@@ -297,12 +313,15 @@ describe("resolveRefreshSet hydration", () => {
 
   it("stale-recover: a hydrated session whose archived tail predates the cursor stays vanished", async () => {
     const home = await makeTempDir();
+
     const manifest = manifestFixture([
       { id: "stale", source: "claude-code", message_count: 5, last_message_id: "old" }
     ]);
+
     const spyHydrate: typeof hydrateSession = async (p) => {
       // The archive's last backup predates the ledger cursor — fewer messages than stored.
       await writeCachedClaudeTranscript(p.home, "stale", 2);
+
       return true;
     };
 
@@ -314,9 +333,11 @@ describe("resolveRefreshSet hydration", () => {
 
   it("unrecoverable: no archive holds the session, so it stays vanished with no error", async () => {
     const home = await makeTempDir();
+
     const manifest = manifestFixture([
       { id: "lost", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     const spyHydrate: typeof hydrateSession = async () => false;
 
     const result = await resolveRefreshSet(paths(home), manifest, [], oneArchive, spyHydrate);
@@ -327,12 +348,16 @@ describe("resolveRefreshSet hydration", () => {
 
   it("skips the hydration attempt entirely when no archives are configured", async () => {
     const home = await makeTempDir();
+
     const manifest = manifestFixture([
       { id: "lost", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     let hydrateCalled = false;
+
     const spyHydrate: typeof hydrateSession = async () => {
       hydrateCalled = true;
+
       return true;
     };
 
@@ -369,17 +394,24 @@ async function ingestFixture(
     created_at: "2026-06-27T00:00:00.000Z",
     sessions: sessions.map((s): ThreadSession => {
       const session: ThreadSession = { id: s.id, source: s.source };
+
       if (s.message_count !== undefined) session.message_count = s.message_count;
+
       if (s.last_message_id !== undefined) session.last_message_id = s.last_message_id;
+
       if (s.message_count !== undefined || s.last_message_id !== undefined)
         session.last_activity_at = "2026-06-27T00:00:00.000Z";
+
       if (s.title !== undefined) session.title = s.title;
+
       if (s.extracted_by !== undefined) session.synthesizer = s.extracted_by;
+
       return session;
     }),
     excluded: [],
     synthesis: {}
   });
+
   return { runtime, slug };
 }
 
@@ -394,6 +426,7 @@ async function writeOpencodeDb(home: string, sessionId: string, turns: number): 
     "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL)"
   );
   const insert = db.prepare("INSERT INTO message (id, session_id, time_created) VALUES (?, ?, ?)");
+
   for (let i = 0; i < turns; i += 1) insert.run(`${sessionId}-m${i}`, sessionId, 1000 + i);
   db.close();
 }
@@ -419,6 +452,7 @@ async function deltaSession(
 // Session ids recorded on the run's ledger — i.e. the resolved refresh work set.
 async function refreshedSessions(runtime: RuntimePaths, slug: string): Promise<string[]> {
   const runs = await readThreadRuns(threadDir(runtime, slug));
+
   return runs.runs.at(-1)!.sessions;
 }
 
@@ -427,9 +461,11 @@ async function latestRunStatus(
 ): Promise<{ current_step: string; finished_at?: string | undefined }> {
   const runIds = await readdir(threadRunsRoot(runtime));
   const runId = runIds.sort().at(-1)!;
+
   const status = threadRunStatusSchema.parse(
     JSON.parse(await readFile(path.join(threadRunsRoot(runtime), runId, "status.json"), "utf8"))
   );
+
   return { current_step: status.current_step, finished_at: status.finished_at };
 }
 
@@ -464,9 +500,11 @@ describe("ingestThread auto-refresh", () => {
   it("skips an unchanged existing session and refreshes only the named id", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "unchanged-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "unchanged-session", source: "claude-code", ...wm }
     ]);
+
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -490,9 +528,11 @@ describe("ingestThread auto-refresh", () => {
     const home = await makeTempDir();
     // Stored watermark is 3 turns; the store now has 5 → grown.
     await writeClaudeTranscript(home, "grown-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "grown-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -514,9 +554,11 @@ describe("ingestThread auto-refresh", () => {
   it("refreshes a changed session when no ids are named, digesting once", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "grown-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "grown-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -538,9 +580,11 @@ describe("ingestThread auto-refresh", () => {
     const home = await makeTempDir();
     // Store has only 1 turn but the stored watermark claims 3 → shrank.
     await writeClaudeTranscript(home, "shrank-session", 1);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "shrank-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -560,9 +604,11 @@ describe("ingestThread auto-refresh", () => {
   it("is a no-op success when a refresh finds nothing drifted", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "unchanged-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "unchanged-session", source: "claude-code", ...wm }
     ]);
+
     const runner = new RecordingRunner();
 
     const result = await ingestThread({
@@ -601,10 +647,12 @@ describe("ingestThread auto-refresh", () => {
     // One unchanged session (would be skipped by a plain refresh) and one that vanished
     // from the store. --all must re-gather the present one and skip the vanished one.
     const wm = await writeClaudeTranscript(home, "steady-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm },
       { id: "gone-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await writeSessionFile(threadDir(runtime, slug), "claude-code", "steady-session", "# prior");
     const runner = new RecordingRunner();
 
@@ -643,9 +691,11 @@ describe("ingestThread update strategy", () => {
   it("defaults to full re-synthesis: reads the whole session, no revise prompt", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "grown-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "grown-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await writeSessionFile(threadDir(runtime, slug), "claude-code", "grown-session", "# prior");
     const runner = new RecordingRunner();
 
@@ -671,6 +721,7 @@ describe("ingestThread update strategy", () => {
   it("delta reads only messages after the cursor and revises the prior file", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "grown-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       {
         id: "grown-session",
@@ -679,6 +730,7 @@ describe("ingestThread update strategy", () => {
         last_message_id: "old-cursor"
       }
     ]);
+
     await deltaSession(runtime, slug, "grown-session", "# Session grown-session — Prior");
     const runner = new RecordingRunner();
 
@@ -705,6 +757,7 @@ describe("ingestThread update strategy", () => {
     // predates the Phases contract. A delta revision could only supply post-cursor
     // phases — a silently partial section — so this refresh must re-gather in full.
     await writeClaudeTranscript(home, "pre-phases-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       {
         id: "pre-phases-session",
@@ -713,6 +766,7 @@ describe("ingestThread update strategy", () => {
         last_message_id: "old-cursor"
       }
     ]);
+
     await writeSessionFile(
       threadDir(runtime, slug),
       "claude-code",
@@ -762,9 +816,11 @@ describe("ingestThread update strategy", () => {
     // delta must NOT read "only messages after the cursor" (there are none) — that would
     // gather an empty dossier and abort. It re-synthesizes the whole session instead.
     const wm = await writeClaudeTranscript(home, "steady-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
+
     await writeSessionFile(threadDir(runtime, slug), "claude-code", "steady-session", "# prior");
     const runner = new RecordingRunner();
 
@@ -790,9 +846,11 @@ describe("ingestThread digest anchoring", () => {
   it("anchors the digest prompt on the prior digest when one exists", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "steady-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
+
     await writeFile(
       path.join(threadDir(runtime, slug), "digest.md"),
       "# Digest — prior rendering\n",
@@ -817,9 +875,11 @@ describe("ingestThread digest anchoring", () => {
   it("hands the digest a repo lookup so reference and extra-folder paths resolve to URLs", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "steady-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
+
     const withRepos: ResolvedProfile = {
       ...profile(home),
       referencesDir: "/home/mark/references",
@@ -838,6 +898,7 @@ describe("ingestThread digest anchoring", () => {
         { path: "/mnt/c/vaults/wiki", description: "", read: "allow", edit: "allow" }
       ]
     };
+
     const runner = new RecordingRunner();
 
     await ingestThread({
@@ -866,9 +927,11 @@ describe("ingestThread digest anchoring", () => {
   it("withholds the prior digest under --all so form drift flushes", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "steady-session", 3);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "steady-session", source: "claude-code", ...wm }
     ]);
+
     await writeFile(
       path.join(threadDir(runtime, slug), "digest.md"),
       "# Digest — prior rendering\n",
@@ -1004,6 +1067,7 @@ describe("ingestThread refusal guard", () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "quoting-session", 3);
     const { runtime, slug } = await ingestFixture(home, []);
+
     // A substantive dossier can legitimately quote a marker phrase from the session's
     // own content (observed live: a 4.2 KB dossier citing a commit message containing
     // "does not exist" was discarded as a refusal). Shape-based recognition keys the
@@ -1018,6 +1082,7 @@ describe("ingestThread refusal guard", () => {
           `- [2026-07-01 15:0${i % 10}] Charter-relevant finding ${i}: watermark drift detection compares message_count and last_message_id host-side before any dispatch. (quoting-session · turn ${i + 3})`
       )
     ].join("\n");
+
     expect(dossier.length).toBeGreaterThan(2000);
     const runner = new RecordingRunner(dossier);
 
@@ -1057,6 +1122,7 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
   it("advances the watermark without synthesizing, writing, or digesting", async () => {
     const home = await makeTempDir();
     const wm = await writeClaudeTranscript(home, "noisy-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       {
         id: "noisy-session",
@@ -1067,12 +1133,15 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
         extracted_by: "claude-code:old@low"
       }
     ]);
+
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior\n\nkept");
+
     const priorContent = await readSessionFile(
       threadDir(runtime, slug),
       "claude-code",
       "noisy-session"
     );
+
     const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
 
     await ingestThread({
@@ -1107,10 +1176,13 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
   it("synthesizes normally when the sentinel is embedded in a larger dossier", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
+
     const runner = new RecordingRunner(
       () => "Real delta work happened.\n\nNO_CHARTER_RELEVANT_ACTIVITY appears mid-dossier."
     );
@@ -1132,9 +1204,11 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
   it("aborts when a full (non-delta) gather emits the exact sentinel", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
     const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
 
@@ -1158,9 +1232,11 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
   it("still aborts on an empty delta dossier", async () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
 
     await expect(
@@ -1180,10 +1256,12 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-a", 5);
     await writeClaudeTranscript(home, "noisy-b", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-a", source: "claude-code", message_count: 3, last_message_id: "old" },
       { id: "noisy-b", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await deltaSession(runtime, slug, "noisy-a", "# Session noisy-a — Prior");
     await deltaSession(runtime, slug, "noisy-b", "# Session noisy-b — Prior");
     const runner = new RecordingRunner(() => "NO_CHARTER_RELEVANT_ACTIVITY");
@@ -1207,12 +1285,15 @@ describe("ingestThread irrelevant-delta short-circuit", () => {
     const home = await makeTempDir();
     await writeClaudeTranscript(home, "noisy-session", 5);
     await writeClaudeTranscript(home, "real-session", 5);
+
     const { runtime, slug } = await ingestFixture(home, [
       { id: "noisy-session", source: "claude-code", message_count: 3, last_message_id: "old" },
       { id: "real-session", source: "claude-code", message_count: 3, last_message_id: "old" }
     ]);
+
     await deltaSession(runtime, slug, "noisy-session", "# Session noisy-session — Prior");
     await deltaSession(runtime, slug, "real-session", "# Session real-session — Prior");
+
     const runner = new RecordingRunner((prompt) =>
       prompt.includes("noisy-session") ? "NO_CHARTER_RELEVANT_ACTIVITY" : "real delta activity"
     );

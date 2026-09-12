@@ -15,7 +15,7 @@
     },
     "agents": {
       "default": [
-        "opencode-v2",
+        "opencode",
         "claude-code",
         "codex"
       ],
@@ -23,7 +23,7 @@
       "items": {
         "type": "string",
         "enum": [
-          "opencode-v2",
+          "opencode",
           "claude-code",
           "codex",
           "pi"
@@ -332,7 +332,7 @@
       },
       "additionalProperties": false
     },
-    "opencode_v2": {
+    "opencode": {
       "default": {
         "config": {},
         "dependencies": {},

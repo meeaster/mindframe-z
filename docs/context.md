@@ -4,7 +4,7 @@
 
 ```sh
 pnpm dev context
-pnpm dev context --agent opencode-v2
+pnpm dev context --agent opencode
 pnpm dev context --probe-mcp
 pnpm dev context history --agent claude-code --days 30
 ```
@@ -27,7 +27,7 @@ MCP schema measurement is opt-in and probes each unique, effectively enabled ser
 
 ```sh
 pnpm dev context --probe-mcp
-pnpm dev context --agent opencode-v2 --probe-mcp
+pnpm dev context --agent opencode --probe-mcp
 ```
 
 Probe totals and per-server measurements appear inline in the harness's Per request phase, preserving the server's effective membership and loading classification. The header retains a disabled-server count without listing disabled rows. Unprobed schemas are explicitly marked unmeasured, while unavailable probes and unknown harness loading are counted separately. Server instructions are probe metadata and excluded from the phase total. The report prints one global safety warning: the probe performs `initialize` and `tools/list` only, but each contacted local process or remote endpoint is not sandboxed and may have its own side effects. It supports local stdio and remote streamable HTTP; unavailable and remote SSE servers do not block other probes. It does not make a provider request or call an MCP tool, and it never prints credentials, server content, arguments, or results. Temporary mfz/OpenCode state is isolated and removed afterward.

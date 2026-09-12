@@ -26,10 +26,12 @@ describe("codex extra-folder permission translation", () => {
 
     // Activate codex for the personal profile.
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+
     const profileYml = (await readFile(profilePath, "utf8")).replace(
-      "agents: [opencode-v2, claude-code]",
+      "agents: [opencode, claude-code]",
       "agents: [codex]"
     );
+
     await writeFile(profilePath, profileYml, "utf8");
 
     // Declare a fully denied folder, an ask-editable (read-only) folder, and the

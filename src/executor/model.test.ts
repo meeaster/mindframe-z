@@ -10,7 +10,7 @@ import type { ResolvedProfile } from "../core/profile.js";
 function profileWithServer(server: ResolvedProfile["mcpServers"][number]): ResolvedProfile {
   return {
     name: "personal",
-    agents: ["opencode-v2"],
+    agents: ["opencode"],
     profile: profileSchema.parse({ name: "personal" }),
     // SAFETY: this fixture only exercises mcpServers; unused resolution metadata is never read.
     manifests: {} as ResolvedProfile["manifests"],
@@ -21,8 +21,8 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     referencesDir: "/tmp/references",
     enabledReferences: [],
     enabledSkills: [],
-    enabledOpenCodeV2Commands: [],
-    enabledOpenCodeV2Agents: [],
+    enabledOpenCodeCommands: [],
+    enabledOpenCodeAgents: [],
     mcpServers: [server],
     extraFolders: [],
     miseLayers: []
@@ -40,6 +40,7 @@ describe("Executor desired state", () => {
         command: ["tool"]
       }
     });
+
     const desired = buildExecutorDesiredState(profile);
     expect(desired.integrations[0]).toMatchObject({
       connections: { main: "none" },
@@ -72,6 +73,7 @@ describe("Executor desired state", () => {
         transport: "http"
       }
     });
+
     const desired = buildExecutorDesiredState(profile);
     expect(desired.integrations[0]).toMatchObject({
       slug: "context7",
@@ -93,6 +95,7 @@ describe("Executor desired state", () => {
         executor: { authentication: [{ slug: "oauth", kind: "oauth2" }] }
       }
     });
+
     const desired = buildExecutorDesiredState(profile);
     expect(desired.integrations[0]?.connections).toEqual({
       publicsafety: "oauth",
@@ -112,6 +115,7 @@ describe("Executor desired state", () => {
         transport: "http"
       }
     });
+
     expect(() => buildExecutorDesiredState(profile)).toThrow(/keep it direct/);
   });
 
@@ -130,6 +134,7 @@ describe("Executor desired state", () => {
         ...credentials
       }
     });
+
     expect(() => buildExecutorDesiredState(profile)).toThrow(/keep it direct/);
   });
 
@@ -143,6 +148,7 @@ describe("Executor desired state", () => {
         command: ["~/bin/tool", "~/config.json"]
       }
     });
+
     const desired = buildExecutorDesiredState(profile, "/tmp/mfz-home");
     expect(desired.integrations[0]?.config).toMatchObject({
       command: "/tmp/mfz-home/bin/tool",
@@ -161,6 +167,7 @@ describe("Executor desired state", () => {
         transport: "stdio"
       }
     });
+
     expect(() => buildExecutorDesiredState(remoteWithStdio)).toThrow(/cannot use stdio/);
 
     const localWithOAuth = profileWithServer({
@@ -173,6 +180,7 @@ describe("Executor desired state", () => {
         executor: { authentication: [{ slug: "oauth", kind: "oauth2" }] }
       }
     });
+
     expect(() => buildExecutorDesiredState(localWithOAuth)).toThrow(/cannot use OAuth/);
 
     const localWithNoAuth = profileWithServer({
@@ -185,6 +193,7 @@ describe("Executor desired state", () => {
         executor: { authentication: [{ slug: "none", kind: "none" }] }
       }
     });
+
     expect(buildExecutorDesiredState(localWithNoAuth).integrations[0]?.connections).toEqual({
       default: "none"
     });

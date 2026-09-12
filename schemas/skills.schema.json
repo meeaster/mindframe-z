@@ -115,7 +115,7 @@
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
                       },
-                      "opencode-v2": {
+                      "opencode": {
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
@@ -124,7 +124,7 @@
                     "required": [
                       "claude-code",
                       "codex",
-                      "opencode-v2"
+                      "opencode"
                     ],
                     "additionalProperties": false
                   }

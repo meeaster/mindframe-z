@@ -35,7 +35,9 @@ const Overrides = z.object({
     })
   )
 });
+
 const OpenCodePermission = z.object({ permission: z.object({ webfetch: z.string() }) });
+
 const ClaudeSettings = z.object({ includeGitInstructions: z.boolean() });
 
 async function seedGitCache(
@@ -71,6 +73,7 @@ async function seedGitCache(
   await mkdir(path.dirname(cache), { recursive: true });
   await execa("git", ["clone", "--bare", "-q", upstream, cache]);
   await execa("git", ["--git-dir", cache, "remote", "set-url", "origin", repository]);
+
   return { commit, newerCommit };
 }
 
@@ -106,7 +109,7 @@ async function writeGitSkillProfile(
     [
       "name: personal",
       "extends: base",
-      "agents: [opencode-v2]",
+      "agents: [opencode]",
       "skills:",
       "  trusted:",
       "    agents: { opencode: true }",
@@ -195,7 +198,7 @@ describe("skill CLI integration", () => {
     const skillsPath = path.join(root, "catalog", "skills.yml");
     await writeFile(
       skillsPath,
-      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: https://example.invalid/skills.git\n    ref: main\n    variants:\n      claude-code: dist/claude\n      codex: dist/codex\n      opencode-v2: dist/opencode\n`,
+      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: https://example.invalid/skills.git\n    ref: main\n    variants:\n      claude-code: dist/claude\n      codex: dist/codex\n      opencode: dist/opencode\n`,
       "utf8"
     );
     await mkdir(path.join(root, "skills"), { recursive: true });
@@ -217,7 +220,7 @@ describe("skill CLI integration", () => {
     await writeFile(
       profilePath,
       profile
-        .replace("agents: [opencode-v2, claude-code]", "agents: [opencode-v2, claude-code, codex]")
+        .replace("agents: [opencode, claude-code]", "agents: [opencode, claude-code, codex]")
         .replace(
           "mcp:\n",
           `  ${name}:\n    agents: { opencode: true, claude-code: true, codex: true }\nmcp:\n`
@@ -383,14 +386,15 @@ describe("skill CLI integration", () => {
   it("reports skill digest changes without labeling the complete snapshot as changed", async () => {
     const paths = createRuntimePaths({ root, home });
     const profile = await resolveProfile(paths, "personal");
-    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode-v2"], link: false });
+    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode"], link: false });
     const skillPath = path.join(root, "skills", "local-skill", "SKILL.md");
     await writeFile(skillPath, `${await readFile(skillPath, "utf8")}\nChanged.\n`, "utf8");
 
     const changed = await syncSkillSnapshot(paths, profile, {
-      selectedTargets: ["opencode-v2"],
+      selectedTargets: ["opencode"],
       link: false
     });
+
     expect(
       changed.filter((outcome) => outcome.category === "skill" && outcome.status !== "unchanged")
     ).toMatchObject([{ target: "local-skill", status: "updated" }]);
@@ -404,34 +408,39 @@ describe("skill CLI integration", () => {
     );
 
     const repeated = await syncSkillSnapshot(paths, profile, {
-      selectedTargets: ["opencode-v2"],
+      selectedTargets: ["opencode"],
       link: false
     });
+
     expect(repeated.every((outcome) => outcome.status === "unchanged")).toBe(true);
   });
 
   it("reports and repairs installed skill content, missing-file, and mode drift", async () => {
     const paths = createRuntimePaths({ root, home });
     const profile = await resolveProfile(paths, "personal");
-    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode-v2"], link: false });
+    await syncSkillSnapshot(paths, profile, { selectedTargets: ["opencode"], link: false });
     const sourcePath = path.join(root, "skills", "local-skill", "SKILL.md");
+
     const installedPath = path.join(
-      configsPath(home, "personal", "opencode-v2", "skills"),
+      configsPath(home, "personal", "opencode", "skills"),
       "local-skill",
       "SKILL.md"
     );
+
     const manifestPath = path.join(
-      configsPath(home, "personal", "opencode-v2", "skills"),
+      configsPath(home, "personal", "opencode", "skills"),
       ".mfz-manifest.yml"
     );
+
     const expectedBytes = await readFile(sourcePath);
     const unchangedManifest = await readFile(manifestPath);
 
     const assertRepair = async (): Promise<void> => {
       const outcomes = await syncSkillSnapshot(paths, profile, {
-        selectedTargets: ["opencode-v2"],
+        selectedTargets: ["opencode"],
         link: false
       });
+
       expect(
         outcomes.filter((outcome) => outcome.category === "skill" && outcome.status !== "unchanged")
       ).toMatchObject([{ target: "local-skill", status: "updated" }]);
@@ -458,7 +467,7 @@ describe("skill CLI integration", () => {
 
     await cli("mfz", root, home, ["skills", "sync"]);
 
-    const snapshot = configsPath(home, "personal", "opencode-v2", "skills");
+    const snapshot = configsPath(home, "personal", "opencode", "skills");
     const manifest = YAML.parse(await readFile(path.join(snapshot, ".mfz-manifest.yml"), "utf8"));
     const trusted = manifest.skills.find((skill: { name: string }) => skill.name === "trusted");
     expect(trusted).toMatchObject({
@@ -486,7 +495,7 @@ describe("skill CLI integration", () => {
       code: "ENOENT"
     });
     await expect(
-      lstat(configsPath(home, "personal", "opencode-v2", "skills", ".mfz-manifest.yml"))
+      lstat(configsPath(home, "personal", "opencode", "skills", ".mfz-manifest.yml"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -496,7 +505,7 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, claude-code]",
+        "agents: [opencode, claude-code]",
         "skills:",
         "  local-skill:",
         "    agents: { opencode: true }",
@@ -539,6 +548,7 @@ describe("skill CLI integration", () => {
       undefined,
       root
     );
+
     expect(disable.stdout).toContain("Disabled local-skill for claude-code");
 
     const enable = await cli(
@@ -550,12 +560,14 @@ describe("skill CLI integration", () => {
       undefined,
       root
     );
+
     expect(enable.stdout).toContain("Enabled claude-skill for claude-code");
 
     const overrides = parseJson(
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
+
     expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["local-skill"]).toBe(false);
     expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBeUndefined();
 
@@ -563,29 +575,31 @@ describe("skill CLI integration", () => {
       OpenCodePermission,
       await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
     );
+
     expect(opencode.permission).toEqual({ webfetch: "allow" });
 
     const claude = parseJson(
       ClaudeSettings,
       await readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
     );
+
     expect(claude).toEqual({ includeGitInstructions: true });
   });
 
-  it("rejects OpenCode V2 skill toggles", async () => {
+  it("rejects OpenCode skill toggles", async () => {
     const outsideRepo = await makeTempDir();
     await expect(
       cli(
         "mfz",
         root,
         home,
-        ["skills", "disable", "local-skill", "--target", "opencode-v2"],
+        ["skills", "disable", "local-skill", "--target", "opencode"],
         {},
         undefined,
         outsideRepo
       )
     ).rejects.toMatchObject({
-      stderr: expect.stringContaining("OpenCode V2 skill toggles are not supported")
+      stderr: expect.stringContaining("OpenCode skill toggles are not supported")
     });
   });
 
@@ -598,7 +612,7 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, claude-code]",
+        "agents: [opencode, claude-code]",
         "skills:",
         "  local-skill:",
         "    agents: { claude-code: true }",
@@ -616,6 +630,7 @@ describe("skill CLI integration", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     input.write(" \r");
     input.end();
+
     try {
       await promise;
     } finally {
@@ -626,6 +641,7 @@ describe("skill CLI integration", () => {
       Overrides,
       await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
     );
+
     expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBe(false);
     await expect(
       readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
@@ -642,7 +658,7 @@ describe("skill CLI integration", () => {
       [
         "name: personal",
         "extends: base",
-        "agents: [opencode-v2, claude-code]",
+        "agents: [opencode, claude-code]",
         "skills:",
         "  local-skill:",
         "    agents: { claude-code: true }",
@@ -655,11 +671,13 @@ describe("skill CLI integration", () => {
     const enableErr = await cli("mfz", root, home, ["skills", "enable", "local-skill"]).catch(
       (e) => e
     );
+
     expect(enableErr.stderr).toContain('Skill "local-skill" is not toggleable');
 
     const disableErr = await cli("mfz", root, home, ["skills", "disable", "local-skill"]).catch(
       (e) => e
     );
+
     expect(disableErr.stderr).toContain('Skill "local-skill" is not toggleable');
   });
 });

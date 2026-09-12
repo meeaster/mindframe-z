@@ -82,6 +82,7 @@ describe("createRuntimePaths", () => {
     "PI_CODING_AGENT_DIR",
     "MISE_CONFIG_DIR"
   ] as const;
+
   const saved: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -131,6 +132,7 @@ describe("createRuntimePaths", () => {
   it("prefers explicit options over environment overrides", () => {
     process.env.OPENCODE_CONFIG_DIR = "/env/opencode";
     process.env.CLAUDE_CONFIG_DIR = "/env/claude";
+
     const runtime = createRuntimePaths({
       root: "/tmp/repo",
       home: "/tmp/home",
@@ -139,6 +141,7 @@ describe("createRuntimePaths", () => {
       codexDir: "/opt/codex",
       piDir: "/opt/pi-agent"
     });
+
     expect(runtime.opencodeConfigDir).toBe("/opt/opencode");
     expect(runtime.claudeDir).toBe("/opt/claude");
     expect(runtime.codexDir).toBe("/opt/codex");
@@ -260,6 +263,7 @@ describe(".mindframe-z store path contract", () => {
     expect(executorManagedPath(runtime, "personal")).toBe(
       path.join(mfz, "configs", "personal", "executor", "managed.json")
     );
+
     if (original === undefined) delete process.env.EXECUTOR_DATA_DIR;
     else process.env.EXECUTOR_DATA_DIR = original;
   });
@@ -275,13 +279,10 @@ describe("target list helpers", () => {
   });
 
   it("expands the all agent target to the profile agent order", () => {
-    expect(agentList("all", ["claude-code", "opencode-v2"])).toEqual([
-      "claude-code",
-      "opencode-v2"
-    ]);
+    expect(agentList("all", ["claude-code", "opencode"])).toEqual(["claude-code", "opencode"]);
   });
 
   it("preserves a specific agent target", () => {
-    expect(agentList("opencode-v2", ["claude-code", "opencode-v2"])).toEqual(["opencode-v2"]);
+    expect(agentList("opencode", ["claude-code", "opencode"])).toEqual(["opencode"]);
   });
 });

@@ -25,16 +25,23 @@ import { jsonObjectSchema, jsonString, type JsonObject } from "../core/json.js";
 function openCodeMcpLoading(): "per-step" | "unknown" {
   const flag = (name: string): boolean | undefined => {
     const value = process.env[name]?.trim().toLowerCase();
+
     if (value === undefined) return undefined;
+
     if (["1", "true", "yes"].includes(value)) return true;
+
     if (["0", "false", "no"].includes(value)) return false;
+
     return undefined;
   };
+
   const codeMode =
     flag("OPENCODE_EXPERIMENTAL_CODE_MODE") ?? flag("OPENCODE_EXPERIMENTAL") ?? false;
+
   if (codeMode) {
     return "unknown";
   }
+
   return "per-step";
 }
 
@@ -54,10 +61,12 @@ async function readSkillFile(
   harness: ContextHarness
 ): Promise<SkillFile | undefined> {
   const targetRoot =
-    harness === "opencode-v2"
+    harness === "opencode"
       ? path.join(paths.opencodeConfigDir, "skills")
       : path.join(paths.claudeDir, "skills");
+
   const skillName = skill.source === "local" ? (skill.skill ?? skill.name) : skill.name;
+
   const sourceSkill =
     skill.source === "vendored"
       ? path.join(
@@ -69,20 +78,24 @@ async function readSkillFile(
           "SKILL.md"
         )
       : path.join(skill.sourceRoot, "skills", skillName, "SKILL.md");
+
   const candidates = [
     path.join(targetRoot, skill.name, "SKILL.md"),
     path.join(targetRoot, skillName, "SKILL.md"),
     sourceSkill
   ];
+
   for (const candidate of new Set(candidates)) {
     try {
       const content = await readFile(candidate, "utf8");
       const metadata = jsonObjectSchema.safeParse(parseFrontmatter(content));
+
       return { path: candidate, content, metadata: metadata.success ? metadata.data : {} };
     } catch {
       // Try the next source-of-truth or installed location.
     }
   }
+
   return undefined;
 }
 
@@ -107,15 +120,18 @@ async function skillContributors(
   const contributors: ContextContributor[] = [];
   const notes: string[] = [];
   const visibleSkillNames: string[] = [];
-  const capability = harness === "opencode-v2" ? "opencode" : harness;
+  const capability = harness === "opencode" ? "opencode" : harness;
+
   for (const skill of profile.enabledSkills.filter((entry) => entry.targets.includes(capability))) {
     visibleSkillNames.push(skill.name);
     const file = await readSkillFile(paths, skill, harness);
     const source = file?.path ?? path.join(skill.sourceRoot, "skills");
     const description = jsonString(file?.metadata.description) ?? skill.description;
     const catalogue = `${skill.name}\n${description}\n${file?.path ?? "mfz catalogue metadata"}`;
+
     const disabled =
       harness === "claude-code" && file?.metadata["disable-model-invocation"] === true;
+
     if (disabled) {
       contributors.push(
         unknownContributor({
@@ -142,6 +158,7 @@ async function skillContributors(
         )
       );
     }
+
     if (file) {
       contributors.push(
         measuredContributor(
@@ -166,6 +183,7 @@ async function skillContributors(
       );
     }
   }
+
   return { contributors, notes, visibleSkillNames };
 }
 
@@ -177,6 +195,7 @@ export async function analyzeHarnessStatic(
   projectRoot: string | undefined
 ): Promise<HarnessReport> {
   const contributors: ContextContributor[] = [];
+
   const scopeNotes = [
     "scope: profile instructions and indexes, enabled skills and MCP exposure, and repository instructions; excludes built-ins, plugins, bundled skills, and unmanaged extensions"
   ];
@@ -215,6 +234,7 @@ export async function analyzeHarnessStatic(
       referenceIndexContent(profile)
     )
   );
+
   if (profile.extraFolders.length > 0) {
     contributors.push(
       indexContributor(
@@ -230,8 +250,9 @@ export async function analyzeHarnessStatic(
   const skills = await skillContributors(paths, profile, harness);
   contributors.push(...skills.contributors);
   scopeNotes.push(...skills.notes);
-  const mcpLoading = harness === "opencode-v2" ? openCodeMcpLoading() : claudeMcpLoading();
+  const mcpLoading = harness === "opencode" ? openCodeMcpLoading() : claudeMcpLoading();
   const effectiveMcp = effectiveProjectState(overrideStore, projectRoot, profile, harness, "mcp");
+
   const mcpServers: ContextMcpMembership[] = filterMcpForTarget(profile, harness).map(
     ({ name }) => ({
       name,
@@ -240,7 +261,9 @@ export async function analyzeHarnessStatic(
       route: "direct"
     })
   );
+
   const shared = requiresExecutorBridge(profile) ? executorMcpServers(profile) : [];
+
   if (shared.length > 0) {
     mcpServers.push({
       name: executorBridgeName,
@@ -257,6 +280,7 @@ export async function analyzeHarnessStatic(
       )
     });
   }
+
   for (const server of mcpServers) {
     if (!server.enabled) continue;
     contributors.push(
@@ -270,6 +294,7 @@ export async function analyzeHarnessStatic(
 
   const repository = await analyzeRepository(projectRoot, inspectedDirectory, harness);
   contributors.push(...repository.contributors);
+
   if (!projectRoot) {
     scopeNotes.push("repository instruction analysis is not applicable outside a Git worktree");
   } else {
@@ -283,6 +308,8 @@ export async function analyzeHarnessStatic(
     mcpServers,
     visibleSkillNames: skills.visibleSkillNames
   };
+
   if (repository.maxConditionalPath) report.maxConditionalPath = repository.maxConditionalPath;
+
   return report;
 }

@@ -8,6 +8,7 @@ import { jsonObjectSchema, jsonStringArray } from "../core/json.js";
 
 export function isPathWithin(root: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
+
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
@@ -23,6 +24,7 @@ async function trackedFiles(root: string): Promise<string[]> {
       ["-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
       { encoding: "buffer" }
     );
+
     return Buffer.from(stdout).toString("utf8").split("\0").filter(Boolean);
   } catch {
     return [];
@@ -38,14 +40,18 @@ function instructionKind(
   harness: ContextHarness
 ): { category: string } | undefined {
   const normalized = relative.split(path.sep).join("/");
+
   if (harness === "claude-code" && normalized.startsWith(".claude/rules/")) {
     return { category: "Claude rule" };
   }
+
   const name = path.basename(relative);
+
   const allowed =
-    harness === "opencode-v2"
+    harness === "opencode"
       ? new Set(["AGENTS.md", "CLAUDE.md", "CONTEXT.md"])
       : new Set(["CLAUDE.md", "CLAUDE.local.md"]);
+
   return allowed.has(name) ? { category: "repository instruction" } : undefined;
 }
 
@@ -66,9 +72,12 @@ function globPattern(pattern: string): RegExp | undefined {
   if (pattern.startsWith("!") || /[\\[\]]/.test(pattern)) return undefined;
   const normalized = pattern.replace(/^\.?[/\\]/, "").replace(/[/\\]/g, "/");
   let source = "^";
+
   for (let index = 0; index < normalized.length; index += 1) {
     const character = normalized[index];
+
     if (character === undefined) continue;
+
     if (character === "*" && normalized[index + 1] === "*") {
       if (normalized[index + 2] === "/") {
         source += "(?:.*/)?";
@@ -83,12 +92,14 @@ function globPattern(pattern: string): RegExp | undefined {
       source += "[^/]";
     } else if (character === "{") {
       const end = normalized.indexOf("}", index + 1);
+
       if (end > index) {
         const alternatives = normalized
           .slice(index + 1, end)
           .split(",")
           .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
           .join("|");
+
         source += `(?:${alternatives})`;
         index = end;
       } else {
@@ -98,6 +109,7 @@ function globPattern(pattern: string): RegExp | undefined {
       source += character.replace(/[.*+^${}()|[\]\\]/g, "\\$&");
     }
   }
+
   return new RegExp(`${source}$`);
 }
 
@@ -114,11 +126,13 @@ export async function analyzeRepository(
 
   const contributors: ContextContributor[] = [];
   const repositoryFiles = await trackedFiles(projectRoot);
+
   const conditional: Array<{
     contributor: ContextContributor;
     directory: string;
     patterns: string[];
   }> = [];
+
   const candidates = repositoryFiles
     .map((relative) => ({
       relative,
@@ -130,9 +144,10 @@ export async function analyzeRepository(
         candidate.kind !== undefined && isPathWithin(projectRoot, candidate.absolute)
     )
     .filter((candidate, _index, all) => {
-      if (harness !== "opencode-v2" || candidate.kind.category !== "repository instruction")
+      if (harness !== "opencode" || candidate.kind.category !== "repository instruction")
         return true;
       const directory = path.dirname(candidate.absolute);
+
       return !all.some(
         (other) =>
           other.kind?.category === "repository instruction" &&
@@ -143,6 +158,7 @@ export async function analyzeRepository(
 
   for (const { absolute, kind } of candidates) {
     let content: string;
+
     try {
       content = await readFile(absolute, "utf8");
     } catch {
@@ -163,10 +179,12 @@ export async function analyzeRepository(
     const isRulePathScoped = rulePaths.length > 0;
     const unsupportedRuleGlob = rulePaths.some((pattern) => globPattern(pattern) === undefined);
     const directory = path.dirname(absolute);
+
     const startup =
       kind.category === "Claude rule"
         ? !isRulePathScoped
         : !isRulePathScoped && isAncestorOrSame(directory, inspectedDirectory);
+
     const contributor = unsupportedRuleGlob
       ? {
           ...measuredContributor(
@@ -189,7 +207,9 @@ export async function analyzeRepository(
           },
           content
         );
+
     contributors.push(contributor);
+
     if (!startup && !unsupportedRuleGlob) {
       conditional.push({
         contributor,
@@ -200,19 +220,24 @@ export async function analyzeRepository(
   }
 
   let maxConditionalPath: ConditionalPathSummary | undefined;
+
   for (const relativeCandidate of repositoryFiles) {
     const candidate = path.resolve(projectRoot, relativeCandidate);
     const directory = path.dirname(candidate);
+
     const entries = conditional.filter((entry) =>
       entry.patterns.length > 0
         ? entry.patterns.some((pattern) => matchesPattern(pattern, relativeCandidate))
         : isAncestorOrSame(entry.directory, candidate)
     );
+
     if (entries.length === 0) continue;
+
     const estimatedTokens = entries.reduce(
       (total, entry) => total + (entry.contributor.estimatedTokens ?? 0),
       0
     );
+
     if (!maxConditionalPath || estimatedTokens > maxConditionalPath.estimatedTokens) {
       maxConditionalPath = {
         directory,
@@ -223,6 +248,8 @@ export async function analyzeRepository(
   }
 
   const result: RepositoryAnalysis = { contributors };
+
   if (maxConditionalPath) result.maxConditionalPath = maxConditionalPath;
+
   return result;
 }
