@@ -577,9 +577,16 @@ function parseSessionTitle(sessionFile: string): string | undefined {
 }
 
 function totalCost(dispatches: readonly ThreadDispatchRun[]): number | null {
-  const costs = dispatches
-    .map((dispatch) => dispatch.cost_usd)
-    .filter((cost): cost is number => cost !== null);
+  let total = 0;
+  let count = 0;
 
-  return costs.length > 0 ? costs.reduce((total, cost) => total + cost, 0) : null;
+  for (const dispatch of dispatches) {
+    const cost = dispatch.cost_usd;
+
+    if (cost === null) continue;
+    total += cost;
+    count += 1;
+  }
+
+  return count > 0 ? total : null;
 }

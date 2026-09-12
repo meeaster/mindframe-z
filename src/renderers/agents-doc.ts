@@ -34,10 +34,13 @@ export async function renderInlinedAgents(
 
   if (referenceSection) parts.push(referenceSection);
 
-  return (
-    parts
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join("\n\n") + "\n"
-  );
+  const nonEmptyParts: string[] = [];
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+
+    if (trimmed) nonEmptyParts.push(trimmed);
+  }
+
+  return nonEmptyParts.join("\n\n") + "\n";
 }

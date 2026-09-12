@@ -102,9 +102,12 @@ class FakeS3 {
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
 
-      const contents = [...this.objects.entries()]
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, lastModified]) => ({ Key: key, LastModified: new Date(lastModified) }));
+      const contents: Array<{ Key: string; LastModified: Date }> = [];
+
+      for (const [key, lastModified] of this.objects.entries()) {
+        if (!key.startsWith(prefix)) continue;
+        contents.push({ Key: key, LastModified: new Date(lastModified) });
+      }
 
       return { Contents: contents, IsTruncated: false };
     }

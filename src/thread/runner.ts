@@ -267,16 +267,23 @@ function parseOpenCodeResult(
   rawTrace: string,
   durationMs: number
 ): ParsedHarnessResult {
-  const text = events
-    .map((event) => {
-      return textField(event.part?.text);
-    })
-    .filter(Boolean)
-    .join("");
+  const textParts: string[] = [];
 
-  const stepFinishes = events
-    .map((event) => event.part)
-    .filter((part): part is NonNullable<typeof part> => part?.type === "step-finish");
+  for (const event of events) {
+    const text = textField(event.part?.text);
+
+    if (text) textParts.push(text);
+  }
+
+  const text = textParts.join("");
+
+  const stepFinishes: Array<NonNullable<HarnessEvent["part"]>> = [];
+
+  for (const event of events) {
+    const part = event.part;
+
+    if (part?.type === "step-finish") stepFinishes.push(part);
+  }
 
   const input = sumNullable(stepFinishes.map((part) => tokenField(part, "input"))) ?? 0;
   const output = sumNullable(stepFinishes.map((part) => tokenField(part, "output"))) ?? 0;

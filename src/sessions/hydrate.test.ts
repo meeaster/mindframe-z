@@ -33,9 +33,12 @@ class FakeArchiveS3 {
     if (command instanceof ListObjectsV2Command) {
       const prefix = command.input.Prefix ?? "";
 
-      const contents = [...this.objects.keys()]
-        .filter((key) => key.startsWith(prefix))
-        .map((key) => ({ Key: key }));
+      const contents: Array<{ Key: string }> = [];
+
+      for (const key of this.objects.keys()) {
+        if (!key.startsWith(prefix)) continue;
+        contents.push({ Key: key });
+      }
 
       return { Contents: contents, IsTruncated: false };
     }
