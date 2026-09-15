@@ -16,7 +16,7 @@ describe("sandbox integration", () => {
     home = "";
   });
 
-  it("renders sandbox agent aliases into managed zshrc", async () => {
+  it("does not render removed sandbox command aliases into managed zshrc", async () => {
     await writeFile(
       path.join(root, "profiles", "base", ".zshrc"),
       "alias gs='git status'\n",
@@ -26,8 +26,16 @@ describe("sandbox integration", () => {
     await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
 
     const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
-    expect(zshrc).toContain("alias mfzcc='mfz cc'");
-    expect(zshrc).toContain("alias mfzoc='mfz oc'");
+    expect(zshrc).not.toContain("mfzcc");
+    expect(zshrc).not.toContain("mfzoc");
+  });
+
+  it("does not expose removed top-level commands", async () => {
+    const result = await cli("mfz", root, home, ["--help"]);
+
+    expect(result.stdout).not.toMatch(/^\s+cc(?:\s|$)/m);
+    expect(result.stdout).not.toMatch(/^\s+oc(?:\s|$)/m);
+    expect(result.stdout).not.toMatch(/^\s+smoke-opencode(?:\s|$)/m);
   });
 
   it("refuses sandbox launch before explicit initialization", async () => {
@@ -87,7 +95,7 @@ describe("sandbox integration", () => {
     expect(await readFile(argsFile, "utf8")).toContain("compose\n--env-file");
   });
 
-  it("forwards sandbox and shortcut arguments to docker", async () => {
+  it("forwards sandbox target arguments to docker", async () => {
     await mkdir(path.join(home, ".mindframe-z", "secrets"), { recursive: true });
     await mkdir(path.join(root, "sandbox", "image"), { recursive: true });
     await writeFile(path.join(root, "sandbox", "image", "Dockerfile"), "FROM scratch\n", "utf8");
@@ -124,7 +132,7 @@ describe("sandbox integration", () => {
     });
     expect(await readFile(argsFile, "utf8")).toContain("claude\n-p\nok\n");
 
-    await cli("mfz", root, home, ["oc", "run", "ok"], {
+    await cli("mfz", root, home, ["sandbox", "oc", "run", "ok"], {
       PATH: `${binDir}:${process.env.PATH ?? ""}`
     });
     expect(await readFile(argsFile, "utf8")).toContain("opencode\nrun\nok\n");

@@ -166,7 +166,7 @@ pnpm test:integration
 pnpm test:plugins
 ```
 
-Use temporary homes and isolated XDG paths in tests. Current test guidance is in `AGENTS.md`, especially the integration isolation rules and the `smoke-opencode-v2` implementation in `src/cli/mfz.ts`. That smoke path invokes the `opencode2` binary.
+Use temporary homes and isolated XDG paths in tests. Current test guidance is in `AGENTS.md`, especially the integration isolation rules.
 
 ## Open Questions For The Implementing Agent
 

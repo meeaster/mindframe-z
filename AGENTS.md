@@ -35,7 +35,6 @@ pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifest
 pnpm dev doctor
 # Isolated test examples only:
 pnpm dev --root /tmp/opencode/mfz-source --home /tmp/opencode/mfz-machine --profile base apply --dry-run
-pnpm dev --root /tmp/opencode/mfz-source --home /tmp/opencode/mfz-machine --profile base smoke-opencode
 pnpm dev refs list
 ```
 
@@ -57,7 +56,7 @@ This is a profile-aware AI tool config renderer. Source manifests live in the ac
 
 Key entrypoints:
 
-- `src/cli/mfz.ts` defines CLI commands: `apply`, `doctor`, `status`, `sync`, `skills`, `smoke-opencode`, `refs`.
+- `src/cli/mfz.ts` defines CLI commands such as `apply`, `doctor`, `status`, `sync`, `skills`, and `refs`.
 - `src/core/manifests.ts` defines Zod schemas; run `pnpm schemas` after changing manifest shapes and commit `schemas/*.schema.json`.
 - `src/core/profile.ts` resolves profile inheritance and merge semantics.
 - `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
@@ -133,8 +132,6 @@ Edit configuration in the home and activate it with plain `mfz apply`. Use `mfz 
 ## Testing And Safety
 
 Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR` and `CLAUDE_CONFIG_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
-
-`smoke-opencode` renders OpenCode config into `<home>/.mindframe-z/configs/<profile>/opencode`, points `OPENCODE_CONFIG_DIR` there, redirects XDG paths under the provided `--home`, and skips if the `opencode` binary is missing.
 
 Pre-commit runs only Gitleaks. `pre-commit` is supplied by the home's Mise configuration; use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
 

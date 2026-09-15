@@ -1,6 +1,5 @@
 import path from "node:path";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { readFile } from "node:fs/promises";
 import { Command } from "@commander-js/extra-typings";
 import { execa } from "execa";
 import YAML from "yaml";
@@ -272,8 +271,6 @@ async function shouldHintLegacyReferences(home: string): Promise<boolean> {
   return pathExists(path.join(home, "references"));
 }
 
-const errorCodeSchema = z.object({ code: z.string() });
-
 async function schemas(options: { root?: string | undefined }): Promise<void> {
   for (const file of await generateSchemas(options.root)) console.log(`wrote\t${file}`);
 }
@@ -402,113 +399,6 @@ async function contextHistoryReport(options: {
       await buildContextHistoryReport(paths, profile, options.agent, options.days)
     )
   );
-}
-
-async function opencodeSmoke(options: {
-  root?: string | undefined;
-  home?: string | undefined;
-  profile?: string | undefined;
-}): Promise<void> {
-  const paths = createRuntimePaths({ root: options.root, home: options.home });
-
-  const profile = await resolveProfile(paths, options.profile, {
-    evaluateAgents: ["opencode"]
-  });
-
-  await applyConfig({ ...options, agent: "opencode", target: "all", noLink: true });
-  const isolated = path.join(paths.home, ".mindframe-z-opencode-smoke");
-  await rm(isolated, { recursive: true, force: true });
-  await mkdir(isolated, { recursive: true });
-  const configsOpenCode = path.join(paths.configsDir, profile.name, "opencode");
-  const isolatedConfig = path.join(isolated, "config", "opencode");
-  await cp(configsOpenCode, isolatedConfig, { recursive: true });
-  const isolatedService = path.join(isolatedConfig, "service.json");
-  await rm(isolatedService, { force: true, recursive: true });
-  await writeFile(
-    isolatedService,
-    `${JSON.stringify({ port: await availablePort() }, null, 2)}\n`,
-    { encoding: "utf8", mode: 0o600 }
-  );
-
-  const env = {
-    ...process.env,
-    HOME: paths.home,
-    OPENCODE_TEST_HOME: paths.home,
-    OPENCODE_CONFIG: undefined,
-    OPENCODE_CONFIG_CONTENT: undefined,
-    OPENCODE_PTY_HANDOFF: undefined,
-    OPENCODE_CONFIG_DIR: isolatedConfig,
-    OPENCODE_DB: path.join(isolated, "data", "opencode.db"),
-    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
-    XDG_CONFIG_HOME: path.join(isolated, "config"),
-    XDG_DATA_HOME: path.join(isolated, "data"),
-    XDG_STATE_HOME: path.join(isolated, "state"),
-    XDG_CACHE_HOME: path.join(isolated, "cache")
-  };
-
-  let verificationError: Error | undefined;
-
-  try {
-    await execa("opencode", ["debug", "config"], {
-      cwd: paths.home,
-      env,
-      stdout: "ignore",
-      stderr: "ignore",
-      timeout: 30_000
-    });
-
-    console.log("OpenCode config parsed successfully");
-  } catch (error) {
-    const parsedError = errorCodeSchema.safeParse(error);
-
-    if (parsedError.success && parsedError.data.code === "ENOENT") {
-      console.log("opencode not found; skipped smoke check");
-
-      return;
-    }
-
-    verificationError = new Error("OpenCode config verification failed");
-  }
-
-  try {
-    await execa("opencode", ["service", "stop"], {
-      cwd: paths.home,
-      env,
-      stdout: "ignore",
-      stderr: "ignore",
-      timeout: 10_000
-    });
-  } catch {
-    throw new Error("Failed to stop the isolated OpenCode service");
-  }
-
-  if (verificationError) {
-    throw verificationError;
-  }
-}
-
-async function availablePort(): Promise<number> {
-  const server = createServer();
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-
-  const address = z
-    .object({ port: z.number().int().min(1).max(65_535) })
-    .safeParse(server.address());
-
-  if (!address.success) {
-    server.close();
-    throw new Error("Failed to reserve an isolated OpenCode service port");
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
-
-  return address.data.port;
 }
 
 const program = new Command()
@@ -1036,26 +926,6 @@ observe
     runThreadObserveStatus({ ...program.opts(), json: Boolean(options.json) })
   );
 
-program
-  .command("cc")
-  .description("Launch Claude Code inside the sandbox")
-  .allowUnknownOption(true)
-  .option("--rebuild", "force rebuilding the sandbox image before launch")
-  .argument("[args...]", "arguments forwarded to Claude Code")
-  .action(async (args, options) =>
-    runSandboxLaunch({ ...program.opts(), target: "cc", args, rebuild: options.rebuild })
-  );
-
-program
-  .command("oc")
-  .description("Launch opencode inside the sandbox")
-  .allowUnknownOption(true)
-  .option("--rebuild", "force rebuilding the sandbox image before launch")
-  .argument("[args...]", "arguments forwarded to opencode")
-  .action(async (args, options) =>
-    runSandboxLaunch({ ...program.opts(), target: "oc", args, rebuild: options.rebuild })
-  );
-
 const skills = program
   .command("skills")
   .description("Inspect, stage, promote, and activate managed skills")
@@ -1439,11 +1309,6 @@ mcp
     const profile = await resolveProfile(paths, program.opts().profile);
     await runMcpTui(paths, profile);
   });
-
-program
-  .command("smoke-opencode")
-  .description("Render OpenCode config and verify it with isolated opencode debug config")
-  .action(async () => opencodeSmoke(program.opts()));
 
 const refs = program.command("refs").description("Manage AI reference repositories");
 

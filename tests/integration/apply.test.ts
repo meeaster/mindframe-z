@@ -1,6 +1,5 @@
 import {
   access,
-  chmod,
   lstat,
   mkdir,
   readFile,
@@ -114,13 +113,6 @@ const PiSettings = z
     subagents: JsonObject.optional()
   })
   .passthrough();
-
-const SmokeCapture = z.object({
-  argv: z.array(z.string()),
-  cwd: z.string(),
-  env: z.record(z.string(), z.string()),
-  service: z.object({ port: z.number() })
-});
 
 function parseJson<T extends z.ZodType>(schema: T, source: string): z.infer<T> {
   return schema.parse(JSON.parse(source));
@@ -945,100 +937,6 @@ describe("apply integration", () => {
       plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
     });
   }, 15_000);
-
-  it("smokes OpenCode with an isolated binary environment", async () => {
-    const binDir = path.join(home, "bin");
-    const capturePath = path.join(home, "opencode-smoke.json");
-    const binaryPath = path.join(binDir, "opencode");
-    const isolated = path.join(home, ".mindframe-z-opencode-smoke");
-    const staleOwner = path.join(home, "user-owned-smoke-state");
-    const stalePath = path.join(isolated, "stale.txt");
-    const userServicePath = path.join(home, ".config", "opencode", "service.json");
-
-    const userService =
-      JSON.stringify({ port: 0xc0de, password: "user-owned-service-secret" }, null, 2) + "\n";
-
-    await mkdir(binDir, { recursive: true });
-    await mkdir(staleOwner, { recursive: true });
-    await writeFile(path.join(staleOwner, "stale.txt"), "stale smoke state\n", "utf8");
-    await symlink(staleOwner, isolated, "dir");
-    await mkdir(path.dirname(userServicePath), { recursive: true });
-    await writeFile(userServicePath, userService, "utf8");
-    await writeFile(
-      binaryPath,
-      [
-        "#!/usr/bin/env node",
-        'const { existsSync, readFileSync, writeFileSync } = require("node:fs");',
-        'const path = require("node:path");',
-        "const events = existsSync(process.env.MFZ_SMOKE_CAPTURE) ? JSON.parse(readFileSync(process.env.MFZ_SMOKE_CAPTURE, 'utf8')) : [];",
-        "const envKeys = ['HOME', 'OPENCODE_TEST_HOME', 'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_PTY_HANDOFF', 'OPENCODE_CONFIG_DIR', 'OPENCODE_DB', 'OPENCODE_DISABLE_DEFAULT_PLUGINS', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME'];",
-        "const env = Object.fromEntries(envKeys.flatMap((key) => process.env[key] === undefined ? [] : [[key, process.env[key]]]));",
-        "const service = JSON.parse(readFileSync(path.join(process.env.OPENCODE_CONFIG_DIR, 'service.json'), 'utf8'));",
-        "events.push({ argv: process.argv.slice(2), cwd: process.cwd(), env, service });",
-        "writeFileSync(process.env.MFZ_SMOKE_CAPTURE, JSON.stringify(events));",
-        'console.log("resolved-config-secret");',
-        ""
-      ].join("\n"),
-      "utf8"
-    );
-    await chmod(binaryPath, 0o755);
-
-    const ambientDb = path.join(home, "v1", "opencode.db");
-
-    const result = await cli("mfz", root, home, ["smoke-opencode"], {
-      PATH: `${binDir}:${process.env.PATH ?? ""}`,
-      MFZ_SMOKE_CAPTURE: capturePath,
-      OPENCODE_DB: ambientDb,
-      OPENCODE_CONFIG: path.join(home, "user-owned-config.json"),
-      OPENCODE_CONFIG_CONTENT: '{"secret":"ambient-config-secret"}',
-      OPENCODE_PTY_HANDOFF: "ambient-handoff",
-      XDG_CONFIG_HOME: path.join(home, "v1", "config"),
-      XDG_DATA_HOME: path.join(home, "v1", "data"),
-      XDG_STATE_HOME: path.join(home, "v1", "state"),
-      XDG_CACHE_HOME: path.join(home, "v1", "cache")
-    });
-
-    const captures = z.array(SmokeCapture).parse(JSON.parse(await readFile(capturePath, "utf8")));
-    const capture = captures[0]!;
-    expect(result.stdout).toContain("OpenCode config parsed successfully");
-    expect(result.stdout).not.toContain("resolved-config-secret");
-    expect(result.stdout).not.toContain("ambient-config-secret");
-    expect(result.stderr).not.toContain("resolved-config-secret");
-    expect(result.stderr).not.toContain("ambient-config-secret");
-    expect(captures.map((event) => event.argv)).toEqual([
-      ["debug", "config"],
-      ["service", "stop"]
-    ]);
-    expect(capture.argv).toEqual(["debug", "config"]);
-    expect(capture.cwd).toBe(home);
-    expect(capture.env.OPENCODE_TEST_HOME).toBe(home);
-    expect(capture.env.OPENCODE_CONFIG).toBeUndefined();
-    expect(capture.env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
-    expect(capture.env.OPENCODE_PTY_HANDOFF).toBeUndefined();
-    expect(capture.env.OPENCODE_CONFIG_DIR).toBe(path.join(isolated, "config", "opencode"));
-    expect(captures[1]!.env.OPENCODE_CONFIG_DIR).toBe(capture.env.OPENCODE_CONFIG_DIR);
-    expect(capture.service).toEqual({ port: expect.any(Number) });
-    expect(
-      JSON.parse(await readFile(path.join(isolated, "config", "opencode", "service.json"), "utf8"))
-    ).toEqual(capture.service);
-    expect(capture.env.OPENCODE_DB).toBe(path.join(isolated, "data", "opencode.db"));
-    expect(capture.env.OPENCODE_DB).not.toBe(ambientDb);
-    expect(capture.env.XDG_CONFIG_HOME).toBe(path.join(isolated, "config"));
-    expect(capture.env.XDG_DATA_HOME).toBe(path.join(isolated, "data"));
-    expect(capture.env.XDG_STATE_HOME).toBe(path.join(isolated, "state"));
-    expect(capture.env.XDG_CACHE_HOME).toBe(path.join(isolated, "cache"));
-    await expect(access(stalePath)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(access(path.join(staleOwner, "stale.txt"))).resolves.toBeUndefined();
-    await expect(readFile(userServicePath, "utf8")).resolves.toBe(userService);
-  });
-
-  it("skips the OpenCode smoke check when the stable executable is unavailable", async () => {
-    const result = await cli("mfz", root, home, ["smoke-opencode"], {
-      PATH: "/usr/bin:/bin"
-    });
-
-    expect(result.stdout).toContain("opencode not found; skipped smoke check");
-  });
 
   it("renders, links, and removes merged OpenCode runtime dependencies", async () => {
     await writeFile(
