@@ -512,7 +512,7 @@ Skills cross a trust boundary in four explicit stages: check, stage, review, and
 
 `mfz skills check` fetches tracked refs into a bare machine-local cache and compares only the selected subtree. `mfz skills stage <name>` extracts an exact revision into `~/.mindframe-z/skill-candidates/<candidate-id>/` with provenance, inventory, digest, deterministic findings, and a complete diff. It never checks out a worktree, runs hooks, recurses into submodules, downloads LFS content, installs dependencies, or executes candidate files.
 
-The user-invoked `/skill-update-review` workflow treats candidate text as hostile evidence. It accounts for every retained and changed file and every required risk category without execution, then returns exactly one candidate-bound recommendation. Human confirmation is still required by `mfz skills promote <candidate-id>`, which atomically updates the home source and lock without applying configuration. `mfz apply` or `mfz skills sync` later copies valid source into `~/.mindframe-z/configs/<profile>/skills/` and reconciles only Mindframe-Z-owned relative harness links.
+The version-local `mfz guide skill-review` workflow treats candidate text as hostile evidence. It accounts for every retained and changed file and every required risk category without execution, then returns exactly one candidate-bound recommendation. Human confirmation is still required by `mfz skills promote <candidate-id>`, which atomically updates the home source and lock without applying configuration. `mfz apply` or `mfz skills sync` later copies valid source into `~/.mindframe-z/configs/<profile>/skills/` and reconciles only Mindframe-Z-owned relative harness links.
 
 Recommended manifest:
 

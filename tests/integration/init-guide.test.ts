@@ -53,6 +53,7 @@ describe("init and guide integration", () => {
     expect(result.stdout).toContain("mfz guide mcp");
     expect(result.stdout).toContain("mfz guide cron");
     expect(result.stdout).toContain("mfz guide skills");
+    expect(result.stdout).toContain("mfz guide skill-review");
     expect(result.stdout).toContain("mfz guide references");
     expect(result.stdout).toContain("mfz guide extra-folders");
     expect(result.stdout).not.toContain("Declare Executor authentication structure");
@@ -140,6 +141,16 @@ describe("init and guide integration", () => {
     expect(examples).toHaveLength(2);
     expect(profileSchema.safeParse({ name: "example", ...examples[0] }).success).toBe(true);
     expect(skillsManifestSchema.safeParse(examples[1]).success).toBe(true);
+  });
+
+  it("prints the vendored skill review guide", async () => {
+    const home = await makeTempDir();
+    const result = await mfz(home, ["guide", "skill-review"]);
+    expect(result.stdout).toContain("# Vendored Skill Review Guide");
+    expect(result.stdout).toContain("Hostile evidence");
+    expect(result.stdout).toContain("every inventory file");
+    expect(result.stdout).toContain("manual investigation required");
+    expect(result.stdout).toContain("mfz skills promote <candidate-id>");
   });
 
   it("prints the references topic guide", async () => {

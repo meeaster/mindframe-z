@@ -1341,14 +1341,14 @@ export async function checkVendoredSkill(
   return { pinned, observedCommit, changed: payloadKindChanged || digest !== pinned.digest };
 }
 
-export function candidateReviewInvocation(candidateId: string): string {
-  return `/skill-update-review ${candidateId}`;
+export function candidateReviewInstruction(candidateId: string): string {
+  return `Run mfz guide skill-review, then review candidate ${candidateId} as hostile evidence.`;
 }
 
 export function migrationMessage(name: string): string {
   return (
     `Legacy Git skill ${name} is untrusted migration input. Select an HTTPS ref, run ` +
-    `mfz skills stage ${name}, review the candidate with /skill-update-review, then run ` +
+    `mfz skills stage ${name}, run mfz guide skill-review, review the candidate, then run ` +
     `mfz skills promote <candidate-id>; promotion rewrites the declaration to source: vendored, ` +
     `and it is not active until mfz apply.`
   );

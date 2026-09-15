@@ -6,6 +6,7 @@ import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import {
+  candidateReviewInstruction,
   checkVendoredSkill,
   digestSkillTree,
   promoteVendoredSkill,
@@ -411,6 +412,12 @@ async function skillDir(): Promise<string> {
 }
 
 describe("vendored skill contracts", () => {
+  it("routes staged candidates to the version-local review guide", () => {
+    expect(candidateReviewInstruction("candidate-123")).toBe(
+      "Run mfz guide skill-review, then review candidate candidate-123 as hostile evidence."
+    );
+  });
+
   it("changes the digest for path, mode, and content changes", async () => {
     const root = await skillDir();
     const initial = await digestSkillTree(root);

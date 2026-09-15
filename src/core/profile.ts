@@ -18,7 +18,6 @@ import {
   type ExtraFolder
 } from "./manifests.js";
 import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
-import { skillUpdateReviewName } from "./engine-skill.js";
 
 type CatalogKind = "reference" | "skill" | "mcp" | "profile";
 
@@ -664,12 +663,6 @@ async function resolveEnabledSkills(
   const validatedVendorRoots = new Set<string>();
 
   for (const skill of enabled) {
-    if (skill.name === skillUpdateReviewName) {
-      throw new Error(
-        "Trust anchor invalid: engine-owned skill-update-review cannot be overridden by a home catalog entry"
-      );
-    }
-
     if (skill.source !== "vendored") continue;
 
     if (!validatedVendorRoots.has(skill.sourceRoot)) {

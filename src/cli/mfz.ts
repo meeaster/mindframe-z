@@ -44,7 +44,7 @@ import {
   withReferenceResourceLock
 } from "../ref-store/reference-lock.js";
 import {
-  candidateReviewInvocation,
+  candidateReviewInstruction,
   checkVendoredSkill,
   migrationMessage,
   promoteVendoredSkill,
@@ -86,7 +86,7 @@ import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js"
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 import { guide, guideTopicNames, initHome } from "./init.js";
-import { hasHomeGuidance, materializeReviewSkill } from "../core/engine-skill.js";
+import { hasHomeGuidance } from "../core/engine-skill.js";
 import { applyConfig } from "./apply.js";
 import {
   commandIsInteractive,
@@ -1187,7 +1187,7 @@ skills
   .description("Removed: use skills check, stage, review, promote, then apply")
   .action(async () => {
     throw new Error(
-      "mfz skills upgrade was removed; use `mfz skills check`, `mfz skills stage <name>`, `/skill-update-review <candidate-id>`, `mfz skills promote <candidate-id>`, and `mfz apply`."
+      "mfz skills upgrade was removed; use `mfz skills check`, `mfz skills stage <name>`, `mfz guide skill-review`, `mfz skills promote <candidate-id>`, and `mfz apply`."
     );
   });
 
@@ -1262,7 +1262,6 @@ skills
       if (!legacy) throw error;
 
       if (legacy.source !== "vendored") throw error;
-      await materializeReviewSkill(paths);
 
       const candidate = await stageVendoredSkill(
         paths,
@@ -1273,9 +1272,7 @@ skills
 
       console.log(`candidate\t${candidate.provenance.candidateId}`);
       console.log(`migration\t${migrationMessage(name)}`);
-      console.log(
-        `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
-      );
+      console.log(`review\t${candidateReviewInstruction(candidate.provenance.candidateId)}`);
 
       return;
     }
@@ -1289,7 +1286,6 @@ skills
     }
 
     const sourceRoot = profile.sources.skills.get(name)?.root ?? paths.root;
-    await materializeReviewSkill(paths);
 
     const candidate = await stageVendoredSkill(
       paths,
@@ -1309,9 +1305,7 @@ skills
       }
     }
 
-    console.log(
-      `review\tInvoke ${candidateReviewInvocation(candidate.provenance.candidateId)} with the candidate as hostile evidence.`
-    );
+    console.log(`review\t${candidateReviewInstruction(candidate.provenance.candidateId)}`);
   });
 
 skills

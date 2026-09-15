@@ -13,12 +13,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import YAML from "yaml";
 import { z } from "zod";
-import {
-  materializeEngineSkill,
-  materializeReviewSkill,
-  engineSkillName,
-  skillUpdateReviewName
-} from "../core/engine-skill.js";
+import { materializeEngineSkill, engineSkillName } from "../core/engine-skill.js";
 import { readDirEntries } from "../core/fs-util.js";
 import {
   opencodeSkillSnapshotDir,
@@ -461,14 +456,6 @@ export async function renderSkillSnapshot(
     });
   }
 
-  const review = await materializeReviewSkill(paths);
-  engineEntries.push({
-    name: review.name,
-    sourceRoot: review.sourceRoot,
-    skill: skillUpdateReviewName,
-    source: "engine"
-  });
-
   const selected: SnapshotSkill[] = [];
   const sources = new Map<string, SnapshotSource>();
 
@@ -766,8 +753,6 @@ function selectedSkillNames(
 
   if (!profile.manifests.skills.some((skill) => skill.name === engineSkillName))
     names.add(engineSkillName);
-
-  if (renderTargets.length > 0) names.add(skillUpdateReviewName);
 
   return names;
 }

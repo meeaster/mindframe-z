@@ -2037,18 +2037,6 @@ describe("apply integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--dry-run"]);
     expect(result.stdout).toContain("planned\tskill\tlocal-skill");
     await expect(
-      readFile(
-        path.join(
-          home,
-          ".mindframe-z",
-          "engine-skills",
-          "skills",
-          "skill-update-review",
-          "SKILL.md"
-        )
-      )
-    ).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(
       readFile(configsPath(home, "personal", "opencode", "skills", ".mfz-manifest.yml"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });

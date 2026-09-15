@@ -175,21 +175,9 @@ describe("skill CLI integration", () => {
     const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
     expect(result.stdout).toContain("would render skill\tlocal-skill");
     expect(result.stdout).toContain("would render skill\tmindframe-z");
-    expect(result.stdout).toContain("would render skill\tskill-update-review");
+    expect(result.stdout).not.toContain("skill-update-review");
     expect(result.stdout).toContain("would link skill");
     expect(result.stdout).not.toContain("skills add");
-    await expect(
-      readFile(
-        path.join(
-          home,
-          ".mindframe-z",
-          "engine-skills",
-          "skills",
-          "skill-update-review",
-          "SKILL.md"
-        )
-      )
-    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("renders each provider variant under the logical skill name", async () => {
