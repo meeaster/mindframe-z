@@ -217,11 +217,7 @@ describe("skill CLI integration", () => {
     );
 
     const paths = createRuntimePaths({ root, home });
-    const resolved = await resolveProfile(paths, "personal");
-    await syncSkillSnapshot(paths, resolved, {
-      selectedTargets: providerVariantTargets,
-      link: true
-    });
+    await cli("mfz", root, home, ["skills", "sync"]);
 
     for (const target of providerVariantTargets) {
       const snapshot = providerSkillSnapshotDir(paths, "personal", target);
@@ -294,6 +290,8 @@ describe("skill CLI integration", () => {
       }))
     );
 
+    const resolved = await resolveProfile(paths, "personal");
+
     const repeated = await syncSkillSnapshot(paths, resolved, {
       selectedTargets: providerVariantTargets,
       link: true
@@ -350,6 +348,13 @@ describe("skill CLI integration", () => {
       );
     }
 
+    const provenanceState = await Promise.all(
+      providerVariantTargets.map(async (target) => ({
+        target,
+        state: await observeProviderSnapshot(target)
+      }))
+    );
+
     const provenanceRepeated = await syncSkillSnapshot(paths, provenanceProfile, {
       selectedTargets: providerVariantTargets,
       link: true
@@ -358,7 +363,7 @@ describe("skill CLI integration", () => {
     expect(provenanceRepeated.length).toBeGreaterThan(0);
     expect(provenanceRepeated.every((outcome) => outcome.status === "unchanged")).toBe(true);
 
-    for (const target of providerVariantTargets) {
+    for (const { target, state } of provenanceState) {
       expect(provenanceRepeated).toContainEqual(
         expect.objectContaining({
           category: "bookkeeping",
@@ -368,6 +373,7 @@ describe("skill CLI integration", () => {
           target: providerSkillSnapshotDir(paths, "personal", target)
         })
       );
+      expect(await observeProviderSnapshot(target)).toEqual(state);
     }
   });
 

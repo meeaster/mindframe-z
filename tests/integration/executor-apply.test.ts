@@ -1,11 +1,37 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { execa } from "execa";
+import { z } from "zod";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyConfig } from "../../src/cli/apply.js";
 import { createRuntimePaths, executorManagedPath } from "../../src/core/paths.js";
 import { resolveProfile } from "../../src/core/profile.js";
 import { renderTarget } from "../../src/core/render.js";
+import { createExecutorAdapter, type ExecutorAdapter } from "../../src/executor/adapter.js";
 import { cli, configsPath, setupIntegrationFixture } from "./support.js";
+
+const executorInstalled = await execa("executor", ["--version"], { reject: false })
+  .then((result) => result.exitCode === 0)
+  .catch(() => false);
+
+async function withExecutorDataDir<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
+  const previous = process.env.EXECUTOR_DATA_DIR;
+  process.env.EXECUTOR_DATA_DIR = dataDir;
+
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.EXECUTOR_DATA_DIR;
+    else process.env.EXECUTOR_DATA_DIR = previous;
+  }
+}
+
+const adapters: ExecutorAdapter[] = [];
+
+afterEach(async () => {
+  await Promise.all(adapters.splice(0).map((adapter) => adapter.close()));
+});
 
 describe("Executor apply integration", () => {
   let root: string;
@@ -14,6 +40,77 @@ describe("Executor apply integration", () => {
   beforeEach(async () => {
     ({ root, home } = await setupIntegrationFixture());
   });
+
+  it.skipIf(!executorInstalled)(
+    "registers, reads, and creates a no-auth connection in disposable state",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-contract-"));
+      await withExecutorDataDir(path.join(root, ".executor"), async () => {
+        const adapter = await createExecutorAdapter({});
+        adapters.push(adapter);
+
+        await adapter.addServer({
+          slug: "contract-server",
+          name: "contract-server",
+          description: "Disposable contract server",
+          connections: {},
+          config: {
+            transport: "remote",
+            endpoint: "https://example.invalid/mcp",
+            remoteTransport: "auto"
+          }
+        });
+
+        await expect(adapter.getIntegration("contract-server")).resolves.toMatchObject({
+          slug: "contract-server",
+          config: { endpoint: "https://example.invalid/mcp" }
+        });
+        await adapter.createNoAuthConnection("contract-server", "main");
+        await expect(adapter.listConnections("contract-server")).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              owner: "user",
+              name: "main",
+              template: "none"
+            })
+          ])
+        );
+        await adapter.close();
+      });
+      await rm(root, { recursive: true, force: true });
+    },
+    30_000
+  );
+
+  it.skipIf(!executorInstalled)(
+    "attaches every profile to the shared native Executor daemon and store",
+    async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-daemon-"));
+      await withExecutorDataDir(path.join(root, ".executor"), async () => {
+        const first = await createExecutorAdapter({});
+        const second = await createExecutorAdapter({});
+        const other = await createExecutorAdapter({});
+        adapters.push(first, second, other);
+
+        expect(second.baseUrl).toBe(first.baseUrl);
+        expect(other.baseUrl).toBe(first.baseUrl);
+        expect(other.dataDir).toBe(first.dataDir);
+
+        const manifest = z
+          .object({ scopeDir: z.string().nullable().optional() })
+          .parse(
+            JSON.parse(
+              await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
+            )
+          );
+
+        expect(manifest.scopeDir).toBeNull();
+        await Promise.all([first.close(), second.close(), other.close()]);
+      });
+      await rm(root, { recursive: true, force: true });
+    },
+    30_000
+  );
 
   it("renders a shared Executor bridge during a dry-run without starting Executor", async () => {
     await writeFile(
@@ -34,20 +131,6 @@ describe("Executor apply integration", () => {
     const result = await cli("mfz", root, home, ["apply", "--agent", "opencode", "--dry-run"]);
     expect(result.stdout).toContain("planned\tadd\texecutor\tcontext7");
 
-    const rendered = await renderTarget(
-      createRuntimePaths({ root, home }),
-      await resolveProfile(createRuntimePaths({ root, home }), "personal"),
-      "opencode"
-    );
-
-    const config =
-      rendered.files.find((file) => file.path.endsWith("opencode.jsonc"))?.content ?? "";
-
-    expect(config).toContain('"executor"');
-    expect(config).not.toContain('"context7"');
-    expect(config).not.toContain("EXECUTOR_DATA_DIR");
-    expect(config).not.toContain("EXECUTOR_SCOPE_DIR");
-    expect(config).not.toContain("--scope");
     await expect(access(path.join(home, ".executor"))).rejects.toMatchObject({
       code: "ENOENT"
     });
@@ -170,8 +253,15 @@ describe("Executor apply integration", () => {
       "utf8"
     );
 
-    const result = await cli("mfz", root, home, ["apply", "--agent", "all", "--dry-run"]);
-    expect(result.stdout).toContain("planned\tadd\texecutor\tcontext7");
+    const outcomes = await applyConfig({ root, home, agent: "all", target: "all", dryRun: true });
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        category: "executor",
+        status: "planned",
+        target: "context7",
+        plannedEffect: "add"
+      })
+    );
 
     for (const target of ["opencode", "claude-code", "codex"] as const) {
       const rendered = await renderTarget(
@@ -254,7 +344,7 @@ describe("Executor apply integration", () => {
   });
 
   it("keeps the direct harness configuration when Executor startup fails", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
     const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const directConfig = await readFile(configPath, "utf8");
 

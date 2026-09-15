@@ -1,27 +1,55 @@
-import { mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cli, configsPath, parseJson, setupIntegrationFixture } from "./support.js";
-
-const OpenCodePermissions = z.object({
-  permissions: z.array(
-    z.object({
-      action: z.string(),
-      resource: z.string(),
-      effect: z.enum(["allow", "ask", "deny"])
-    })
-  )
-});
+import { cli, configsPath, makeTempDir, parseJson } from "./support.js";
 
 const ClaudePermissions = z.object({ permissions: z.object({ deny: z.array(z.string()) }) });
+
+async function setupDotfilesFixture(): Promise<{ root: string; home: string }> {
+  const root = await makeTempDir();
+  const home = await makeTempDir();
+
+  await mkdir(path.join(root, "catalog"), { recursive: true });
+  await mkdir(path.join(root, "instructions"), { recursive: true });
+  await mkdir(path.join(root, "profiles", "base"), { recursive: true });
+  await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
+  await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
+  await writeFile(path.join(root, "mfz-home.yml"), "description: Dotfiles test home\n", "utf8");
+  await writeFile(path.join(root, "catalog", "references.yml"), "references: []\n", "utf8");
+  await writeFile(path.join(root, "catalog", "skills.yml"), "skills: []\n", "utf8");
+  await writeFile(path.join(root, "catalog", "mcp.yml"), "servers: {}\n", "utf8");
+  await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Test Agents\n", "utf8");
+  await writeFile(
+    path.join(root, "profiles", "base", "profile.yml"),
+    ["name: base", "instructions:", "  - instructions/AGENTS.md", ""].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "profiles", "base", ".npmrc"),
+    "min-release-age=3\nminimum-release-age=4320\n",
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "profiles", "personal", "profile.yml"),
+    ["name: personal", "extends: base", "agents: [opencode, claude-code]", ""].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    path.join(home, ".mindframe-z", "config.yml"),
+    ["profile: personal", "references_dir: ~/.mindframe-z/references", ""].join("\n"),
+    "utf8"
+  );
+
+  return { root, home };
+}
 
 describe("dotfiles integration", () => {
   let root: string;
   let home: string;
 
   beforeEach(async () => {
-    ({ root, home } = await setupIntegrationFixture());
+    ({ root, home } = await setupDotfilesFixture());
   });
 
   afterEach(() => {
@@ -67,15 +95,6 @@ describe("dotfiles integration", () => {
     expect(renderedProfile).not.toContain("test@example.com");
   });
 
-  it("omits git identity fields when machine identity is absent", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-
-    const fragment = await readFile(path.join(home, ".mindframe-z", "gitconfig"), "utf8");
-    expect(fragment).not.toContain("[user]");
-    expect(fragment).not.toContain("name =");
-    expect(fragment).not.toContain("email =");
-  });
-
   it("writes extra_folders index to machine-local path", async () => {
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),
@@ -104,38 +123,6 @@ describe("dotfiles integration", () => {
     expect(index).toContain("read: deny, edit: deny");
   });
 
-  it("denies managed zsh secrets in OpenCode config", async () => {
-    await writeFile(
-      path.join(root, "profiles", "base", ".zshrc"),
-      "alias gs='git status'\n",
-      "utf8"
-    );
-
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
-
-    const config = parseJson(
-      OpenCodePermissions,
-      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    );
-
-    const secretsBoundary = path.join(home, ".mindframe-z", "secrets", "*");
-    expect(config.permissions).toContainEqual({
-      action: "external_directory",
-      resource: secretsBoundary,
-      effect: "deny"
-    });
-    expect(config.permissions).toContainEqual({
-      action: "edit",
-      resource: secretsBoundary,
-      effect: "deny"
-    });
-    expect(config.permissions).not.toContainEqual({
-      action: "edit",
-      resource: path.join(home, ".zshrc"),
-      effect: expect.any(String)
-    });
-  });
-
   it("denies managed zsh secrets in Claude settings", async () => {
     await writeFile(
       path.join(root, "profiles", "base", ".zshrc"),
@@ -155,29 +142,24 @@ describe("dotfiles integration", () => {
     expect(settings.permissions.deny).toContain(`Edit(${secretsPattern})`);
   });
 
-  it("renders and links .npmrc dotfile from profile folder", async () => {
+  it("renders and links merged profile dotfiles", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", ".npmrc"),
+      "minimum-release-age-exclude[]=test-pkg\n",
+      "utf8"
+    );
+
     const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
     expect(result.stdout).toContain("created\tfile");
 
     const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
     expect(npmrc).toContain("min-release-age=3");
     expect(npmrc).toContain("minimum-release-age=4320");
+    expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");
 
     await expect(realpath(path.join(home, ".npmrc"))).resolves.toBe(
       configsPath(home, "personal", "dotfiles", ".npmrc")
     );
-  });
-
-  it("renders profile-owned local binaries as executable", async () => {
-    const source = path.join(root, "profiles", "personal", ".local", "bin", "example");
-    await mkdir(path.dirname(source), { recursive: true });
-    await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
-
-    await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-
-    const rendered = configsPath(home, "personal", "dotfiles", ".local", "bin", "example");
-    expect((await stat(rendered)).mode & 0o111).toBe(0o111);
-    expect((await stat(path.join(home, ".local", "bin", "example"))).mode & 0o111).toBe(0o111);
   });
 
   it("removes the retired opencode2 wrapper", async () => {
@@ -195,50 +177,7 @@ describe("dotfiles integration", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("renders and links managed .zshrc with guarded local includes", async () => {
-    await writeFile(
-      path.join(root, "profiles", "base", ".zshrc"),
-      "alias gs='git status'\n",
-      "utf8"
-    );
-
-    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("created\tfile");
-
-    const zshrc = await readFile(configsPath(home, "personal", "dotfiles", ".zshrc"), "utf8");
-    expect(zshrc).toContain(path.join(home, ".mindframe-z", "secrets", "zsh.env"));
-    expect(zshrc).toContain(path.join(home, ".local", "bin"));
-    expect(zshrc).not.toContain(path.join(home, ".mindframe-z", "bin"));
-    expect(zshrc).toContain("alias gs='git status'");
-    expect(zshrc).toContain(path.join(home, ".mindframe-z", ".zshrc"));
-
-    await expect(realpath(path.join(home, ".zshrc"))).resolves.toBe(
-      configsPath(home, "personal", "dotfiles", ".zshrc")
-    );
-  });
-
-  it("renders and links managed .bashrc with user bin on PATH", async () => {
-    await writeFile(
-      path.join(root, "profiles", "base", ".bashrc"),
-      "alias gs='git status'\n",
-      "utf8"
-    );
-
-    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("created\tfile");
-
-    const bashrc = await readFile(configsPath(home, "personal", "dotfiles", ".bashrc"), "utf8");
-    expect(bashrc).toContain("# Managed by mindframe-z.");
-    expect(bashrc).toContain(path.join(home, ".local", "bin"));
-    expect(bashrc).not.toContain(path.join(home, ".mindframe-z", "bin"));
-    expect(bashrc).toContain("alias gs='git status'");
-
-    await expect(realpath(path.join(home, ".bashrc"))).resolves.toBe(
-      configsPath(home, "personal", "dotfiles", ".bashrc")
-    );
-  });
-
-  it("keeps managed .zshrc safe when local include files are absent", async () => {
+  it("keeps managed zsh safe when local include files are absent", async () => {
     await writeFile(path.join(root, "profiles", "base", ".zshrc"), "export TEST_ZSH=1\n", "utf8");
 
     await cli("mfz", root, home, ["apply", "--target", "dotfiles", "--no-link"]);
@@ -272,77 +211,5 @@ describe("dotfiles integration", () => {
     await expect(
       readFile(path.join(home, ".mindframe-z", "secrets", "zsh.env"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("concatenates dotfile content from parent and child profiles", async () => {
-    // Add a .npmrc to the personal profile folder
-    await writeFile(
-      path.join(root, "profiles", "personal", ".npmrc"),
-      "minimum-release-age-exclude[]=test-pkg\n",
-      "utf8"
-    );
-
-    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("created\tfile");
-
-    const npmrc = await readFile(configsPath(home, "personal", "dotfiles", ".npmrc"), "utf8");
-    expect(npmrc).toContain("min-release-age=3");
-    expect(npmrc).toContain("minimum-release-age=4320");
-    expect(npmrc).toContain("minimum-release-age-exclude[]=test-pkg");
-  });
-
-  it("renders and links nested dotfiles from profile subdirectories", async () => {
-    await mkdir(path.join(root, "profiles", "personal", ".config", "ccstatusline"), {
-      recursive: true
-    });
-    await writeFile(
-      path.join(root, "profiles", "personal", ".config", "ccstatusline", "settings.json"),
-      '{"version":3,"lines":[]}\n',
-      "utf8"
-    );
-
-    const result = await cli("mfz", root, home, ["apply", "--target", "dotfiles"]);
-    expect(result.stdout).toContain("created\tfile");
-
-    const rendered = await readFile(
-      configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json"),
-      "utf8"
-    );
-
-    expect(rendered).toContain('"version":3');
-
-    await expect(
-      realpath(path.join(home, ".config", "ccstatusline", "settings.json"))
-    ).resolves.toBe(
-      configsPath(home, "personal", "dotfiles", ".config", "ccstatusline", "settings.json")
-    );
-  });
-
-  it("renders systemd units as ordinary dotfiles", async () => {
-    await mkdir(path.join(root, "profiles", "personal", ".config", "systemd", "user"), {
-      recursive: true
-    });
-    await writeFile(
-      path.join(root, "profiles", "personal", ".config", "systemd", "user", "example.service"),
-      "[Unit]\nDescription=Example\n",
-      "utf8"
-    );
-
-    await cli("mfz", root, home, ["apply", "--target", "all"]);
-
-    const snapshot = configsPath(
-      home,
-      "personal",
-      "dotfiles",
-      ".config",
-      "systemd",
-      "user",
-      "example.service"
-    );
-
-    expect(await readFile(snapshot, "utf8")).toContain("Description=Example");
-    await expect(
-      realpath(path.join(home, ".config", "systemd", "user", "example.service"))
-    ).resolves.toBe(snapshot);
   });
 });

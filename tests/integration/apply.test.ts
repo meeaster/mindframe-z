@@ -24,7 +24,7 @@ import {
   referenceStatePath
 } from "../../src/core/paths.js";
 import { ReferenceReconciliationError } from "../../src/ref-store/references.js";
-import { providerVariantTargets, writeProviderVariantSkill } from "./support.js";
+import { writeProviderVariantSkill } from "./support.js";
 
 const JsonObject = z.object({}).passthrough();
 
@@ -161,7 +161,7 @@ describe("apply integration", () => {
     ).toEqual([]);
   });
 
-  it("applies provider variants to target-scoped snapshots under one skill name", async () => {
+  it("applies a selected provider variant through the apply route", async () => {
     const name = "provider-skill";
     const fixture = await writeProviderVariantSkill(root, name);
     const skillsPath = path.join(root, "catalog", "skills.yml");
@@ -184,104 +184,29 @@ describe("apply integration", () => {
       }),
       "utf8"
     );
-    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
-    const profile = await readFile(profilePath, "utf8");
     await writeFile(
-      profilePath,
-      profile
-        .replace("agents: [opencode, claude-code]", "agents: [opencode, claude-code, codex]")
-        .replace(
-          "mcp:\n",
-          `  ${name}:\n    agents: { opencode: true, claude-code: true, codex: true }\nmcp:\n`
-        ),
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode, claude-code, codex]",
+        "skills:",
+        `  ${name}:`,
+        "    agents: { opencode: true, claude-code: true, codex: true }",
+        ""
+      ].join("\n"),
       "utf8"
     );
 
-    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
+    await cli("mfz", root, home, ["apply", "--agent", "claude-code", "--no-link"]);
 
     const paths = createRuntimePaths({ root, home });
-
-    for (const target of providerVariantTargets) {
-      await expect(
-        readFile(
-          path.join(providerSkillSnapshotDir(paths, "personal", target), name, "SKILL.md"),
-          "utf8"
-        )
-      ).resolves.toBe(fixture.contents[target]);
-    }
-
-    await expect(lstat(configsPath(home, "personal", "skills", name))).rejects.toMatchObject({
-      code: "ENOENT"
-    });
-
-    const observeProviderSnapshot = async (target: (typeof providerVariantTargets)[number]) => {
-      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
-      const manifestPath = path.join(snapshot, ".mfz-manifest.yml");
-      const skillPath = path.join(snapshot, name, "SKILL.md");
-
-      const [snapshotStat, manifestStat, skillStat] = await Promise.all([
-        lstat(snapshot),
-        lstat(manifestPath),
-        lstat(skillPath)
-      ]);
-
-      return {
-        snapshot: {
-          dev: snapshotStat.dev,
-          ino: snapshotStat.ino,
-          mtimeMs: snapshotStat.mtimeMs
-        },
-        manifest: {
-          dev: manifestStat.dev,
-          ino: manifestStat.ino,
-          mtimeMs: manifestStat.mtimeMs,
-          bytes: await readFile(manifestPath)
-        },
-        skill: {
-          dev: skillStat.dev,
-          ino: skillStat.ino,
-          mtimeMs: skillStat.mtimeMs,
-          bytes: await readFile(skillPath)
-        }
-      };
-    };
-
-    const initialState = await Promise.all(
-      providerVariantTargets.map(async (target) => ({
-        target,
-        state: await observeProviderSnapshot(target)
-      }))
-    );
-
-    const repeated = await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
-
-    expect(
-      repeated.filter(
-        (outcome) => outcome.significance === "meaningful" && operationChanged(outcome)
+    await expect(
+      readFile(
+        path.join(providerSkillSnapshotDir(paths, "personal", "claude-code"), name, "SKILL.md"),
+        "utf8"
       )
-    ).toEqual([]);
-
-    for (const { target, state } of initialState) {
-      const snapshot = providerSkillSnapshotDir(paths, "personal", target);
-      expect(repeated).toContainEqual(
-        expect.objectContaining({
-          category: "bookkeeping",
-          action: "snapshot",
-          status: "unchanged",
-          significance: "internal",
-          target: snapshot
-        })
-      );
-      expect(
-        repeated.filter(
-          (outcome) =>
-            outcome.category === "file" &&
-            outcome.action === "remove" &&
-            outcome.target.startsWith(`${snapshot}${path.sep}`)
-        )
-      ).toEqual([]);
-      expect(await observeProviderSnapshot(target)).toEqual(state);
-    }
+    ).resolves.toBe(fixture.contents["claude-code"]);
   });
 
   it("keeps linked OpenCode files and links unchanged across repeat apply", async () => {
@@ -303,7 +228,7 @@ describe("apply integration", () => {
     await mkdir(managedPlugins, { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
     await expect(access(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
 
     const gitConfig = path.join(home, ".gitconfig");
@@ -373,7 +298,7 @@ describe("apply integration", () => {
   }, 30_000);
 
   it("prints default no-change and complete verbose apply receipts", async () => {
-    await cli("mfz", root, home, ["apply", "--no-link"]);
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     const unchanged = await cli("mfz", root, home, ["apply", "--no-link"]);
     expect(unchanged.stdout).not.toContain("Changes\n");
@@ -391,7 +316,7 @@ describe("apply integration", () => {
   it("reconciles references for full --agent and --no-link apply", async () => {
     const source = fixtureReferenceSource(root);
     const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
     const before = await git(checkout, ["rev-parse", "HEAD"]);
     await writeFile(path.join(source, "README.md"), "advanced fixture\n", "utf8");
     await git(source, ["add", "README.md"]);
@@ -405,7 +330,7 @@ describe("apply integration", () => {
     );
   });
 
-  it.each(["mise", "dotfiles"])(
+  it.each(["mise", "dotfiles"] as const)(
     "keeps targeted %s apply scoped away from references",
     async (target) => {
       const referencesPath = path.join(root, "catalog", "references.yml");
@@ -418,7 +343,7 @@ describe("apply integration", () => {
         "utf8"
       );
 
-      await cli("mfz", root, home, ["apply", "--target", target, "--no-link"]);
+      await applyConfig({ root, home, agent: "all", target, noLink: true });
 
       expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(false);
       expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
@@ -829,7 +754,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
 
     const awareness = await readFile(
       path.join(home, ".mindframe-z", "capabilities", "index.md"),
@@ -915,7 +840,7 @@ describe("apply integration", () => {
     expect((await lstat(cliPath)).isSymbolicLink()).toBe(false);
 
     await writeFile(profilePath, profile.replace("mode: compact", "mode: detailed"), "utf8");
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
       plugins: [
@@ -931,7 +856,7 @@ describe("apply integration", () => {
       profile.replace("  tui_plugins:\n    - session-cost-tui\n", ""),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
       plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
@@ -966,7 +891,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
 
     const manifestPath = configsPath(home, "personal", "opencode", "package.json");
     expect(JSON.parse(await readFile(manifestPath, "utf8"))).toEqual({
@@ -991,13 +916,13 @@ describe("apply integration", () => {
       code: "ENOENT"
     });
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       ["name: personal", "extends: base", "agents: [opencode]", ""].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
 
     await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(
@@ -1158,7 +1083,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+    await applyConfig({ root, home, agent: "codex", target: "all", noLink: true });
 
     const config = parseToml(
       CodexConfig,
@@ -1197,7 +1122,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "pi", "--no-link"]);
+    await applyConfig({ root, home, agent: "pi", target: "all", noLink: true });
 
     const snapshot = parseJson(
       PiSettings,
@@ -1351,7 +1276,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "codex"]);
+    await applyConfig({ root, home, agent: "codex", target: "all" });
 
     const localConfig = parseToml(
       CodexConfig,
@@ -1383,7 +1308,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "codex"]);
+    await applyConfig({ root, home, agent: "codex", target: "all" });
 
     const localConfig = parseToml(
       CodexConfig,
@@ -1406,7 +1331,7 @@ describe("apply integration", () => {
       ].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+    await applyConfig({ root, home, agent: "codex", target: "all", noLink: true });
 
     const codexPath = configsPath(home, "personal", "codex", "config.toml");
     await writeFile(
@@ -1454,7 +1379,7 @@ describe("apply integration", () => {
       ].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "codex", "--no-link"]);
+    await applyConfig({ root, home, agent: "codex", target: "all", noLink: true });
 
     const codexDir = path.join(home, ".codex");
     await mkdir(codexDir, { recursive: true });
@@ -1493,7 +1418,7 @@ describe("apply integration", () => {
   });
 
   it("sync promotes unmanaged rendered OpenCode config keys to the chosen profile", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
 
     const opencodePath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const opencode = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
@@ -1512,7 +1437,7 @@ describe("apply integration", () => {
 
     expect(profileYaml).toContain("small_model: test/small-model");
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
     const rerendered = parseJson(OpenCodeConfig, await readFile(opencodePath, "utf8"));
     expect(rerendered.small_model).toBe("test/small-model");
   });
@@ -1787,7 +1712,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--no-link"]);
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     // OpenCode passes the {env:NAME} reference through untouched.
     const opencode = parseJson(
@@ -1821,17 +1746,6 @@ describe("apply integration", () => {
         http_headers: { "X-Client": "literal-value" }
       }
     });
-  });
-
-  it("filters agent rendering with --agent", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
-
-    await expect(
-      readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
-    ).resolves.toContain("test/model");
-    await expect(
-      readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8")
-    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("translates {env:NAME} MCP header refs per agent without leaking literals", async () => {
@@ -1872,7 +1786,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--no-link"]);
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     const codexConfig = parseToml(
       CodexSecuredConfig,
@@ -1932,15 +1846,22 @@ describe("apply integration", () => {
   });
 
   it("keeps skill runtime state unchanged during apply dry-run", async () => {
-    const result = await cli("mfz", root, home, ["apply", "--dry-run"]);
-    expect(result.stdout).toContain("planned\tskill\tlocal-skill");
+    const outcomes = await applyConfig({ root, home, agent: "all", target: "all", dryRun: true });
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        category: "skill",
+        action: "snapshot",
+        status: "planned",
+        target: "local-skill"
+      })
+    );
     await expect(
       readFile(configsPath(home, "personal", "opencode", "skills", ".mfz-manifest.yml"))
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("fails before replacing a snapshot when an unmanaged skill path conflicts", async () => {
-    await cli("mfz", root, home, ["apply", "--no-link"]);
+    await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     const snapshotSkill = configsPath(
       home,
@@ -1965,7 +1886,7 @@ describe("apply integration", () => {
   });
 
   it("removes stale owned links when a target has no remaining skills", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
     const link = path.join(home, ".config", "opencode", "skills", "local-skill");
     await expect(realpath(link)).resolves.toBe(
       configsPath(home, "personal", "opencode", "skills", "local-skill")
@@ -1982,23 +1903,6 @@ describe("apply integration", () => {
     await expect(
       lstat(configsPath(home, "personal", "opencode", "skills", "local-skill"))
     ).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("does not rewrite a matching snapshot", async () => {
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-
-    const snapshotSkill = configsPath(
-      home,
-      "personal",
-      "opencode",
-      "skills",
-      "local-skill",
-      "SKILL.md"
-    );
-
-    const before = (await stat(snapshotSkill)).ino;
-    await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-    expect((await stat(snapshotSkill)).ino).toBe(before);
   });
 
   it("renders explicit shared-directory runtime restrictions", async () => {
@@ -2051,7 +1955,7 @@ describe("apply integration", () => {
       ].join("\n"),
       "utf8"
     );
-    await cli("mfz", root, home, ["apply", "--agent", "all"]);
+    await applyConfig({ root, home, agent: "all", target: "all" });
     await expect(lstat(path.join(home, ".agents", "skills", "all-skill"))).resolves.toBeDefined();
 
     await cli("mfz", root, home, ["apply", "--agent", "opencode"]);

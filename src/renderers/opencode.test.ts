@@ -1,5 +1,6 @@
 import path from "node:path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { profileSchema } from "../core/manifests.js";
 import { createRuntimePaths } from "../core/paths.js";
@@ -73,6 +74,15 @@ function renderedConfig(result: Awaited<ReturnType<typeof renderOpenCode>>): Jso
 
   // SAFETY: the renderer serializes this file from a JSON object.
   return JSON.parse(file.content) as JsonObject;
+}
+
+function rendererSources(): ResolvedProfile["sources"] {
+  // SAFETY: this fixture supplies every source map read by renderOpenCode.
+  return {
+    plugins: new Map(),
+    commands: new Map(),
+    agents: new Map()
+  } as ResolvedProfile["sources"];
 }
 
 describe("OpenCode renderer", () => {
@@ -406,5 +416,126 @@ describe("OpenCode renderer", () => {
     );
 
     expect(result.cliPlugins?.settings).toEqual({ theme: { name: "dracula" } });
+  });
+
+  it("collects direct and packaged command and agent assets", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-markdown-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-markdown-home-"));
+    const commandDir = path.join(root, "opencode", "commands");
+    const packagedCommandDir = path.join(commandDir, "packaged");
+    const agentDir = path.join(root, "opencode", "agents");
+
+    await mkdir(path.join(packagedCommandDir, "meta"), { recursive: true });
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(path.join(commandDir, "direct.md"), "Direct command.\n");
+    await writeFile(path.join(packagedCommandDir, "COMMAND.md"), "Packaged command.\n");
+    await writeFile(path.join(packagedCommandDir, "meta", "VISION.md"), "Development only.\n");
+    await writeFile(path.join(agentDir, "reviewer.md"), "Reviewer agent.\n");
+
+    const paths = createRuntimePaths({ root, home });
+    const resolved = profile(home);
+    resolved.enabledOpenCodeCommands = ["direct", "packaged"];
+    resolved.enabledOpenCodeAgents = ["reviewer"];
+    resolved.sources = rendererSources();
+
+    const result = await renderOpenCode(paths, resolved);
+
+    expect(result.files).toContainEqual({
+      path: path.join(paths.configsDir, "personal", "opencode", "commands", "direct.md"),
+      content: "Direct command.\n"
+    });
+    expect(result.files).toContainEqual({
+      path: path.join(paths.configsDir, "personal", "opencode", "commands", "packaged.md"),
+      content: "Packaged command.\n"
+    });
+    expect(result.files).toContainEqual({
+      path: path.join(paths.configsDir, "personal", "opencode", "agents", "reviewer.md"),
+      content: "Reviewer agent.\n"
+    });
+    expect(result.files.some((file) => file.path.includes("VISION.md"))).toBe(false);
+
+    resolved.enabledOpenCodeAgents = ["missing-agent"];
+    await expect(renderOpenCode(paths, resolved)).rejects.toThrow("Unknown agent: missing-agent");
+  });
+
+  it("renders plugin URLs and packaged TUI files without development assets", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-assets-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-assets-home-"));
+    const pluginsDir = path.join(root, "opencode", "plugins");
+    const combinedDir = path.join(pluginsDir, "combined");
+
+    await mkdir(path.join(pluginsDir, "server"), { recursive: true });
+    await mkdir(path.join(combinedDir, "node_modules", "helper"), { recursive: true });
+    await mkdir(path.join(combinedDir, "tests"), { recursive: true });
+    await writeFile(path.join(pluginsDir, "server", "index.mts"), "export default {}\n");
+    await writeFile(path.join(pluginsDir, "single.mjs"), "export default {}\n");
+    await writeFile(path.join(combinedDir, "package.json"), '{"type":"module"}\n');
+    await writeFile(path.join(combinedDir, "server.ts"), "export default {}\n");
+    await writeFile(path.join(combinedDir, "tests", "plugin.test.ts"), "test\n");
+    await writeFile(path.join(combinedDir, "node_modules", "helper", "index.js"), "helper\n");
+
+    const paths = createRuntimePaths({ root, home });
+    const resolved = profile(home);
+    resolved.enabledOpenCodePlugins = ["server", "combined", "single"];
+    resolved.enabledOpenCodeTuiPlugins = ["combined"];
+    resolved.sources = rendererSources();
+
+    const result = await renderOpenCode(paths, resolved);
+    const pluginPath = path.join(paths.configsDir, "personal", "opencode", "plugins");
+    const tuiPath = path.join(pluginPath, "tui", "combined");
+
+    expect(renderedConfig(result).plugins).toEqual([
+      `file://${path.join(pluginsDir, "server")}`,
+      `file://${combinedDir}`,
+      `file://${path.join(pluginPath, "single.mjs")}`
+    ]);
+    expect(result.cliPlugins?.entries).toEqual([`file://${tuiPath}`]);
+    expect(result.localFiles).toEqual(
+      expect.arrayContaining([
+        {
+          path: path.join(pluginPath, "single.mjs"),
+          content: "export default {}\n"
+        },
+        { path: path.join(tuiPath, "package.json"), content: '{"type":"module"}\n' },
+        { path: path.join(tuiPath, "server.ts"), content: "export default {}\n" }
+      ])
+    );
+    expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
+    expect(result.localFiles?.some((file) => file.path.includes("plugin.test.ts"))).toBe(false);
+  });
+
+  it("reports stale snapshots and excludes unconfigured plugin assets", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-stale-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-stale-home-"));
+    const pluginsDir = path.join(root, "opencode", "plugins");
+
+    const staleFile = path.join(
+      home,
+      ".mindframe-z",
+      "configs",
+      "personal",
+      "opencode",
+      "plugins",
+      "legacy.ts"
+    );
+
+    await mkdir(pluginsDir, { recursive: true });
+    await writeFile(path.join(pluginsDir, "discovered.mjs"), "export default {}\n");
+    await mkdir(path.join(pluginsDir, "bundled"), { recursive: true });
+    await writeFile(path.join(pluginsDir, "bundled", "index.ts"), "export default {}\n");
+    await mkdir(path.dirname(staleFile), { recursive: true });
+    await writeFile(staleFile, "stale\n");
+
+    const paths = createRuntimePaths({ root, home });
+    const resolved = profile(home);
+    resolved.sources = rendererSources();
+
+    const result = await renderTarget(paths, resolved, "opencode");
+
+    expect(renderedConfig(result).plugins).toBeUndefined();
+    expect(result.localFiles).toEqual([]);
+    expect(result.staleFiles).toContain(staleFile);
+    expect(result.files.some((file) => file.path.includes("discovered.mjs"))).toBe(false);
+    expect(result.files.some((file) => file.path.includes("bundled"))).toBe(false);
   });
 });

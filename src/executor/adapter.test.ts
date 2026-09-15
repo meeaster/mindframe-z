@@ -1,23 +1,15 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { execa } from "execa";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createRuntimePaths, executorConfigPath, executorDataDir } from "../core/paths.js";
 import {
   createExecutorAdapter,
   createExecutorHttpAdapter,
-  redactExecutorError,
-  type ExecutorAdapter
+  redactExecutorError
 } from "./adapter.js";
 import { executorJsonObjectSchema } from "./contract.js";
-
-const adapters: ExecutorAdapter[] = [];
-
-const executorInstalled = await execa("executor", ["--version"], { reject: false })
-  .then((result) => result.exitCode === 0)
-  .catch(() => false);
 
 async function withExecutorDataDir<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
   const previous = process.env.EXECUTOR_DATA_DIR;
@@ -30,10 +22,6 @@ async function withExecutorDataDir<T>(dataDir: string, run: () => Promise<T>): P
     else process.env.EXECUTOR_DATA_DIR = previous;
   }
 }
-
-afterEach(async () => {
-  await Promise.all(adapters.splice(0).map((adapter) => adapter.close()));
-});
 
 describe("Executor adapter contract", () => {
   it("redacts bearer, OAuth, API-key, and browser query secrets", () => {
@@ -116,77 +104,6 @@ describe("Executor adapter contract", () => {
       /address-safe/
     );
   });
-
-  it.skipIf(!executorInstalled)(
-    "registers, reads, and creates a no-auth connection in disposable state",
-    async () => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-contract-"));
-      await withExecutorDataDir(path.join(root, ".executor"), async () => {
-        const adapter = await createExecutorAdapter({});
-        adapters.push(adapter);
-
-        await adapter.addServer({
-          slug: "contract-server",
-          name: "contract-server",
-          description: "Disposable contract server",
-          connections: {},
-          config: {
-            transport: "remote",
-            endpoint: "https://example.invalid/mcp",
-            remoteTransport: "auto"
-          }
-        });
-
-        await expect(adapter.getIntegration("contract-server")).resolves.toMatchObject({
-          slug: "contract-server",
-          config: { endpoint: "https://example.invalid/mcp" }
-        });
-        await adapter.createNoAuthConnection("contract-server", "main");
-        await expect(adapter.listConnections("contract-server")).resolves.toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              owner: "user",
-              name: "main",
-              template: "none"
-            })
-          ])
-        );
-        await adapter.close();
-      });
-      await rm(root, { recursive: true, force: true });
-    },
-    30_000
-  );
-
-  it.skipIf(!executorInstalled)(
-    "attaches every profile to the shared native Executor daemon and store",
-    async () => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-daemon-"));
-      await withExecutorDataDir(path.join(root, ".executor"), async () => {
-        const first = await createExecutorAdapter({});
-        const second = await createExecutorAdapter({});
-        const other = await createExecutorAdapter({});
-        adapters.push(first, second, other);
-
-        expect(second.baseUrl).toBe(first.baseUrl);
-        expect(other.baseUrl).toBe(first.baseUrl);
-        expect(other.dataDir).toBe(first.dataDir);
-
-        const manifest = z
-          .object({ scopeDir: z.string().nullable().optional() })
-          .parse(
-            JSON.parse(
-              await readFile(path.join(first.dataDir, "server-control", "server.json"), "utf8")
-            )
-          );
-
-        expect(manifest.scopeDir).toBeNull();
-        await Promise.all([first.close(), second.close(), other.close()]);
-      });
-      await rm(root, { recursive: true, force: true });
-    },
-    30_000
-  );
 
   it("uses metadata-only HTTP calls and never submits guessed credentials", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];

@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import YAML from "yaml";
-import { guideTopicNames } from "../../src/cli/init.js";
+import { guide, guideTopicNames } from "../../src/cli/init.js";
+import { applyConfig } from "../../src/cli/apply.js";
 import {
   mcpServerSchema,
   profileSchema,
@@ -44,27 +45,39 @@ function yamlExamples(markdown: string) {
   );
 }
 
+async function captureGuide(topic?: string): Promise<string> {
+  const logs: string[] = [];
+
+  const log = vi.spyOn(console, "log").mockImplementation((value?: string) => {
+    logs.push(String(value));
+  });
+
+  try {
+    await guide(topic);
+  } finally {
+    log.mockRestore();
+  }
+
+  return logs.join("\n");
+}
+
 describe("init and guide integration", () => {
   it("prints the home guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide"]);
-    expect(result.stdout).toContain("# mindframe-z Home Guide");
-    expect(result.stdout).toContain("catalog/references.yml");
-    expect(result.stdout).toContain("mfz guide mcp");
-    expect(result.stdout).toContain("mfz guide cron");
-    expect(result.stdout).toContain("mfz guide skills");
-    expect(result.stdout).toContain("mfz guide skill-review");
-    expect(result.stdout).toContain("mfz guide references");
-    expect(result.stdout).toContain("mfz guide extra-folders");
-    expect(result.stdout).not.toContain("Declare Executor authentication structure");
+    const result = await captureGuide();
+    expect(result).toContain("# mindframe-z Home Guide");
+    expect(result).toContain("catalog/references.yml");
+    expect(result).toContain("mfz guide mcp");
+    expect(result).toContain("mfz guide cron");
+    expect(result).toContain("mfz guide skills");
+    expect(result).toContain("mfz guide skill-review");
+    expect(result).toContain("mfz guide references");
+    expect(result).toContain("mfz guide extra-folders");
+    expect(result).not.toContain("Declare Executor authentication structure");
 
-    const routes = Array.from(
-      result.stdout.matchAll(/`mfz guide ([a-z-]+)`/g),
-      (match) => match[1]
-    );
+    const routes = Array.from(result.matchAll(/`mfz guide ([a-z-]+)`/g), (match) => match[1]);
 
     expect(routes.sort()).toEqual([...guideTopicNames].sort());
-    const examples = yamlExamples(result.stdout);
+    const examples = yamlExamples(result);
     expect(examples).toHaveLength(2);
 
     for (const example of examples) {
@@ -74,6 +87,8 @@ describe("init and guide integration", () => {
 
   it("advertises the same topics in help and unknown-topic errors", async () => {
     const home = await makeTempDir();
+    const route = await mfz(home, ["guide", "cron"]);
+    expect(route.stdout).toContain("# Scheduled OpenCode Jobs Guide");
     const help = await mfz(home, ["guide", "--help"]);
     const failure = await mfz(home, ["guide", "unknown-topic"], false);
     expect(failure.exitCode).toBe(1);
@@ -85,27 +100,25 @@ describe("init and guide integration", () => {
   });
 
   it("prints the scheduled OpenCode jobs topic guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "cron"]);
-    expect(result.stdout).toContain("# Scheduled OpenCode Jobs Guide");
-    expect(result.stdout).toContain("Persistent root plus worker");
-    expect(result.stdout).toContain("Never use `--continue`");
-    expect(result.stdout).toContain("New sessions and forks are durable top-level sessions");
-    expect(result.stdout).toContain("OPENCODE_CONFIG_CONTENT");
-    expect(result.stdout).toContain("There is no `opencode run --compact-first` flag");
-    expect(result.stdout).toContain("systemctl --user enable --now");
-    const [example] = yamlExamples(result.stdout);
+    const result = await captureGuide("cron");
+    expect(result).toContain("# Scheduled OpenCode Jobs Guide");
+    expect(result).toContain("Persistent root plus worker");
+    expect(result).toContain("Never use `--continue`");
+    expect(result).toContain("New sessions and forks are durable top-level sessions");
+    expect(result).toContain("OPENCODE_CONFIG_CONTENT");
+    expect(result).toContain("There is no `opencode run --compact-first` flag");
+    expect(result).toContain("systemctl --user enable --now");
+    const [example] = yamlExamples(result);
     expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
   });
 
   it("prints the MCP topic guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "mcp"]);
-    expect(result.stdout).toContain("# MCP Guide");
-    expect(result.stdout).toContain("executor:");
-    expect(result.stdout).toContain("all connected supported harnesses");
-    expect(result.stdout).toContain("Done when every declared credentialed connection");
-    const examples = yamlExamples(result.stdout);
+    const result = await captureGuide("mcp");
+    expect(result).toContain("# MCP Guide");
+    expect(result).toContain("executor:");
+    expect(result).toContain("all connected supported harnesses");
+    expect(result).toContain("Done when every declared credentialed connection");
+    const examples = yamlExamples(result);
     expect(examples).toHaveLength(2);
     expect(profileSchema.safeParse({ name: "example", ...examples[0] }).success).toBe(true);
     expect(
@@ -118,53 +131,49 @@ describe("init and guide integration", () => {
   });
 
   it("prints the extra folders topic guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "extra-folders"]);
-    expect(result.stdout).toContain("# Extra Folders Guide");
-    expect(result.stdout).toContain("cross-repository routing metadata");
-    expect(result.stdout).toContain("domain outcome");
-    expect(result.stdout).toContain("Active and upstream homes are not granted implicitly");
-    expect(result.stdout).toContain("mfz doctor");
-    const [example] = yamlExamples(result.stdout);
+    const result = await captureGuide("extra-folders");
+    expect(result).toContain("# Extra Folders Guide");
+    expect(result).toContain("cross-repository routing metadata");
+    expect(result).toContain("domain outcome");
+    expect(result).toContain("Active and upstream homes are not granted implicitly");
+    expect(result).toContain("mfz doctor");
+    const [example] = yamlExamples(result);
     expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
   });
 
   it("prints the skills topic guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "skills"]);
-    expect(result.stdout).toContain("# Skills Guide");
-    expect(result.stdout).toContain("catalog/skills.yml");
-    expect(result.stdout).toContain("mfz skills check");
-    expect(result.stdout).toContain("mfz skills stage");
-    expect(result.stdout).toContain("Done when the skill appears for its selected agents");
-    const examples = yamlExamples(result.stdout);
+    const result = await captureGuide("skills");
+    expect(result).toContain("# Skills Guide");
+    expect(result).toContain("catalog/skills.yml");
+    expect(result).toContain("mfz skills check");
+    expect(result).toContain("mfz skills stage");
+    expect(result).toContain("Done when the skill appears for its selected agents");
+    const examples = yamlExamples(result);
     expect(examples).toHaveLength(2);
     expect(profileSchema.safeParse({ name: "example", ...examples[0] }).success).toBe(true);
     expect(skillsManifestSchema.safeParse(examples[1]).success).toBe(true);
   });
 
   it("prints the vendored skill review guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "skill-review"]);
-    expect(result.stdout).toContain("# Vendored Skill Review Guide");
-    expect(result.stdout).toContain("Hostile evidence");
-    expect(result.stdout).toContain("every inventory file");
-    expect(result.stdout).toContain("manual investigation required");
-    expect(result.stdout).toContain("mfz skills promote <candidate-id>");
+    const result = await captureGuide("skill-review");
+    expect(result).toContain("# Vendored Skill Review Guide");
+    expect(result).toContain("Hostile evidence");
+    expect(result).toContain("every inventory file");
+    expect(result).toContain("manual investigation required");
+    expect(result).toContain("mfz skills promote <candidate-id>");
   });
 
   it("prints the references topic guide", async () => {
-    const home = await makeTempDir();
-    const result = await mfz(home, ["guide", "references"]);
-    expect(result.stdout).toContain("# References Guide");
-    expect(result.stdout).toContain("catalog/references.yml");
-    expect(result.stdout).toContain("profiles/<profile>/profile.yml");
-    expect(result.stdout).toContain("mfz refs sync");
-    expect(result.stdout).toContain("regenerate the local reference");
-    expect(result.stdout).toContain("without activating configuration");
-    expect(result.stdout).not.toContain("refs index");
-    expect(result.stdout).toContain("routing metadata");
-    const examples = yamlExamples(result.stdout);
+    const result = await captureGuide("references");
+    expect(result).toContain("# References Guide");
+    expect(result).toContain("catalog/references.yml");
+    expect(result).toContain("profiles/<profile>/profile.yml");
+    expect(result).toContain("mfz refs sync");
+    expect(result).toContain("regenerate the local reference");
+    expect(result).toContain("without activating configuration");
+    expect(result).not.toContain("refs index");
+    expect(result).toContain("routing metadata");
+    const examples = yamlExamples(result);
     expect(examples).toHaveLength(2);
     expect(refsManifestSchema.safeParse(examples[0]).success).toBe(true);
     expect(profileSchema.safeParse({ name: "example", ...examples[1] }).success).toBe(true);
@@ -191,8 +200,22 @@ describe("init and guide integration", () => {
       `home_path: ${homeRoot}`
     );
 
-    const apply = await mfz(machineHome, ["apply", "--no-link"]);
-    expect(apply.stdout).toContain("created\tfile");
+    const apply = await applyConfig({
+      home: machineHome,
+      agent: "all",
+      target: "all",
+      noLink: true
+    });
+
+    expect(
+      apply.some((outcome) => outcome.category === "file" && outcome.status === "created")
+    ).toBe(true);
+    expect(
+      await readFile(
+        path.join(machineHome, ".mindframe-z", "configs", "base", "opencode", "opencode.jsonc"),
+        "utf8"
+      )
+    ).toContain("https://opencode.ai/config.json");
   });
 
   it("clones a home into the managed upstream clone root and points machine config at it", async () => {
@@ -213,7 +236,21 @@ describe("init and guide integration", () => {
       `home_path: ${cloneRoot}`
     );
 
-    const apply = await mfz(machineHome, ["apply", "--no-link"]);
-    expect(apply.stdout).toContain("created\tfile");
+    const apply = await applyConfig({
+      home: machineHome,
+      agent: "all",
+      target: "all",
+      noLink: true
+    });
+
+    expect(
+      apply.some((outcome) => outcome.category === "file" && outcome.status === "created")
+    ).toBe(true);
+    expect(
+      await readFile(
+        path.join(machineHome, ".mindframe-z", "configs", "base", "opencode", "opencode.jsonc"),
+        "utf8"
+      )
+    ).toContain("https://opencode.ai/config.json");
   });
 });

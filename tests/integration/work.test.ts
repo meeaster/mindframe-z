@@ -1,8 +1,21 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { describe, expect, it } from "vitest";
-import { cli, parseJson, setupIntegrationFixture } from "./support.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  appendWorkReceipt,
+  attachWorkSession,
+  createWorkUnit,
+  readWorkCheckpoints,
+  readWorkReceipts,
+  resolveWorkContext,
+  setWorkPhase,
+  switchWorkSession,
+  validateWorkUnit,
+  workAuthoringPaths
+} from "../../src/work/storage.js";
+import { runWorkCheckpointInstructions } from "../../src/work/cli.js";
+import { cli, makeTempDir, parseJson, testRuntimePaths } from "./support.js";
 
 const WorkJson = z
   .object({
@@ -48,8 +61,7 @@ function json(stdout: string) {
 }
 
 async function authorWorkUnit(
-  root: string,
-  home: string,
+  paths: ReturnType<typeof testRuntimePaths>,
   slug: string,
   input: {
     outcome?: string;
@@ -57,9 +69,9 @@ async function authorWorkUnit(
     context?: string[];
   } = {}
 ): Promise<void> {
-  const dir = path.join(home, ".mindframe-z", "work", "v1", "units", slug);
+  const files = workAuthoringPaths(paths, slug);
   await writeFile(
-    path.join(dir, "orientation.md"),
+    files.orientation,
     `# Orientation
 
 ## Outcome
@@ -88,7 +100,7 @@ Run the next test.
     ["| Target | Role | Status |", "| --- | --- | --- |", ...rows].join("\n");
 
   await writeFile(
-    path.join(dir, "context-map.md"),
+    files.context_map,
     `# Context Map
 
 ## Repositories
@@ -101,13 +113,30 @@ ${table(input.context)}
 `,
     "utf8"
   );
-  const validated = await cli("mfz", root, home, ["work", "validate", slug, "--json"]);
-  expect(json(validated.stdout)).toMatchObject({ ok: true, status: { valid: true } });
+  expect((await validateWorkUnit(paths, slug)).valid).toBe(true);
+}
+
+async function captureWorkOutput(action: () => Promise<void>): Promise<string> {
+  const logs: string[] = [];
+
+  const log = vi.spyOn(console, "log").mockImplementation((value?: string) => {
+    logs.push(String(value));
+  });
+
+  try {
+    await action();
+  } finally {
+    log.mockRestore();
+  }
+
+  return logs.join("\n");
 }
 
 describe("work commands", () => {
   it("keeps sessions unbound until explicit attachment and exposes context as JSON", async () => {
-    const { root, home } = await setupIntegrationFixture();
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    const paths = testRuntimePaths(home, root);
 
     const create = await cli("mfz", root, home, [
       "work",
@@ -126,20 +155,17 @@ describe("work commands", () => {
     const instructions = await cli("mfz", root, home, ["work", "instructions", "update", "alpha"]);
     expect(instructions.stdout).toContain("Required orientation sections:");
 
-    const checkpointInstructions = await cli("mfz", root, home, [
-      "work",
-      "instructions",
-      "checkpoint",
-      "alpha"
-    ]);
+    const checkpointInstructions = await captureWorkOutput(() =>
+      runWorkCheckpointInstructions("alpha", { root, home })
+    );
 
-    expect(checkpointInstructions.stdout).toContain("Required frontmatter:");
-    expect(checkpointInstructions.stdout).toContain("  id");
-    expect(checkpointInstructions.stdout).toContain("Authoring guidance:");
-    expect(checkpointInstructions.stdout).toContain("meaningful boundary");
-    expect(checkpointInstructions.stdout).toContain("## Decisions And Rationale");
-    expect(checkpointInstructions.stdout).toContain("## Evidence Pointers");
-    await authorWorkUnit(root, home, "alpha", {
+    expect(checkpointInstructions).toContain("Required frontmatter:");
+    expect(checkpointInstructions).toContain("  id");
+    expect(checkpointInstructions).toContain("Authoring guidance:");
+    expect(checkpointInstructions).toContain("meaningful boundary");
+    expect(checkpointInstructions).toContain("## Decisions And Rationale");
+    expect(checkpointInstructions).toContain("## Evidence Pointers");
+    await authorWorkUnit(paths, "alpha", {
       outcome: "Ship the work runtime.",
       repositories: ["| /code/alpha | source | current |", "| /code/shared | source | current |"],
       context: ["| alpha:design.md | design | accepted |"]
@@ -165,16 +191,7 @@ describe("work commands", () => {
       session: { source: "opencode", id: "session-a" }
     });
 
-    const attached = await cli("mfz", root, home, [
-      "work",
-      "attach",
-      "alpha",
-      "--session",
-      "opencode:session-a",
-      "--json"
-    ]);
-
-    expect(json(attached.stdout)).toMatchObject({ ok: true, unit: "alpha" });
+    await attachWorkSession(paths, "alpha", { source: "opencode", id: "session-a" });
 
     const context = await cli("mfz", root, home, [
       "work",
@@ -193,17 +210,20 @@ describe("work commands", () => {
   }, 60_000);
 
   it("requires switch to replace bindings, retains checkpoints, and reports failed JSON operations", async () => {
-    const { root, home } = await setupIntegrationFixture();
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    const paths = testRuntimePaths(home, root);
+    const session = { source: "opencode", id: "session-a" } as const;
 
     for (const [slug, title] of [
       ["alpha", "Alpha"],
       ["beta", "Beta"]
     ] as const) {
-      await cli("mfz", root, home, ["work", "create", slug, "--title", title, "--phase", "design"]);
-      await authorWorkUnit(root, home, slug, { outcome: `${title} objective.` });
+      await createWorkUnit(paths, { slug, title, objective: "", phase: "design" });
+      await authorWorkUnit(paths, slug, { outcome: `${title} objective.` });
     }
 
-    await cli("mfz", root, home, ["work", "attach", "alpha", "--session", "opencode:session-a"]);
+    await attachWorkSession(paths, "alpha", session);
 
     const rejected = await cli("mfz", root, home, [
       "work",
@@ -219,33 +239,16 @@ describe("work commands", () => {
       error: { message: expect.stringMatching(/already bound to alpha/) }
     });
 
-    await cli("mfz", root, home, ["work", "phase", "alpha", "--phase", "implement"]);
+    await setWorkPhase(paths, "alpha", "implement");
+    const reversed = await setWorkPhase(paths, "alpha", "design");
 
-    const reversed = await cli("mfz", root, home, [
-      "work",
-      "phase",
-      "alpha",
-      "--phase",
+    expect(reversed.phase_history.map((entry) => entry.phase)).toEqual([
       "design",
-      "--json"
+      "implement",
+      "design"
     ]);
 
-    expect(
-      z
-        .object({ phase_history: z.array(z.object({ phase: z.string() })) })
-        .parse(json(reversed.stdout).unit)
-        .phase_history.map((entry) => entry.phase)
-    ).toEqual(["design", "implement", "design"]);
-
-    const checkpointDirectory = path.join(
-      home,
-      ".mindframe-z",
-      "work",
-      "v1",
-      "units",
-      "alpha",
-      "checkpoints"
-    );
+    const checkpointDirectory = workAuthoringPaths(paths, "alpha").checkpoints;
 
     await writeFile(
       path.join(checkpointDirectory, "compaction.md"),
@@ -260,69 +263,54 @@ Completed compaction summary.
 `,
       "utf8"
     );
-    await cli("mfz", root, home, ["work", "validate", "alpha"]);
-    await cli("mfz", root, home, ["work", "switch", "beta", "--session", "opencode:session-a"]);
+    await validateWorkUnit(paths, "alpha");
+    await switchWorkSession(paths, "beta", session);
 
-    const checkpoints = await cli("mfz", root, home, ["work", "checkpoints", "alpha", "--json"]);
-    expect(json(checkpoints.stdout).checkpoints).toHaveLength(1);
+    expect(await readWorkCheckpoints(paths, "alpha")).toHaveLength(1);
 
-    const context = await cli("mfz", root, home, [
-      "work",
-      "context",
-      "--session",
-      "opencode:session-a",
-      "--json"
-    ]);
+    const context = await resolveWorkContext(paths, session);
 
-    expect(z.object({ slug: z.string() }).parse(json(context.stdout).context?.unit).slug).toBe(
-      "beta"
-    );
+    expect(context).toMatchObject({ bound: true, unit: { slug: "beta" } });
   }, 30_000);
 
   it("records exact delivery receipts and makes successful delivery fresh", async () => {
-    const { root, home } = await setupIntegrationFixture();
-    await cli("mfz", root, home, ["work", "create", "receipt-unit", "--title", "Receipt unit"]);
-    await authorWorkUnit(root, home, "receipt-unit", { outcome: "Observe delivery." });
-    await cli("mfz", root, home, [
-      "work",
-      "attach",
-      "receipt-unit",
-      "--session",
-      "opencode:receipt-session"
-    ]);
-    await cli("mfz", root, home, [
-      "work",
-      "receipt",
-      "--session",
-      "opencode:receipt-session",
-      "--boundary",
-      "request",
-      "--orientation-revision",
-      "1",
-      "--reminder",
-      "Exact compact reminder.",
-      "--orientation",
-      "Exact orientation.",
-      "--outcome",
-      "delivered"
-    ]);
+    const root = await makeTempDir();
+    const home = await makeTempDir();
+    const paths = testRuntimePaths(home, root);
+    const session = { source: "opencode", id: "receipt-session" } as const;
+    await createWorkUnit(paths, {
+      slug: "receipt-unit",
+      title: "Receipt unit",
+      objective: ""
+    });
+    await authorWorkUnit(paths, "receipt-unit", { outcome: "Observe delivery." });
+    await attachWorkSession(paths, "receipt-unit", session);
 
-    const receipts = await cli("mfz", root, home, ["work", "receipts", "receipt-unit", "--json"]);
-    expect(json(receipts.stdout).receipts?.[0]).toMatchObject({
+    const receipt = await appendWorkReceipt(paths, session, {
+      boundary: "request",
+      orientation_revision: 1,
+      reminder: "Exact compact reminder.",
+      orientation: "Exact orientation.",
+      outcome: "delivered",
+      error: null
+    });
+
+    expect(receipt).toMatchObject({
       reminder: "Exact compact reminder.",
       orientation: "Exact orientation.",
       outcome: "delivered"
     });
 
-    const context = await cli("mfz", root, home, [
-      "work",
-      "context",
-      "--session",
-      "opencode:receipt-session",
-      "--json"
-    ]);
+    const receipts = await readWorkReceipts(paths, "receipt-unit");
+    expect(receipts[0]).toMatchObject({
+      reminder: "Exact compact reminder.",
+      orientation: "Exact orientation.",
+      outcome: "delivered"
+    });
 
-    expect(json(context.stdout).context).toMatchObject({
+    const context = await resolveWorkContext(paths, session);
+
+    expect(context).toMatchObject({
       freshness: "delivered",
       pending_orientation: null
     });

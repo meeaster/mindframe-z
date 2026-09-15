@@ -6,14 +6,10 @@ import { makeTempDir } from "../../tests/integration/support.js";
 import {
   ensureLapdogNetwork,
   isLapdogReachable,
-  lapdogContainerName,
-  lapdogContainerUrl,
-  lapdogDashboardUrl,
   lapdogImageRef,
   lapdogNetworkName,
   lapdogPort,
   lapdogSnapshotsPath,
-  lapdogUrl,
   lapdogWebUiPort,
   startLapdogContainer,
   stopLapdogContainer,
@@ -113,18 +109,7 @@ async function withFakeDocker(
   await body(paths, stateDir);
 }
 
-describe("lapdog module constants", () => {
-  it("exposes the canonical image, ports, and network names", () => {
-    expect(lapdogImageRef).toBe("ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest");
-    expect(lapdogContainerName).toBe("lapdog");
-    expect(lapdogNetworkName).toBe("mfz-net");
-    expect(lapdogPort).toBe(8126);
-    expect(lapdogWebUiPort).toBe(8080);
-    expect(lapdogUrl()).toBe("http://localhost:8126");
-    expect(lapdogDashboardUrl()).toBe("http://localhost:8080");
-    expect(lapdogContainerUrl()).toBe("http://lapdog:8126");
-  });
-
+describe("lapdog snapshot paths", () => {
   it("places snapshots under ~/.mindframe-z/lapdog/snapshots", () => {
     const paths = createRuntimePaths({ root: "/repo", home: "/home/x" });
     expect(lapdogSnapshotsPath(paths)).toBe("/home/x/.mindframe-z/lapdog/snapshots");
@@ -150,6 +135,8 @@ describe("startLapdogContainer", () => {
       expect(log).toContain("run");
       expect(log).toContain("--name lapdog");
       expect(log).toContain("--network mfz-net");
+      expect(log).toContain(`--publish ${lapdogPort}:${lapdogPort}`);
+      expect(log).toContain(`--publish ${lapdogWebUiPort}:${lapdogWebUiPort}`);
       expect(log).toContain("--lapdog-mode");
       expect(log).toContain(`--web-ui-port=${lapdogWebUiPort}`);
       expect(log).toContain("snapshots:/snapshots");
