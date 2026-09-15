@@ -7,7 +7,8 @@ import type { OperationOutcome } from "../core/operations.js";
 import {
   commandIsInteractive,
   createOperationReporter,
-  printInventory
+  printInventory,
+  printInventorySections
 } from "./operation-report.js";
 
 function capture() {
@@ -734,6 +735,124 @@ describe("plain operation reporting", () => {
       output.stream
     );
     expect(output.text()).toBe("alpha\tenabled\t/refs/alpha\tAlpha reference\n");
+  });
+
+  it("renders inventory details through the styled TTY branch", () => {
+    const output = capture();
+    Object.assign(output.stream, { isTTY: true });
+
+    printInventory(
+      "mfz skills list",
+      "personal",
+      ["local-skill\topencode", "all-skill\tclaude-code"],
+      [
+        { label: "local-skill", detail: "[opencode]", inline: true },
+        { label: "all-skill", detail: "[claude-code]", inline: true }
+      ],
+      output.stream,
+      "skill",
+      true
+    );
+
+    expect(output.text()).toContain("┌  mfz skills list · personal");
+    expect(output.text()).toMatch(/│  local-skill  \[opencode\]\n│  all-skill  \[claude-code\]/);
+    expect(output.text()).toContain("└  2 skills");
+    expect(output.text()).not.toContain("enabled");
+    expect(output.text()).not.toContain("installed in");
+    expect(output.text()).not.toContain("local-skill\topencode");
+
+    const verboseOutput = capture();
+    Object.assign(verboseOutput.stream, { isTTY: true });
+
+    printInventory(
+      "mfz skills list",
+      "personal",
+      [
+        "local-skill\topencode\tLocal test skill.",
+        "all-skill\tclaude-code\tAll agents test skill."
+      ],
+      [
+        { label: "local-skill", detail: "[opencode] — Local test skill.", inline: true },
+        { label: "all-skill", detail: "[claude-code] — All agents test skill.", inline: true }
+      ],
+      verboseOutput.stream,
+      "skill",
+      true
+    );
+
+    expect(verboseOutput.text()).toMatch(
+      /│  local-skill  \[opencode\] — Local test skill\.\n│  all-skill  \[claude-code\] — All agents test skill\./
+    );
+    expect(verboseOutput.text()).not.toMatch(/local-skill.*\n.*Local test skill/);
+    expect(verboseOutput.text()).not.toContain("enabled");
+    expect(verboseOutput.text()).not.toContain("installed in");
+    expect(verboseOutput.text()).toContain("Local test skill.");
+  });
+
+  it("renders ordered inventory sections with compact verbose rows", () => {
+    const output = capture();
+    Object.assign(output.stream, { isTTY: true });
+
+    printInventorySections(
+      "mfz skills list",
+      "personal",
+      [
+        {
+          heading: "MFZ managed",
+          plainRows: ["managed-a\topencode", "managed-b\tclaude-code"],
+          items: [
+            { label: "managed-a", detail: "[opencode]", inline: true },
+            { label: "managed-b", detail: "[claude-code]", inline: true }
+          ]
+        },
+        {
+          heading: "Other global skills",
+          plainRows: ["external-a\tagents\tExternal A.", "external-b\topencode\tExternal B."],
+          items: [
+            { label: "external-a", detail: "[agents] — External A.", inline: true },
+            { label: "external-b", detail: "[opencode] — External B.", inline: true }
+          ]
+        }
+      ],
+      output.stream,
+      "skill",
+      true
+    );
+
+    expect(output.text()).toContain("MFZ managed");
+    expect(output.text()).toContain("Other global skills");
+    expect(output.text()).toMatch(/MFZ managed[\s\S]*Other global skills/);
+    expect(output.text()).toMatch(/│  managed-a  \[opencode\]\n│  managed-b  \[claude-code\]/);
+    expect(output.text()).toMatch(
+      /│  external-a  \[agents\] — External A\.\n│  external-b  \[opencode\] — External B\./
+    );
+    expect(output.text()).toContain("└  4 skills");
+  });
+
+  it("renders plain section headers and an explicit empty marker", () => {
+    const output = capture();
+
+    printInventorySections(
+      "mfz skills list",
+      "personal",
+      [
+        {
+          heading: "MFZ managed",
+          plainRows: ["managed\topencode"],
+          items: [{ label: "managed", detail: "[opencode]", inline: true }]
+        },
+        { heading: "Other global skills", plainRows: [], items: [] }
+      ],
+      output.stream,
+      "skill",
+      true
+    );
+
+    expect(output.text()).toBe(
+      "# MFZ managed\nmanaged\topencode\n# Other global skills\n# (none)\n"
+    );
+    expect(output.text()).not.toContain(String.fromCharCode(27));
+    expect(output.text()).not.toContain(String.fromCharCode(155));
   });
 });
 

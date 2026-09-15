@@ -84,13 +84,18 @@ import {
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
 import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
+import { readOtherGlobalSkills } from "../skills/global-inventory.js";
 import { guide, guideTopicNames, initHome } from "./init.js";
 import { hasHomeGuidance } from "../core/engine-skill.js";
 import { applyConfig } from "./apply.js";
 import {
   commandIsInteractive,
   createOperationReporter,
-  printInventory
+  printInventory,
+  printInventorySections,
+  type InventoryItem,
+  type InventorySection,
+  singleLine
 } from "./operation-report.js";
 import {
   buildContextHistoryReport,
@@ -979,6 +984,46 @@ function parseSkillAgentOption(agent: string | undefined): SkillTarget | undefin
   return parseSkillRenderTarget(agent);
 }
 
+interface SkillListEntry {
+  name: string;
+  targets: readonly string[];
+  description?: string;
+}
+
+const inventoryTargetOrder = ["agents", "claude-code", "opencode"];
+
+function inventoryTarget(target: string): string {
+  return target === "codex" ? "agents" : target;
+}
+
+function skillInventorySection(
+  heading: string,
+  skills: readonly SkillListEntry[],
+  verbose: boolean
+): InventorySection {
+  const plainRows: string[] = [];
+  const items: InventoryItem[] = [];
+
+  for (const skill of [...skills].sort((a, b) => a.name.localeCompare(b.name))) {
+    const targets = skill.targets
+      .map(inventoryTarget)
+      .sort((a, b) => inventoryTargetOrder.indexOf(a) - inventoryTargetOrder.indexOf(b));
+
+    const description = verbose ? singleLine(skill.description ?? "") : "";
+    const plainFields = [skill.name, targets.join(",")];
+
+    if (description) plainFields.push(description);
+    plainRows.push(plainFields.join("\t"));
+    items.push({
+      label: skill.name,
+      detail: `[${targets.join(", ")}]${description ? ` — ${description}` : ""}`,
+      inline: true
+    });
+  }
+
+  return { heading, plainRows, items };
+}
+
 async function setSkillEnabled(
   name: string,
   enabled: boolean,
@@ -1021,13 +1066,25 @@ skills
 
 skills
   .command("list")
-  .description("List profile-enabled skills")
-  .action(async () => {
+  .description("List profile-managed and other global skills")
+  .option("--verbose", "show skill descriptions")
+  .action(async (options) => {
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
+    const verbose = options.verbose ?? false;
+    const otherGlobalSkills = await readOtherGlobalSkills(paths, { verbose });
 
-    for (const skill of profile.enabledSkills)
-      console.log(`${skill.name}\t${skill.targets.join(",")}\t${skill.description}`);
+    printInventorySections(
+      "mfz skills list",
+      profile.name,
+      [
+        skillInventorySection("MFZ managed", profile.enabledSkills, verbose),
+        skillInventorySection("Other global skills", otherGlobalSkills, verbose)
+      ],
+      process.stdout,
+      "skill",
+      true
+    );
   });
 
 skills

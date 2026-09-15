@@ -50,7 +50,7 @@ function uniqueOutcomes(outcomes: readonly OperationOutcome[]): OperationOutcome
   return [...unique.values()];
 }
 
-function singleLine(value: string): string {
+export function singleLine(value: string): string {
   return value.replaceAll(/\s+/g, " ").trim();
 }
 
@@ -321,6 +321,19 @@ export function commandIsInteractive(
 export interface InventoryItem {
   label: string;
   detail: string;
+  inline?: boolean;
+}
+
+export interface InventorySection {
+  heading: string;
+  plainRows: readonly string[];
+  items: readonly InventoryItem[];
+}
+
+function inventoryMessage(item: InventoryItem): string {
+  return item.inline
+    ? `${singleLine(item.label)}  ${singleLine(item.detail)}`
+    : `${item.label}\n${item.detail}`;
 }
 
 export function printInventory(
@@ -328,7 +341,9 @@ export function printInventory(
   scope: string,
   plainRows: readonly string[],
   items: readonly InventoryItem[],
-  output: TerminalStream = processStdout
+  output: TerminalStream = processStdout,
+  itemNoun = "reference",
+  compact = false
 ): void {
   if (output.isTTY !== true) {
     for (const row of plainRows) output.write(`${row}\n`);
@@ -338,6 +353,46 @@ export function printInventory(
 
   intro(`${title} · ${scope}`, { output });
 
-  for (const item of items) log.message(`${item.label}\n${item.detail}`, { output });
-  outro(`${items.length} reference${items.length === 1 ? "" : "s"}`, { output });
+  for (const item of items)
+    log.message(inventoryMessage(item), { output, spacing: compact ? 0 : 1 });
+
+  outro(`${items.length} ${itemNoun}${items.length === 1 ? "" : "s"}`, { output });
+}
+
+export function printInventorySections(
+  title: string,
+  scope: string,
+  sections: readonly InventorySection[],
+  output: TerminalStream = processStdout,
+  itemNoun = "skill",
+  compact = false
+): void {
+  if (output.isTTY !== true) {
+    for (const section of sections) {
+      output.write(`# ${section.heading}\n`);
+
+      if (section.plainRows.length === 0) output.write("# (none)\n");
+      else for (const row of section.plainRows) output.write(`${row}\n`);
+    }
+
+    return;
+  }
+
+  intro(`${title} · ${scope}`, { output });
+  let count = 0;
+
+  for (const section of sections) {
+    log.info(section.heading, { output, spacing: 0 });
+
+    if (section.items.length === 0) log.message("(none)", { output, spacing: 0 });
+    else {
+      for (const item of section.items) {
+        log.message(inventoryMessage(item), { output, spacing: compact ? 0 : 1 });
+      }
+    }
+
+    count += section.items.length;
+  }
+
+  outro(`${count} ${itemNoun}${count === 1 ? "" : "s"}`, { output });
 }

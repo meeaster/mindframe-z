@@ -1,14 +1,4 @@
-import {
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  rename,
-  rm,
-  symlink,
-  writeFile
-} from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import YAML from "yaml";
@@ -36,6 +26,7 @@ import {
 } from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
 import { readPinnedGitSkillFiles } from "./git.js";
+import { isManagedTarget, linkStatus } from "./link-state.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
 type SkillTarget = Exclude<AgentName, "pi">;
@@ -116,12 +107,6 @@ interface SnapshotInspection {
 interface SnapshotRenderOptions {
   snapshotDir?: string;
   excludeProviderVariants?: boolean;
-}
-
-function isManagedTarget(configsDir: string, target: string): boolean {
-  const relative = path.relative(configsDir, target);
-
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
@@ -213,26 +198,6 @@ async function assertLinkDirectory(directory: string): Promise<void> {
     }
   } catch (error) {
     if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
-  }
-}
-
-async function linkStatus(
-  linkPath: string
-): Promise<
-  | { state: "missing" }
-  | { state: "directory" | "file" }
-  | { state: "symlink"; target: string; resolved: string }
-> {
-  try {
-    const stat = await lstat(linkPath);
-
-    if (!stat.isSymbolicLink()) return { state: stat.isDirectory() ? "directory" : "file" };
-    const target = await readlink(linkPath);
-
-    return { state: "symlink", target, resolved: path.resolve(path.dirname(linkPath), target) };
-  } catch (error) {
-    if (error instanceof Error && errorCode(error) === "ENOENT") return { state: "missing" };
-    throw error;
   }
 }
 

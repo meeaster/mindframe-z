@@ -166,9 +166,17 @@ describe("skill CLI integration", () => {
 
   it("lists resolved skill targets from the profile", async () => {
     const result = await cli("mfz", root, home, ["skills", "list"]);
-    expect(result.stdout).toContain("local-skill\topencode,claude-code\tLocal test skill.");
-    expect(result.stdout).toContain("claude-skill\tclaude-code\tClaude test skill.");
-    expect(result.stdout).toContain("all-skill\topencode,claude-code\tAll agents test skill.");
+    expect(result.stdout.trim().split("\n")).toEqual([
+      "# MFZ managed",
+      "all-skill\tclaude-code,opencode",
+      "claude-skill\tclaude-code",
+      "local-skill\tclaude-code,opencode",
+      "# Other global skills",
+      "# (none)"
+    ]);
+    expect(result.stdout).not.toContain("Local test skill.");
+    expect(result.stdout).not.toContain("Claude test skill.");
+    expect(result.stdout).not.toContain("All agents test skill.");
   });
 
   it("sync renders the managed snapshot and links", async () => {
