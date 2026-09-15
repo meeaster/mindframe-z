@@ -177,8 +177,8 @@ describe("init and guide integration", () => {
     const result = await mfz(machineHome, ["init", "--create", homeRoot, "--agents", "opencode"]);
 
     expect(result.stdout).toContain(`home_path\t${homeRoot}`);
-    expect(await readFile(path.join(homeRoot, "mfz_home.yml"), "utf8")).toContain(
-      "mfz_home.schema.json"
+    expect(await readFile(path.join(homeRoot, "mfz-home.yml"), "utf8")).toContain(
+      "mfz-home.schema.json"
     );
     expect(await readFile(path.join(homeRoot, "catalog", "skills.yml"), "utf8")).toContain(
       "skills: []"
@@ -206,8 +206,8 @@ describe("init and guide integration", () => {
     // The same directory apply-time cloning and skill vendoring resolve for this alias.
     const cloneRoot = path.join(machineHome, ".mindframe-z", "homes", "shared");
     expect(result.stdout).toContain(`home_path\t${cloneRoot}`);
-    expect(await readFile(path.join(cloneRoot, "mfz_home.yml"), "utf8")).toContain(
-      "mfz_home.schema.json"
+    expect(await readFile(path.join(cloneRoot, "mfz-home.yml"), "utf8")).toContain(
+      "mfz-home.schema.json"
     );
     expect(await readFile(path.join(machineHome, ".mindframe-z", "config.yml"), "utf8")).toContain(
       `home_path: ${cloneRoot}`

@@ -23,7 +23,7 @@ async function tmpHome(): Promise<{ root: string; home: string }> {
   const home = path.join(base, "home");
   await mkdir(root, { recursive: true });
   await mkdir(home, { recursive: true });
-  await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+  await writeFile(path.join(root, "mfz-home.yml"), "description: Test home\n", "utf8");
 
   return { root, home };
 }
@@ -85,7 +85,7 @@ describe("home manifest schema", () => {
   it("rejects a relative upstream path before clone resolution side effects", async () => {
     const { root, home } = await tmpHome();
     await writeFile(
-      path.join(root, "mfz_home.yml"),
+      path.join(root, "mfz-home.yml"),
       [
         "extends:",
         "  name: personal",
@@ -98,21 +98,21 @@ describe("home manifest schema", () => {
 
     await expect(loadManifests(root, home)).rejects.toThrow(/absolute or start with ~\//);
     await expect(
-      readFile(path.join(home, ".mindframe-z", "homes", "personal", "mfz_home.yml"), "utf8")
+      readFile(path.join(home, ".mindframe-z", "homes", "personal", "mfz-home.yml"), "utf8")
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("publishes the explicit upstream path contract", async () => {
-    const schema = await readGeneratedSchema("mfz_home.schema.json");
+    const schema = await readGeneratedSchema("mfz-home.schema.json");
     expect(schema.properties?.extends?.required).toContain("path");
     expect(schema.properties?.extends?.properties?.path?.pattern).toBe("^(?:/|~/)");
   });
 });
 
 describe("loadManifests", () => {
-  it("refuses a root without mfz_home.yml", async () => {
+  it("refuses a root without mfz-home.yml", async () => {
     const base = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-manifests-"));
-    await expect(loadManifests(base, base)).rejects.toThrow(/Missing mfz_home\.yml/);
+    await expect(loadManifests(base, base)).rejects.toThrow(/Missing mfz-home\.yml/);
   });
 
   it("treats a missing profiles dir as no profiles and fills machine defaults", async () => {
@@ -406,7 +406,7 @@ describe("validateManifests", () => {
 
     const results = await validateManifests(root, home);
     expect(results.map((r) => path.relative(root, r.file)).sort()).toEqual([
-      "mfz_home.yml",
+      "mfz-home.yml",
       path.join("profiles", "base", "profile.yml")
     ]);
     expect(results.every((r) => r.ok)).toBe(true);
@@ -439,7 +439,7 @@ describe("validateManifests", () => {
   it("tolerates a root with no profiles dir", async () => {
     const { root, home } = await tmpHome();
     const results = await validateManifests(root, home);
-    expect(results.map((r) => path.basename(r.file))).toEqual(["mfz_home.yml"]);
+    expect(results.map((r) => path.basename(r.file))).toEqual(["mfz-home.yml"]);
   });
 });
 

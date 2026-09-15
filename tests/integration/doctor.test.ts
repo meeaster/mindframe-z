@@ -41,7 +41,7 @@ describe("doctor integration", () => {
 
   it("doctor reports valid manifests", async () => {
     const result = await cli("mfz", root, home, ["doctor"]);
-    expect(result.stdout).toContain("manifest:✓\tmfz_home.yml");
+    expect(result.stdout).toContain("manifest:✓\tmfz-home.yml");
     expect(result.stdout).toContain("manifest:✓\tcatalog/references.yml");
     expect(result.stdout).toContain("manifest:✓\tcatalog/skills.yml");
     expect(result.stdout).toContain("manifest:✓\tcatalog/mcp.yml");

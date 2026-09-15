@@ -7,14 +7,14 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 - **Engine**: this repository. It contains the CLI, schemas, renderers, sync logic, sandbox/thread helpers, installer, and release packaging.
 - **Home**: a separate git repository containing user/team content: catalogs, profiles, instructions, local skills, OpenCode plugins/commands/agents, and optional sandbox overlays.
 - **Active home**: exactly one home selected per machine through `~/.mindframe-z/config.yml#home_path`, `MFZ_ROOT`, or `--root`.
-- **Upstream home**: one optional parent declared by `mfz_home.yml#extends`. The downstream assigns the alias.
+- **Upstream home**: one optional parent declared by `mfz-home.yml#extends`. The downstream assigns the alias.
 - **Qualified reference**: `<alias>/<name>` or a transitive path such as `personal/common/base`.
 
 ## Home Layout
 
 ```text
 <home>/
-├── mfz_home.yml
+├── mfz-home.yml
 ├── catalog/
 │   ├── references.yml
 │   ├── skills.yml
@@ -34,9 +34,9 @@ The layout is not configurable. Missing optional content directories are allowed
 ## Resolution
 
 1. Resolve machine paths: `--root` > `MFZ_ROOT` > machine `home_path` > cwd.
-2. Require `mfz_home.yml` in the active home.
+2. Require `mfz-home.yml` in the active home.
 3. Load local catalogs and profiles from `catalog/` and `profiles/`.
-4. If `mfz_home.yml#extends` is present, resolve its configured upstream checkout and recursively load it.
+4. If `mfz-home.yml#extends` is present, resolve its configured upstream checkout and recursively load it.
 5. Resolve the requested profile: `--profile` > `MFZ_PROFILE` > machine profile > `personal`.
 6. Apply existing profile merge semantics across home boundaries.
 
@@ -143,7 +143,7 @@ For vendored skills, `mfz skills check` fetches only into a bare machine-local c
 
 ## Upstream Checkouts
 
-`mfz_home.yml#extends.path` is required whenever `extends` exists and is the
+`mfz-home.yml#extends.path` is required whenever `extends` exists and is the
 authoritative upstream home root. It must be absolute or begin with `~/`; cwd-relative
 paths are rejected during manifest validation. `extends.repo` remains the Git clone
 source and is used only when the configured path is absent.
@@ -172,7 +172,7 @@ The installer downloads a self-contained `bun --compile` binary for the host pla
 
 Zod schemas live in `src/core/manifests.ts`. `pnpm schemas` writes committed JSON Schema files:
 
-- `schemas/mfz_home.schema.json`
+- `schemas/mfz-home.schema.json`
 - `schemas/references.schema.json`
 - `schemas/skills.schema.json`
 - `schemas/mcp.schema.json`

@@ -52,7 +52,7 @@ async function createChildHome(
   const child = await makeTempDir();
   await writeFixture(child, home);
   await writeFile(
-    path.join(child, "mfz_home.yml"),
+    path.join(child, "mfz-home.yml"),
     ["extends:", "  name: personal", `  repo: ${upstreamRepo}`, `  path: ${upstreamPath}`, ""].join(
       "\n"
     ),

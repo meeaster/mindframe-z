@@ -4,7 +4,7 @@
     "./schemas/skills.schema.json": "catalog/skills.yml",
     "./schemas/mcp.schema.json": "catalog/mcp.yml",
     "./schemas/profile.schema.json": "profiles/*/profile.yml",
-    "./schemas/mfz_home.schema.json": "mfz_home.yml",
+    "./schemas/mfz-home.schema.json": "mfz-home.yml",
     "./schemas/machine.schema.json": "machine-config.example.yml"
   }
 }

@@ -60,7 +60,7 @@ async function writeHome(
   await mkdir(path.join(root, "instructions"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await writeFile(
-    path.join(root, "mfz_home.yml"),
+    path.join(root, "mfz-home.yml"),
     options.extends
       ? [
           "extends:",

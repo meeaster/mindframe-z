@@ -2,7 +2,7 @@
 
 mindframe-z is the engine for rendering profile-aware AI coding tool configuration. The engine owns the CLI, schemas, renderers, sync logic, sandbox/thread helpers, and packaging. User content lives in separate **home** repositories.
 
-A home is a git repo with `mfz_home.yml`, `catalog/`, `instructions/`, `profiles/`, optional local `skills/`, optional `opencode/`, and optional `sandbox/` overlays. A machine activates one home through `~/.mindframe-z/config.yml#home_path`.
+A home is a git repo with `mfz-home.yml`, `catalog/`, `instructions/`, `profiles/`, optional local `skills/`, optional `opencode/`, and optional `sandbox/` overlays. A machine activates one home through `~/.mindframe-z/config.yml#home_path`.
 
 ## Install
 
@@ -115,7 +115,7 @@ Resolution order:
 
 ```text
 <home>/
-├── mfz_home.yml
+├── mfz-home.yml
 ├── catalog/
 │   ├── references.yml
 │   ├── skills.yml

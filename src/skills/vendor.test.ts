@@ -310,7 +310,7 @@ async function writeLegacyState(
 }
 
 async function writeVendoredCatalog(root: string, entry: SkillEntry): Promise<void> {
-  await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+  await writeFile(path.join(root, "mfz-home.yml"), "description: Test home\n", "utf8");
   await mkdir(path.join(root, "catalog"), { recursive: true });
   await writeFile(
     path.join(root, "catalog", "skills.yml"),
@@ -880,11 +880,11 @@ describe("vendored skill contracts", () => {
     const upstream = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-upstream-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-machine-"));
     await writeFile(
-      path.join(root, "mfz_home.yml"),
+      path.join(root, "mfz-home.yml"),
       YAML.stringify({ extends: { name: "upstream", repo: upstream, path: upstream } }),
       "utf8"
     );
-    await writeFile(path.join(upstream, "mfz_home.yml"), "description: upstream\n", "utf8");
+    await writeFile(path.join(upstream, "mfz-home.yml"), "description: upstream\n", "utf8");
     await mkdir(path.join(upstream, "catalog"), { recursive: true });
     await writeFile(
       path.join(upstream, "catalog", "skills.yml"),
@@ -902,7 +902,7 @@ describe("vendored skill contracts", () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-machine-"));
     const configured = path.join(home, "workspace", "repos", "shared-home");
     await writeFile(
-      path.join(root, "mfz_home.yml"),
+      path.join(root, "mfz-home.yml"),
       YAML.stringify({
         extends: { name: "shared", repo: "https://example.invalid/shared.git", path: configured }
       }),
@@ -910,7 +910,7 @@ describe("vendored skill contracts", () => {
     );
     const managedFallback = path.join(home, ".mindframe-z", "homes", "shared");
     await mkdir(path.join(configured, "catalog"), { recursive: true });
-    await writeFile(path.join(configured, "mfz_home.yml"), "description: shared\n", "utf8");
+    await writeFile(path.join(configured, "mfz-home.yml"), "description: shared\n", "utf8");
     await writeFile(
       path.join(configured, "catalog", "skills.yml"),
       YAML.stringify({
@@ -919,7 +919,7 @@ describe("vendored skill contracts", () => {
       "utf8"
     );
     await mkdir(path.join(managedFallback, "catalog"), { recursive: true });
-    await writeFile(path.join(managedFallback, "mfz_home.yml"), "description: managed\n", "utf8");
+    await writeFile(path.join(managedFallback, "mfz-home.yml"), "description: managed\n", "utf8");
     await writeFile(
       path.join(managedFallback, "catalog", "skills.yml"),
       YAML.stringify({
@@ -959,7 +959,7 @@ describe("vendored skill contracts", () => {
     const newContent = "---\nname: test-skill\ndescription: new\n---\n";
     const source = path.join(root, "skills", "vendor", name);
     await mkdir(source, { recursive: true });
-    await writeFile(path.join(root, "mfz_home.yml"), "description: Test\n", "utf8");
+    await writeFile(path.join(root, "mfz-home.yml"), "description: Test\n", "utf8");
     await mkdir(path.join(root, "catalog"), { recursive: true });
     await writeFile(
       path.join(root, "catalog", "skills.yml"),
@@ -1071,7 +1071,7 @@ describe("vendored skill contracts", () => {
     const oldCommit = "a".repeat(40);
     const newCommit = "b".repeat(40);
     const repository = "https://example.invalid/skills.git";
-    await writeFile(path.join(root, "mfz_home.yml"), "description: Test\n", "utf8");
+    await writeFile(path.join(root, "mfz-home.yml"), "description: Test\n", "utf8");
     await mkdir(path.join(root, "catalog"), { recursive: true });
     await writeFile(
       path.join(root, "catalog", "skills.yml"),

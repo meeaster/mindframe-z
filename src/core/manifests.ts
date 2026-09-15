@@ -875,7 +875,7 @@ export async function validateManifests(
   home?: string
 ): Promise<ManifestValidationResult[]> {
   const files: Array<{ file: string; schema: z.ZodType }> = [
-    { file: path.join(root, "mfz_home.yml"), schema: homeManifestSchema },
+    { file: path.join(root, "mfz-home.yml"), schema: homeManifestSchema },
     { file: path.join(root, "catalog", "references.yml"), schema: refsManifestSchema },
     { file: path.join(root, "catalog", "skills.yml"), schema: skillsManifestSchema },
     { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema },
@@ -927,13 +927,13 @@ async function readDotfileEntries(dir: string, prefix = ""): Promise<Array<[stri
 }
 
 export async function loadManifests(root: string, home?: string): Promise<LoadedManifests> {
-  if (!(await pathExists(path.join(root, "mfz_home.yml")))) {
+  if (!(await pathExists(path.join(root, "mfz-home.yml")))) {
     throw new Error(
-      `Missing mfz_home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
+      `Missing mfz-home.yml at ${root}. Run mfz init or point MFZ_ROOT/home_path at a mindframe-z home.`
     );
   }
 
-  const homeManifest = await parseYaml(path.join(root, "mfz_home.yml"), homeManifestSchema);
+  const homeManifest = await parseYaml(path.join(root, "mfz-home.yml"), homeManifestSchema);
   const effectiveHome = home ?? process.env.HOME ?? "";
 
   const upstream = homeManifest.extends

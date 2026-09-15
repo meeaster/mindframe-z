@@ -166,13 +166,13 @@ async function activeHomeRoots(
   const roots = [resolvedRoot];
 
   try {
-    const parsed = YAML.parse(await readFile(path.join(resolvedRoot, "mfz_home.yml"), "utf8"));
+    const parsed = YAML.parse(await readFile(path.join(resolvedRoot, "mfz-home.yml"), "utf8"));
     const extension = homeManifestSchema.parse(parsed).extends;
 
     if (!extension) return roots;
     const upstream = path.resolve(expandHome(extension.path, machineHome));
 
-    if (await pathExists(path.join(upstream, "mfz_home.yml"))) {
+    if (await pathExists(path.join(upstream, "mfz-home.yml"))) {
       roots.push(...(await activeHomeRoots(upstream, machineHome, seen)));
     }
   } catch {

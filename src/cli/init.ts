@@ -233,9 +233,9 @@ Done when the manual service run succeeds, the next timer occurrence is correct 
 
 const guideMarkdown = `# mindframe-z Home Guide
 
-A home is a git repository with \`mfz_home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
+A home is a git repository with \`mfz-home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
 
-Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz_home.yml#extends\`.
+Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz-home.yml#extends\`.
 
 The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
 
@@ -361,7 +361,7 @@ Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home sour
 
 Unpinned \`source: git\` entries are legacy migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 
-Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
+Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 `;
 
 const skillReviewGuideMarkdown = `# Vendored Skill Review Guide
@@ -435,7 +435,7 @@ If the profile defines \`capability_groups\`, each enabled reference must declar
 
 Write descriptions as routing metadata, not miniature repository summaries. Lead with the stack or repository type and its purpose, name the concepts or situations that should cause an agent to inspect it, and include at most one or two durable entrypoints, packages, or config models. Keep descriptions concise; avoid promotional language, exhaustive feature lists, volatile counts, and details agents can discover after opening the repository.
 
-References inherited from an upstream home use qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz_home.yml#extends\`.
+References inherited from an upstream home use qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 
 Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify a complete activation with \`mfz refs list\` and \`mfz doctor\`. A focused \`mfz refs sync [name]\` updates local references and indexes only; run full \`mfz apply\` when agent snapshots or configuration also need activation.
 `;
@@ -474,8 +474,8 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
   await mkdir(path.join(homeRoot, "instructions"), { recursive: true });
   await mkdir(path.join(homeRoot, "profiles", "base"), { recursive: true });
   await writeFile(
-    path.join(homeRoot, "mfz_home.yml"),
-    `# yaml-language-server: $schema=${schemaBaseUrl}/mfz_home.schema.json\ndescription: mindframe-z home\n`,
+    path.join(homeRoot, "mfz-home.yml"),
+    `# yaml-language-server: $schema=${schemaBaseUrl}/mfz-home.schema.json\ndescription: mindframe-z home\n`,
     "utf8"
   );
   await writeFile(

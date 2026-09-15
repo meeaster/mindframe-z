@@ -95,7 +95,7 @@ async function writeFakeDocker(home: string): Promise<string> {
 async function makeFixtureRoot(): Promise<string> {
   const root = await makeTempDir();
   await mkdir(path.join(root, "catalog"), { recursive: true });
-  await writeFile(path.join(root, "mfz_home.yml"), "description: Thread test home\n", "utf8");
+  await writeFile(path.join(root, "mfz-home.yml"), "description: Thread test home\n", "utf8");
   await writeFile(path.join(root, "catalog", "references.yml"), "references: []\n", "utf8");
   await writeFile(path.join(root, "catalog", "skills.yml"), "skills: []\n", "utf8");
   await writeFile(path.join(root, "catalog", "mcp.yml"), "servers: {}\n", "utf8");

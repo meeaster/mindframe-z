@@ -133,7 +133,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   await mkdir(path.join(root, "skills", "all-skill"), { recursive: true });
   await mkdir(path.join(root, "profiles", "base"), { recursive: true });
   await mkdir(path.join(root, "profiles", "personal"), { recursive: true });
-  await writeFile(path.join(root, "mfz_home.yml"), "description: Test home\n", "utf8");
+  await writeFile(path.join(root, "mfz-home.yml"), "description: Test home\n", "utf8");
   await writeFile(path.join(root, "instructions", "AGENTS.md"), "# Test Agents\n", "utf8");
 
   for (const [name, description] of [

@@ -187,7 +187,7 @@ describe("createRuntimePaths", () => {
       `home_path: ${JSON.stringify(root)}\nprofile: personal\n`,
       "utf8"
     );
-    await writeFile(path.join(root, "mfz_home.yml"), "description: fixture\n", "utf8");
+    await writeFile(path.join(root, "mfz-home.yml"), "description: fixture\n", "utf8");
 
     const runtime = createRuntimePaths({ home });
     const manifests = await loadManifests(root, home);

@@ -20,7 +20,7 @@ const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
   { schema: vendorLockSchema, filename: "skills-vendor-lock.schema.json" },
   { schema: mcpManifestSchema, filename: "mcp.schema.json" },
   { schema: profileSchema, filename: "profile.schema.json" },
-  { schema: homeManifestSchema, filename: "mfz_home.schema.json" },
+  { schema: homeManifestSchema, filename: "mfz-home.schema.json" },
   { schema: machineSchema, filename: "machine.schema.json" },
   { schema: threadManifestSchema, filename: "thread-manifest.schema.json" },
   { schema: threadRunsSchema, filename: "thread-runs.schema.json" }
@@ -93,16 +93,16 @@ export const jsonSchemaNodeSchema = jsonObjectSchema.transform((value, context):
 function strengthenHomeManifestSchema(schema: JsonSchemaNode): void {
   const properties = schema.properties;
 
-  if (!properties) throw new Error("mfz_home.schema.json is missing properties");
+  if (!properties) throw new Error("mfz-home.schema.json is missing properties");
   const extension = properties.extends;
 
-  if (!extension) throw new Error("mfz_home.schema.json is missing the extends property");
+  if (!extension) throw new Error("mfz-home.schema.json is missing the extends property");
   const extensionProperties = extension.properties;
 
-  if (!extensionProperties) throw new Error("mfz_home.schema.json is missing extends.properties");
+  if (!extensionProperties) throw new Error("mfz-home.schema.json is missing extends.properties");
   const upstreamPath = extensionProperties.path;
 
-  if (!upstreamPath) throw new Error("mfz_home.schema.json is missing extends.path");
+  if (!upstreamPath) throw new Error("mfz-home.schema.json is missing extends.path");
   upstreamPath.pattern = "^(?:/|~/)";
 }
 
@@ -254,7 +254,7 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
       z.toJSONSchema(entry.schema, { io: "input", unrepresentable: "any" })
     );
 
-    if (entry.filename === "mfz_home.schema.json") strengthenHomeManifestSchema(schema);
+    if (entry.filename === "mfz-home.schema.json") strengthenHomeManifestSchema(schema);
 
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
 
