@@ -586,6 +586,7 @@ describe("vendored skill contracts", () => {
     );
 
     expect(checked).toMatchObject({
+      status: "tracked",
       pinned: { commit: oldCommit, digest: oldDigest },
       observedCommit: upstream.commit,
       changed: true
@@ -755,6 +756,30 @@ describe("vendored skill contracts", () => {
     );
 
     expect(repeated.provenance.candidateId).toBe(withBaseline.provenance.candidateId);
+  });
+
+  it("reports an unpromoted declaration without fetching and rejects orphaned source", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-check-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-check-home-"));
+    const entry = singleEntry("unpromoted");
+    const paths = createRuntimePaths({ root, home });
+    await writeVendoredCatalog(root, entry);
+
+    await expect(checkVendoredSkill(paths, entry, root)).resolves.toEqual({
+      status: "unpromoted"
+    });
+
+    const source = path.join(root, "skills", "vendor", entry.name);
+    await mkdir(source, { recursive: true });
+    await writeFile(
+      path.join(source, "SKILL.md"),
+      `---\nname: ${entry.name}\ndescription: orphaned\n---\n`,
+      "utf8"
+    );
+
+    await expect(checkVendoredSkill(paths, entry, root)).rejects.toThrow(
+      "source exists without a vendor lock entry"
+    );
   });
 
   it("rejects promotion after the trusted baseline changes", async () => {

@@ -147,6 +147,8 @@ describe("init and guide integration", () => {
     expect(result).toContain("catalog/skills.yml");
     expect(result).toContain("mfz skills check");
     expect(result).toContain("mfz skills stage");
+    expect(result).toContain("does not need a lock entry before staging");
+    expect(result).toContain("check reports `unpromoted` without fetching upstream");
     expect(result).toContain("Done when the skill appears for its selected agents");
     const examples = yamlExamples(result);
     expect(examples).toHaveLength(2);

@@ -5,7 +5,7 @@ import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import { profileSchema } from "./manifests.js";
-import { deepMerge, mergeProfiles, resolveProfile } from "./profile.js";
+import { deepMerge, mergeProfiles, resolveProfile, resolveSkillDeclarations } from "./profile.js";
 import { createRuntimePaths } from "./paths.js";
 import { digestSkillFiles, readSkillFiles } from "../skills/tree.js";
 
@@ -816,6 +816,49 @@ describe("home inheritance", () => {
     const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
 
     expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
+  });
+
+  it("resolves an unpromoted vendored declaration for authoring without weakening activation", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-skill-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-skill-machine-"));
+    const name = "new-vendor";
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      YAML.stringify({
+        skills: [
+          {
+            name,
+            source: "vendored",
+            repo: "https://example.invalid/skills.git",
+            ref: "main",
+            subtree: `skills/${name}`
+          }
+        ]
+      }),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      [
+        "name: work",
+        "agents: [opencode]",
+        "skills:",
+        `  ${name}:`,
+        "    agents: { opencode: true }",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const paths = createRuntimePaths({ root, home });
+    const declarations = await resolveSkillDeclarations(paths, "work");
+
+    expect(declarations.selectedSkills).toMatchObject([
+      { name, source: "vendored", sourceRoot: root, targets: ["opencode"] }
+    ]);
+    await expect(resolveProfile(paths, "work")).rejects.toThrow(/vendor\.lock\.yml/);
   });
 
   it("resolves provider variant provenance for every enabled harness", async () => {

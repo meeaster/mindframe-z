@@ -77,6 +77,63 @@ async function seedGitCache(
   return { commit, newerCommit };
 }
 
+async function vendoredUpstream(name: string): Promise<{ root: string; commit: string }> {
+  const root = await makeTempDir();
+  await execa("git", ["init", "-q", "-b", "main"], { cwd: root });
+  await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: root });
+  await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: root });
+  const source = path.join(root, "skills", name);
+  await mkdir(source, { recursive: true });
+  await writeFile(
+    path.join(source, "SKILL.md"),
+    `---\nname: ${name}\ndescription: New vendored skill.\n---\n\n# ${name}\n`,
+    "utf8"
+  );
+  await execa("git", ["add", "."], { cwd: root });
+  await execa("git", ["commit", "-qm", "add skill"], { cwd: root });
+  const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: root });
+
+  return { root, commit };
+}
+
+async function gitFetchShim(remote: string): Promise<string> {
+  const bin = await makeTempDir();
+  const shim = path.join(bin, "git");
+  await writeFile(
+    shim,
+    [
+      "#!/usr/bin/env node",
+      'import { spawnSync } from "node:child_process";',
+      `const remote = ${JSON.stringify(remote)};`,
+      'process.env.GIT_PROTOCOL_FROM_USER = "1";',
+      "const args = process.argv.slice(2);",
+      'const fetchIndex = args.indexOf("fetch");',
+      "if (fetchIndex >= 0) {",
+      '  const originIndex = args.indexOf("origin", fetchIndex + 1);',
+      "  if (originIndex >= 0) {",
+      "    args[originIndex] = remote;",
+      "    for (let index = fetchIndex - 1; index >= 0; index -= 1) {",
+      '      if (args[index] === "-c" && args[index + 1]?.startsWith("protocol.")) {',
+      "        args.splice(index, 2);",
+      "      }",
+      "    }",
+      "  }",
+      "}",
+      'const result = spawnSync("/usr/bin/git", args, { stdio: "inherit" });',
+      "if (result.error) {",
+      "  console.error(result.error);",
+      "  process.exit(1);",
+      "}",
+      "process.exit(result.status ?? 1);",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await chmod(shim, 0o755);
+
+  return bin;
+}
+
 async function writeGitSkillCatalog(
   root: string,
   repository: string,
@@ -177,6 +234,72 @@ describe("skill CLI integration", () => {
     expect(result.stdout).not.toContain("Local test skill.");
     expect(result.stdout).not.toContain("Claude test skill.");
     expect(result.stdout).not.toContain("All agents test skill.");
+  });
+
+  it("stages and promotes a new vendored declaration before activation", async () => {
+    const name = "new-vendor";
+    const repository = "https://example.invalid/skills.git";
+    const upstream = await vendoredUpstream(name);
+    const shim = await gitFetchShim(upstream.root);
+    const skillsPath = path.join(root, "catalog", "skills.yml");
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    await writeFile(
+      skillsPath,
+      `${(await readFile(skillsPath, "utf8")).trimEnd()}\n  - name: ${name}\n    source: vendored\n    repo: ${repository}\n    ref: main\n    subtree: skills/${name}\n`,
+      "utf8"
+    );
+    await writeFile(
+      profilePath,
+      (await readFile(profilePath, "utf8")).replace(
+        "mcp:\n",
+        `  ${name}:\n    agents: { opencode: true }\nmcp:\n`
+      ),
+      "utf8"
+    );
+
+    const check = await cli("mfz", root, home, ["skills", "check", name]);
+    expect(check.stdout).toContain(
+      `unpromoted\t${name}\tpinned=none\tnext=mfz skills stage ${name}`
+    );
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "personal")).rejects.toThrow(
+      /vendor\.lock\.yml/
+    );
+
+    const stage = await cli(
+      "mfz",
+      root,
+      home,
+      ["skills", "stage", name, "--commit", upstream.commit],
+      { PATH: `${shim}${path.delimiter}${process.env.PATH ?? ""}` }
+    );
+
+    const candidate = /^candidate\t([0-9a-f]{64})$/mu.exec(stage.stdout)?.[1];
+
+    if (!candidate) throw new Error("stage did not return a candidate identity");
+
+    expect(stage.stdout).toContain(`provenance\tnone -> ${upstream.commit}`);
+    expect(stage.stdout).not.toContain("migration");
+    await expect(lstat(path.join(root, "skills", "vendor", name))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+    await expect(lstat(path.join(root, "skills", "vendor.lock.yml"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+
+    await cli("mfz", root, home, ["skills", "promote", candidate]);
+
+    await expect(
+      readFile(path.join(root, "skills", "vendor", name, "SKILL.md"), "utf8")
+    ).resolves.toContain("New vendored skill.");
+    const lock = YAML.parse(await readFile(path.join(root, "skills", "vendor.lock.yml"), "utf8"));
+    expect(lock.skills[name].commit).toBe(upstream.commit);
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "personal")).resolves.toEqual(
+      expect.objectContaining({
+        enabledSkills: expect.arrayContaining([
+          expect.objectContaining({ name, source: "vendored" })
+        ])
+      })
+    );
   });
 
   it("sync renders the managed snapshot and links", async () => {

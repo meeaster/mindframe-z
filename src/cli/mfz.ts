@@ -7,7 +7,7 @@ import { z } from "zod";
 import { pathExists } from "../core/fs-util.js";
 import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, machineSchema, validateManifests } from "../core/manifests.js";
-import type { LoadedManifests } from "../core/manifests.js";
+import type { LoadedManifests, SkillEntry } from "../core/manifests.js";
 import {
   createRuntimePaths,
   infraTargetList,
@@ -19,6 +19,7 @@ import {
 import {
   assertMcpToggleSupported,
   resolveProfile,
+  resolveSkillDeclarations,
   type ResolvedMcpServer
 } from "../core/profile.js";
 import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
@@ -47,7 +48,6 @@ import {
   checkVendoredSkill,
   migrationMessage,
   promoteVendoredSkill,
-  readVendorLock,
   readLegacyGitSkills,
   stageVendoredSkill,
   validateVendoredSkills
@@ -1121,23 +1121,58 @@ skills
 skills
   .command("check")
   .description("Check tracked vendored refs without staging or activating updates")
-  .action(async () => {
+  .argument("[name]", "vendored skill name, including an unpromoted catalog declaration")
+  .action(async (name) => {
     const paths = createRuntimePaths(program.opts());
-    const profile = await resolveProfile(paths, program.opts().profile);
+    const declarations = await resolveSkillDeclarations(paths, program.opts().profile);
 
-    const skills = profile.enabledSkills.filter(
-      (skill): skill is typeof skill & { source: "vendored" } => skill.source === "vendored"
-    );
+    const selected = name
+      ? declarations.selectedSkills.find((entry) => entry.name === name)
+      : undefined;
+
+    const catalog = name
+      ? declarations.manifests.skills.find((entry) => entry.name === name)
+      : undefined;
+
+    type VendoredEntry = Extract<SkillEntry, { source: "vendored" }>;
+
+    type CheckTarget = { entry: VendoredEntry; sourceRoot: string };
+
+    let vendored: CheckTarget[];
+
+    if (name) {
+      const entry = selected ?? catalog;
+
+      if (!entry || entry.source !== "vendored") {
+        throw new Error(`Profile ${declarations.name} does not declare vendored skill: ${name}`);
+      }
+
+      vendored = [{ entry, sourceRoot: selected?.sourceRoot ?? declarations.manifests.root }];
+    } else {
+      vendored = declarations.selectedSkills.flatMap((entry): CheckTarget[] =>
+        entry.targets.length > 0 && entry.source === "vendored"
+          ? [{ entry, sourceRoot: entry.sourceRoot }]
+          : []
+      );
+    }
 
     let failures = 0;
 
-    for (const skill of skills) {
+    for (const { entry, sourceRoot } of vendored) {
       try {
-        const result = await checkVendoredSkill(paths, skill, skill.sourceRoot);
+        const result = await checkVendoredSkill(paths, entry, sourceRoot);
+
+        if (result.status === "unpromoted") {
+          console.log(
+            `unpromoted\t${entry.name}\tpinned=none\tnext=mfz skills stage ${entry.name}`
+          );
+          continue;
+        }
+
         const status = result.changed ? "update available" : "current";
 
         const note =
-          "variants" in skill
+          "variants" in entry
             ? result.changed
               ? "selected provider subtrees changed"
               : "selected provider subtrees unchanged"
@@ -1146,25 +1181,19 @@ skills
               : "selected subtree unchanged";
 
         console.log(
-          `${status}\t${skill.name}\tpinned=${result.pinned.commit}\tobserved=${result.observedCommit}\t${note}`
+          `${status}\t${entry.name}\tpinned=${result.pinned.commit}\tobserved=${result.observedCommit}\t${note}`
         );
       } catch (error) {
         failures += 1;
-        let pinned = "unknown";
-
-        try {
-          pinned = (await readVendorLock(skill.sourceRoot)).skills[skill.name]?.commit ?? "missing";
-        } catch {
-          // The manifest/lock error is included in the observational failure below.
-        }
-
         console.log(
-          `remote failure\t${skill.name}\tpinned=${pinned}\t${error instanceof Error ? error.message : String(error)}`
+          `check failed\t${entry.name}\t${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
 
-    if (skills.length === 0) console.log("No vendored skills are enabled in the resolved profile.");
+    if (vendored.length === 0) {
+      console.log("No vendored skills are enabled in the resolved profile.");
+    }
 
     if (failures > 0) throw new Error(`${failures} vendored skill check(s) failed`);
   });
@@ -1177,10 +1206,10 @@ skills
   .option("--revision <revision>", "alias for --commit")
   .action(async (name, options) => {
     const paths = createRuntimePaths(program.opts());
-    let profile;
+    let declarations: Awaited<ReturnType<typeof resolveSkillDeclarations>>;
 
     try {
-      profile = await resolveProfile(paths, program.opts().profile);
+      declarations = await resolveSkillDeclarations(paths, program.opts().profile);
     } catch (error) {
       const legacy = (await readLegacyGitSkills(paths.root, paths.home)).find(
         (entry) => entry.name === name
@@ -1205,14 +1234,15 @@ skills
     }
 
     const skill =
-      profile.enabledSkills.find((entry) => entry.name === name) ??
-      profile.manifests.skills.find((entry) => entry.name === name);
+      declarations.selectedSkills.find((entry) => entry.name === name) ??
+      declarations.manifests.skills.find((entry) => entry.name === name);
 
     if (!skill || skill.source !== "vendored") {
-      throw new Error(`Profile ${profile.name} does not declare vendored skill: ${name}`);
+      throw new Error(`Profile ${declarations.name} does not declare vendored skill: ${name}`);
     }
 
-    const sourceRoot = profile.sources.skills.get(name)?.root ?? paths.root;
+    const selected = declarations.selectedSkills.find((entry) => entry.name === name);
+    const sourceRoot = selected?.sourceRoot ?? declarations.manifests.root;
 
     const candidate = await stageVendoredSkill(
       paths,

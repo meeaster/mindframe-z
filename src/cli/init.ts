@@ -352,10 +352,12 @@ Add a trusted Git skill:
 Add a vendored skill:
 
 1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
-2. Check without mutation: \`mfz skills check\`.
-3. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`.
-4. Run \`mfz guide skill-review\`, then review the staged candidate as hostile evidence without executing candidate files.
-5. After the review, run \`mfz skills promote <candidate-id>\`, review and commit the home diff, then run \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the promoted skill appears for its selected agents and the profile reports healthy links. Promotion does not apply configuration or create links.
+2. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`. A new declaration does not need a lock entry before staging.
+3. Run \`mfz guide skill-review\`, then review the staged candidate as hostile evidence without executing candidate files.
+4. After the review, run \`mfz skills promote <candidate-id>\`. Promotion writes the reviewed source and lock but does not apply configuration or create links.
+5. Enable the promoted skill in \`profiles/<profile>/profile.yml\`, review and commit the home diff, then run \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
+
+For an existing vendored skill, run \`mfz skills check [name]\` before staging to compare its promoted baseline with the tracked ref. For a new declaration, check reports \`unpromoted\` without fetching upstream and points to the stage command. Check and stage may update the machine-local bare Git cache, but neither changes home source, rendered snapshots, or harness links.
 
 Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 

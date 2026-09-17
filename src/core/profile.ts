@@ -159,6 +159,12 @@ export interface ResolvedProfile {
   miseLayers: ResolvedMiseLayer[];
 }
 
+export interface ResolvedSkillDeclarations {
+  name: string;
+  manifests: LoadedManifests;
+  selectedSkills: ResolvedSkill[];
+}
+
 function emptySources(): ProfileSources {
   return {
     references: new Map(),
@@ -643,22 +649,31 @@ function directCapabilityAgent(agent: AgentName): CapabilityAgentName | undefine
   return agent;
 }
 
+function resolveSelectedSkills(
+  profileName: string,
+  build: ProfileBuild,
+  manifests: LoadedManifests,
+  agents: CapabilityAgentName[]
+): ResolvedSkill[] {
+  return Object.entries(build.profile.skills).map(([skillName, config]): ResolvedSkill => {
+    const sourceHome = build.sources.skills.get(skillName) ?? manifests;
+    const skill = sourceHome.skills.find((entry) => entry.name === skillName);
+
+    if (!skill) throw new Error(`Profile ${profileName} references unknown skill: ${skillName}`);
+
+    return { ...skill, ...resolveSkillConfig(config, agents), sourceRoot: sourceHome.root };
+  });
+}
+
 async function resolveEnabledSkills(
   profileName: string,
   build: ProfileBuild,
   manifests: LoadedManifests,
   agents: CapabilityAgentName[]
 ): Promise<ResolvedSkill[]> {
-  const enabled = Object.entries(build.profile.skills)
-    .map(([skillName, config]): ResolvedSkill => {
-      const sourceHome = build.sources.skills.get(skillName) ?? manifests;
-      const skill = sourceHome.skills.find((entry) => entry.name === skillName);
-
-      if (!skill) throw new Error(`Profile ${profileName} references unknown skill: ${skillName}`);
-
-      return { ...skill, ...resolveSkillConfig(config, agents), sourceRoot: sourceHome.root };
-    })
-    .filter((entry) => entry.targets.length > 0);
+  const enabled = resolveSelectedSkills(profileName, build, manifests, agents).filter(
+    (entry) => entry.targets.length > 0
+  );
 
   const validatedVendorRoots = new Set<string>();
 
@@ -723,6 +738,30 @@ async function resolveEnabledSkills(
   }
 
   return enabled;
+}
+
+export async function resolveSkillDeclarations(
+  paths: RuntimePaths,
+  requestedProfile?: string
+): Promise<ResolvedSkillDeclarations> {
+  const manifests = await loadManifests(paths.root, paths.home);
+
+  const name =
+    requestedProfile ?? process.env.MFZ_PROFILE ?? manifests.machine.profile ?? "personal";
+
+  const profileBuild = await resolveProfileByName(manifests, name, { includeOpenCode: false });
+
+  const agents = profileBuild.profile.agents.flatMap((agent) => {
+    const capability = capabilityAgent(agent);
+
+    return capability === undefined ? [] : [capability];
+  });
+
+  return {
+    name,
+    manifests,
+    selectedSkills: resolveSelectedSkills(name, profileBuild, manifests, agents)
+  };
 }
 
 function resolveMcpServers(

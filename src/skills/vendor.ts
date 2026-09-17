@@ -1328,17 +1328,46 @@ export async function checkVendoredSkill(
   paths: RuntimePaths,
   entry: VendoredSkill,
   sourceRoot: string
-): Promise<{ pinned: VendorLockEntry; observedCommit: string; changed: boolean }> {
-  const lock = await readVendorLock(sourceRoot);
+): Promise<
+  | { status: "unpromoted" }
+  | { status: "tracked"; pinned: VendorLockEntry; observedCommit: string; changed: boolean }
+> {
+  let lock: VendorLock;
+
+  try {
+    lock = await readVendorLock(sourceRoot);
+  } catch (error) {
+    if (!(error instanceof Error) || errorCode(error) !== "ENOENT") throw error;
+
+    if (await pathExists(vendoredSkillSourcePath(sourceRoot, entry.name))) {
+      throw new Error(`Vendored skill ${entry.name} source exists without a vendor lock entry`);
+    }
+
+    return { status: "unpromoted" };
+  }
+
   const pinned = lock.skills[entry.name];
 
-  if (!pinned) throw new Error(`Vendored skill ${entry.name} has no vendor lock entry`);
+  if (!pinned) {
+    if (await pathExists(vendoredSkillSourcePath(sourceRoot, entry.name))) {
+      throw new Error(`Vendored skill ${entry.name} source exists without a vendor lock entry`);
+    }
+
+    return { status: "unpromoted" };
+  }
+
+  await validateVendoredSkill(sourceRoot, entry, lock);
   const { cache, commit: observedCommit } = await fetchCommit(paths, entry.repo, entry.ref);
   const payload = await readUpstreamPayload(cache, observedCommit, entry);
   const digest = payloadDigest(payload);
   const payloadKindChanged = isVariantSkill(entry) !== "variants" in pinned;
 
-  return { pinned, observedCommit, changed: payloadKindChanged || digest !== pinned.digest };
+  return {
+    status: "tracked",
+    pinned,
+    observedCommit,
+    changed: payloadKindChanged || digest !== pinned.digest
+  };
 }
 
 export function candidateReviewInstruction(candidateId: string): string {
