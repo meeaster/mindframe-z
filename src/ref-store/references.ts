@@ -247,6 +247,8 @@ export async function planReferences(
         : `${reference.name}: checkout would be cloned`
     };
 
+    if (exists) outcome.verification = "unchecked";
+
     operations.complete(outcome);
     emitReferenceCompletion(options, operation, ordinal, outcome);
   }

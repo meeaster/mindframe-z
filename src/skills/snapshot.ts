@@ -3,7 +3,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import YAML from "yaml";
 import { z } from "zod";
-import { materializeEngineSkill, engineSkillName } from "../core/engine-skill.js";
+import { engineSkillName, engineSkillRoot, materializeEngineSkill } from "../core/engine-skill.js";
 import { readDirEntries } from "../core/fs-util.js";
 import {
   opencodeSkillSnapshotDir,
@@ -25,7 +25,7 @@ import {
   vendoredSkillSourcePath
 } from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
-import { readPinnedGitSkillFiles } from "./git.js";
+import { readCachedPinnedGitSkillFiles, readPinnedGitSkillFiles } from "./git.js";
 import { isManagedTarget, linkStatus } from "./link-state.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
@@ -109,6 +109,13 @@ interface SnapshotRenderOptions {
   excludeProviderVariants?: boolean;
 }
 
+interface SkillSnapshotGroupOptions {
+  dryRun?: boolean;
+  link?: boolean;
+  onComplete?: OperationCompletion;
+  excludeProviderVariants?: boolean;
+}
+
 function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
   if (skill.source === "vendored") {
     if ("variants" in skill) {
@@ -144,14 +151,34 @@ interface SnapshotSource {
   git?: GitSkill;
 }
 
+interface SnapshotPreparation {
+  manifest: SnapshotManifest;
+  sources: Map<string, SnapshotSource>;
+  snapshot: string;
+  links: LinkPlan[];
+}
+
+async function readSourceFiles(
+  paths: RuntimePaths,
+  source: SnapshotSource,
+  options: { cachedGit?: boolean } = {}
+): Promise<Awaited<ReturnType<typeof readSkillFiles>> | undefined> {
+  if (!source.git) return readSkillFiles(source.sourcePath);
+
+  if (options.cachedGit) return readCachedPinnedGitSkillFiles(paths, source.git);
+
+  return readPinnedGitSkillFiles(paths, source.git);
+}
+
 async function copySource(
   paths: RuntimePaths,
   source: SnapshotSource,
   destination: string
 ): Promise<string> {
-  const files = source.git
-    ? await readPinnedGitSkillFiles(paths, source.git)
-    : await readSkillFiles(source.sourcePath);
+  const files = await readSourceFiles(paths, source);
+
+  if (!files)
+    throw new Error(`Missing Git cache for skill ${source.git?.name ?? source.sourcePath}`);
 
   validateSkillRecords(files);
   await mkdir(destination, { recursive: true });
@@ -364,6 +391,16 @@ function linksMatch(plans: readonly LinkPlan[], current: LinkSnapshot): boolean 
   return true;
 }
 
+function selectLinkPlans(
+  paths: RuntimePaths,
+  plans: readonly LinkPlan[],
+  selectedTargets: readonly SkillTarget[]
+): LinkPlan[] {
+  const directories = new Set(linkDirectories(paths, selectedTargets));
+
+  return plans.filter((plan) => directories.has(path.dirname(plan.linkPath)));
+}
+
 function desiredTargets(skill: ResolvedSkill, selected: readonly SkillTarget[]): SkillTarget[] {
   return selected.filter((target) => skill.targets.includes(capabilityTarget(target)));
 }
@@ -398,12 +435,13 @@ function nonOpenCodeVariantTargets(profile: ResolvedProfile): NonOpenCodeSkillTa
   );
 }
 
-export async function renderSkillSnapshot(
+async function prepareSkillSnapshot(
   paths: RuntimePaths,
   profile: ResolvedProfile,
   selectedTargets: readonly SkillTarget[] = ["opencode", "claude-code", "codex"],
-  options: SnapshotRenderOptions = {}
-): Promise<{ manifest: SnapshotManifest; links: LinkPlan[]; temporaryPath: string }> {
+  options: SnapshotRenderOptions = {},
+  materializeEngine: boolean
+): Promise<SnapshotPreparation> {
   const engineEntries: Array<{
     name: string;
     sourceRoot: string;
@@ -412,7 +450,10 @@ export async function renderSkillSnapshot(
   }> = [];
 
   if (!profile.manifests.skills.some((skill) => skill.name === engineSkillName)) {
-    const engine = await materializeEngineSkill(paths);
+    const engine = materializeEngine
+      ? await materializeEngineSkill(paths)
+      : { name: engineSkillName, sourceRoot: engineSkillRoot(paths) };
+
     engineEntries.push({
       name: engine.name,
       sourceRoot: engine.sourceRoot,
@@ -506,31 +547,6 @@ export async function renderSkillSnapshot(
 
   const snapshot = options.snapshotDir ?? skillSnapshotDir(paths, profile.name);
   await assertNoSymlinkAncestors(paths.home, snapshot);
-  const temporary = `${snapshot}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
-  const backup = `${snapshot}.bak-${process.pid}`;
-  await rm(temporary, { recursive: true, force: true });
-  await rm(backup, { recursive: true, force: true });
-  await mkdir(path.dirname(snapshot), { recursive: true });
-  await mkdir(temporary, { recursive: true });
-  const manifest: SnapshotManifest = { version: 1, profile: profile.name, skills: selected };
-
-  try {
-    for (const skill of selected) {
-      const source = sources.get(skill.name);
-
-      if (!source) throw new Error(`Missing source for skill ${skill.name}`);
-      skill.digest = await copySource(paths, source, path.join(temporary, skill.name));
-    }
-
-    await writeFile(
-      path.join(temporary, path.relative(snapshot, snapshotManifestPath(snapshot))),
-      YAML.stringify(manifest),
-      "utf8"
-    );
-  } catch (error) {
-    await rm(temporary, { recursive: true, force: true });
-    throw error;
-  }
 
   const links: LinkPlan[] = [];
 
@@ -547,7 +563,48 @@ export async function renderSkillSnapshot(
   // OpenCode and Codex intentionally share one physical directory.
   const uniqueLinks = [...new Map(links.map((link) => [link.linkPath, link])).values()];
 
-  return { manifest, links: uniqueLinks, temporaryPath: temporary };
+  return {
+    manifest: { version: 1, profile: profile.name, skills: selected },
+    sources,
+    snapshot,
+    links: uniqueLinks
+  };
+}
+
+export async function renderSkillSnapshot(
+  paths: RuntimePaths,
+  profile: ResolvedProfile,
+  selectedTargets: readonly SkillTarget[] = ["opencode", "claude-code", "codex"],
+  options: SnapshotRenderOptions = {}
+): Promise<{ manifest: SnapshotManifest; links: LinkPlan[]; temporaryPath: string }> {
+  const prepared = await prepareSkillSnapshot(paths, profile, selectedTargets, options, true);
+  const { manifest, links, snapshot, sources } = prepared;
+  const temporary = `${snapshot}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
+  const backup = `${snapshot}.bak-${process.pid}`;
+  await rm(temporary, { recursive: true, force: true });
+  await rm(backup, { recursive: true, force: true });
+  await mkdir(path.dirname(snapshot), { recursive: true });
+  await mkdir(temporary, { recursive: true });
+
+  try {
+    for (const skill of manifest.skills) {
+      const source = sources.get(skill.name);
+
+      if (!source) throw new Error(`Missing source for skill ${skill.name}`);
+      skill.digest = await copySource(paths, source, path.join(temporary, skill.name));
+    }
+
+    await writeFile(
+      path.join(temporary, path.relative(snapshot, snapshotManifestPath(snapshot))),
+      YAML.stringify(manifest),
+      "utf8"
+    );
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true });
+    throw error;
+  }
+
+  return { manifest, links, temporaryPath: temporary };
 }
 
 async function readSnapshotManifest(snapshot: string): Promise<SnapshotManifest | undefined> {
@@ -628,9 +685,25 @@ async function removeManagedSkillSnapshot(
   return [outcome];
 }
 
+function snapshotSkillMetadataMatches(left: SnapshotSkill, right: SnapshotSkill): boolean {
+  return (
+    left.name === right.name &&
+    left.source === right.source &&
+    JSON.stringify(left.targets) === JSON.stringify(right.targets) &&
+    left.variant === right.variant &&
+    left.repository === right.repository &&
+    left.ref === right.ref &&
+    left.subtree === right.subtree &&
+    left.commit === right.commit &&
+    left.sourceRoot === right.sourceRoot &&
+    left.sourcePath === right.sourcePath
+  );
+}
+
 async function inspectSnapshot(
   snapshot: string,
-  next: SnapshotManifest
+  next: SnapshotManifest,
+  unchecked: ReadonlySet<string> = new Set()
 ): Promise<SnapshotInspection> {
   const previous = await readSnapshotManifest(snapshot);
   const before = new Map(previous?.skills.map((skill) => [skill.name, skill]));
@@ -668,6 +741,18 @@ async function inspectSnapshot(
       continue;
     }
 
+    if (unchecked.has(name)) {
+      outcomes.push({
+        category: "skill",
+        action: "snapshot",
+        status: "planned",
+        target: name,
+        significance: "meaningful",
+        detail: "source state not checked"
+      });
+      continue;
+    }
+
     let installedDigest: string | undefined;
 
     try {
@@ -680,8 +765,8 @@ async function inspectSnapshot(
     treeDrift ||= installedChanged;
 
     const changed =
+      !snapshotSkillMetadataMatches(oldSkill, newSkill) ||
       oldSkill.digest !== newSkill.digest ||
-      JSON.stringify(oldSkill.targets) !== JSON.stringify(newSkill.targets) ||
       installedChanged;
 
     outcomes.push({
@@ -697,7 +782,7 @@ async function inspectSnapshot(
   return {
     previousManifest: previous,
     outcomes,
-    replacementRequired: !isDeepStrictEqual(previous, next) || treeDrift
+    replacementRequired: unchecked.size > 0 || !isDeepStrictEqual(previous, next) || treeDrift
   };
 }
 
@@ -722,39 +807,127 @@ function selectedSkillNames(
   return names;
 }
 
-function selectedLinkPlans(
+async function planSkillSnapshotDryRun(
   paths: RuntimePaths,
   profile: ResolvedProfile,
-  snapshot: string,
   selectedTargets: readonly SkillTarget[],
   renderTargets: readonly SkillTarget[],
-  options: Pick<SnapshotRenderOptions, "excludeProviderVariants"> = {}
-): LinkPlan[] {
-  const links: LinkPlan[] = [];
+  snapshot: string,
+  options: SkillSnapshotGroupOptions,
+  directories: readonly string[]
+): Promise<OperationOutcome[]> {
+  const prepared = await prepareSkillSnapshot(
+    paths,
+    profile,
+    renderTargets,
+    options.excludeProviderVariants
+      ? { snapshotDir: snapshot, excludeProviderVariants: true }
+      : { snapshotDir: snapshot },
+    false
+  );
 
-  for (const name of selectedSkillNames(profile, renderTargets, options)) {
-    const declared = profile.enabledSkills.find((skill) => skill.name === name);
+  const unchecked = new Set<string>();
 
-    const targets = declared
-      ? selectedTargets.filter((target) => declared.targets.includes(capabilityTarget(target)))
-      : selectedTargets.filter((target) => renderTargets.includes(target));
+  for (const skill of prepared.manifest.skills) {
+    const source = prepared.sources.get(skill.name);
 
-    for (const target of targets) {
-      const directory =
-        target === "claude-code"
-          ? paths.claudeDir
-          : target === "opencode"
-            ? paths.opencodeConfigDir
-            : path.join(paths.home, ".agents");
+    if (!source) throw new Error(`Missing source for skill ${skill.name}`);
 
-      links.push({
-        linkPath: path.join(directory, "skills", name),
-        targetPath: path.join(snapshot, name)
+    let files: Awaited<ReturnType<typeof readSkillFiles>> | undefined;
+
+    try {
+      files = await readSourceFiles(paths, source, { cachedGit: true });
+    } catch (error) {
+      if (skill.source !== "engine" || !(error instanceof Error) || errorCode(error) !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    if (!files) {
+      unchecked.add(skill.name);
+
+      if (!options.onComplete && source.git) {
+        console.log(`would acquire git commit\t${skill.name}\t${source.git.commit}`);
+      }
+
+      continue;
+    }
+
+    validateSkillRecords(files);
+    skill.digest = digestSkillFiles(files);
+  }
+
+  const inspection = await inspectSnapshot(snapshot, prepared.manifest, unchecked);
+  const plans = selectLinkPlans(paths, prepared.links, selectedTargets);
+
+  if (!options.onComplete) {
+    for (const name of [...selectedSkillNames(profile, renderTargets, options)].sort()) {
+      console.log(`would render skill\t${name}`);
+    }
+  }
+
+  if (options.link !== false) await preflightLinks(paths, plans, directories);
+
+  const current =
+    options.link !== false ? await captureManagedLinks(paths, directories) : undefined;
+
+  const completed = inspection.outcomes.map((outcome) => {
+    if (
+      outcome.status === "created" ||
+      outcome.status === "updated" ||
+      outcome.status === "removed"
+    ) {
+      return { ...outcome, status: "planned" as const };
+    }
+
+    return outcome;
+  });
+
+  const desired = new Set(plans.map((plan) => plan.linkPath));
+
+  for (const linkPath of current?.managed.keys() ?? []) {
+    if (!desired.has(linkPath)) {
+      if (!options.onComplete) console.log(`would unlink skill\t${linkPath}`);
+      completed.push({
+        category: "link",
+        action: "remove",
+        status: "planned",
+        target: linkPath,
+        significance: "meaningful",
+        detail: "skill link"
       });
     }
   }
 
-  return [...new Map(links.map((link) => [link.linkPath, link])).values()];
+  if (options.link !== false) {
+    for (const { linkPath, targetPath } of plans) {
+      const currentTarget = current?.managed.get(linkPath);
+
+      if (!options.onComplete) console.log(`would link skill\t${linkPath} -> ${targetPath}`);
+
+      const outcome: OperationOutcome = {
+        category: "link",
+        action: "link",
+        status: currentTarget === path.resolve(targetPath) ? "unchanged" : "planned",
+        target: linkPath,
+        significance: "meaningful",
+        detail: targetPath
+      };
+
+      if (outcome.status === "planned") {
+        outcome.changes = ["destination"];
+        outcome.after = targetPath;
+
+        if (currentTarget !== undefined) outcome.before = currentTarget;
+      }
+
+      completed.push(outcome);
+    }
+  }
+
+  for (const outcome of completed) options.onComplete?.(outcome);
+
+  return completed;
 }
 
 async function syncSkillSnapshotGroup(
@@ -763,103 +936,21 @@ async function syncSkillSnapshotGroup(
   selectedTargets: readonly SkillTarget[],
   renderTargets: readonly SkillTarget[],
   snapshot: string,
-  options: {
-    dryRun?: boolean;
-    link?: boolean;
-    onComplete?: OperationCompletion;
-    excludeProviderVariants?: boolean;
-  }
+  options: SkillSnapshotGroupOptions
 ): Promise<OperationOutcome[]> {
   if (selectedTargets.length === 0) return [];
   const directories = linkDirectories(paths, selectedTargets);
 
-  if (options.dryRun) {
-    for (const skill of profile.enabledSkills) {
-      if (renderTargets.some((target) => skill.targets.includes(capabilityTarget(target)))) {
-        if (options.excludeProviderVariants && "variants" in skill) continue;
-
-        if (skill.source === "git") {
-          if (!options.onComplete) {
-            console.log(`would acquire git commit\t${skill.name}\t${skill.commit}`);
-          }
-
-          continue;
-        } else {
-          const skillTargets = desiredTargets(skill, renderTargets);
-
-          const files = await readSkillFiles(
-            sourcePath(skill, selectedVariantTarget(skill, skillTargets))
-          );
-
-          validateSkillRecords(files);
-        }
-      }
-    }
-
-    const names = selectedSkillNames(profile, renderTargets, options);
-
-    if (!options.onComplete) {
-      for (const name of [...names].sort()) console.log(`would render skill\t${name}`);
-    }
-
-    const completed: OperationOutcome[] = [...names].sort().map((name) => ({
-      category: "skill",
-      action: "snapshot",
-      status: "planned",
-      target: name,
-      significance: "meaningful"
-    }));
-
-    const plans = selectedLinkPlans(
+  if (options.dryRun)
+    return planSkillSnapshotDryRun(
       paths,
       profile,
-      snapshot,
       selectedTargets,
       renderTargets,
-      options
+      snapshot,
+      options,
+      directories
     );
-
-    if (options.link !== false) await preflightLinks(paths, plans, directories);
-
-    const current =
-      options.link !== false ? await captureManagedLinks(paths, directories) : undefined;
-
-    const desired = new Set(plans.map((plan) => plan.linkPath));
-
-    for (const linkPath of current?.managed.keys() ?? []) {
-      if (!desired.has(linkPath)) {
-        if (!options.onComplete) console.log(`would unlink skill\t${linkPath}`);
-        completed.push({
-          category: "link",
-          action: "remove",
-          status: "planned",
-          target: linkPath,
-          significance: "meaningful",
-          detail: "skill link"
-        });
-      }
-    }
-
-    if (options.link !== false) {
-      for (const { linkPath, targetPath } of plans) {
-        if (!options.onComplete) console.log(`would link skill\t${linkPath} -> ${targetPath}`);
-        completed.push({
-          category: "link",
-          action: "link",
-          status: "planned",
-          target: linkPath,
-          significance: "meaningful",
-          changes: ["destination"],
-          after: targetPath,
-          detail: "skill link"
-        });
-      }
-    }
-
-    for (const outcome of completed) options.onComplete?.(outcome);
-
-    return completed;
-  }
 
   const rendered = await renderSkillSnapshot(
     paths,
@@ -871,27 +962,12 @@ async function syncSkillSnapshotGroup(
   );
 
   const inspection = await inspectSnapshot(snapshot, rendered.manifest);
-  const universalDir = path.join(paths.home, ".agents", "skills") + path.sep;
-  const claudeDir = path.join(paths.claudeDir, "skills") + path.sep;
-  const opencodeDir = path.join(paths.opencodeConfigDir, "skills") + path.sep;
-  const useUniversal = selectedTargets.includes("codex");
-  const useOpenCode = selectedTargets.includes("opencode");
+  const links = selectLinkPlans(paths, rendered.links, selectedTargets);
 
-  const prepared = {
-    ...rendered,
-    links: rendered.links.filter((link) =>
-      link.linkPath.startsWith(universalDir)
-        ? useUniversal
-        : link.linkPath.startsWith(claudeDir)
-          ? selectedTargets.includes("claude-code")
-          : link.linkPath.startsWith(opencodeDir) && useOpenCode
-    )
-  };
-
-  const temporary = prepared.temporaryPath;
+  const temporary = rendered.temporaryPath;
 
   try {
-    if (options.link !== false) await preflightLinks(paths, prepared.links, directories);
+    if (options.link !== false) await preflightLinks(paths, links, directories);
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
     throw error;
@@ -902,7 +978,7 @@ async function syncSkillSnapshotGroup(
   const previousLinks =
     options.link !== false ? await captureManagedLinks(paths, directories) : undefined;
 
-  const linksAreCurrent = previousLinks ? linksMatch(prepared.links, previousLinks) : true;
+  const linksAreCurrent = previousLinks ? linksMatch(links, previousLinks) : true;
 
   if (!inspection.replacementRequired && linksAreCurrent) {
     await rm(temporary, { recursive: true, force: true });
@@ -910,7 +986,7 @@ async function syncSkillSnapshotGroup(
     const unchangedLinks =
       options.link === false
         ? []
-        : prepared.links.map(
+        : links.map(
             (plan): OperationOutcome => ({
               category: "link",
               action: "link",
@@ -953,7 +1029,7 @@ async function syncSkillSnapshotGroup(
     await rename(temporary, snapshot);
 
     if (options.link !== false) {
-      linkOutcomes = await reconcileLinks(paths, prepared.links, directories);
+      linkOutcomes = await reconcileLinks(paths, links, directories);
     }
 
     committed = true;

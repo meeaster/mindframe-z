@@ -26,6 +26,8 @@ export type OperationChange = "content" | "permissions" | "path-type" | "destina
 
 export type PlannedOperationEffect = "add" | "update" | "remove";
 
+export type OperationVerification = "checked" | "unchecked";
+
 export interface OperationOutcome {
   category: OperationCategory;
   action: OperationAction;
@@ -33,6 +35,7 @@ export interface OperationOutcome {
   target: string;
   significance: "meaningful" | "internal";
   plannedEffect?: PlannedOperationEffect;
+  verification?: OperationVerification;
   changes?: readonly OperationChange[];
   before?: string;
   after?: string;

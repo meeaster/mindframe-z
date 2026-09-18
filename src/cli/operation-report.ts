@@ -42,6 +42,10 @@ export interface OperationReporter {
 
 const attentionStatuses = new Set(["skipped", "blocked", "failed"]);
 
+function dryRunChange(outcome: OperationOutcome): boolean {
+  return outcome.status === "planned" && outcome.verification !== "unchecked";
+}
+
 function uniqueOutcomes(outcomes: readonly OperationOutcome[]): OperationOutcome[] {
   const unique = new Map<string, OperationOutcome>();
 
@@ -176,7 +180,16 @@ class CliOperationReporter implements OperationReporter {
       this.#outcomes.filter(
         (outcome) =>
           outcome.significance === "meaningful" &&
-          (this.#dryRun ? outcome.status === "planned" : operationChanged(outcome))
+          (this.#dryRun ? dryRunChange(outcome) : operationChanged(outcome))
+      )
+    );
+
+    const unchecked = uniqueOutcomes(
+      this.#outcomes.filter(
+        (outcome) =>
+          this.#dryRun &&
+          outcome.significance === "meaningful" &&
+          outcome.verification === "unchecked"
       )
     );
 
@@ -194,11 +207,15 @@ class CliOperationReporter implements OperationReporter {
       (outcome) => !this.#terminal || outcome.category !== "reference"
     );
 
+    const receiptUnchecked = unchecked.filter(
+      (outcome) => !this.#terminal || outcome.category !== "reference"
+    );
+
     const blocked = attention.some(
       (outcome) => outcome.status === "blocked" || outcome.status === "failed"
     );
 
-    if (!this.#verbose) this.#writeReceipt(receiptChanges, receiptAttention);
+    if (!this.#verbose) this.#writeReceipt(receiptChanges, receiptAttention, receiptUnchecked);
 
     const result =
       blocked && !this.#dryRun
@@ -268,7 +285,8 @@ class CliOperationReporter implements OperationReporter {
 
   #writeReceipt(
     changes: readonly OperationOutcome[],
-    attention: readonly OperationOutcome[]
+    attention: readonly OperationOutcome[],
+    unchecked: readonly OperationOutcome[] = []
   ): void {
     if (changes.length > 0) {
       this.#writeSection("Changes", changes);
@@ -276,6 +294,10 @@ class CliOperationReporter implements OperationReporter {
 
     if (attention.length > 0) {
       this.#writeSection("Attention", attention);
+    }
+
+    if (unchecked.length > 0) {
+      this.#writeSection("Unchecked", unchecked);
     }
   }
 

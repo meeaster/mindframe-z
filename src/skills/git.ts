@@ -98,6 +98,23 @@ async function gitText(cache: string, args: string[]): Promise<string> {
   return result.stdout.trim();
 }
 
+async function gitObjectExists(cache: string, object: string): Promise<boolean> {
+  const result = await execa("git", ["--git-dir", cache, "cat-file", "--batch-check"], {
+    env: gitEnv(),
+    input: `${object}\n`,
+    timeout: 30_000
+  });
+
+  const output = result.stdout.trim();
+
+  if (output === `${object} missing`) return false;
+
+  if (!output.startsWith(`${object} `))
+    throw new Error(`Git returned invalid object status: ${output}`);
+
+  return true;
+}
+
 function safeCacheConfig(config: string): boolean {
   const sections = new Map<string, Set<string>>([
     ["core", new Set(["repositoryformatversion", "filemode", "bare", "logallrefupdates"])],
@@ -360,6 +377,28 @@ export async function readPinnedGitSkillFiles(
   const { cache, commit } = await fetchCommit(paths, entry.repo, entry.commit);
 
   if (commit !== entry.commit) throw new Error(`Git did not return pinned commit ${entry.commit}`);
+
+  return readGitSkillFiles(cache, entry.commit, entry.subtree);
+}
+
+export async function readCachedPinnedGitSkillFiles(
+  paths: RuntimePaths,
+  entry: Extract<SkillEntry, { source: "git" }>
+): Promise<SkillFileRecord[] | undefined> {
+  const normalized = normalizedRepository(entry.repo);
+  const cache = cachePath(paths, normalized);
+  await assertNoSymlinkAncestors(paths.home, cache);
+
+  try {
+    await lstat(cache);
+  } catch (error) {
+    if (error instanceof Error && errorCode(error) === "ENOENT") return undefined;
+    throw error;
+  }
+
+  if (!(await cacheIsSafe(cache))) throw new Error(`Unsafe Git cache path: ${cache}`);
+
+  if (!(await gitObjectExists(cache, entry.commit))) return undefined;
 
   return readGitSkillFiles(cache, entry.commit, entry.subtree);
 }

@@ -624,6 +624,21 @@ describe("skill CLI integration", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("treats a pinned commit missing from an existing Git cache as pending", async () => {
+    const repository = "https://127.0.0.1:1/existing-cache.git";
+    const commit = "a".repeat(40);
+    await seedGitCache(root, home, repository);
+    await writeGitSkillProfile(root, repository, commit);
+
+    const result = await cli("mfz", root, home, ["skills", "sync", "--dry-run"]);
+
+    expect(result.stdout).toContain(`would acquire git commit\ttrusted\t${commit}`);
+    expect(result.stdout).not.toContain("fatal:");
+    await expect(
+      lstat(configsPath(home, "personal", "opencode", "skills", ".mfz-manifest.yml"))
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("sync renders skills disabled by runtime override", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),

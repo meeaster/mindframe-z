@@ -313,6 +313,23 @@ describe("apply integration", () => {
     expect(verbose.stdout).toContain("Result\tmfz apply complete — no changes");
   });
 
+  it("reports current skills and links as unchanged without counting unchecked references", async () => {
+    await cli("mfz", root, home, ["apply"]);
+
+    const dryRun = await cli("mfz", root, home, ["apply", "--dry-run"]);
+
+    expect(dryRun.stdout).toContain("Unchecked");
+    expect(dryRun.stdout).toContain("planned\treference");
+    expect(dryRun.stdout).toContain("upstream state not checked");
+    expect(dryRun.stdout).not.toMatch(/^planned\t(?:skill|link)\t/mu);
+    expect(dryRun.stdout).toContain("Result\tmfz apply complete — no changes");
+
+    const verbose = await cli("mfz", root, home, ["apply", "--dry-run", "--verbose"]);
+    expect(verbose.stdout).toContain("unchanged\tskill");
+    expect(verbose.stdout).toContain("unchanged\tlink");
+    expect(verbose.stdout).not.toMatch(/^planned\t(?:skill|link)\t/mu);
+  });
+
   it("reconciles references for full --agent and --no-link apply", async () => {
     const source = fixtureReferenceSource(root);
     const checkout = path.join(home, ".mindframe-z", "references", "local-ref");

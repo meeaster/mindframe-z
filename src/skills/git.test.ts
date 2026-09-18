@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
-import { fetchCommit, readGitSkillFiles } from "./git.js";
-import { createRuntimePaths } from "../core/paths.js";
+import { fetchCommit, readCachedPinnedGitSkillFiles, readGitSkillFiles } from "./git.js";
+import { createRuntimePaths, skillCacheRoot } from "../core/paths.js";
+import { sha256 } from "./tree.js";
 
 describe("Git skill extraction", () => {
   it("reads exact commits with executable and binary content", async () => {
@@ -63,6 +64,44 @@ describe("Git skill extraction", () => {
         "main"
       )
     ).rejects.toThrow();
+  });
+
+  it("treats a missing commit in an existing safe cache as unchecked", async () => {
+    const repository = "https://example.invalid/missing-commit.git";
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-git-cache-"));
+    const repo = await mkdtemp(path.join(os.tmpdir(), "mfz-git-cache-source-"));
+    await execa("git", ["init", "-q"], { cwd: repo });
+    await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: repo });
+    await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: repo });
+    await mkdir(path.join(repo, "skills", "test-skill"), { recursive: true });
+    await writeFile(
+      path.join(repo, "skills", "test-skill", "SKILL.md"),
+      "---\nname: test-skill\ndescription: test\n---\n",
+      "utf8"
+    );
+    await execa("git", ["add", "."], { cwd: repo });
+    await execa("git", ["commit", "-qm", "initial"], { cwd: repo });
+    const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: repo });
+
+    const paths = createRuntimePaths({ root: home, home });
+    const cache = path.join(skillCacheRoot(paths), sha256(repository));
+    await mkdir(path.dirname(cache), { recursive: true });
+    await execa("git", ["clone", "--bare", "-q", repo, cache]);
+    await execa("git", ["--git-dir", cache, "remote", "set-url", "origin", repository]);
+
+    const entry = {
+      name: "test-skill",
+      description: "test",
+      source: "git" as const,
+      repo: repository,
+      commit: "a".repeat(40),
+      subtree: "skills/test-skill"
+    };
+
+    await expect(readCachedPinnedGitSkillFiles(paths, entry)).resolves.toBeUndefined();
+    await expect(
+      readCachedPinnedGitSkillFiles(paths, { ...entry, commit, subtree: "skills/missing" })
+    ).rejects.toThrow(/Selected subtree does not exist/);
   });
 
   it("extracts a single repository-root skill file", async () => {
