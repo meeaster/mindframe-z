@@ -275,7 +275,7 @@ Before changing a topic below, run its guide:
 
 - \`mfz guide mcp\` - add or change direct MCP servers, Executor routing, or Executor authentication.
 - \`mfz guide cron\` - add or change a recurring OpenCode job.
-- \`mfz guide skills\` - add or change local, trusted Git, or vendored skills.
+- \`mfz guide skills\` - add or change local or vendored skills.
 - \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
 - \`mfz guide references\` - add or change read-only reference repositories.
 - \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
@@ -344,11 +344,6 @@ Add a local skill:
 
 3. Enable it as above, then run plain \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
 
-Add a trusted Git skill:
-
-1. Declare \`source: git\`, an HTTPS \`repo:\`, full lowercase \`commit:\`, and explicit upstream \`subtree:\`. The commit is the exact content activated by \`mfz apply\`; Git entries bypass staging and vendor locks.
-2. Run plain \`mfz apply\`, then \`mfz skills list\` and \`mfz doctor\`. Update the skill later by changing its commit and applying again.
-
 Add a vendored skill:
 
 1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
@@ -360,8 +355,6 @@ Add a vendored skill:
 For an existing vendored skill, run \`mfz skills check [name]\` before staging to compare its promoted baseline with the tracked ref. For a new declaration, check reports \`unpromoted\` without fetching upstream and points to the stage command. Check and stage may update the machine-local bare Git cache, but neither changes home source, rendered snapshots, or harness links.
 
 Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
-
-Unpinned \`source: git\` entries are legacy migration input only. They are rejected by the normal schema and never activated; select a new HTTPS revision and use the stage, review, promote, and apply sequence.
 
 Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 `;

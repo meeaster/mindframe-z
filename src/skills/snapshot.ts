@@ -25,7 +25,6 @@ import {
   vendoredSkillSourcePath
 } from "./vendor.js";
 import { assertNoSymlinkAncestors } from "./tree.js";
-import { readCachedPinnedGitSkillFiles, readPinnedGitSkillFiles } from "./git.js";
 import { isManagedTarget, linkStatus } from "./link-state.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
@@ -47,7 +46,7 @@ const snapshotManifestSchema = z
       z
         .object({
           name: z.string(),
-          source: z.enum(["local", "vendored", "git", "engine"]),
+          source: z.enum(["local", "vendored", "engine"]),
           digest: z.string(),
           targets: z.array(z.enum(["opencode", "claude-code", "codex"])),
           variant: vendoredSkillTargetSchema.optional(),
@@ -70,7 +69,7 @@ function errorCode(error: Error): string | undefined {
 
 interface SnapshotSkill {
   name: string;
-  source: "local" | "vendored" | "git" | "engine";
+  source: "local" | "vendored" | "engine";
   digest: string;
   targets: SkillTarget[];
   variant?: VendoredSkillTarget;
@@ -129,8 +128,6 @@ function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
     return vendoredSkillSourcePath(skill.sourceRoot, skill.name);
   }
 
-  if (skill.source === "git") return `git:${skill.repo}#${skill.subtree}@${skill.commit}`;
-
   return path.join(skill.sourceRoot, "skills", skill.skill ?? skill.name);
 }
 
@@ -144,11 +141,8 @@ function relativeLinkTarget(linkPath: string, targetPath: string): string {
   return relative || ".";
 }
 
-type GitSkill = Extract<ResolvedSkill, { source: "git" }>;
-
 interface SnapshotSource {
   sourcePath: string;
-  git?: GitSkill;
 }
 
 interface SnapshotPreparation {
@@ -159,26 +153,13 @@ interface SnapshotPreparation {
 }
 
 async function readSourceFiles(
-  paths: RuntimePaths,
-  source: SnapshotSource,
-  options: { cachedGit?: boolean } = {}
-): Promise<Awaited<ReturnType<typeof readSkillFiles>> | undefined> {
-  if (!source.git) return readSkillFiles(source.sourcePath);
-
-  if (options.cachedGit) return readCachedPinnedGitSkillFiles(paths, source.git);
-
-  return readPinnedGitSkillFiles(paths, source.git);
+  source: SnapshotSource
+): Promise<Awaited<ReturnType<typeof readSkillFiles>>> {
+  return readSkillFiles(source.sourcePath);
 }
 
-async function copySource(
-  paths: RuntimePaths,
-  source: SnapshotSource,
-  destination: string
-): Promise<string> {
-  const files = await readSourceFiles(paths, source);
-
-  if (!files)
-    throw new Error(`Missing Git cache for skill ${source.git?.name ?? source.sourcePath}`);
+async function copySource(source: SnapshotSource, destination: string): Promise<string> {
+  const files = await readSourceFiles(source);
 
   validateSkillRecords(files);
   await mkdir(destination, { recursive: true });
@@ -475,7 +456,6 @@ async function prepareSkillSnapshot(
     const skillSourcePath = sourcePath(skill, variantTarget);
     const snapshotSource: SnapshotSource = { sourcePath: skillSourcePath };
 
-    if (skill.source === "git") snapshotSource.git = skill;
     sources.set(skill.name, snapshotSource);
 
     const selectedSkill: SnapshotSkill = {
@@ -512,14 +492,6 @@ async function prepareSkillSnapshot(
           commit: skill.vendor.commit
         });
       }
-    }
-
-    if (skill.source === "git") {
-      Object.assign(selectedSkill, {
-        repository: skill.repo,
-        subtree: skill.subtree,
-        commit: skill.commit
-      });
     }
 
     selected.push(selectedSkill);
@@ -591,7 +563,7 @@ export async function renderSkillSnapshot(
       const source = sources.get(skill.name);
 
       if (!source) throw new Error(`Missing source for skill ${skill.name}`);
-      skill.digest = await copySource(paths, source, path.join(temporary, skill.name));
+      skill.digest = await copySource(source, path.join(temporary, skill.name));
     }
 
     await writeFile(
@@ -836,7 +808,7 @@ async function planSkillSnapshotDryRun(
     let files: Awaited<ReturnType<typeof readSkillFiles>> | undefined;
 
     try {
-      files = await readSourceFiles(paths, source, { cachedGit: true });
+      files = await readSourceFiles(source);
     } catch (error) {
       if (skill.source !== "engine" || !(error instanceof Error) || errorCode(error) !== "ENOENT") {
         throw error;
@@ -845,10 +817,6 @@ async function planSkillSnapshotDryRun(
 
     if (!files) {
       unchecked.add(skill.name);
-
-      if (!options.onComplete && source.git) {
-        console.log(`would acquire git commit\t${skill.name}\t${source.git.commit}`);
-      }
 
       continue;
     }

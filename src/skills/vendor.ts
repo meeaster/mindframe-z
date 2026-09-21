@@ -110,20 +110,6 @@ const candidateFindingSchema = z
   .object({ path: z.string().min(1), kind: z.string().min(1), detail: z.string() })
   .strict();
 
-const legacyCatalogSchema = z.looseObject({ skills: z.array(z.unknown()) });
-
-const legacySkillInputSchema = z.looseObject({
-  name: z.string(),
-  source: z.string(),
-  repo: z.string(),
-  ref: z.string().optional(),
-  subtree: z.string().optional(),
-  skill: z.string().optional(),
-  description: z.string().optional()
-});
-
-type CatalogDocument = z.infer<typeof legacyCatalogSchema>;
-
 type VendoredSkill = Extract<SkillEntry, { source: "vendored" }>;
 
 type VendoredVariantSkill = Extract<VendoredSkill, { variants: object }>;
@@ -134,8 +120,6 @@ export type VendoredPayload =
 
 interface CatalogEntryResolution {
   entry: VendoredSkill;
-  migrated: boolean;
-  document?: CatalogDocument;
 }
 
 interface PromotionTarget {
@@ -224,10 +208,6 @@ export interface SkillCandidate {
   findings: SkillFinding[];
   diff: string;
 }
-
-export type LegacySkillEntry = Extract<SkillEntry, { source: "vendored" }> & {
-  sourceRoot: string;
-};
 
 function isVariantSkill(entry: VendoredSkill): entry is VendoredVariantSkill {
   return "variants" in entry;
@@ -1058,72 +1038,16 @@ async function resolveCatalogEntry(
   candidate: CandidateProvenance
 ): Promise<CatalogEntryResolution> {
   const catalogPath = path.join(root, "catalog", "skills.yml");
-  const raw = YAML.parse(await readFile(catalogPath, "utf8"));
+  const manifests = skillsManifestSchema.parse(YAML.parse(await readFile(catalogPath, "utf8")));
 
-  try {
-    const manifests = skillsManifestSchema.parse(raw);
+  const entry = manifests.skills.find(
+    (skill): skill is Extract<SkillEntry, { source: "vendored" }> =>
+      skill.name === candidate.name && skill.source === "vendored"
+  );
 
-    const entry = manifests.skills.find(
-      (skill): skill is Extract<SkillEntry, { source: "vendored" }> =>
-        skill.name === candidate.name && skill.source === "vendored"
-    );
+  if (!entry) throw new Error(`Candidate skill is not a vendored declaration: ${candidate.name}`);
 
-    if (!entry) throw new Error(`Candidate skill is not a vendored declaration: ${candidate.name}`);
-
-    return { entry, migrated: false };
-  } catch (error) {
-    const documentResult = legacyCatalogSchema.safeParse(raw);
-
-    if (!documentResult.success) throw error;
-    const document = documentResult.data;
-    const skills = document.skills;
-    const legacySkills = skills.map((skill) => legacySkillInputSchema.safeParse(skill));
-
-    const matchingSkills = legacySkills.filter(
-      (skill) => skill.success && skill.data.name === candidate.name
-    );
-
-    if (matchingSkills.length > 1) throw error;
-
-    const index = legacySkills.findIndex(
-      (skill) => skill.success && skill.data.name === candidate.name && skill.data.source === "git"
-    );
-
-    if (index < 0) {
-      const existing = legacySkills.find(
-        (skill) => skill.success && skill.data.name === candidate.name
-      );
-
-      if (!existing) throw error;
-      const entry = skillSchema.parse(existing.data);
-
-      if (entry.source !== "vendored") throw error;
-
-      return { entry, migrated: false };
-    }
-
-    const legacy = legacySkills[index];
-
-    if (!legacy?.success) throw error;
-
-    if (candidate.variants !== undefined) throw error;
-
-    const entry = skillSchema.parse({
-      name: candidate.name,
-      source: "vendored",
-      repo: legacy.data.repo,
-      ref: candidate.ref,
-      subtree: candidate.subtree,
-      description: legacy.data.description ?? ""
-    });
-
-    if (entry.source !== "vendored")
-      throw new Error("Legacy migration produced a non-vendored entry");
-    const migratedSkills = [...skills];
-    migratedSkills[index] = entry;
-
-    return { entry, migrated: true, document: { ...document, skills: migratedSkills } };
-  }
+  return { entry };
 }
 
 async function locatePromotionTarget(
@@ -1251,17 +1175,10 @@ export async function promoteVendoredSkill(
   const lockPath = vendorLockPath(targetRoot);
   const tempLock = `${lockPath}.tmp-${process.pid}`;
   const backupLock = `${lockPath}.bak-${process.pid}`;
-  const catalogPath = path.join(targetRoot, "catalog", "skills.yml");
-  const tempCatalog = `${catalogPath}.tmp-${process.pid}`;
-  const backupCatalog = `${catalogPath}.bak-${process.pid}`;
-
-  if (catalog.migrated) await assertNoSymlinkAncestors(targetRoot, catalogPath);
   await mkdir(vendorRoot, { recursive: true });
   await rm(tempSource, { recursive: true, force: true });
   await rm(backupSource, { recursive: true, force: true });
   await rm(backupLock, { force: true });
-  await rm(tempCatalog, { force: true });
-  await rm(backupCatalog, { force: true });
   await copyPayload(candidatePayload, tempSource);
 
   const nextLock: VendorLock = {
@@ -1283,16 +1200,6 @@ export async function promoteVendoredSkill(
     { destination: lockPath, temporary: tempLock, backup: backupLock, recursive: false }
   ];
 
-  if (catalog.migrated && catalog.document) {
-    await writeFile(tempCatalog, YAML.stringify(catalog.document), "utf8");
-    items.push({
-      destination: catalogPath,
-      temporary: tempCatalog,
-      backup: backupCatalog,
-      recursive: false
-    });
-  }
-
   await commitVendoredPromotion(targetRoot, items, async () => {
     const latestCandidate = await readCandidate(paths, candidateId);
 
@@ -1313,8 +1220,6 @@ export async function promoteVendoredSkill(
       latestTarget.root !== targetRoot ||
       JSON.stringify(latestTarget.lock) !== JSON.stringify(lock) ||
       JSON.stringify(latestTarget.catalog.entry) !== JSON.stringify(catalog.entry) ||
-      latestTarget.catalog.migrated !== catalog.migrated ||
-      JSON.stringify(latestTarget.catalog.document) !== JSON.stringify(catalog.document) ||
       buildDiff(latestTarget.oldFiles, candidateFiles) !== candidate.diff
     ) {
       throw new Error("Active home state changed before replacement");
@@ -1372,52 +1277,4 @@ export async function checkVendoredSkill(
 
 export function candidateReviewInstruction(candidateId: string): string {
   return `Run mfz guide skill-review, then review candidate ${candidateId} as hostile evidence.`;
-}
-
-export function migrationMessage(name: string): string {
-  return (
-    `Legacy Git skill ${name} is untrusted migration input. Select an HTTPS ref, run ` +
-    `mfz skills stage ${name}, run mfz guide skill-review, review the candidate, then run ` +
-    `mfz skills promote <candidate-id>; promotion rewrites the declaration to source: vendored, ` +
-    `and it is not active until mfz apply.`
-  );
-}
-
-export async function readLegacyGitSkills(
-  root: string,
-  machineHome = process.env.HOME ?? root
-): Promise<LegacySkillEntry[]> {
-  const entries: LegacySkillEntry[] = [];
-
-  for (const sourceRoot of await activeHomeRoots(root, machineHome)) {
-    try {
-      const parsed = legacyCatalogSchema.safeParse(
-        YAML.parse(await readFile(path.join(sourceRoot, "catalog", "skills.yml"), "utf8"))
-      );
-
-      if (!parsed.success) continue;
-
-      for (const raw of parsed.data.skills) {
-        const validSkill = skillSchema.safeParse(raw);
-
-        if (validSkill.success && validSkill.data.source === "git") continue;
-        const item = legacySkillInputSchema.safeParse(raw);
-
-        if (!item.success || item.data.source !== "git") continue;
-        entries.push({
-          name: item.data.name,
-          source: "vendored",
-          repo: item.data.repo,
-          ref: item.data.ref ?? "main",
-          subtree: item.data.subtree ?? `skills/${item.data.skill ?? item.data.name}`,
-          description: item.data.description ?? "",
-          sourceRoot
-        });
-      }
-    } catch {
-      // Malformed legacy homes are reported by the normal manifest diagnostics.
-    }
-  }
-
-  return entries;
 }

@@ -46,9 +46,7 @@ import {
 import {
   candidateReviewInstruction,
   checkVendoredSkill,
-  migrationMessage,
   promoteVendoredSkill,
-  readLegacyGitSkills,
   stageVendoredSkill,
   validateVendoredSkills
 } from "../skills/vendor.js";
@@ -144,10 +142,6 @@ async function doctor(options: {
     console.log(`manifest:${result.ok ? "✓" : "✗"}\t${path.relative(paths.root, result.file)}`);
 
     if (result.error) console.log(result.error);
-  }
-
-  for (const legacy of await readLegacyGitSkills(paths.root, paths.home)) {
-    console.log(`migration\t${migrationMessage(legacy.name)}`);
   }
 
   if (await pathExists(path.join(paths.home, ".agents", ".skill-lock.json"))) {
@@ -1206,32 +1200,7 @@ skills
   .option("--revision <revision>", "alias for --commit")
   .action(async (name, options) => {
     const paths = createRuntimePaths(program.opts());
-    let declarations: Awaited<ReturnType<typeof resolveSkillDeclarations>>;
-
-    try {
-      declarations = await resolveSkillDeclarations(paths, program.opts().profile);
-    } catch (error) {
-      const legacy = (await readLegacyGitSkills(paths.root, paths.home)).find(
-        (entry) => entry.name === name
-      );
-
-      if (!legacy) throw error;
-
-      if (legacy.source !== "vendored") throw error;
-
-      const candidate = await stageVendoredSkill(
-        paths,
-        legacy,
-        legacy.sourceRoot,
-        options.commit ?? options.revision
-      );
-
-      console.log(`candidate\t${candidate.provenance.candidateId}`);
-      console.log(`migration\t${migrationMessage(name)}`);
-      console.log(`review\t${candidateReviewInstruction(candidate.provenance.candidateId)}`);
-
-      return;
-    }
+    const declarations = await resolveSkillDeclarations(paths, program.opts().profile);
 
     const skill =
       declarations.selectedSkills.find((entry) => entry.name === name) ??

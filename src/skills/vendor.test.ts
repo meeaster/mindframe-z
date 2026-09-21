@@ -11,7 +11,6 @@ import {
   digestSkillTree,
   promoteVendoredSkill,
   readCandidate,
-  readLegacyGitSkills,
   revalidateCandidate,
   stageVendoredSkill,
   validateVendoredSkill,
@@ -859,104 +858,6 @@ describe("vendored skill contracts", () => {
     await expect(validateVendoredSkills(home)).resolves.toEqual([
       "orphan: vendor lock entry has no vendored catalog declaration"
     ]);
-  });
-
-  it("reads legacy Git declarations only as migration input", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-skill-"));
-    await mkdir(path.join(root, "catalog"), { recursive: true });
-    await writeFile(
-      path.join(root, "catalog", "skills.yml"),
-      YAML.stringify({
-        skills: [{ name: "old", source: "git", repo: "https://example.invalid/old" }]
-      }),
-      "utf8"
-    );
-    const legacy = await readLegacyGitSkills(root);
-    expect(legacy[0]).toMatchObject({ source: "vendored", name: "old", ref: "main" });
-  });
-
-  it("does not reinterpret a valid pinned Git declaration as migration input", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-pinned-not-legacy-"));
-    await mkdir(path.join(root, "catalog"), { recursive: true });
-    await writeFile(
-      path.join(root, "catalog", "skills.yml"),
-      YAML.stringify({
-        skills: [
-          {
-            name: "trusted",
-            source: "git",
-            repo: "https://example.invalid/skills",
-            commit: "a".repeat(40),
-            subtree: "skills/trusted"
-          },
-          { name: "old", source: "git", repo: "https://example.invalid/old" }
-        ]
-      }),
-      "utf8"
-    );
-
-    const legacy = await readLegacyGitSkills(root);
-
-    expect(legacy.map((entry) => entry.name)).toEqual(["old"]);
-  });
-
-  it("discovers legacy declarations in an inherited home", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-child-"));
-    const upstream = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-upstream-"));
-    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-machine-"));
-    await writeFile(
-      path.join(root, "mfz-home.yml"),
-      YAML.stringify({ extends: { name: "upstream", repo: upstream, path: upstream } }),
-      "utf8"
-    );
-    await writeFile(path.join(upstream, "mfz-home.yml"), "description: upstream\n", "utf8");
-    await mkdir(path.join(upstream, "catalog"), { recursive: true });
-    await writeFile(
-      path.join(upstream, "catalog", "skills.yml"),
-      YAML.stringify({
-        skills: [{ name: "old", source: "git", repo: "https://example.invalid/old" }]
-      }),
-      "utf8"
-    );
-    const legacy = await readLegacyGitSkills(root, home);
-    expect(legacy[0]).toMatchObject({ name: "old", sourceRoot: upstream });
-  });
-
-  it("reads a remote-declared upstream home from its configured path", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-child-"));
-    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-legacy-remote-machine-"));
-    const configured = path.join(home, "workspace", "repos", "shared-home");
-    await writeFile(
-      path.join(root, "mfz-home.yml"),
-      YAML.stringify({
-        extends: { name: "shared", repo: "https://example.invalid/shared.git", path: configured }
-      }),
-      "utf8"
-    );
-    const managedFallback = path.join(home, ".mindframe-z", "homes", "shared");
-    await mkdir(path.join(configured, "catalog"), { recursive: true });
-    await writeFile(path.join(configured, "mfz-home.yml"), "description: shared\n", "utf8");
-    await writeFile(
-      path.join(configured, "catalog", "skills.yml"),
-      YAML.stringify({
-        skills: [{ name: "shared-skill", source: "git", repo: "https://example.invalid/shared" }]
-      }),
-      "utf8"
-    );
-    await mkdir(path.join(managedFallback, "catalog"), { recursive: true });
-    await writeFile(path.join(managedFallback, "mfz-home.yml"), "description: managed\n", "utf8");
-    await writeFile(
-      path.join(managedFallback, "catalog", "skills.yml"),
-      YAML.stringify({
-        skills: [{ name: "managed-skill", source: "git", repo: "https://example.invalid/managed" }]
-      }),
-      "utf8"
-    );
-
-    const legacy = await readLegacyGitSkills(root, home);
-
-    expect(legacy).toHaveLength(1);
-    expect(legacy[0]).toMatchObject({ name: "shared-skill", sourceRoot: configured });
   });
 
   it("rejects non-HTTPS sources before creating a Git cache", async () => {
