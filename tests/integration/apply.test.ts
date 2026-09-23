@@ -347,6 +347,24 @@ describe("apply integration", () => {
     );
   });
 
+  it.each([false, true])("runs reference %s after the rest of full apply", async (dryRun) => {
+    const started: string[] = [];
+
+    await applyConfig({
+      root,
+      home,
+      agent: "opencode",
+      target: "all",
+      noLink: true,
+      dryRun,
+      onStart: (operation) => started.push(operation.category)
+    });
+
+    const reference = started.indexOf("reference");
+    expect(reference).toBeGreaterThan(started.indexOf("skill"));
+    expect(reference).toBe(started.length - 1);
+  });
+
   it.each(["mise", "dotfiles"] as const)(
     "keeps targeted %s apply scoped away from references",
     async (target) => {
@@ -430,7 +448,7 @@ describe("apply integration", () => {
     expect(await readFile(indexPath, "utf8")).toBe("stale index\n");
   });
 
-  it("stops activation after a reference failure and retains completed reference effects", async () => {
+  it("retains completed activation and reference effects after a late reference failure", async () => {
     const referencesPath = path.join(root, "catalog", "references.yml");
     await writeFile(
       referencesPath,
@@ -477,7 +495,7 @@ describe("apply integration", () => {
         }
       )
     ).rejects.toThrow();
-    expect(renders).toBe(0);
+    expect(renders).toBe(3);
     expect(completed).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ category: "reference", status: "created" }),
@@ -485,10 +503,10 @@ describe("apply integration", () => {
       ])
     );
     expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(true);
-    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
+    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(true);
   });
 
-  it("stops indexes and activation after reference state persistence fails", async () => {
+  it("retains completed activation when late reference state persistence fails", async () => {
     const completed: OperationOutcome[] = [];
     let renders = 0;
     const failureCause = new Error("state store unavailable");
@@ -542,27 +560,39 @@ describe("apply integration", () => {
               failureCause
             );
           },
-          renderTarget: async () => {
+          renderTarget: async (_paths, _profile, target) => {
             renders += 1;
 
-            return { files: [], links: [] };
+            return {
+              files:
+                target === "opencode"
+                  ? [
+                      {
+                        path: configsPath(home, "personal", "opencode", "opencode.jsonc"),
+                        content: "rendered\n"
+                      }
+                    ]
+                  : [],
+              links: []
+            };
           }
         }
       )
     ).rejects.toThrow("Could not record ownership");
 
-    expect(renders).toBe(0);
+    expect(renders).toBe(3);
     expect(completed).toEqual(
       expect.arrayContaining([referenceOutcome, referenceFailure, bookkeepingFailure])
     );
-    await expect(readFile(path.join(home, ".mindframe-z", "references.md"))).rejects.toMatchObject({
-      code: "ENOENT"
-    });
-    await expect(
-      readFile(path.join(home, ".mindframe-z", "configs", "personal", "opencode", "opencode.jsonc"))
-    ).rejects.toMatchObject({
-      code: "ENOENT"
-    });
+    expect(await readFile(path.join(home, ".mindframe-z", "references.md"), "utf8")).toContain(
+      "local-ref"
+    );
+    expect(
+      await readFile(
+        path.join(home, ".mindframe-z", "configs", "personal", "opencode", "opencode.jsonc"),
+        "utf8"
+      )
+    ).toBe("rendered\n");
   });
 
   it("prints known completed effects when apply fails partway through references", async () => {

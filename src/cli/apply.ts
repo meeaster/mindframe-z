@@ -338,27 +338,6 @@ export async function applyConfig(
   ): Promise<OperationOutcome[]> => {
     const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
 
-    if (rendersAgents) {
-      const referenceOptions = { onComplete: operations.complete };
-
-      if (options.onStart) Object.assign(referenceOptions, { onStart: options.onStart });
-
-      if (options.onLifecycle)
-        Object.assign(referenceOptions, { onLifecycle: options.onLifecycle });
-
-      if (referenceSignal) Object.assign(referenceOptions, { signal: referenceSignal });
-
-      if (options.dryRun) {
-        await planReferences(paths, profile, referenceOptions);
-      } else {
-        if (!lockScope) throw new Error("Reference synchronization requires an active lock");
-        const synchronizeReferences = dependencies.syncReferences ?? syncReferencesLocked;
-        await synchronizeReferences(paths, profile, referenceOptions, lockScope);
-      }
-
-      throwIfReferenceSyncCancelled(referenceSignal);
-    }
-
     if (
       selectedExecutorTarget &&
       (requiresExecutorReconciliation(profile, selectedAgents) ||
@@ -483,6 +462,24 @@ export async function applyConfig(
       link: !options.noLink,
       onComplete: operations.complete
     });
+
+    const referenceOptions = { onComplete: operations.complete };
+
+    if (options.onStart) Object.assign(referenceOptions, { onStart: options.onStart });
+
+    if (options.onLifecycle) Object.assign(referenceOptions, { onLifecycle: options.onLifecycle });
+
+    if (referenceSignal) Object.assign(referenceOptions, { signal: referenceSignal });
+
+    if (options.dryRun) {
+      await planReferences(paths, profile, referenceOptions);
+    } else {
+      if (!lockScope) throw new Error("Reference synchronization requires an active lock");
+      const synchronizeReferences = dependencies.syncReferences ?? syncReferencesLocked;
+      await synchronizeReferences(paths, profile, referenceOptions, lockScope);
+    }
+
+    throwIfReferenceSyncCancelled(referenceSignal);
 
     return operations.outcomes;
   };
