@@ -5,7 +5,7 @@ minimumReleaseAgeExclude:
   - "@clack/prompts@1.8.0"
   - "@opencode-ai/plugin@1.18.18"
   - "@opencode-ai/sdk@1.18.18"
-trustPolicy: allow
+trustPolicy: off
 strictDepBuilds: true
 allowBuilds:
   esbuild: true
