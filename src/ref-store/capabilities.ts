@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { ExtraFolder, ReferenceEntry } from "../core/manifests.js";
 import {
@@ -18,6 +18,7 @@ import {
   writeFileOutcome,
   type WriteFileOptions
 } from "../core/file-operations.js";
+import { readDirEntries } from "../core/fs-util.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 import { extraFoldersIndexContent, referenceIndexContent, referencePath } from "./references.js";
 
@@ -208,14 +209,13 @@ function capabilityFiles(paths: RuntimePaths, profile: ResolvedProfile) {
 }
 
 async function existingCapabilityFiles(directory: string): Promise<string[]> {
-  try {
-    return (await readdir(directory, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-      .map((entry) => path.join(directory, entry.name));
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
-    throw error;
+  const files: string[] = [];
+
+  for (const entry of await readDirEntries(directory)) {
+    if (entry.isFile() && entry.name.endsWith(".md")) files.push(path.join(directory, entry.name));
   }
+
+  return files;
 }
 
 export async function writeCapabilityIndexes(
@@ -237,10 +237,8 @@ export async function writeCapabilityIndexes(
   const outcomes: OperationOutcome[] = [];
   const expected = new Set(files.map((file) => file.path));
 
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const stalePath = path.join(directory, entry.name);
-
-    if (entry.isFile() && entry.name.endsWith(".md") && !expected.has(stalePath)) {
+  for (const stalePath of await existingCapabilityFiles(directory)) {
+    if (!expected.has(stalePath)) {
       outcomes.push(await removePathOutcome(stalePath, options));
     }
   }
