@@ -71,10 +71,10 @@ mfz currently handles the portable parts:
 
 | Claude Code feature | Current mfz mapping | Gap |
 | --- | --- | --- |
-| Global/project guidance | Render `configs/<profile>/AGENTS.md`; render `CLAUDE.md` importing AGENTS and machine indexes. | None for current model. |
+| Global/project guidance | Render `configs/<profile>/AGENTS.md`; render `CLAUDE.md` importing AGENTS; it also imports the full machine indexes only when no `capability_groups` are defined. | None for current model. |
 | Settings | `profile.claude.settings` plus generated permissions, merged into ~/.claude/settings.json. | Schema is loose pass-through; no first-class hooks/subagents/plugins model. |
 | MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `configs/<profile>/claude/mcp.json`, which replaces top-level ~/.claude.json#mcpServers. | Project-scoped `.mcp.json` and `projects[*].mcpServers` are not generated or touched. |
-| Extra folders | `extra_folders` generates `permissions` and `additionalDirectories`. | None for current machine-local model. |
+| Extra folders | `extra_folders` generates `permissions` rules and `permissions.additionalDirectories`. | None for current machine-local model. |
 | Skills | Catalog/profile skills plus external `mfz skills` commands. | Claude skills are runtime state, not rendered profile files. |
 | Subagents | Not first-class. | Could add a source directory and renderer if needed. |
 | Hooks | Pass-through via `claude.settings.hooks`. | No reusable hook source file model. |
@@ -161,8 +161,8 @@ Codex has an mfz renderer:
 | Instructions | CLAUDE.md | `instructions` array and project docs | AGENTS.md |
 | Tool-neutral generated guidance | Imported by rendered CLAUDE.md | Listed in `instructions` | Installed to ~/.codex/AGENTS.md |
 | MCP | ~/.claude.json and .mcp.json | `mcp` object | `[mcp_servers]` |
-| Permissions | `permissions.allow/ask/deny`, `defaultMode`, `additionalDirectories` | `permission` object | `approval_policy`, `sandbox_mode`, `[permissions]` profiles |
-| Extra folders | Read/Edit permissions plus `additionalDirectories` | `external_directory` and `edit` rules | Named filesystem permission profile |
+| Permissions | `permissions.allow/ask/deny`, `defaultMode`, `permissions.additionalDirectories` | `permission` object | `approval_policy`, `sandbox_mode`, `[permissions]` profiles |
+| Extra folders | Read/Edit permissions plus `permissions.additionalDirectories` | `external_directory` and `edit` rules | Named filesystem permission profile |
 | Skills | .claude/skills, skillOverrides | `skills.paths`, `skills.urls`, `permission.skill` | .agents/skills and `[[skills.config]]` |
 | Commands | Merged into skills; legacy .claude/commands supported | command(s) markdown files | Deprecated prompts; prefer skills |
 | Subagents | Markdown in .claude/agents or ~/.claude/agents | agent(s)/mode(s) markdown files | TOML in .codex/agents or ~/.codex/agents |
@@ -226,7 +226,7 @@ Keep each tool's native permission model behind a common mfz intent:
 | mfz input | Claude Code output | OpenCode output | Codex output |
 | --- | --- | --- | --- |
 | `references_dir` | Allow Read, deny Edit | `external_directory: allow`, `edit: deny` | `read` permission |
-| `extra_folders.read=allow` | Allow Read and add `additionalDirectories` | `external_directory: allow` | filesystem read/write depending on edit |
+| `extra_folders.read=allow` | Allow Read and add `permissions.additionalDirectories` | `external_directory: allow` | filesystem read/write depending on edit |
 | `extra_folders.edit=allow` | Allow Edit | no `edit` deny rule | filesystem write |
 | `extra_folders.read/edit=deny` | Deny Read/Edit | deny rules | filesystem deny |
 

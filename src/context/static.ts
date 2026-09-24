@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "../core/fs-util.js";
 import { extraFoldersIndexContent, referenceIndexContent } from "../ref-store/references.js";
+import { capabilityIndexContent } from "../ref-store/capabilities.js";
 import {
   executorBridgeName,
   executorMcpServers,
@@ -226,16 +227,37 @@ export async function analyzeHarnessStatic(
     }
   }
 
-  contributors.push(
-    indexContributor(
-      "references index",
-      "references.md",
-      "generated references index",
-      referenceIndexContent(profile)
-    )
-  );
+  const hasCapabilityGroups = profile.profile.capability_groups.length > 0;
 
-  if (profile.extraFolders.length > 0) {
+  // Rendered AGENTS.md inlines the compact capability index in place of the full indexes;
+  // OpenCode without global instructions still lists the full indexes as instruction files.
+  const loadsFullIndexes =
+    !hasCapabilityGroups ||
+    (harness === "opencode" && profile.profile.opencode.global_instructions !== true);
+
+  if (hasCapabilityGroups) {
+    contributors.push(
+      indexContributor(
+        "capability index",
+        "AGENTS.md",
+        "compact capability index inlined in rendered AGENTS.md",
+        capabilityIndexContent(paths, profile)
+      )
+    );
+  }
+
+  if (loadsFullIndexes) {
+    contributors.push(
+      indexContributor(
+        "references index",
+        "references.md",
+        "generated references index",
+        referenceIndexContent(profile)
+      )
+    );
+  }
+
+  if (loadsFullIndexes && profile.extraFolders.length > 0) {
     contributors.push(
       indexContributor(
         "extra-folder index",

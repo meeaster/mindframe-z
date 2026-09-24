@@ -125,15 +125,13 @@ export async function renderClaude(
     }
   }
 
-  const claudeMdLines = [
-    "# CLAUDE.md",
-    "",
-    `@${path.join(configsProfile, "AGENTS.md")}`,
-    `@${referenceIndexPath(paths)}`
-  ];
+  const claudeMdLines = ["# CLAUDE.md", "", `@${path.join(configsProfile, "AGENTS.md")}`];
 
-  if (extraFolders.length > 0) {
-    claudeMdLines.push(`@${extraFoldersIndexPath(paths)}`);
+  // With capability groups, AGENTS.md inlines the compact index and points to the full indexes.
+  if (profile.profile.capability_groups.length === 0) {
+    claudeMdLines.push(`@${referenceIndexPath(paths)}`);
+
+    if (extraFolders.length > 0) claudeMdLines.push(`@${extraFoldersIndexPath(paths)}`);
   }
 
   claudeMdLines.push(
@@ -166,7 +164,7 @@ export async function renderClaude(
   );
 
   if (additionalDirectories.length > 0) {
-    settings.additionalDirectories = additionalDirectories;
+    settings.permissions.additionalDirectories = additionalDirectories;
   }
 
   const managedClaudeMcp = jsonObjectSchema.parse(

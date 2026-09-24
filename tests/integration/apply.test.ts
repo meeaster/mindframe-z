@@ -66,9 +66,12 @@ const ClaudeSettings = z
   .object({
     model: z.string().optional(),
     includeGitInstructions: z.boolean().optional(),
-    additionalDirectories: z.array(z.string()).optional(),
     permissions: z
-      .object({ allow: z.array(z.string()).optional(), deny: z.array(z.string()).optional() })
+      .object({
+        allow: z.array(z.string()).optional(),
+        deny: z.array(z.string()).optional(),
+        additionalDirectories: z.array(z.string()).optional()
+      })
       .passthrough()
       .optional(),
     env: z.record(z.string(), z.string()).optional()
@@ -820,6 +823,11 @@ describe("apply integration", () => {
     expect(details).toContain("Permissions: read allow, edit allow");
     expect(agents).toContain("# Available Workspace Capabilities");
     expect(agents).not.toContain("# Enabled References");
+    await applyConfig({ root, home, agent: "claude-code", target: "all" });
+    const claudeMd = await readFile(configsPath(home, "personal", "claude", "CLAUDE.md"), "utf8");
+    expect(claudeMd).toContain(`@${configsPath(home, "personal", "AGENTS.md")}`);
+    expect(claudeMd).not.toContain("references.md");
+    expect(claudeMd).not.toContain("extra_folders.md");
     await expect(
       readFile(path.join(home, ".mindframe-z", "references.md"), "utf8")
     ).resolves.toContain("Local test reference with full routing detail.");
@@ -1037,8 +1045,8 @@ describe("apply integration", () => {
     );
 
     expect(settings).toHaveProperty("permissions");
-    expect(settings).toHaveProperty("additionalDirectories");
-    expect(settings.additionalDirectories).toContain(codePath);
+    expect(settings).not.toHaveProperty("additionalDirectories");
+    expect(settings.permissions?.additionalDirectories).toContain(codePath);
     expect(settings.permissions?.allow).toContain(`Read(/${codePath}/**)`);
   });
 
