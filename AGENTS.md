@@ -21,7 +21,6 @@ pnpm test:thread       # thread source tests
 pnpm test:sessions     # session backup/hydration source tests
 pnpm test:sandbox      # sandbox source tests plus current sandbox CLI integration seams
 pnpm test:skills       # skills/TUI source tests plus vendored skill integration seams
-pnpm test:plugins      # OpenCode plugin tests
 pnpm test:apply        # broad apply/render/link CLI integration bucket
 pnpm test:doctor       # doctor/status manifest integration seams
 pnpm test:dotfiles     # dotfile/zsh/git identity integration seams
@@ -30,7 +29,7 @@ pnpm test:refs         # reference integration seams
 pnpm test -- src/work tests/integration/work.test.ts # work runtime and CLI
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt; skips configs/, schemas/, skills/, openspec/
-pnpm check             # lint -> fmt:check -> build -> fast test
+pnpm check             # lint -> fmt:check -> build -> check:bun -> fast test
 pnpm schemas           # regenerate schemas/*.schema.json from src/core/manifests.ts
 pnpm dev doctor
 # Isolated test examples only:
@@ -42,7 +41,7 @@ Use `pnpm dev <command>` for source execution via `tsx`; do not insert `--` befo
 
 ## Verification
 
-Use the narrowest command that proves the change while iterating. Start with the matching focused command (`pnpm test:thread`, `pnpm test:sessions`, `pnpm test:sandbox`, `pnpm test:skills`, `pnpm test:plugins`, `pnpm test:dotfiles`, `pnpm test:mise`, or `pnpm test:refs`) plus `pnpm build` when types are affected. Use `pnpm check` for fast local confidence after a change. Use `pnpm test:integration` or `pnpm test:all` when touching broad CLI/apply/render behavior, shared integration support, or before handing off broad changes.
+Use the narrowest command that proves the change while iterating. Start with the matching focused command (`pnpm test:thread`, `pnpm test:sessions`, `pnpm test:sandbox`, `pnpm test:skills`, `pnpm test:dotfiles`, `pnpm test:mise`, or `pnpm test:refs`) plus `pnpm build` when types are affected. Use `pnpm check` for fast local confidence after a change. Use `pnpm test:integration` or `pnpm test:all` when touching broad CLI/apply/render behavior, shared integration support, or before handing off broad changes.
 
 Integration tests are split by feature file under `tests/integration/`. If a change crosses apply/render/profile seams, prefer `pnpm test:apply` or `pnpm test:integration` over a narrower feature script.
 
@@ -59,13 +58,13 @@ Key entrypoints:
 - `src/cli/mfz.ts` defines CLI commands such as `apply`, `doctor`, `status`, `sync`, `skills`, and `refs`.
 - `src/core/manifests.ts` defines Zod schemas; run `pnpm schemas` after changing manifest shapes and commit `schemas/*.schema.json`.
 - `src/core/profile.ts` resolves profile inheritance and merge semantics.
-- `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `mise`, and `dotfiles`.
+- `src/renderers/` owns target-specific output for `opencode`, `claude-code`, `codex`, `pi`, `mise`, `dotfiles`, and Executor.
 - `src/work/` owns configurable durable work units plus machine-local bindings, checkpoints, receipts, and CLI behavior.
 - `src/sync/` promotes unmanaged edits from rendered configs back into profile YAML/TOML.
 
 ## File Path Discovery
 
-Do not guess repo paths. Before reading a path from memory or convention, confirm it with `fff_find_files`, `glob`, or a targeted grep. Common path traps in this repo:
+Do not guess repo paths. Before reading a path from memory or convention, confirm it with `glob` or a targeted grep. Common path traps in this repo:
 
 - Profiles live at `profiles/<name>/profile.yml` in the active home, not `profiles/<name>.yml`.
 - The references catalog is `catalog/references.yml` in the active home.
@@ -105,33 +104,30 @@ Use `mise prune --tools -y` to remove unused installed versions; plain `mise pru
 
 Claude `settings.json` and Claude MCP are not symlinked. The rendered `~/.mindframe-z/configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots. Apply merges `settings.json` into local `~/.claude/settings.json` and replaces the top-level `~/.claude.json#mcpServers` with `mcp.json`, preserving the rest of `~/.claude.json`, including project-scoped servers. Codex `[mcp_servers]` in `$CODEX_HOME/config.toml` is likewise replaced. User-scope MCP servers are therefore fully profile-owned, as in the symlinked OpenCode config: apply reports each server it removes, and `mfz sync` warns about unmanaged servers before the next apply removes them.
 
-OpenCode plugins and commands are source files under the home's `opencode/`; profiles list enabled names under `opencode`, and apply copies them into `~/.mindframe-z/configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
+OpenCode plugins and commands are source files under the home's `opencode/`; profiles list enabled names under `opencode`. Apply registers server plugin directories in place with `file://` URLs, so they resolve imports from the home's own install. It copies TUI plugins and commands into `~/.mindframe-z/configs/<profile>/opencode/` before linking the rendered OpenCode config and commands. The optional `opencode.dependencies` manifest is rendered, not installed.
 
 ## Permissions
 
-Profile permissions belong in the home's `profiles/*/profile.yml` under `opencode.config.permission`.
-
-- Default `bash` to `ask` with `"*": ask`.
-- Add explicit allow rules only for safe, read-only command forms you want to reuse.
-- Match the exact shell text you want approved; inline env prefixes, wrappers, and chained commands are separate patterns.
-- Keep allow rules narrow rather than using broad convenience globs.
+OpenCode V2 permissions are ordered lists of `{action, resource, effect}` rules. MFZ generates the top-level `permissions` list from `extra_folders`, `references_dir`, and managed secret paths, and rejects a profile that sets `opencode.config.permissions`. Put agent-specific rules in the home's `profiles/*/profile.yml` under `opencode.config.agents.<name>.permissions`, and keep allow rules narrow rather than using broad convenience globs.
 
 Example:
 
 ```yml
 opencode:
   config:
-    permission:
-      bash:
-        "*": ask
-        "aws ec2 describe-instances *": allow
+    agents:
+      explore:
+        permissions:
+          - action: edit
+            resource: "*"
+            effect: deny
 ```
 
 Edit configuration in the home and activate it with plain `mfz apply`. Use `mfz sync` only to promote supported unmanaged configuration keys to `base` or the active profile; it is not the editing workflow for managed output or skill source.
 
 ## Testing And Safety
 
-Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR` and `CLAUDE_CONFIG_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
+Integration tests are isolated with temp `root` and `home` directories and override `OPENCODE_CONFIG_DIR`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `PI_CODING_AGENT_DIR`; they should not touch real `~/.config/opencode`, `~/.claude`, `~/.codex`, `~/.pi`, or `~/.config/mise`. Use `--no-link` in new tests unless symlink behavior is under test.
 
 Pre-commit runs only Gitleaks. `pre-commit` is supplied by the home's Mise configuration; use `mise install`, then `pre-commit install` or `pre-commit run --all-files`.
 
