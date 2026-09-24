@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import type { ResolvedProfile } from "../core/profile.js";
 import {
   activeCapabilityGroups,
   capabilityIndexContent,
+  planCapabilityIndexes,
   writeCapabilityIndexes
 } from "./capabilities.js";
 
@@ -71,6 +72,29 @@ describe("workspace capability indexes", () => {
       { target: capabilityGroupPath(paths, "agent-tooling"), status: "created" }
     ]);
     await expect(readFile(stale, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("plans stale group removal without touching disk and tolerates an absent directory", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-capabilities-"));
+    const paths = createRuntimePaths({ home });
+    const profile = groupedProfile(home);
+
+    expect(await planCapabilityIndexes(paths, profile)).toMatchObject([
+      { target: capabilityIndexPath(paths), status: "planned" },
+      { target: capabilityGroupPath(paths, "agent-tooling"), status: "planned" }
+    ]);
+    await expect(readdir(capabilitiesDir(paths))).rejects.toMatchObject({ code: "ENOENT" });
+
+    await mkdir(capabilitiesDir(paths), { recursive: true });
+    const stale = path.join(capabilitiesDir(paths), "stale.md");
+    await writeFile(stale, "stale\n");
+
+    expect(await planCapabilityIndexes(paths, profile)).toMatchObject([
+      { target: stale, status: "planned" },
+      { target: capabilityIndexPath(paths), status: "planned" },
+      { target: capabilityGroupPath(paths, "agent-tooling"), status: "planned" }
+    ]);
+    expect(await readFile(stale, "utf8")).toBe("stale\n");
   });
 });
 
