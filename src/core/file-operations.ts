@@ -11,6 +11,7 @@ export interface WriteFileOptions {
   category?: OperationCategory;
   mode?: number;
   significance?: OperationOutcome["significance"];
+  detail?: string;
   onComplete?: OperationCompletion;
 }
 
@@ -76,11 +77,13 @@ export async function writeFileOutcome(
 
   if (options.mode !== undefined) await chmod(file, options.mode);
 
-  const outcome = {
+  const outcome: OperationOutcome = {
     ...base,
-    status: existing.kind === "missing" ? ("created" as const) : ("updated" as const),
+    status: existing.kind === "missing" ? "created" : "updated",
     changes
   };
+
+  if (options.detail !== undefined) outcome.detail = options.detail;
 
   options.onComplete?.(outcome);
 
@@ -116,6 +119,8 @@ export async function planFileOutcome(
     significance: options.significance ?? "meaningful",
     changes
   };
+
+  if (changes.length > 0 && options.detail !== undefined) outcome.detail = options.detail;
 
   options.onComplete?.(outcome);
 

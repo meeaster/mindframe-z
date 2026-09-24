@@ -28,6 +28,8 @@ export interface RenderedFile {
   content: string;
   ifMissing?: boolean;
   mode?: number;
+  /** Reported with the write outcome when the file changes. */
+  detail?: string;
 }
 
 export interface RenderResult {
@@ -95,6 +97,8 @@ export async function writeRenderedFiles(
 
     if (file.mode !== undefined) options.mode = file.mode;
 
+    if (file.detail !== undefined) options.detail = file.detail;
+
     if (onComplete) options.onComplete = onComplete;
     outcomes.push(await writeFileOutcome(file.path, file.content, options));
   }
@@ -151,6 +155,8 @@ export async function writeLocalFiles(
     const options: WriteFileOptions = {};
 
     if (file.mode !== undefined) options.mode = file.mode;
+
+    if (file.detail !== undefined) options.detail = file.detail;
 
     if (onComplete) options.onComplete = onComplete;
     outcomes.push(await writeFileOutcome(file.path, file.content, options));

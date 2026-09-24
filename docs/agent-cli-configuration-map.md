@@ -42,7 +42,7 @@ Existing agent renderers are gated by `profile.agents`:
 | Agent | Rendered output | Runtime behavior |
 | --- | --- | --- |
 | OpenCode | configs/<profile>/opencode/opencode.jsonc plus commands, agents, plugins | Symlinked into ~/.config/opencode. The global CLI file owns TUI plugin entries. |
-| Claude Code | configs/<profile>/claude/CLAUDE.md, settings.json, mcp.json | CLAUDE.md is symlinked. settings.json and ~/.claude.json#mcpServers are merged into local user files. |
+| Claude Code | configs/<profile>/claude/CLAUDE.md, settings.json, mcp.json | CLAUDE.md is symlinked. settings.json is merged into ~/.claude/settings.json; mcp.json replaces top-level ~/.claude.json#mcpServers. |
 | Codex | configs/<profile>/codex/AGENTS.md, config.toml | AGENTS.md is copied into $CODEX_HOME. config.toml is merged into local user config. |
 
 Codex follows the same renderer pattern: it is an agent target, renders a managed
@@ -73,7 +73,7 @@ mfz currently handles the portable parts:
 | --- | --- | --- |
 | Global/project guidance | Render `configs/<profile>/AGENTS.md`; render `CLAUDE.md` importing AGENTS and machine indexes. | None for current model. |
 | Settings | `profile.claude.settings` plus generated permissions, merged into ~/.claude/settings.json. | Schema is loose pass-through; no first-class hooks/subagents/plugins model. |
-| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `configs/<profile>/claude/mcp.json` and merged into ~/.claude.json. | Project-scoped `.mcp.json` is not generated. |
+| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `configs/<profile>/claude/mcp.json`, which replaces top-level ~/.claude.json#mcpServers. | Project-scoped `.mcp.json` and `projects[*].mcpServers` are not generated or touched. |
 | Extra folders | `extra_folders` generates `permissions` and `additionalDirectories`. | None for current machine-local model. |
 | Skills | Catalog/profile skills plus external `mfz skills` commands. | Claude skills are runtime state, not rendered profile files. |
 | Subagents | Not first-class. | Could add a source directory and renderer if needed. |
@@ -139,7 +139,7 @@ Codex has an mfz renderer:
 | --- | --- | --- |
 | Agent target | `codex` in agent enums and profile `agents`. | Affects schema, profile resolution, MCP/skill target filtering, apply/status/doctor/sync. |
 | User config | `profile.codex.config` renders to `configs/<profile>/codex/config.toml`. | TOML pass-through. Use `codex.config.tui` for additive `[tui]` settings such as `theme`, `status_line`, and `status_line_use_colors`. |
-| Local apply behavior | Managed snapshot merges into `$CODEX_HOME/config.toml`. | Claude-style merge avoids overwriting auth/project trust/user state. The `[plugins]` table is full-owner state and is replaced from `codex.plugins`. |
+| Local apply behavior | Managed snapshot merges into `$CODEX_HOME/config.toml`. | Claude-style merge avoids overwriting auth/project trust/user state. The `[plugins]` and `[mcp_servers]` tables are full-owner state and are replaced from the rendered snapshot. |
 | Instructions | `configs/<profile>/codex/AGENTS.md` copies to `$CODEX_HOME/AGENTS.md`. | Does not create `AGENTS.override.md`. |
 | MCP | `shared/mcp.yml` selections render to `[mcp_servers]`. | Stdio command/args/env and HTTP url/static headers are covered. |
 | Extra folders | Named permission profile under `[permissions.mfz.filesystem]` plus `default_permissions = "mfz"`. | Maps read/write/deny from references and extra folders. |

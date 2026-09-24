@@ -103,7 +103,7 @@ Use `mise prune --tools -y` to remove unused installed versions; plain `mise pru
 
 `extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode native permission rules and Claude `permissions`/`additionalDirectories`; `references_dir` is always readable and edit-denied by default.
 
-Claude `settings.json` and Claude MCP are not symlinked. The rendered `~/.mindframe-z/configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots; apply merges them into local `~/.claude/settings.json` and `~/.claude.json#mcpServers` while preserving unrelated user state.
+Claude `settings.json` and Claude MCP are not symlinked. The rendered `~/.mindframe-z/configs/<profile>/claude/settings.json` and `mcp.json` are managed snapshots. Apply merges `settings.json` into local `~/.claude/settings.json` and replaces the top-level `~/.claude.json#mcpServers` with `mcp.json`, preserving the rest of `~/.claude.json`, including project-scoped servers. Codex `[mcp_servers]` in `$CODEX_HOME/config.toml` is likewise replaced. User-scope MCP servers are therefore fully profile-owned, as in the symlinked OpenCode config: apply reports each server it removes, and `mfz sync` warns about unmanaged servers before the next apply removes them.
 
 OpenCode plugins and commands are source files under the home's `opencode/`; profiles list enabled names under `opencode`, and apply copies them into `~/.mindframe-z/configs/<profile>/opencode/` before linking the rendered OpenCode config/commands.
 

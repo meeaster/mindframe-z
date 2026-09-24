@@ -87,8 +87,8 @@ Normal MCP OAuth discovers metadata from the integration endpoint. Assisted OAut
 Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
 - `opencode`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI plugins, commands, agents, native permissions, and nested MCP servers.
-- `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions.
-- `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables.
+- `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions. The MCP snapshot replaces top-level `~/.claude.json#mcpServers`.
+- `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables. The MCP and plugin tables replace their local counterparts.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
 - `mise`: ordered native fragments under `conf.d/` plus namespaced task files; snapshots live under `configs/<profile>/mise/` and the single `configs/<profile>/.mfz-owned.json` manifest limits host cleanup to exact MFZ-owned paths.
 - `dotfiles`: profile dotfiles; managed shell files guarantee `~/.local/bin` is on `PATH`.

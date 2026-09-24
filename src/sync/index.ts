@@ -12,6 +12,7 @@ import type { ResolvedProfile } from "../core/profile.js";
 import { syncOpenCode } from "./opencode.js";
 import { syncClaude } from "./claude.js";
 import { syncCodex } from "./codex.js";
+import { unmanagedClaudeMcp, unmanagedCodexMcp, unmanagedMcpWarning } from "./mcp.js";
 import {
   syncDocumentSchema,
   type SyncCandidate,
@@ -245,18 +246,36 @@ export async function runSync(
   const clp = path.join(configsProfile, "claude", "settings.json");
   const cdx = path.join(configsProfile, "codex", "config.toml");
 
-  const [opencodeResult, claudeResult, codexResult, commandCandidates] = await Promise.all([
-    profile.agents.includes("opencode")
-      ? syncOpenCode(ocp, profile)
-      : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("claude-code")
-      ? syncClaude(clp, profile)
-      : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("codex")
-      ? syncCodex(cdx, path.join(paths.codexDir, "config.toml"), profile)
-      : Promise.resolve({ candidates: [] }),
-    profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([])
-  ]);
+  const localCodexConfig = path.join(paths.codexDir, "config.toml");
+
+  const [opencodeResult, claudeResult, codexResult, commandCandidates, ...unmanagedMcp] =
+    await Promise.all([
+      profile.agents.includes("opencode")
+        ? syncOpenCode(ocp, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("claude-code")
+        ? syncClaude(clp, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("codex")
+        ? syncCodex(cdx, localCodexConfig, profile)
+        : Promise.resolve({ candidates: [] }),
+      profile.agents.includes("opencode") ? syncCommands(paths, profile) : Promise.resolve([]),
+      profile.agents.includes("claude-code")
+        ? unmanagedClaudeMcp(
+            path.join(paths.home, ".claude.json"),
+            path.join(configsProfile, "claude", "mcp.json")
+          )
+        : Promise.resolve(null),
+      profile.agents.includes("codex")
+        ? unmanagedCodexMcp(localCodexConfig, cdx)
+        : Promise.resolve(null)
+    ]);
+
+  const mcpWarnings = unmanagedMcp.flatMap((result) =>
+    result && result.names.length > 0 ? [unmanagedMcpWarning(result)] : []
+  );
+
+  for (const warning of mcpWarnings) console.log(warning);
 
   const candidates = [
     ...opencodeResult.candidates,
@@ -265,7 +284,7 @@ export async function runSync(
   ];
 
   if (candidates.length === 0 && commandCandidates.length === 0) {
-    console.log("No unmanaged keys found — everything is in sync.");
+    if (mcpWarnings.length === 0) console.log("No unmanaged keys found — everything is in sync.");
 
     return;
   }

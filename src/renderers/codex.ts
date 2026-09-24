@@ -9,7 +9,12 @@ import {
   requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
-import type { RenderResult } from "../core/render.js";
+import type { RenderedFile, RenderResult } from "../core/render.js";
+import {
+  mcpRemovalDetail,
+  mcpServerNamesSchema,
+  unmanagedMcpServerNames
+} from "../core/mcp-full-sync.js";
 import { renderInlinedAgents } from "./agents-doc.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
@@ -152,7 +157,9 @@ export async function renderCodex(
   const configContent = stringify(renderedConfig);
   const agentsContent = await renderInlinedAgents(paths, profile);
   const localConfigPath = path.join(paths.codexDir, "config.toml");
-  const mergedLocalConfig = deepMerge(await readTomlObject(localConfigPath), renderedConfig);
+  const existingLocalConfig = await readTomlObject(localConfigPath);
+  const mergedLocalConfig = deepMerge(existingLocalConfig, renderedConfig);
+  mergedLocalConfig.mcp_servers = renderedConfig.mcp_servers;
 
   if (hasPlugins) {
     mergedLocalConfig.plugins = plugins;
@@ -160,13 +167,25 @@ export async function renderCodex(
     delete mergedLocalConfig.plugins;
   }
 
+  const localConfig: RenderedFile = {
+    path: localConfigPath,
+    content: stringify(mergedLocalConfig)
+  };
+
+  const removedServers = unmanagedMcpServerNames(
+    mcpServerNamesSchema.parse(existingLocalConfig.mcp_servers),
+    mcpServerNamesSchema.parse(renderedConfig.mcp_servers)
+  );
+
+  if (removedServers.length > 0) localConfig.detail = mcpRemovalDetail(removedServers);
+
   return {
     files: [
       { path: configPath, content: configContent },
       { path: agentsPath, content: agentsContent }
     ],
     localFiles: [
-      { path: localConfigPath, content: stringify(mergedLocalConfig) },
+      localConfig,
       { path: path.join(paths.codexDir, "AGENTS.md"), content: agentsContent }
     ],
     links: []

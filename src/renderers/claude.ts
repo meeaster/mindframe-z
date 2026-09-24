@@ -16,7 +16,8 @@ import {
   requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
-import type { RenderResult } from "../core/render.js";
+import type { RenderedFile, RenderResult } from "../core/render.js";
+import { mcpRemovalDetail, unmanagedMcpServerNames } from "../core/mcp-full-sync.js";
 import { jsonObjectSchema, type JsonObject } from "../core/json.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { claudeExecutorEntry } from "./executor.js";
@@ -80,27 +81,6 @@ function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], ho
   if (server.server.env) Object.assign(entry, { env: server.server.env });
 
   return entry;
-}
-
-function mergeClaudeMcp(
-  existingClaudeJson: JsonObject,
-  managedMcp: JsonObject,
-  managedServerNames: Set<string>
-) {
-  const existingMcpServersRaw = existingClaudeJson.mcpServers;
-  const existingMcpServers = jsonObjectSchema.safeParse(existingMcpServersRaw).data ?? {};
-
-  for (const serverName of managedServerNames) {
-    delete existingMcpServers[serverName];
-  }
-
-  return {
-    ...existingClaudeJson,
-    mcpServers: {
-      ...existingMcpServers,
-      ...managedMcp
-    }
-  };
 }
 
 export async function renderClaude(
@@ -203,37 +183,20 @@ export async function renderClaude(
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
   const existingClaudeJson = jsonObjectSchema.parse(await readJsonObject(localClaudeJsonPath));
-  const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data;
-  const existingExecutor = existingMcpServers?.[executorBridgeName];
-  const existingExecutorObject = jsonObjectSchema.safeParse(existingExecutor).data;
-
-  const existingExecutorEnv = existingExecutorObject
-    ? jsonObjectSchema.safeParse(existingExecutorObject.env).data
-    : undefined;
-
-  const hasGeneratedExecutor =
-    existingExecutorObject !== undefined &&
-    existingExecutorObject.type === "stdio" &&
-    existingExecutorObject.command === "executor" &&
-    Array.isArray(existingExecutorObject.args) &&
-    ((existingExecutorObject.args.includes("--scope") &&
-      existingExecutorEnv !== undefined &&
-      "EXECUTOR_DATA_DIR" in existingExecutorEnv) ||
-      (existingExecutorObject.args[0] === "mcp" &&
-        existingExecutorObject.args.includes("--elicitation-mode")));
-
-  const managedClaudeServerNames = new Set([
-    ...profile.mcpServers.map((server) => server.name),
-    ...(requiresExecutorBridge(profile) || hasGeneratedExecutor ? [executorBridgeName] : [])
-  ]);
-
+  const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data ?? {};
   const mergedSettings = deepMerge(await readJsonObject(localSettingsPath), settings);
 
-  const mergedClaudeJson = mergeClaudeMcp(
-    existingClaudeJson,
-    managedClaudeMcp,
-    managedClaudeServerNames
+  const localClaudeJson: RenderedFile = {
+    path: localClaudeJsonPath,
+    content: jsonFileContent({ ...existingClaudeJson, mcpServers: managedClaudeMcp })
+  };
+
+  const removedServers = unmanagedMcpServerNames(
+    Object.keys(existingMcpServers),
+    Object.keys(managedClaudeMcp)
   );
+
+  if (removedServers.length > 0) localClaudeJson.detail = mcpRemovalDetail(removedServers);
 
   return {
     files: [
@@ -243,7 +206,7 @@ export async function renderClaude(
     ],
     localFiles: [
       { path: localSettingsPath, content: jsonFileContent(mergedSettings) },
-      { path: localClaudeJsonPath, content: jsonFileContent(mergedClaudeJson) }
+      localClaudeJson
     ],
     links: [{ linkPath: path.join(paths.claudeDir, "CLAUDE.md"), targetPath: claudeMdPath }]
   };

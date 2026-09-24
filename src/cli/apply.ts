@@ -47,7 +47,8 @@ import {
   planRemovePathOutcome,
   removePathOutcome,
   writeFileOutcome,
-  writeJsonAtomicOutcome
+  writeJsonAtomicOutcome,
+  type WriteFileOptions
 } from "../core/file-operations.js";
 import {
   collectOperations,
@@ -285,9 +286,11 @@ async function planRenderedFile(
   file: RenderResult["files"][number],
   onComplete: OperationCompletion
 ): Promise<void> {
-  const writeOptions = { onComplete };
+  const writeOptions: WriteFileOptions = { onComplete };
 
-  if (file.mode !== undefined) Object.assign(writeOptions, { mode: file.mode });
+  if (file.mode !== undefined) writeOptions.mode = file.mode;
+
+  if (file.detail !== undefined) writeOptions.detail = file.detail;
   await planFileOutcome(file.path, file.content, writeOptions);
 }
 

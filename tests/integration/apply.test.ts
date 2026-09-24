@@ -1335,6 +1335,56 @@ describe("apply integration", () => {
     expect(localConfig.plugins).toEqual({ "github@openai-curated": { enabled: true } });
   });
 
+  it("replaces local Codex MCP servers with the rendered set and reports removals", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [codex]",
+        "mcp:",
+        "  local-helper:",
+        "    agents: [codex]",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(home, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(home, ".codex", "config.toml"),
+      [
+        'user_key = "kept"',
+        "",
+        "[mcp_servers.manual]",
+        'url = "https://manual.invalid/mcp"',
+        "",
+        "[mcp_servers.local-helper]",
+        'command = "old-helper"',
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const outcomes = await applyConfig({ root, home, agent: "codex", target: "all" });
+
+    const localConfig = parseToml(
+      CodexConfig,
+      await readFile(path.join(home, ".codex", "config.toml"), "utf8")
+    );
+
+    expect(localConfig.user_key).toBe("kept");
+    expect(localConfig.mcp_servers).toEqual({
+      context7: { url: "https://mcp.context7.com/mcp", enabled: true },
+      "local-helper": { command: "tool-helper", args: ["--serve"], enabled: true }
+    });
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        target: path.join(home, ".codex", "config.toml"),
+        detail: "removes unmanaged MCP servers: manual"
+      })
+    );
+  });
+
   it("removes the local Codex plugins table when the declared set is empty", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
@@ -1592,7 +1642,7 @@ describe("apply integration", () => {
     expect(await readFile(path.join(home, ".claude.json"), "utf8")).toBe('{"mcpServers":{}}\n');
   });
 
-  it("merges Claude MCP into top-level .claude.json and prunes non-targeted managed servers", async () => {
+  it("replaces top-level Claude MCP servers with the rendered set and reports removals", async () => {
     await writeFile(
       path.join(root, "profiles", "personal", "profile.yml"),
       [
@@ -1607,6 +1657,9 @@ describe("apply integration", () => {
       ].join("\n"),
       "utf8"
     );
+
+    const projectPath = path.join(home, "src");
+
     await writeFile(
       path.join(home, ".claude.json"),
       JSON.stringify(
@@ -1614,17 +1667,13 @@ describe("apply integration", () => {
           installMethod: "native",
           mcpServers: {
             context7: { type: "http", url: "https://old.invalid" },
-            executor: {
-              type: "stdio",
-              command: "executor",
-              args: ["mcp", "--scope", "/tmp/mfz-generated-executor"],
-              env: { EXECUTOR_DATA_DIR: "/tmp/mfz-generated-executor-data" }
-            },
+            executor: { type: "stdio", command: "executor" },
             manual: { type: "http", url: "https://manual.invalid" }
           },
           projects: {
-            [path.join(home, "src")]: {
-              disabledMcpServers: ["local-helper"]
+            [projectPath]: {
+              disabledMcpServers: ["local-helper"],
+              mcpServers: { "project-local": { type: "http", url: "https://project.invalid" } }
             }
           }
         },
@@ -1634,7 +1683,7 @@ describe("apply integration", () => {
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
+    const outcomes = await applyConfig({ root, home, agent: "claude-code", target: "all" });
 
     const localClaudeJson = parseJson(
       ClaudeJson,
@@ -1642,37 +1691,57 @@ describe("apply integration", () => {
     );
 
     expect(localClaudeJson.installMethod).toBe("native");
-    expect(localClaudeJson.projects).toBeDefined();
+    expect(localClaudeJson.projects?.[projectPath]).toEqual({
+      disabledMcpServers: ["local-helper"],
+      mcpServers: { "project-local": { type: "http", url: "https://project.invalid" } }
+    });
     expect(localClaudeJson.mcpServers).toEqual({
-      manual: { type: "http", url: "https://manual.invalid" },
       context7: { type: "http", url: "https://mcp.context7.com/mcp" },
       "local-helper": { type: "stdio", command: "tool-helper", args: ["--serve"] }
     });
+    expect(outcomes).toContainEqual(
+      expect.objectContaining({
+        target: path.join(home, ".claude.json"),
+        status: "updated",
+        detail: "removes unmanaged MCP servers: executor, manual"
+      })
+    );
   });
 
-  it("preserves a user-owned all-direct Claude MCP entry named executor", async () => {
+  it("sync warns about user-scope MCP servers that the next apply removes", async () => {
     await writeFile(
-      path.join(home, ".claude.json"),
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "extends: base", "agents: [claude-code, codex]", ""].join("\n"),
+      "utf8"
+    );
+    await applyConfig({ root, home, agent: "all", target: "all" });
+
+    const claudeJsonPath = path.join(home, ".claude.json");
+    const claudeJson = parseJson(ClaudeJson, await readFile(claudeJsonPath, "utf8"));
+
+    await writeFile(
+      claudeJsonPath,
       JSON.stringify({
-        mcpServers: {
-          executor: { type: "stdio", command: "executor" },
-          manual: { type: "http", url: "https://manual.invalid" }
-        }
+        ...claudeJson,
+        mcpServers: { ...claudeJson.mcpServers, manual: { type: "http", url: "https://m.invalid" } }
       }) + "\n",
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--agent", "claude-code"]);
+    const codexPath = path.join(home, ".codex", "config.toml");
 
-    const localClaudeJson = parseJson(
-      ClaudeJson,
-      await readFile(path.join(home, ".claude.json"), "utf8")
+    await writeFile(
+      codexPath,
+      (await readFile(codexPath, "utf8")) +
+        '\n[mcp_servers.added]\nurl = "https://added.invalid/mcp"\n',
+      "utf8"
     );
 
-    expect(localClaudeJson.mcpServers).toMatchObject({
-      executor: { type: "stdio", command: "executor" },
-      manual: { type: "http", url: "https://manual.invalid" }
-    });
+    const syncResult = await cli("mfz", root, home, ["sync"], {}, "skip\n");
+
+    expect(syncResult.stdout).toContain("Unmanaged claude-code MCP servers: manual.");
+    expect(syncResult.stdout).toContain("Unmanaged codex MCP servers: added.");
+    expect(syncResult.stdout).not.toContain("everything is in sync");
   });
 
   it("does not render Claude config for an opencode-only profile", async () => {
