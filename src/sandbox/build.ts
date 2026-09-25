@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
+import { writeTextFile } from "../core/fs-util.js";
 import { renderTarget } from "../core/render.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -45,9 +46,7 @@ async function writeGeneratedBuildContext(plan: SandboxImageBuildPlan): Promise<
   );
 
   for (const [name, content] of Object.entries(plan.inputs.resolvedMiseTree)) {
-    const target = path.join(plan.contextDir, "generated", name);
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, content, "utf8");
+    await writeTextFile(path.join(plan.contextDir, "generated", name), content);
   }
 
   await writeFile(

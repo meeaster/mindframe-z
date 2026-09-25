@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonObjectSchema, type JsonObject } from "../core/json.js";
-import { jsonFileContent } from "../core/fs-util.js";
+import { jsonFileContent, writeTextFile } from "../core/fs-util.js";
 import { renderTarget } from "../core/render.js";
 import { gitIdentityFragmentPath } from "../core/git-config.js";
 import {
@@ -301,8 +301,7 @@ async function writeSandboxRuntimeConfig(
       relative.startsWith("tasks/") ? relative : path.join("conf.d", relative)
     );
 
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, file.content, "utf8");
+    await writeTextFile(target, file.content);
   }
 
   const agents = await Promise.all(profile.instructionFiles.map((file) => readFile(file, "utf8")));
