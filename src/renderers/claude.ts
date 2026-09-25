@@ -17,7 +17,11 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import type { RenderedFile, RenderResult } from "../core/render.js";
-import { mcpRemovalDetail, unmanagedMcpServerNames } from "../core/mcp-full-sync.js";
+import {
+  mcpRemovalDetail,
+  mcpServerNamesSchema,
+  unmanagedMcpServerNames
+} from "../core/mcp-full-sync.js";
 import { jsonObjectSchema, type JsonObject } from "../core/json.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { claudeExecutorEntry } from "./executor.js";
@@ -181,7 +185,6 @@ export async function renderClaude(
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
   const existingClaudeJson = jsonObjectSchema.parse(await readJsonObject(localClaudeJsonPath));
-  const existingMcpServers = jsonObjectSchema.safeParse(existingClaudeJson.mcpServers).data ?? {};
   const mergedSettings = deepMerge(await readJsonObject(localSettingsPath), settings);
 
   const localClaudeJson: RenderedFile = {
@@ -190,7 +193,7 @@ export async function renderClaude(
   };
 
   const removedServers = unmanagedMcpServerNames(
-    Object.keys(existingMcpServers),
+    mcpServerNamesSchema.parse(existingClaudeJson.mcpServers),
     Object.keys(managedClaudeMcp)
   );
 
