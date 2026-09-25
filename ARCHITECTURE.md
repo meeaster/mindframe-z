@@ -125,6 +125,10 @@ Renderer source files for inherited OpenCode plugins, commands, agents, and loca
 
 OpenCode profiles may define `opencode.plugin_options` by plugin asset name. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
 
+OpenCode server plugins remain registered from their home source paths. MFZ copies selected TUI plugins into the profile snapshot, then links each one under `~/.config/opencode/plugins/tui/`. The plugin directories are real directories, so other installers can keep their files beside MFZ's links. MFZ records the TUI links it creates in `~/.mindframe-z/opencode-plugin-links.json`. Apply removes a deselected link only when it still points to the recorded target; it leaves other files and replaced links alone. MFZ merges its TUI registrations into `cli.json` and preserves external entries.
+
+An existing directory symlink at `~/.config/opencode/plugins/` or `~/.config/opencode/plugins/tui/` blocks apply. Move that symlink aside and preserve any external files in its target before applying the per-plugin layout. MFZ does not migrate the old directory symlink automatically.
+
 ## Sync
 
 `mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged harness keys back into profiles. Mise is intentionally excluded: native Mise commands own unmanaged user edits. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.

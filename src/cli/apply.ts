@@ -37,6 +37,10 @@ import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
 import { mergeOpenCodeCliPlugins, parseOpenCodePluginEntries } from "../renderers/opencode.js";
 import {
+  assertOpenCodePluginDirectories,
+  reconcileOpenCodePluginLinks
+} from "../renderers/opencode-links.js";
+import {
   readActiveProfile,
   readOwnership,
   writeOwnership,
@@ -188,6 +192,15 @@ async function applyRenderedTarget(
     } else {
       await removePathOutcome(link.linkPath, { category: "link", onComplete });
     }
+  }
+
+  if (result.pluginLinks) {
+    await reconcileOpenCodePluginLinks(
+      result.pluginLinks,
+      paths.configsDir,
+      options.dryRun === true,
+      onComplete
+    );
   }
 
   if (result.cliPlugins) {
@@ -402,6 +415,11 @@ export async function applyConfig(
 
     for (const target of selectedTargets) {
       throwIfReferenceSyncCancelled(referenceSignal);
+
+      if (target === "opencode" && !options.noLink) {
+        await assertOpenCodePluginDirectories(path.join(paths.opencodeConfigDir, "plugins", "tui"));
+      }
+
       options.onStart?.({
         category: "file",
         action: "write",

@@ -42,6 +42,11 @@ export interface RenderResult {
     registryPath: string;
     settings?: JsonObject;
   };
+  pluginLinks?: {
+    directory: string;
+    registryPath: string;
+    links: LinkPlan[];
+  };
   links: LinkPlan[];
   staleFiles?: string[];
   staleLinks?: LinkPlan[];

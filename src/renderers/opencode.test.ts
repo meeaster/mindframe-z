@@ -149,10 +149,26 @@ describe("OpenCode renderer", () => {
     ]);
     expect(result.cliPlugins?.entries).toEqual([
       {
-        package: `file://${path.join(home, ".mindframe-z", "configs", "personal", "opencode", "plugins", "tui", "work-ledger")}`,
+        package: `file://${path.join(paths.opencodeConfigDir, "plugins", "tui", "work-ledger")}`,
         options
       }
     ]);
+    expect(result.pluginLinks?.links).toEqual([
+      {
+        linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui", "work-ledger"),
+        targetPath: path.join(
+          paths.configsDir,
+          "personal",
+          "opencode",
+          "plugins",
+          "tui",
+          "work-ledger"
+        )
+      }
+    ]);
+    expect(
+      result.links.some((link) => link.linkPath === path.join(paths.opencodeConfigDir, "plugins"))
+    ).toBe(false);
   });
 
   it("links active OpenCode runtime dependencies from the profile", async () => {
@@ -489,7 +505,9 @@ describe("OpenCode renderer", () => {
       `file://${combinedDir}`,
       `file://${path.join(pluginPath, "single.mjs")}`
     ]);
-    expect(result.cliPlugins?.entries).toEqual([`file://${tuiPath}`]);
+    expect(result.cliPlugins?.entries).toEqual([
+      `file://${path.join(paths.opencodeConfigDir, "plugins", "tui", "combined")}`
+    ]);
     expect(result.localFiles).toEqual(
       expect.arrayContaining([
         {

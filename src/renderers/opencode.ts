@@ -292,6 +292,14 @@ export async function renderOpenCode(
     true
   );
 
+  const tuiDirectory = path.join(paths.opencodeConfigDir, "plugins", "tui");
+
+  const tuiLinks = tuiPluginResult.entries.map((entry) => {
+    const targetPath = entry.slice("file://".length);
+
+    return { linkPath: path.join(tuiDirectory, path.basename(targetPath)), targetPath };
+  });
+
   const commandFiles = await collectOpenCodeMarkdownFiles(
     (name) => profile.sources.commands.get(name)?.root ?? paths.root,
     configsOpenCode,
@@ -315,8 +323,8 @@ export async function renderOpenCode(
   );
 
   const tuiPluginEntries = configurePluginEntries(
-    tuiPluginResult.entries,
-    tuiPluginsPath,
+    tuiLinks.map((link) => `file://${link.linkPath}`),
+    tuiDirectory,
     pluginOptions
   );
 
@@ -370,11 +378,7 @@ export async function renderOpenCode(
         ]
       : []),
     { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
-    { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath },
-    {
-      linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui"),
-      targetPath: tuiPluginsPath
-    }
+    { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath }
   ];
 
   const result: RenderResult = {
@@ -417,10 +421,6 @@ export async function renderOpenCode(
       {
         linkPath: path.join(paths.opencodeConfigDir, "node_modules"),
         targetPath: path.join(configsOpenCode, "node_modules")
-      },
-      {
-        linkPath: path.join(paths.opencodeConfigDir, "plugins"),
-        targetPath: pluginsPath
       }
     ]
   };
@@ -430,6 +430,11 @@ export async function renderOpenCode(
     entries: tuiPluginEntries,
     registryPath: path.join(paths.home, ".mindframe-z", "opencode-cli-plugins.json"),
     settings: profile.profile.opencode.cli
+  };
+  result.pluginLinks = {
+    directory: tuiDirectory,
+    registryPath: path.join(paths.home, ".mindframe-z", "opencode-plugin-links.json"),
+    links: tuiLinks
   };
 
   return result;
