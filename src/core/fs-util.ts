@@ -221,8 +221,9 @@ export function jsonFileContent<T>(value: T): string {
  * Write a file's text, creating its parent directory first. This is the
  * canonical write behind the "render one file into a directory that may not
  * exist yet" seams — rendered agent config, the reference and extra-folder
- * indexes, the Git identity fragment, the sandbox compose file, project skill
- * overrides, and session absent-markers — so the file and the tree it needs are
+ * indexes, the Git identity fragment, the sandbox compose file, the sandbox
+ * image's and runtime's nested Mise trees, project skill overrides, and session
+ * absent-markers — so the file and the tree it needs are
  * created in one step wherever a single destination path is the unit of work.
  * Writers that lay down many files under one directory still create that
  * directory once themselves. It replaces the destination outright; callers that
