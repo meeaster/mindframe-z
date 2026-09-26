@@ -1,6 +1,7 @@
-import { access, readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "smol-toml";
+import { pathExists, readDirEntries } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { profileConfigsDir } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
@@ -48,17 +49,7 @@ export async function renderMise(
       const source = path.join(layer.root, "profiles", layer.name, ".config", "mise", "tasks");
 
       async function walk(dir: string, relative = ""): Promise<void> {
-        let entries;
-
-        try {
-          entries = await readdir(dir, { withFileTypes: true });
-        } catch (error) {
-          // SAFETY: ENOENT means the optional task directory is absent; other errors are real failures.
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-          throw error;
-        }
-
-        for (const entry of entries) {
+        for (const entry of await readDirEntries(dir)) {
           const rel = relative ? path.join(relative, entry.name) : entry.name;
 
           if (entry.isDirectory()) {
@@ -92,13 +83,7 @@ export async function renderMise(
   const installableHostPaths: string[] = [];
 
   for (const file of ownedHostPaths) {
-    try {
-      await access(file);
-
-      if (previousOwned.has(file)) installableHostPaths.push(file);
-    } catch {
-      installableHostPaths.push(file);
-    }
+    if (!(await pathExists(file)) || previousOwned.has(file)) installableHostPaths.push(file);
   }
 
   const current = new Set(installableHostPaths);
@@ -110,14 +95,9 @@ export async function renderMise(
 
       if (!host) continue;
 
-      try {
-        await access(host);
-      } catch {
+      if (!(await pathExists(host)) || previousOwned.has(host)) {
         safeLocal.push({ ...file, path: host });
-        continue;
       }
-
-      if (previousOwned.has(host)) safeLocal.push({ ...file, path: host });
     }
   }
 
