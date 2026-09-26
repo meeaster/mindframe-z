@@ -24,7 +24,7 @@ import {
   validateSkillRecords,
   vendoredSkillSourcePath
 } from "./vendor.js";
-import { assertNoSymlinkAncestors } from "./tree.js";
+import { assertNoSymlinkAncestors, copySkillFiles } from "./tree.js";
 import { isManagedTarget, linkStatus } from "./link-state.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
@@ -162,13 +162,7 @@ async function copySource(source: SnapshotSource, destination: string): Promise<
   const files = await readSourceFiles(source);
 
   validateSkillRecords(files);
-  await mkdir(destination, { recursive: true });
-
-  for (const file of files) {
-    const target = path.join(destination, ...file.path.split("/"));
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, file.bytes, { mode: file.mode === "100755" ? 0o755 : 0o644 });
-  }
+  await copySkillFiles(files, destination);
 
   return digestSkillFiles(files);
 }
