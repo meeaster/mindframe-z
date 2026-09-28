@@ -70,7 +70,11 @@ describe("materializeEngineSkill", () => {
     const home = await tempDir();
     const paths = createRuntimePaths({ root: home, home });
     const entry = await materializeEngineSkill(paths);
-    expect(entry).toMatchObject({ name: "mindframe-z", source: "local", skill: "mindframe-z" });
+    expect(entry).toMatchObject({
+      name: "mindframe-z",
+      source: "local",
+      skill: "skills/mindframe-z"
+    });
 
     const skillMd = await readFile(
       path.join(entry.sourceRoot, "skills", "mindframe-z", "SKILL.md"),

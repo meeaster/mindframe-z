@@ -766,7 +766,13 @@ describe("home inheritance", () => {
     await writeHome(common);
     await writeFile(
       path.join(common, "catalog", "skills.yml"),
-      ["skills:", "  - name: common-skill", "    source: local", ""].join("\n"),
+      [
+        "skills:",
+        "  - name: common-skill",
+        "    source: local",
+        "    skill: skills/common-skill",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await writeHome(parent, { extends: { name: "common", repo: common, path: common } });
@@ -796,7 +802,13 @@ describe("home inheritance", () => {
     await writeHome(root);
     await writeFile(
       path.join(root, "catalog", "skills.yml"),
-      ["skills:", "  - name: selective-skill", "    source: local", ""].join("\n"),
+      [
+        "skills:",
+        "  - name: selective-skill",
+        "    source: local",
+        "    skill: skills/selective-skill",
+        ""
+      ].join("\n"),
       "utf8"
     );
     await mkdir(path.join(root, "profiles", "work"), { recursive: true });

@@ -478,7 +478,10 @@ describe("skill manifest schemas", () => {
   });
 
   it("accepts local and vendored declarations", () => {
-    expect(skillSchema.parse({ name: "local", source: "local" })).toMatchObject({
+    expect(() => skillSchema.parse({ name: "local", source: "local" })).toThrow();
+    expect(
+      skillSchema.parse({ name: "local", source: "local", skill: "packages/tools/local" })
+    ).toMatchObject({
       name: "local",
       source: "local"
     });

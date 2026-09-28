@@ -41,7 +41,7 @@ export async function materializeEngineSkill(
   return {
     name: engineSkillName,
     source: "local",
-    skill: engineSkillName,
+    skill: `skills/${engineSkillName}`,
     description: "Operate the mfz CLI or change mindframe-z configuration.",
     sourceRoot: root
   };

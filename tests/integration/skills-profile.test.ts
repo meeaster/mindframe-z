@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cli, setupIntegrationFixture } from "./support.js";
@@ -46,6 +46,36 @@ describe("skills profile integration", () => {
     expect(result.stdout).not.toContain("claude-code");
     expect(result.stdout).not.toContain(String.fromCharCode(27));
     expect(result.stdout).not.toContain(String.fromCharCode(155));
+  });
+
+  it("renders a local skill from an explicit home-root path outside skills", async () => {
+    const destination = path.join(root, "packages", "tools", "local-skill");
+    await mkdir(path.dirname(destination), { recursive: true });
+    await rename(path.join(root, "skills", "local-skill"), destination);
+
+    const catalogPath = path.join(root, "catalog", "skills.yml");
+    const catalog = await readFile(catalogPath, "utf8");
+    await writeFile(
+      catalogPath,
+      catalog.replace("skill: skills/local-skill", "skill: packages/tools/local-skill")
+    );
+
+    await cli("mfz", root, home, ["apply", "--no-link"]);
+
+    const rendered = path.join(
+      home,
+      ".mindframe-z",
+      "configs",
+      "personal",
+      "opencode",
+      "skills",
+      "local-skill",
+      "SKILL.md"
+    );
+
+    expect(await readFile(rendered, "utf8")).toBe(
+      await readFile(path.join(destination, "SKILL.md"), "utf8")
+    );
   });
 
   it("includes descriptions in verbose output", async () => {

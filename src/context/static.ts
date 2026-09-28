@@ -66,8 +66,6 @@ async function readSkillFile(
       ? path.join(paths.opencodeConfigDir, "skills")
       : path.join(paths.claudeDir, "skills");
 
-  const skillName = skill.source === "local" ? (skill.skill ?? skill.name) : skill.name;
-
   const sourceSkill =
     skill.source === "vendored"
       ? path.join(
@@ -78,13 +76,9 @@ async function readSkillFile(
           ),
           "SKILL.md"
         )
-      : path.join(skill.sourceRoot, "skills", skillName, "SKILL.md");
+      : path.join(skill.sourceRoot, skill.skill, "SKILL.md");
 
-  const candidates = [
-    path.join(targetRoot, skill.name, "SKILL.md"),
-    path.join(targetRoot, skillName, "SKILL.md"),
-    sourceSkill
-  ];
+  const candidates = [path.join(targetRoot, skill.name, "SKILL.md"), sourceSkill];
 
   for (const candidate of new Set(candidates)) {
     try {

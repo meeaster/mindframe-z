@@ -31,7 +31,8 @@
             },
             "required": [
               "name",
-              "source"
+              "source",
+              "skill"
             ],
             "additionalProperties": false
           },

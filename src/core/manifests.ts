@@ -238,7 +238,7 @@ const localSkillSchema = z
   .object({
     ...skillFields,
     source: z.literal("local"),
-    skill: skillPathSchema.optional()
+    skill: skillPathSchema
   })
   .strict();
 

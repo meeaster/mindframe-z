@@ -128,7 +128,7 @@ function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
     return vendoredSkillSourcePath(skill.sourceRoot, skill.name);
   }
 
-  return path.join(skill.sourceRoot, "skills", skill.skill ?? skill.name);
+  return path.join(skill.sourceRoot, skill.skill);
 }
 
 function snapshotManifestPath(snapshot: string): string {

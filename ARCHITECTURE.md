@@ -21,7 +21,7 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 │   └── mcp.yml
 ├── instructions/
 ├── profiles/<name>/
-├── skills/<local-name>/
+├── <explicit-local-skill-path>/          # required catalog skill: path, relative to home
 ├── skills/vendor/<name>/                  # single-subtree vendored skill
 ├── skills/vendor/<name>/<target>/         # provider-variant vendored skill
 ├── skills/vendor.lock.yml

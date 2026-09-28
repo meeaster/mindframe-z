@@ -32,6 +32,7 @@ function skill(
     name,
     description: "",
     source: "local" as const,
+    skill: `skills/${name}`,
     agents,
     targets,
     toggleable: true,

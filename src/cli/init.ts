@@ -269,7 +269,7 @@ Runtime-managed files:
 - User systemd files live under \`profiles/<profile>/.config/systemd/user/\`. Run \`mfz apply --target dotfiles\` after changing them. MFZ writes unit files under \`~/.config/systemd/user/\`, but does not reload, enable, start, stop, or disable services.
 - When a systemd service should run, use \`systemctl --user daemon-reload\`, then explicitly \`systemctl --user enable <unit>\` and \`systemctl --user start <unit>\` as appropriate. \`WantedBy=default.target\` affects enablement only.
 
-Local skills live under \`skills/\`; OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets.
+Local skills use an explicit \`skill:\` directory relative to the home root. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets.
 
 Before changing a topic below, run its guide:
 
@@ -322,7 +322,7 @@ Put this selection in \`profiles/<profile>/profile.yml\`, using the skill's cata
 
 Add a local skill:
 
-1. Create \`skills/<name>/SKILL.md\`. The frontmatter must carry both \`name:\` and \`description:\` — Mindframe-Z validates these fields before rendering:
+1. Create a skill directory anywhere within the home, for example \`packages/tools/skills/my-skill/\`, with a \`SKILL.md\` file. Its frontmatter must contain both \`name:\` and \`description:\`:
 
    \`\`\`markdown
    ---
@@ -338,9 +338,11 @@ Add a local skill:
     skills:
       - name: my-skill
         source: local
-        skill: my-skill
+        skill: packages/tools/skills/my-skill
         description: One-line summary.
    \`\`\`
+
+   The \`skill:\` field is required and resolves from the home root. There is no default directory. Absolute paths and \`..\` segments are rejected.
 
 3. Enable it as above, then run plain \`mfz apply\`, \`mfz skills list\`, and \`mfz doctor\`. Done when the skill appears for its selected agents and the profile reports healthy links.
 
