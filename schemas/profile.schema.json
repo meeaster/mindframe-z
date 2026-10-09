@@ -335,6 +335,7 @@
     "opencode": {
       "default": {
         "config": {},
+        "permissions": [],
         "dependencies": {},
         "cli": {},
         "plugins": [],
@@ -348,6 +349,37 @@
         "config": {
           "default": {},
           "$ref": "#/$defs/__schema0"
+        },
+        "permissions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "minLength": 1
+              },
+              "resource": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "ask",
+                  "deny"
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "resource",
+              "effect"
+            ],
+            "additionalProperties": false
+          }
         },
         "dependencies": {
           "default": {},

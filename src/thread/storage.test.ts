@@ -67,6 +67,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       mcp: {},
       opencode: {
         config: {},
+        permissions: [],
         dependencies: {},
         cli: {},
         plugins: [],

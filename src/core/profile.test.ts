@@ -608,6 +608,26 @@ describe("mergeProfiles OpenCode plugin options", () => {
   });
 });
 
+describe("mergeProfiles OpenCode permissions", () => {
+  it("keeps base rules before child rules so the child's rules win", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      opencode: { permissions: [{ action: "skill", resource: "pdf", effect: "deny" }] }
+    });
+
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      opencode: { permissions: [{ action: "skill", resource: "pdf", effect: "allow" }] }
+    });
+
+    expect(mergeProfiles(base, child).opencode.permissions).toEqual([
+      { action: "skill", resource: "pdf", effect: "deny" },
+      { action: "skill", resource: "pdf", effect: "allow" }
+    ]);
+  });
+});
+
 describe("home inheritance", () => {
   it("resolves inherited instruction references from their source home", async () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), "mfz-parent-home-"));

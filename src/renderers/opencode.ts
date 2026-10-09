@@ -175,11 +175,7 @@ function configurePluginEntries(
   });
 }
 
-interface NativePermissionRule {
-  action: string;
-  resource: string;
-  effect: "allow" | "ask" | "deny";
-}
+type NativePermissionRule = ResolvedProfile["profile"]["opencode"]["permissions"][number];
 
 function nativeBoundary(absPath: string): string {
   const normalized = absPath.replace(/[\\/]+$/, "") || path.parse(absPath).root;
@@ -235,6 +231,10 @@ function nativePermissions(paths: RuntimePaths, profile: ResolvedProfile): Nativ
     { action: "read", resource: references, effect: "allow" },
     { action: "edit", resource: references, effect: "deny" }
   );
+
+  // Profile rules come after folder access, which they may refine, and before the protected denies, which they can't
+  // reopen because OpenCode applies the last matching rule.
+  rules.push(...profile.profile.opencode.permissions);
 
   if (hasManagedZsh(profile)) {
     const secrets = nativeBoundary(zshSecretsDir(paths));

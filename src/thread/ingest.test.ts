@@ -71,6 +71,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       mcp: {},
       opencode: {
         config: {},
+        permissions: [],
         dependencies: {},
         cli: {},
         plugins: [],

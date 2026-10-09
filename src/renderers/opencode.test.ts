@@ -351,6 +351,26 @@ describe("OpenCode renderer", () => {
     expect(dotfiles.staleFiles).not.toContain(reference.path);
   });
 
+  it("renders profile permissions after folder access and before protected denies", async () => {
+    const home = "/tmp/mfz-opencode-permissions";
+    const resolved = profile(home);
+    resolved.profile.opencode.permissions = [{ action: "read", resource: "*", effect: "allow" }];
+
+    const result = await renderOpenCode(createRuntimePaths({ root: "/tmp/root", home }), resolved);
+    const rules = renderedConfig(result).permissions;
+
+    if (!Array.isArray(rules)) throw new Error("expected rendered permissions");
+
+    expect(rules.slice(6, 8)).toEqual([
+      { action: "read", resource: "*", effect: "allow" },
+      {
+        action: "external_directory",
+        resource: path.join(home, ".mindframe-z", "secrets", "*"),
+        effect: "deny"
+      }
+    ]);
+  });
+
   it("rejects OpenCode config ownership collisions", async () => {
     const home = "/tmp/mfz-opencode-owned";
     const paths = createRuntimePaths({ root: "/tmp/root", home });

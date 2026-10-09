@@ -504,6 +504,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     executor: deepMerge(base.executor ?? {}, child.executor ?? {}),
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
+      permissions: [...base.opencode.permissions, ...child.opencode.permissions],
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       cli: deepMerge(base.opencode.cli, child.opencode.cli),
       global_instructions: child.opencode.global_instructions ?? base.opencode.global_instructions,

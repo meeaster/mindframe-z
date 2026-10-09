@@ -18,6 +18,7 @@ function profile(): ResolvedProfile {
       mcp: {},
       opencode: {
         config: {},
+        permissions: [],
         dependencies: {},
         cli: {},
         plugins: [],

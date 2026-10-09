@@ -56,6 +56,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       mcp: {},
       opencode: {
         config: {},
+        permissions: [],
         dependencies: {},
         cli: {},
         plugins: [],

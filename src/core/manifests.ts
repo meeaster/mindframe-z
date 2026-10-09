@@ -602,8 +602,17 @@ const exactVersionSchema = z
     "must be an exact semantic version"
   );
 
+const opencodePermissionRuleSchema = z
+  .object({
+    action: z.string().min(1),
+    resource: z.string().min(1),
+    effect: z.enum(["allow", "ask", "deny"])
+  })
+  .strict();
+
 const opencodeConfigSchema = z.object({
   config: jsonObjectSchema.default({}),
+  permissions: z.array(opencodePermissionRuleSchema).default([]),
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: jsonObjectSchema.default({}),
   global_instructions: z.boolean().optional(),
@@ -680,6 +689,7 @@ export const profileSchema = z
       .optional(),
     opencode: opencodeConfigSchema.default({
       config: {},
+      permissions: [],
       dependencies: {},
       cli: {},
       plugins: [],

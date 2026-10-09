@@ -61,6 +61,7 @@ function profile(
       mcp: {},
       opencode: {
         config: {},
+        permissions: [],
         dependencies: {},
         cli: {},
         plugins: [],
