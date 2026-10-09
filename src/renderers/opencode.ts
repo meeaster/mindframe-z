@@ -425,11 +425,15 @@ export async function renderOpenCode(
     ]
   };
 
+  // Profile `cli.plugins` entries, such as "-opencode.sidebar.context" to turn off a built-in TUI plugin, are managed
+  // like TUI plugin registrations, so they merge beside the user's own entries instead of replacing them.
+  const { plugins: cliPlugins, ...cliSettings } = profile.profile.opencode.cli;
+
   result.cliPlugins = {
     path: path.join(paths.opencodeConfigDir, "cli.json"),
-    entries: tuiPluginEntries,
+    entries: [...parseOpenCodePluginEntries(cliPlugins), ...tuiPluginEntries],
     registryPath: path.join(paths.home, ".mindframe-z", "opencode-cli-plugins.json"),
-    settings: profile.profile.opencode.cli
+    settings: cliSettings
   };
   result.pluginLinks = {
     directory: tuiDirectory,

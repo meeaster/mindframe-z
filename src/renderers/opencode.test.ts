@@ -454,6 +454,34 @@ describe("OpenCode renderer", () => {
     expect(result.cliPlugins?.settings).toEqual({ theme: { name: "dracula" } });
   });
 
+  it("manages profile CLI plugin entries beside TUI plugin registrations", async () => {
+    const resolved = profile("/tmp/mfz-opencode-cli-plugins");
+    resolved.profile.opencode.cli = {
+      theme: { name: "dracula" },
+      plugins: ["-opencode.sidebar.context"]
+    };
+
+    const result = await renderOpenCode(
+      {
+        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
+      },
+      resolved
+    );
+
+    expect(result.cliPlugins?.settings).toEqual({ theme: { name: "dracula" } });
+    expect(result.cliPlugins?.entries).toEqual(["-opencode.sidebar.context"]);
+    expect(
+      mergeOpenCodeCliPlugins(
+        { plugins: ["./herdr-opencode"], ...result.cliPlugins?.settings },
+        result.cliPlugins?.entries ?? [],
+        []
+      )
+    ).toEqual({
+      plugins: ["./herdr-opencode", "-opencode.sidebar.context"],
+      theme: { name: "dracula" }
+    });
+  });
+
   it("collects direct and packaged command and agent assets", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-markdown-root-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-markdown-home-"));
