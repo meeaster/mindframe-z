@@ -25,6 +25,12 @@ export function machineConfigPath(home: string): string {
   return path.join(mindframeZDir(home), "config.yml");
 }
 
+// Machine-local instruction files: every top-level `*.md` here is appended to the
+// profile's global instructions, so host-specific guidance stays out of the home.
+export function machineInstructionsDir(home: string): string {
+  return path.join(mindframeZDir(home), "instructions");
+}
+
 // Bootstrap location used by `mfz init --clone`, keyed by the alias declared in
 // `mfz-home.yml#extends`. Extension resolution uses the versioned `extends.path`
 // instead; this helper remains for the separate init bootstrap behavior.

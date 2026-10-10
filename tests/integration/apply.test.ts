@@ -165,6 +165,25 @@ describe("apply integration", () => {
     ).toEqual([]);
   });
 
+  it("appends machine-local instruction files after profile instructions", async () => {
+    const machineInstructions = path.join(home, ".mindframe-z", "instructions");
+    await mkdir(path.join(machineInstructions, "nested"), { recursive: true });
+    await writeFile(path.join(machineInstructions, "20-share.md"), "# Machine Share\n", "utf8");
+    await writeFile(path.join(machineInstructions, "10-network.md"), "# Machine Network\n", "utf8");
+    await writeFile(path.join(machineInstructions, ".draft.md"), "# Hidden Draft\n", "utf8");
+    await writeFile(path.join(machineInstructions, "notes.txt"), "Plain Notes\n", "utf8");
+    await writeFile(path.join(machineInstructions, "nested", "deep.md"), "# Nested\n", "utf8");
+
+    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
+
+    const agents = await readFile(configsPath(home, "personal", "AGENTS.md"), "utf8");
+
+    expect(agents).toContain("# Test Agents\n\n# Machine Network\n\n# Machine Share\n");
+    expect(agents).not.toContain("Hidden Draft");
+    expect(agents).not.toContain("Plain Notes");
+    expect(agents).not.toContain("# Nested");
+  });
+
   it("applies a selected provider variant through the apply route", async () => {
     const name = "provider-skill";
     const fixture = await writeProviderVariantSkill(root, name);

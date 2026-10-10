@@ -18,6 +18,8 @@ import {
   type ExtraFolder
 } from "./manifests.js";
 import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
+import { readDirEntries } from "./fs-util.js";
+import { machineInstructionsDir } from "./path-util.js";
 
 type CatalogKind = "reference" | "skill" | "mcp" | "profile";
 
@@ -865,6 +867,21 @@ export function assertOpenCodeConfigOwned(profile: ProfileManifest): void {
   }
 }
 
+// Top-level, non-hidden Markdown files in name order, so a numeric prefix sets
+// their position after the profile's own instructions.
+async function machineInstructionFiles(home: string): Promise<string[]> {
+  const directory = machineInstructionsDir(home);
+  const files: string[] = [];
+
+  for (const entry of await readDirEntries(directory)) {
+    if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".")) {
+      files.push(path.join(directory, entry.name));
+    }
+  }
+
+  return files.sort();
+}
+
 export async function resolveProfile(
   paths: RuntimePaths,
   requestedProfile?: string,
@@ -901,14 +918,17 @@ export async function resolveProfile(
     )
   ];
 
-  const instructionFiles = profile.instructions.map((file) => {
-    const sourceHome = sources.instructions.get(file) ?? manifests;
+  const instructionFiles = [
+    ...profile.instructions.map((file) => {
+      const sourceHome = sources.instructions.get(file) ?? manifests;
 
-    return path.resolve(
-      sourceHome.root,
-      file.startsWith("instructions/") ? file : path.join("instructions", file)
-    );
-  });
+      return path.resolve(
+        sourceHome.root,
+        file.startsWith("instructions/") ? file : path.join("instructions", file)
+      );
+    }),
+    ...(await machineInstructionFiles(paths.home))
+  ];
 
   const instructionReferences = profile.instruction_references.map((reference) => {
     const sourceHome = sources.instructions.get(reference.path) ?? manifests;

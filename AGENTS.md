@@ -84,7 +84,7 @@ If a read fails with "file not found", locate the path before retrying instead o
 
 Profile resolution is `--profile` > `MFZ_PROFILE` > machine config > `personal`; root resolution is `--root` > `MFZ_ROOT` > machine `home_path` > cwd.
 
-The active home's `catalog/*.yml` declares available references, skills, and MCP servers. Its `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and host-specific paths.
+The active home's `catalog/*.yml` declares available references, skills, and MCP servers. Its `profiles/*/profile.yml` selects what a profile enables. Machine config belongs in `~/.mindframe-z/config.yml` and is based on `machine-config.example.yml`; it owns `references_dir`, `extra_folders`, and host-specific paths. Top-level `*.md` files in `~/.mindframe-z/instructions/` are machine-local global instructions, appended in file-name order after the profile's instructions.
 
 Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, and `claude` are deep-merged with child keys overriding parent keys. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 

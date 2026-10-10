@@ -241,6 +241,8 @@ The editing model: home files are the source of truth; everything under \`~/.min
 
 Use \`instructions\` for guidance every agent should receive. Use \`instruction_references\` for branch-specific guidance: each entry declares a stable kebab-case \`name\`, a source \`path\` under an active or upstream home's \`instructions/\` directory, and a trigger-focused \`description\`. MFZ copies these files into the rendered profile and adds compact pointers to global instructions; the agent reads a referenced file only when its description matches the task.
 
+For guidance specific to one machine, put Markdown files directly in \`~/.mindframe-z/instructions/\` instead of the home. \`mfz apply\` appends every top-level, non-hidden \`*.md\` file there, in file-name order, after the profile's instructions. These files are never committed with the home.
+
 ~~~yaml
 instruction_references:
   - name: browser
