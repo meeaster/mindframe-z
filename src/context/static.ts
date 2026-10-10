@@ -23,31 +23,14 @@ import type {
 } from "./model.js";
 import { jsonObjectSchema, jsonString, type JsonObject } from "../core/json.js";
 
-function openCodeMcpLoading(): "per-step" | "unknown" {
-  const flag = (name: string): boolean | undefined => {
-    const value = process.env[name]?.trim().toLowerCase();
-
-    if (value === undefined) return undefined;
-
-    if (["1", "true", "yes"].includes(value)) return true;
-
-    if (["0", "false", "no"].includes(value)) return false;
-
-    return undefined;
-  };
-
-  const codeMode =
-    flag("OPENCODE_EXPERIMENTAL_CODE_MODE") ?? flag("OPENCODE_EXPERIMENTAL") ?? false;
-
-  if (codeMode) {
-    return "unknown";
-  }
-
-  return "per-step";
-}
-
-function claudeMcpLoading(): "unknown" {
-  return "unknown";
+// OpenCode lists a direct server's tools in its Code Mode catalog instead of sending their
+// definitions with every request, but turns Code Mode off for an `executor mcp` command,
+// so only the Executor bridge has an established per-request cost there.
+function mcpLoading(
+  harness: ContextHarness,
+  route: NonNullable<ContextMcpMembership["route"]>
+): "per-step" | "unknown" {
+  return harness === "opencode" && route === "executor" ? "per-step" : "unknown";
 }
 
 interface SkillFile {
@@ -266,14 +249,13 @@ export async function analyzeHarnessStatic(
   const skills = await skillContributors(paths, profile, harness);
   contributors.push(...skills.contributors);
   scopeNotes.push(...skills.notes);
-  const mcpLoading = harness === "opencode" ? openCodeMcpLoading() : claudeMcpLoading();
   const effectiveMcp = effectiveProjectState(overrideStore, projectRoot, profile, harness, "mcp");
 
   const mcpServers: ContextMcpMembership[] = filterMcpForTarget(profile, harness).map(
     ({ name }) => ({
       name,
       enabled: effectiveMcp[name] === true,
-      loading: mcpLoading,
+      loading: mcpLoading(harness, "direct"),
       route: "direct"
     })
   );
@@ -284,7 +266,7 @@ export async function analyzeHarnessStatic(
     mcpServers.push({
       name: executorBridgeName,
       enabled: true,
-      loading: mcpLoading,
+      loading: mcpLoading(harness, "executor"),
       route: "executor",
       sharedIntegrations: shared.map((entry) => entry.name).sort(),
       sharedConnections: Object.fromEntries(
