@@ -1021,6 +1021,40 @@ describe("apply integration", () => {
     expect(await readFile(path.join(tuiDir, "external.js"), "utf8")).toBe("external\n");
   });
 
+  it("merges npm plugins across profiles, with the child's version winning", async () => {
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      [
+        "name: base",
+        "opencode:",
+        "  plugins:",
+        "    - npm:@acme/review@1.0.0",
+        "    - npm:shared-plugin@1.0.0",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      [
+        "name: personal",
+        "extends: base",
+        "agents: [opencode]",
+        "opencode:",
+        "  plugins:",
+        "    - npm:shared-plugin@2.0.0",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
+
+    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
+    const config = parseJson(OpenCodeConfig, await readFile(configPath, "utf8"));
+    expect(config.plugins).toEqual(["@acme/review@1.0.0", "shared-plugin@2.0.0"]);
+  });
+
   it("renders, links, and removes merged OpenCode runtime dependencies", async () => {
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),

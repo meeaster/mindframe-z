@@ -16,6 +16,7 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
+import { parseNpmPlugin } from "../core/manifests.js";
 import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -278,10 +279,12 @@ export async function renderOpenCode(
   if (!useGlobalInstructions && profile.extraFolders.length > 0)
     instructions.push(extraFoldersIndexPath(paths));
 
+  const enabledPlugins = profile.enabledOpenCodePlugins ?? [];
+
   const pluginResult = await collectPluginFiles(
     (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
     pluginsPath,
-    profile.enabledOpenCodePlugins ?? [],
+    enabledPlugins.filter((entry) => parseNpmPlugin(entry) === undefined),
     false
   );
 
@@ -321,6 +324,17 @@ export async function renderOpenCode(
     pluginsPath,
     pluginOptions
   );
+
+  for (const entry of enabledPlugins) {
+    const plugin = parseNpmPlugin(entry);
+
+    if (!plugin) continue;
+
+    const options = jsonObjectSchema.safeParse(pluginOptions[plugin.name]);
+    const target = `${plugin.name}@${plugin.version}`;
+
+    serverPluginEntries.push(options.success ? { package: target, options: options.data } : target);
+  }
 
   const tuiPluginEntries = configurePluginEntries(
     tuiLinks.map((link) => `file://${link.linkPath}`),

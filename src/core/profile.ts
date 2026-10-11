@@ -4,6 +4,7 @@ import {
   eachUpstream,
   homeDisplayName,
   loadManifests,
+  parseNpmPlugin,
   type LoadedManifests,
   type McpServer,
   type ProfileMcpConfig,
@@ -305,6 +306,25 @@ function resolveCatalogName(
   throw new Error(`Unknown ${kind}: ${rawName}`);
 }
 
+// A child's npm plugin entry replaces the parent's entry for the same package, so the child picks the version.
+function mergeOpenCodePlugins(base: readonly string[], child: readonly string[]): string[] {
+  const childPackages = new Set<string>();
+
+  for (const entry of child) {
+    const plugin = parseNpmPlugin(entry);
+
+    if (plugin) childPackages.add(plugin.name);
+  }
+
+  const inherited = base.filter((entry) => {
+    const plugin = parseNpmPlugin(entry);
+
+    return !plugin || !childPackages.has(plugin.name);
+  });
+
+  return dedupe([...inherited, ...child]);
+}
+
 function normalizeSourceNames(
   home: LoadedManifests,
   names: readonly string[],
@@ -377,13 +397,16 @@ function normalizeProfile(
   const opencode = options.includeOpenCode
     ? {
         ...profile.opencode,
-        plugins: normalizeSourceNames(
-          home,
-          profile.opencode.plugins,
-          sources.plugins,
-          "opencode plugin",
-          "OpenCode plugin"
-        ),
+        plugins: [
+          ...normalizeSourceNames(
+            home,
+            profile.opencode.plugins.filter((entry) => parseNpmPlugin(entry) === undefined),
+            sources.plugins,
+            "opencode plugin",
+            "OpenCode plugin"
+          ),
+          ...profile.opencode.plugins.filter((entry) => parseNpmPlugin(entry) !== undefined)
+        ],
         tui_plugins: normalizeSourceNames(
           home,
           profile.opencode.tui_plugins,
@@ -510,7 +533,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       cli: deepMerge(base.opencode.cli, child.opencode.cli),
       global_instructions: child.opencode.global_instructions ?? base.opencode.global_instructions,
-      plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
+      plugins: mergeOpenCodePlugins(base.opencode.plugins, child.opencode.plugins),
       plugin_options: deepMerge(base.opencode.plugin_options, child.opencode.plugin_options),
       tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),

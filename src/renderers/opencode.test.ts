@@ -187,6 +187,20 @@ describe("OpenCode renderer", () => {
     });
   });
 
+  it("registers npm plugins by exact version with their plugin options", async () => {
+    const home = "/tmp/mfz-opencode-npm-plugins";
+    const resolved = profile(home);
+    resolved.enabledOpenCodePlugins = ["npm:@acme/review@1.2.3", "npm:plain-plugin@0.4.0"];
+    resolved.profile.opencode.plugin_options = { "@acme/review": { workflow: "manual" } };
+
+    const result = await renderOpenCode(createRuntimePaths({ root: "/tmp/root", home }), resolved);
+
+    expect(renderedConfig(result).plugins).toEqual([
+      { package: "@acme/review@1.2.3", options: { workflow: "manual" } },
+      "plain-plugin@0.4.0"
+    ]);
+  });
+
   it("renders native MCP, permissions, CLI, and isolated paths without reading V1 plugins", async () => {
     const home = "/tmp/mfz-opencode-renderer";
     const paths = createRuntimePaths({ root: "/tmp/root", home });

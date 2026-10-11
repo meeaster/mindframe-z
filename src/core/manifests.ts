@@ -651,6 +651,29 @@ const exactVersionSchema = z
     "must be an exact semantic version"
   );
 
+const npmPluginPattern = /^npm:((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)@(.+)$/;
+
+export interface NpmPlugin {
+  name: string;
+  version: string;
+}
+
+/** An `npm:<package>@<exact version>` plugin entry, or undefined for a home plugin name. */
+export function parseNpmPlugin(entry: string): NpmPlugin | undefined {
+  const match = npmPluginPattern.exec(entry);
+
+  if (!match?.[1] || !match[2] || !exactVersionSchema.safeParse(match[2]).success) return undefined;
+
+  return { name: match[1], version: match[2] };
+}
+
+const opencodePluginSchema = z
+  .string()
+  .refine(
+    (entry) => !entry.startsWith("npm:") || parseNpmPlugin(entry) !== undefined,
+    "npm plugins must be npm:<package>@<exact version>"
+  );
+
 const opencodePermissionRuleSchema = z
   .object({
     action: z.string().min(1),
@@ -665,7 +688,7 @@ const opencodeConfigSchema = z.object({
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: jsonObjectSchema.default({}),
   global_instructions: z.boolean().optional(),
-  plugins: z.array(z.string()).default([]),
+  plugins: z.array(opencodePluginSchema).default([]),
   plugin_options: z.record(z.string().min(1), jsonObjectSchema).default({}),
   tui_plugins: z.array(z.string()).default([]),
   commands: z.array(z.string()).default([]),

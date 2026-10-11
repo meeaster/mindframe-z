@@ -443,6 +443,19 @@ describe("validateManifests", () => {
   });
 });
 
+describe("OpenCode plugin entries", () => {
+  it("accepts npm plugins only with an exact version", () => {
+    const plugins = (entry: string) => ({ name: "personal", opencode: { plugins: [entry] } });
+
+    expect(profileSchema.parse(plugins("npm:@acme/review@1.2.3")).opencode.plugins).toEqual([
+      "npm:@acme/review@1.2.3"
+    ]);
+    expect(() => profileSchema.parse(plugins("npm:@acme/review"))).toThrow();
+    expect(() => profileSchema.parse(plugins("npm:@acme/review@^1.2.3"))).toThrow();
+    expect(() => profileSchema.parse(plugins("npm:@acme/review@latest"))).toThrow();
+  });
+});
+
 describe("skill manifest schemas", () => {
   it("rejects retired OpenCode target, profile, and provider variant names", () => {
     expect(() => agentSchema.parse("opencode-v2")).toThrow();

@@ -124,7 +124,9 @@ An old direct map with every value `true` becomes a concise list. A map with `fa
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
-OpenCode profiles may define `opencode.plugin_options` by plugin asset name. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
+An `opencode.plugins` entry of the form `npm:<package>@<exact version>` enables a published npm plugin instead of a home asset. A child profile's entry replaces the parent's entry for the same package. The renderer appends each one to the server `plugins` list as `<package>@<version>` after the home's own plugins, and OpenCode installs and loads the package itself. MFZ does not install or vendor it.
+
+OpenCode profiles may define `opencode.plugin_options` by plugin asset name, or by package name for an npm plugin. The renderer applies the same options to that asset's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
 
 MFZ owns OpenCode's top-level `permissions`. It renders extra-folder and references access, then the profile's `opencode.permissions` rules (base before child), then the protected denies for MFZ secrets and `service.json`. OpenCode applies the last matching rule, so profile rules can refine folder access but can't reopen the protected paths.
 
