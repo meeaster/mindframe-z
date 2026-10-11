@@ -360,6 +360,35 @@ For an existing vendored skill, run \`mfz skills check [name]\` before staging t
 
 Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home source is trusted input; single-subtree rendered snapshots live under \`~/.mindframe-z/configs/<profile>/skills/\`, while provider variants use \`~/.mindframe-z/configs/<profile>/opencode/skills/\` and target-scoped legacy paths under \`~/.mindframe-z/configs/<profile>/<target>/skills/\`. Harness links point only to rendered snapshots. Unmanaged link conflicts fail without replacement. Before recovery, remove or restore the candidate only; restore active behaviour with a home Git revert followed by \`mfz apply\`.
 
+Add a tool skill:
+
+Use \`source: tool\` when a skill ships with a CLI that Mise installs and must match the installed version. Tool skills are not committed to the home and are not reviewed: trusting the installed tool covers the skill it ships. Vendor standalone skills instead. A CLI that serves its own guide at runtime needs only a stable discovery stub, which stays vendored.
+
+1. Declare the skill with \`source: tool\`, the Mise tool name in \`tool:\`, and one way to obtain it:
+
+   \`\`\`yaml
+   skills:
+     # The repository tag matching the installed version; tag defaults to v{version}, then {version}.
+     - name: fframes-video
+       source: tool
+       tool: cargo:cargo-fframes
+       repo: https://github.com/dmtrKovalenko/fframes
+       subtree: skills/fframes-video
+     # Run the CLI in a throwaway project with an isolated HOME and collect what it wrote.
+     - name: openspec-explore
+       source: tool
+       tool: npm:@fission-ai/openspec
+       generate: &openspec
+         run: openspec init --tools agents --no-animation --no-copilot-cloud .
+         path: .agents/skills/{name}
+   \`\`\`
+
+   \`generate.run\` is a shell command run from the sandbox project directory with \`MFZ_TOOL_VERSION\` set and installed tool binaries on \`PATH\`. \`generate.path\` locates one skill: \`{name}\` is the catalog name, and a leading \`~/\` means the sandbox home, for tools that only install into global agent folders. Entries sharing a tool version and \`run\` command run it once, so several skills from one generator can reuse a YAML anchor (\`generate: *openspec\`).
+
+2. Enable it in the profile, then run plain \`mfz apply\`. Apply refreshes tool skills into the flat machine-local pool \`~/.mindframe-z/skills/<name>/\` before rendering. Folders hold exactly what the tool shipped; \`~/.mindframe-z/skills/.mfz-skills.yml\` records each skill's tool, version, source, and digest. A skill whose tool is not installed is left out of the snapshot.
+
+3. Keep skills current after tool upgrades with a Mise postinstall hook that calls \`mfz skills refresh --tool <tool>\`, never the tool's own global installer. A failed refresh keeps the previous copy. \`mfz doctor\` reports missing, stale, and hand-modified tool skills, unrecorded pool folders, and unmanaged skills in harness folders.
+
 Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 `;
 

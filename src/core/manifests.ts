@@ -268,7 +268,56 @@ const vendoredSkillSchema = z.union([
     .strict()
 ]);
 
-export const skillSchema = z.union([localSkillSchema, vendoredSkillSchema]);
+const toolSpecSchema = z
+  .string()
+  .min(1)
+  .regex(/^(?!-)\S+$/, "must be a Mise tool name without option markers or whitespace");
+
+const toolTagSchema = z
+  .string()
+  .min(1)
+  .refine(safeGitRef, "must be a Git ref without option or whitespace characters")
+  .refine((value) => value.includes("{version}"), "must contain the {version} placeholder");
+
+// `~/` selects the generator's isolated home; `{name}` is the catalog skill name.
+const generatedSkillPathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      skillPathSchema.safeParse(value.replace(/^~\//u, "").replaceAll("{name}", "skill")).success,
+    "must be a relative POSIX path, optionally starting with ~/"
+  );
+
+const toolSkillFields = {
+  ...skillFields,
+  source: z.literal("tool"),
+  tool: toolSpecSchema
+};
+
+const toolSkillSchema = z.union([
+  z
+    .object({
+      ...toolSkillFields,
+      repo: httpsRepositorySchema,
+      tag: toolTagSchema.optional(),
+      subtree: skillPathSchema
+    })
+    .strict(),
+  z
+    .object({
+      ...toolSkillFields,
+      generate: z
+        .object({
+          run: z.string().min(1),
+          path: generatedSkillPathSchema
+        })
+        .strict()
+    })
+    .strict()
+]);
+
+export const skillSchema = z.union([localSkillSchema, vendoredSkillSchema, toolSkillSchema]);
 
 const vendorCommitSchema = z
   .string()
@@ -749,6 +798,8 @@ export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
 
 export type SkillEntry = z.infer<typeof skillSchema>;
+
+export type ToolSkillEntry = z.infer<typeof toolSkillSchema>;
 
 export type VendoredSkillTarget = z.infer<typeof vendoredSkillTargetSchema>;
 

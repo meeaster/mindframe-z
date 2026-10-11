@@ -151,9 +151,10 @@ describe("init and guide integration", () => {
     expect(result).toContain("check reports `unpromoted` without fetching upstream");
     expect(result).toContain("Done when the skill appears for its selected agents");
     const examples = yamlExamples(result);
-    expect(examples).toHaveLength(2);
+    expect(examples).toHaveLength(3);
     expect(profileSchema.safeParse({ name: "example", ...examples[0] }).success).toBe(true);
     expect(skillsManifestSchema.safeParse(examples[1]).success).toBe(true);
+    expect(skillsManifestSchema.safeParse(examples[2]).success).toBe(true);
   });
 
   it("prints the vendored skill review guide", async () => {

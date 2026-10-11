@@ -161,6 +161,11 @@ export function skillCandidatesRoot(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "skill-candidates");
 }
 
+/** Machine-local skills derived from installed tools, one directory per catalog skill name. */
+export function toolSkillPoolDir(paths: RuntimePaths): string {
+  return path.join(mindframeZDir(paths.home), "skills");
+}
+
 export function skillSnapshotDir(paths: RuntimePaths, profileName: string): string {
   return path.join(profileConfigsDir(paths, profileName), "skills");
 }

@@ -140,6 +140,102 @@
                 "additionalProperties": false
               }
             ]
+          },
+          {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "tool"
+                  },
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!-)\\S+$"
+                  },
+                  "repo": {
+                    "type": "string",
+                    "pattern": "^https:\\/\\/(?![^/]*@)\\S+$"
+                  },
+                  "tag": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "subtree": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "tool",
+                  "repo",
+                  "subtree"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "tool"
+                  },
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!-)\\S+$"
+                  },
+                  "generate": {
+                    "type": "object",
+                    "properties": {
+                      "run": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "run",
+                      "path"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "tool",
+                  "generate"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         ]
       }

@@ -52,6 +52,11 @@ import {
 } from "../skills/vendor.js";
 import { runSync } from "../sync/index.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
+import {
+  refreshToolSkills,
+  toolSkillDiagnostics,
+  type ToolSkillRefreshOptions
+} from "../skills/tool.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
 import { runSeedOpenai } from "../sandbox/seed-openai.js";
@@ -190,6 +195,14 @@ async function doctor(options: {
 
   for (const upstream of eachUpstream(profile.manifests)) {
     for (const line of await upstreamDoctorLines(upstream)) console.log(line);
+  }
+
+  for (const line of await toolSkillDiagnostics(paths, profile)) console.log(line);
+
+  for (const skill of await readOtherGlobalSkills(paths)) {
+    console.log(
+      `skill:unmanaged\t${skill.name}\t${skill.targets.join(",")}\tnot an mfz link; agents see it regardless of the profile`
+    );
   }
 
   for (const target of [...profile.agents, ...infraTargetList("all")]) {
@@ -1100,6 +1113,46 @@ skills
     await syncSkillSnapshot(paths, profile, {
       selectedTargets: targets,
       dryRun: options.dryRun ?? false
+    });
+  });
+
+skills
+  .command("refresh")
+  .description("Update tool skills to match installed tool versions, then sync the skill snapshot")
+  .argument("[names...]", "tool skill names; defaults to every enabled tool skill")
+  .option("--tool <tool>", "only refresh skills from this Mise tool, e.g. npm:agent-browser")
+  .option("--dry-run", "report what would change without fetching or writing")
+  .action(async (names: string[], options) => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+    const dryRun = options.dryRun ?? false;
+    const refreshOptions: ToolSkillRefreshOptions = { dryRun };
+
+    if (names.length > 0) refreshOptions.names = names;
+
+    if (options.tool !== undefined) refreshOptions.tool = options.tool;
+    const outcomes = await refreshToolSkills(paths, profile, refreshOptions);
+
+    for (const outcome of outcomes) {
+      const versions =
+        outcome.before !== undefined && outcome.before !== outcome.after
+          ? `${outcome.before} -> ${outcome.after ?? "none"}`
+          : (outcome.after ?? "");
+
+      console.log(
+        [outcome.status, path.basename(outcome.target), versions, outcome.detail ?? ""]
+          .join("\t")
+          .trimEnd()
+      );
+    }
+
+    if (outcomes.length === 0) console.log("No matching tool skills are enabled.");
+
+    if (outcomes.some((outcome) => outcome.status === "failed")) process.exitCode = 1;
+
+    await syncSkillSnapshot(paths, profile, {
+      selectedTargets: profile.agents.filter(isSkillTarget),
+      dryRun
     });
   });
 

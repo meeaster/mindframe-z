@@ -33,6 +33,7 @@ import {
 } from "../ref-store/reference-lock.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
+import { refreshToolSkills } from "../skills/tool.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
 import { mergeOpenCodeCliPlugins, parseOpenCodePluginEntries } from "../renderers/opencode.js";
@@ -468,6 +469,16 @@ export async function applyConfig(
 
     if (!rendersAgents) return operations.outcomes;
     throwIfReferenceSyncCancelled(referenceSignal);
+    options.onStart?.({
+      category: "skill",
+      action: "write",
+      target: profile.name,
+      detail: "tool skills"
+    });
+    await refreshToolSkills(paths, profile, {
+      dryRun: options.dryRun ?? false,
+      onComplete: operations.complete
+    });
     options.onStart?.({
       category: "skill",
       action: "snapshot",

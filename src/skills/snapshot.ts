@@ -4,11 +4,12 @@ import { isDeepStrictEqual } from "node:util";
 import YAML from "yaml";
 import { z } from "zod";
 import { engineSkillName, engineSkillRoot, materializeEngineSkill } from "../core/engine-skill.js";
-import { readDirEntries } from "../core/fs-util.js";
+import { pathExists, readDirEntries } from "../core/fs-util.js";
 import {
   opencodeSkillSnapshotDir,
   providerSkillSnapshotDir,
   skillSnapshotDir,
+  toolSkillPoolDir,
   type AgentName,
   type RuntimePaths
 } from "../core/paths.js";
@@ -25,6 +26,7 @@ import {
   vendoredSkillSourcePath
 } from "./vendor.js";
 import { assertNoSymlinkAncestors, copySkillFiles } from "./tree.js";
+import { toolSkillSourcePath } from "./tool.js";
 import { isManagedTarget, linkStatus } from "./link-state.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
 
@@ -46,7 +48,7 @@ const snapshotManifestSchema = z
       z
         .object({
           name: z.string(),
-          source: z.enum(["local", "vendored", "engine"]),
+          source: z.enum(["local", "vendored", "tool", "engine"]),
           digest: z.string(),
           targets: z.array(z.enum(["opencode", "claude-code", "codex"])),
           variant: vendoredSkillTargetSchema.optional(),
@@ -69,7 +71,7 @@ function errorCode(error: Error): string | undefined {
 
 interface SnapshotSkill {
   name: string;
-  source: "local" | "vendored" | "engine";
+  source: "local" | "vendored" | "tool" | "engine";
   digest: string;
   targets: SkillTarget[];
   variant?: VendoredSkillTarget;
@@ -115,7 +117,9 @@ interface SkillSnapshotGroupOptions {
   excludeProviderVariants?: boolean;
 }
 
-function sourcePath(skill: ResolvedSkill, target?: SkillTarget): string {
+function sourcePath(paths: RuntimePaths, skill: ResolvedSkill, target?: SkillTarget): string {
+  if (skill.source === "tool") return toolSkillSourcePath(paths, skill.name);
+
   if (skill.source === "vendored") {
     if ("variants" in skill) {
       if (target === undefined) {
@@ -447,7 +451,10 @@ async function prepareSkillSnapshot(
     if (targets.length === 0) continue;
     const variantTarget = selectedVariantTarget(skill, targets);
     const source = skill.source;
-    const skillSourcePath = sourcePath(skill, variantTarget);
+    const skillSourcePath = sourcePath(paths, skill, variantTarget);
+
+    // A tool skill exists only once its tool is installed and `mfz skills refresh` has run.
+    if (source === "tool" && !(await pathExists(skillSourcePath))) continue;
     const snapshotSource: SnapshotSource = { sourcePath: skillSourcePath };
 
     sources.set(skill.name, snapshotSource);
@@ -457,7 +464,7 @@ async function prepareSkillSnapshot(
       source,
       digest: "",
       targets,
-      sourceRoot: skill.sourceRoot,
+      sourceRoot: source === "tool" ? toolSkillPoolDir(paths) : skill.sourceRoot,
       sourcePath: skillSourcePath
     };
 

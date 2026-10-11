@@ -14,6 +14,7 @@ import { type RuntimePaths } from "../core/paths.js";
 import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import { analyzeRepository } from "./repository.js";
 import { measuredContributor, unknownContributor } from "./measurement.js";
+import { toolSkillSourcePath } from "../skills/tool.js";
 import { vendoredSkillSourcePath } from "../skills/vendor.js";
 import type {
   ContextContributor,
@@ -50,16 +51,18 @@ async function readSkillFile(
       : path.join(paths.claudeDir, "skills");
 
   const sourceSkill =
-    skill.source === "vendored"
-      ? path.join(
-          vendoredSkillSourcePath(
-            skill.sourceRoot,
-            skill.name,
-            "variants" in skill ? harness : undefined
-          ),
-          "SKILL.md"
-        )
-      : path.join(skill.sourceRoot, skill.skill, "SKILL.md");
+    skill.source === "tool"
+      ? path.join(toolSkillSourcePath(paths, skill.name), "SKILL.md")
+      : skill.source === "vendored"
+        ? path.join(
+            vendoredSkillSourcePath(
+              skill.sourceRoot,
+              skill.name,
+              "variants" in skill ? harness : undefined
+            ),
+            "SKILL.md"
+          )
+        : path.join(skill.sourceRoot, skill.skill, "SKILL.md");
 
   const candidates = [path.join(targetRoot, skill.name, "SKILL.md"), sourceSkill];
 
