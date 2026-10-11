@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { parseFrontmatter, readDirEntries } from "../core/fs-util.js";
+import { parseFrontmatter, pathExists, readDirEntries } from "../core/fs-util.js";
 import { jsonObjectSchema, jsonString } from "../core/json.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { isManagedTarget, linkStatus } from "./link-state.js";
@@ -68,6 +68,11 @@ export async function readOtherGlobalSkills(
       const status = await linkStatus(entryPath);
 
       if (status.state === "missing" || status.state === "file") continue;
+
+      // Harnesses keep their own folders here, such as Claude Code's `synced`; only skills count.
+      if (status.state === "directory" && !(await pathExists(path.join(entryPath, "SKILL.md")))) {
+        continue;
+      }
 
       if (status.state === "symlink" && isManagedTarget(paths.configsDir, status.resolved)) {
         continue;

@@ -175,6 +175,7 @@ describe("skills profile integration", () => {
       "---\ndescription: Shared global skill.\n---\n",
       "utf8"
     );
+    // Directories without SKILL.md, such as Claude Code's `synced`, are not skills.
     await mkdir(path.join(claudeSkills, "missing-global"), { recursive: true });
     await mkdir(path.join(opencodeSkills, "malformed-global"), { recursive: true });
     await writeFile(
@@ -202,13 +203,13 @@ describe("skills profile integration", () => {
       "global-only\tagents",
       "local-skill\tclaude-code",
       "malformed-global\topencode",
-      "missing-global\tclaude-code",
-      "shared-global\tagents,claude-code,opencode"
+      "shared-global\tagents"
     ]);
     expect(result.stdout).not.toContain("ignored-codex");
     expect(result.stdout).not.toContain("ignored-opencode");
     expect(result.stdout).not.toContain("snapshot-only");
     expect(result.stdout).not.toContain("project-only");
+    expect(result.stdout).not.toContain("missing-global");
     expect(result.stdout).not.toContain(String.fromCharCode(27));
     expect(result.stdout).not.toContain(String.fromCharCode(155));
 
@@ -222,8 +223,7 @@ describe("skills profile integration", () => {
       "global-only\tagents\tGlobal-only skill.",
       "local-skill\tclaude-code\tIndependent local skill.",
       "malformed-global\topencode",
-      "missing-global\tclaude-code",
-      "shared-global\tagents,claude-code,opencode\tShared global skill."
+      "shared-global\tagents\tShared global skill."
     ]);
   });
 

@@ -42,7 +42,7 @@ describe("readOtherGlobalSkills", () => {
     await expect(readOtherGlobalSkills(runtimePaths(home))).resolves.toEqual([]);
   });
 
-  it("filters managed links and non-skills while aggregating external entries", async () => {
+  it("filters managed links and directories without a skill while aggregating external entries", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-global-inventory-"));
     const paths = runtimePaths(home);
     const agentsSkills = globalSkillPath(paths, "agents");
@@ -83,7 +83,8 @@ describe("readOtherGlobalSkills", () => {
     await writeSkill(agentsSkills, "shared", "---\ndescription: Agents shared\n---\n");
     await writeSkill(claudeSkills, "shared", "---\ndescription: Claude shared\n---\n");
     await writeSkill(claudeSkills, "malformed", "---\ndescription: [unclosed\n---\n");
-    await writeSkill(claudeSkills, "missing-description");
+    await writeSkill(claudeSkills, "missing-description", "---\nname: missing-description\n---\n");
+    await mkdir(path.join(claudeSkills, "synced", "bucket"), { recursive: true });
     await writeSkill(opencodeSkills, "shared");
     await writeSkill(opencodeSkills, ".hidden", "---\ndescription: hidden\n---\n");
     await writeFile(path.join(opencodeSkills, "not-a-skill"), "file\n", "utf8");
@@ -96,7 +97,7 @@ describe("readOtherGlobalSkills", () => {
       { name: "ordinary", targets: ["agents"], description: "Ordinary skill" },
       {
         name: "shared",
-        targets: ["agents", "claude-code", "opencode"],
+        targets: ["agents", "claude-code"],
         description: "Agents shared"
       }
     ]);
