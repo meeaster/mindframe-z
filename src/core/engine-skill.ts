@@ -17,7 +17,7 @@ export const engineSkillName = "mindframe-z";
 
 const engineSkillMarkdown = `---
 name: mindframe-z
-description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."
+description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, reference repositories, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."
 ---
 
 Mindframe-Z renders AI tool configuration from a home repository. Before changing MFZ configuration, run \`mfz guide\` and follow its topic routing. For CLI command discovery, run \`mfz --help\`.

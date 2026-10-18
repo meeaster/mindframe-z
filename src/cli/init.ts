@@ -6,7 +6,7 @@ import { machineConfigPath, mindframeZDir, upstreamHomeRoot } from "../core/path
 
 const mcpGuideMarkdown = `# MCP Guide
 
-Use this guide when adding or changing a direct MCP server, Executor routing, or Executor authentication.
+Use this guide when adding or changing a direct MCP server or Executor routing.
 
 The catalog defines server connection details. A profile may select native agents, Executor, or both independently.
 
@@ -34,7 +34,16 @@ mcp:
 
 Omitting \`agents\` leaves a server Executor-only. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
 
-Executor entries are shared inventory for all connected supported harnesses, not per-agent toggles. Set the profile-level \`executor.bridge: false\` to reconcile Executor without adding its MCP bridge to any agent. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only when the bridge is enabled and required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows or imports harness credentials. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects profiles with Executor integrations.
+Executor entries are shared inventory for all connected supported harnesses, not per-agent toggles. Set the profile-level \`executor.bridge: false\` to reconcile Executor without adding its MCP bridge to any agent. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only when the bridge is enabled and required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects profiles with Executor integrations.
+
+For an Executor server that needs OAuth, an API key, or named connections, run \`mfz guide executor-auth\` before declaring them.
+
+Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when the intended routing is rendered and the profile reports healthy links.
+`;
+
+const executorAuthGuideMarkdown = `# Executor Authentication Guide
+
+Use this guide before declaring Executor authentication methods or profile connections. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows, accepts secrets, or imports harness credentials.
 
 Declare Executor authentication structure in the catalog, never credential values:
 
@@ -237,7 +246,26 @@ A home is a git repository with \`mfz-home.yml\` at its root. The engine loads f
 
 Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz-home.yml#extends\`.
 
-The editing model: home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Never edit rendered output directly. Use \`mfz sync\` only to promote supported unmanaged configuration keys; source changes, including skills, remain home edits followed by \`mfz apply\`.
+Home files are the source of truth; everything under \`~/.mindframe-z/configs/<profile>/\` and managed harness configuration is rendered output. Edit home files, then run plain \`mfz apply\` to re-render; it follows the active home and profile from \`~/.mindframe-z/config.yml\`. Reserve \`--root\`, \`--home\`, and \`--profile\` for isolated tests with an explicit test home. Use \`mfz sync\` only to promote supported unmanaged configuration keys back into the home.
+
+\`mfz apply\` is local: it renders configuration, regenerates indexes, and links harness globals without cloning or fetching anything. \`mfz refs sync\` is the separate network step that clones, updates, and prunes reference checkouts. Run it only when references themselves should change; apply reports any enabled reference that is not cloned yet.
+
+OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Published npm plugins need no home source: add \`npm:<package>@<exact version>\` to \`opencode.plugins\`, and OpenCode installs it.
+
+Before changing a topic below, run its guide:
+
+- \`mfz guide instructions\` - global guidance, instruction references, machine-local instructions, or capability groups.
+- \`mfz guide mcp\` - add or change direct MCP servers or Executor routing.
+- \`mfz guide executor-auth\` - declare Executor authentication methods or profile connections.
+- \`mfz guide skills\` - add or change local, vendored, or tool skills.
+- \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
+- \`mfz guide references\` - add, update, or remove read-only reference repositories.
+- \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
+- \`mfz guide runtime-files\` - Mise settings and tasks or user systemd units.
+- \`mfz guide cron\` - add or change a recurring OpenCode job.
+`;
+
+const instructionsGuideMarkdown = `# Instructions Guide
 
 Use \`instructions\` for guidance every agent should receive. Use \`instruction_references\` for branch-specific guidance: each entry declares a stable kebab-case \`name\`, a source \`path\` under an active or upstream home's \`instructions/\` directory, and a trigger-focused \`description\`. MFZ copies these files into the rendered profile and adds compact pointers to global instructions; the agent reads a referenced file only when its description matches the task.
 
@@ -265,22 +293,16 @@ extra_folders:
     description: Profile-aware AI tooling engine.
 ~~~
 
-Runtime-managed files:
+Run plain \`mfz apply\`, then inspect the rendered \`~/.mindframe-z/configs/<profile>/AGENTS.md\`. Done when every pointer appears with its trigger description and each referenced file is copied into the rendered profile.
+`;
+
+const runtimeFilesGuideMarkdown = `# Runtime Files Guide
+
+Use this guide before changing profile-managed Mise settings, Mise tasks, or user systemd units.
 
 - Mise profile settings live in \`profiles/<profile>/mise.toml\`; profile task files live under \`profiles/<profile>/.config/mise/tasks/\`. Run \`mfz apply --target mise\` after changing them. MFZ renders native Mise fragments under \`conf.d/\` and namespaced tasks under \`tasks/\`.
 - User systemd files live under \`profiles/<profile>/.config/systemd/user/\`. Run \`mfz apply --target dotfiles\` after changing them. MFZ writes unit files under \`~/.config/systemd/user/\`, but does not reload, enable, start, stop, or disable services.
 - When a systemd service should run, use \`systemctl --user daemon-reload\`, then explicitly \`systemctl --user enable <unit>\` and \`systemctl --user start <unit>\` as appropriate. \`WantedBy=default.target\` affects enablement only.
-
-Local skills use an explicit \`skill:\` directory relative to the home root. OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Published npm plugins need no home source: add \`npm:<package>@<exact version>\` to \`opencode.plugins\`, and OpenCode installs it.
-
-Before changing a topic below, run its guide:
-
-- \`mfz guide mcp\` - add or change direct MCP servers, Executor routing, or Executor authentication.
-- \`mfz guide cron\` - add or change a recurring OpenCode job.
-- \`mfz guide skills\` - add or change local or vendored skills.
-- \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
-- \`mfz guide references\` - add or change read-only reference repositories.
-- \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
 `;
 
 const extraFoldersGuideMarkdown = `# Extra Folders Guide
@@ -430,7 +452,7 @@ Present \`mfz skills promote <candidate-id>\` only after every file and category
 
 const referencesGuideMarkdown = `# References Guide
 
-A reference is a read-only local clone that gives agents source-grounded context when a repository becomes relevant. The catalog declares available repositories, and a profile enables them. Full \`mfz apply\` clones or updates enabled references, removes deselected checkouts that MFZ owns and can delete safely, regenerates local indexes, refreshes embedded agent snapshots, and activates configuration.
+A reference is a read-only local clone that gives agents source-grounded context when a repository becomes relevant. The catalog declares available repositories, and a profile enables them. \`mfz refs sync\` owns every checkout: it clones or updates enabled references, removes deselected checkouts that MFZ owns and can delete safely, and regenerates the local reference, extra-folder, and capability indexes without activating configuration. \`mfz apply\` never clones, fetches, or removes checkouts; it embeds the indexes in agent snapshots and reports enabled references that are not cloned yet.
 
 Add a reference:
 
@@ -453,11 +475,13 @@ Add a reference:
      - example
    \`\`\`
 
-3. Run plain \`mfz apply\` to synchronize references, regenerate indexes, refresh embedded agent snapshots, and activate configuration. Use \`mfz refs list\` to inspect availability. Use \`mfz refs sync example\` when you need to update only this reference without activating configuration. Both named and bulk reference synchronization regenerate the local reference, extra-folder, and capability indexes automatically.
+3. Run \`mfz refs sync example\` to clone it, then plain \`mfz apply\` so agent snapshots embed the updated index.
 
-Bulk reconciliation removes a deselected checkout only when MFZ owns it and Git establishes that removal is safe. MFZ preserves modified or untracked files, ahead or divergent commits, and checkouts with an unexpected remote. Resolve a reported conflict instead of deleting local work. Named synchronization does not update or remove unrelated references.
+Update checkouts with \`mfz refs sync\` for every enabled reference or \`mfz refs sync <name>\` for one; apply is not needed afterwards because checkout revisions do not appear in rendered configuration. Named synchronization never updates or removes unrelated references.
 
-Use \`--verbose\` with apply or reference synchronization to show unchanged checks and internal operations. Default output lists changes and items that need attention. Captured output uses plain lines without terminal control sequences.
+Remove a reference by deleting it from the profile, then running bulk \`mfz refs sync\` and \`mfz apply\`. Bulk synchronization removes a deselected checkout only when MFZ owns it and Git establishes that removal is safe. MFZ preserves modified or untracked files, ahead or divergent commits, and checkouts with an unexpected remote. Resolve a reported conflict instead of deleting local work.
+
+Use \`--verbose\` with apply or reference synchronization to show unchanged checks and internal operations.
 
 If the profile defines \`capability_groups\`, each enabled reference must declare a matching \`group\`, a short \`summary\`, and at least one \`signal\`.
 
@@ -465,16 +489,19 @@ Write descriptions as routing metadata, not miniature repository summaries. Lead
 
 References inherited from an upstream home use qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 
-Rendered indexes mark reference clones as read-only. Agents may inspect them but must not edit, reorganize, or write within the reference paths. Verify a complete activation with \`mfz refs list\` and \`mfz doctor\`. A focused \`mfz refs sync [name]\` updates local references and indexes only; run full \`mfz apply\` when agent snapshots or configuration also need activation.
+Rendered indexes mark reference clones as read-only: agents inspect them and leave their files untouched. Verify with \`mfz refs list\` and \`mfz doctor\`.
 `;
 
 const guideTopics = new Map([
+  ["instructions", instructionsGuideMarkdown],
   ["cron", cronGuideMarkdown],
   ["mcp", mcpGuideMarkdown],
+  ["executor-auth", executorAuthGuideMarkdown],
   ["skills", skillsGuideMarkdown],
   ["skill-review", skillReviewGuideMarkdown],
   ["references", referencesGuideMarkdown],
-  ["extra-folders", extraFoldersGuideMarkdown]
+  ["extra-folders", extraFoldersGuideMarkdown],
+  ["runtime-files", runtimeFilesGuideMarkdown]
 ]);
 
 export const guideTopicNames = [...guideTopics.keys()];

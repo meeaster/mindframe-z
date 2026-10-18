@@ -9,7 +9,11 @@ import {
   type ApplyAgent,
   type InfraTarget
 } from "../core/paths.js";
-import { requiresExecutorReconciliation, resolveProfile } from "../core/profile.js";
+import {
+  requiresExecutorReconciliation,
+  resolveProfile,
+  type ResolvedProfile
+} from "../core/profile.js";
 import { renderAllPayloads } from "../core/override-store.js";
 import {
   removeRenderedFiles,
@@ -25,12 +29,7 @@ import {
   writeGitIdentityFragment
 } from "../core/git-config.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
-import { planReferences, syncReferencesLocked } from "../ref-store/references.js";
-import {
-  throwIfReferenceSyncCancelled,
-  withReferenceResourceLock,
-  type ReferenceLockScope
-} from "../ref-store/reference-lock.js";
+import { referencePath } from "../ref-store/references.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { refreshToolSkills } from "../skills/tool.js";
@@ -58,7 +57,6 @@ import {
 import {
   collectOperations,
   type OperationCompletion,
-  type OperationLifecycleNotification,
   type OperationOutcome,
   type OperationStartNotification
 } from "../core/operations.js";
@@ -74,14 +72,12 @@ export interface ApplyOptions {
   interactive?: boolean | undefined;
   onStart?: OperationStartNotification | undefined;
   onComplete?: OperationCompletion | undefined;
-  onLifecycle?: OperationLifecycleNotification | undefined;
   beforePrompt?: (() => void) | undefined;
 }
 
 export interface ApplyDependencies {
   reconcileExecutor?: typeof reconcileExecutor;
   renderTarget?: typeof renderTarget;
-  syncReferences?: typeof syncReferencesLocked;
 }
 
 async function confirmReplace(
@@ -349,10 +345,7 @@ export async function applyConfig(
   const usePrompts = !options.dryRun && !options.noLink;
   const interactive = usePrompts && options.interactive === true;
 
-  const execute = async (
-    referenceSignal?: AbortSignal,
-    lockScope?: ReferenceLockScope
-  ): Promise<OperationOutcome[]> => {
+  const execute = async (): Promise<OperationOutcome[]> => {
     const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
 
     if (
@@ -374,7 +367,6 @@ export async function applyConfig(
     }
 
     if (rendersAgents) {
-      throwIfReferenceSyncCancelled(referenceSignal);
       options.onStart?.({
         category: "index",
         action: "write",
@@ -415,8 +407,6 @@ export async function applyConfig(
     }
 
     for (const target of selectedTargets) {
-      throwIfReferenceSyncCancelled(referenceSignal);
-
       if (target === "opencode" && !options.noLink) {
         await assertOpenCodePluginDirectories(path.join(paths.opencodeConfigDir, "plugins", "tui"));
       }
@@ -468,7 +458,6 @@ export async function applyConfig(
     }
 
     if (!rendersAgents) return operations.outcomes;
-    throwIfReferenceSyncCancelled(referenceSignal);
     options.onStart?.({
       category: "skill",
       action: "write",
@@ -495,30 +484,31 @@ export async function applyConfig(
       onComplete: operations.complete
     });
 
-    const referenceOptions = { onComplete: operations.complete };
-
-    if (options.onStart) Object.assign(referenceOptions, { onStart: options.onStart });
-
-    if (options.onLifecycle) Object.assign(referenceOptions, { onLifecycle: options.onLifecycle });
-
-    if (referenceSignal) Object.assign(referenceOptions, { signal: referenceSignal });
-
-    if (options.dryRun) {
-      await planReferences(paths, profile, referenceOptions);
-    } else {
-      if (!lockScope) throw new Error("Reference synchronization requires an active lock");
-      const synchronizeReferences = dependencies.syncReferences ?? syncReferencesLocked;
-      await synchronizeReferences(paths, profile, referenceOptions, lockScope);
-    }
-
-    throwIfReferenceSyncCancelled(referenceSignal);
+    await reportMissingReferences(profile, operations.complete);
 
     return operations.outcomes;
   };
 
-  if (!rendersAgents) return execute();
+  return execute();
+}
 
-  return withReferenceResourceLock(paths, profile.referencesDir, (signal, scope) =>
-    execute(signal, scope)
-  );
+// Apply stays local: it never clones or updates references, so it only points at missing checkouts.
+async function reportMissingReferences(
+  profile: ResolvedProfile,
+  onComplete: OperationCompletion
+): Promise<void> {
+  for (const reference of profile.enabledReferences) {
+    const destination = referencePath(profile, reference);
+
+    if (await pathExists(destination)) continue;
+
+    onComplete({
+      category: "reference",
+      action: "reconcile",
+      status: "skipped",
+      target: destination,
+      significance: "meaningful",
+      detail: `${reference.name}: not cloned; run mfz refs sync ${reference.name}`
+    });
+  }
 }

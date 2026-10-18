@@ -24,7 +24,6 @@ import {
   providerSkillSnapshotDir,
   referenceStatePath
 } from "../../src/core/paths.js";
-import { ReferenceReconciliationError } from "../../src/ref-store/references.js";
 import { writeProviderVariantSkill } from "./support.js";
 
 const JsonObject = z.object({}).passthrough();
@@ -250,6 +249,7 @@ describe("apply integration", () => {
     const stalePlugin = path.join(managedPlugins, "stale.ts");
     await mkdir(managedPlugins, { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
+    await cli("mfz", root, home, ["refs", "sync"]);
 
     await applyConfig({ root, home, agent: "opencode", target: "all" });
     await expect(access(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
@@ -321,6 +321,7 @@ describe("apply integration", () => {
   }, 30_000);
 
   it("prints default no-change and complete verbose apply receipts", async () => {
+    await cli("mfz", root, home, ["refs", "sync"]);
     await applyConfig({ root, home, agent: "all", target: "all", noLink: true });
 
     const unchanged = await cli("mfz", root, home, ["apply", "--no-link"]);
@@ -330,20 +331,17 @@ describe("apply integration", () => {
     expect(unchanged.stdout).not.toContain(String.fromCharCode(155));
 
     const verbose = await cli("mfz", root, home, ["apply", "--no-link", "--verbose"]);
-    expect(verbose.stdout).toContain("working\treference\treconcile");
     expect(verbose.stdout).toContain("unchanged\tfile");
     expect(verbose.stdout).toContain("unchanged\tbookkeeping");
     expect(verbose.stdout).toContain("Result\tmfz apply complete — no changes");
   });
 
-  it("reports current skills and links as unchanged without counting unchecked references", async () => {
+  it("reports current skills and links as unchanged in a dry run", async () => {
+    await cli("mfz", root, home, ["refs", "sync"]);
     await cli("mfz", root, home, ["apply"]);
 
     const dryRun = await cli("mfz", root, home, ["apply", "--dry-run"]);
 
-    expect(dryRun.stdout).toContain("Unchecked");
-    expect(dryRun.stdout).toContain("planned\treference");
-    expect(dryRun.stdout).toContain("upstream state not checked");
     expect(dryRun.stdout).not.toMatch(/^planned\t(?:skill|link)\t/mu);
     expect(dryRun.stdout).toContain("Result\tmfz apply complete — no changes");
 
@@ -353,39 +351,19 @@ describe("apply integration", () => {
     expect(verbose.stdout).not.toMatch(/^planned\t(?:skill|link)\t/mu);
   });
 
-  it("reconciles references for full --agent and --no-link apply", async () => {
+  it("leaves existing reference checkouts at their current revision", async () => {
     const source = fixtureReferenceSource(root);
     const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
-    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
+    await cli("mfz", root, home, ["refs", "sync"]);
     const before = await git(checkout, ["rev-parse", "HEAD"]);
     await writeFile(path.join(source, "README.md"), "advanced fixture\n", "utf8");
     await git(source, ["add", "README.md"]);
     await git(source, ["commit", "-m", "advance fixture"]);
 
-    await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
+    const result = await cli("mfz", root, home, ["apply", "--no-link"]);
 
-    expect(await git(checkout, ["rev-parse", "HEAD"])).not.toBe(before);
-    expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(
-      await git(source, ["rev-parse", "HEAD"])
-    );
-  });
-
-  it.each([false, true])("runs reference %s after the rest of full apply", async (dryRun) => {
-    const started: string[] = [];
-
-    await applyConfig({
-      root,
-      home,
-      agent: "opencode",
-      target: "all",
-      noLink: true,
-      dryRun,
-      onStart: (operation) => started.push(operation.category)
-    });
-
-    const reference = started.indexOf("reference");
-    expect(reference).toBeGreaterThan(started.indexOf("skill"));
-    expect(reference).toBe(started.length - 1);
+    expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(before);
+    expect(result.stdout).not.toContain("not cloned");
   });
 
   it.each(["mise", "dotfiles"] as const)(
@@ -408,249 +386,33 @@ describe("apply integration", () => {
     }
   );
 
-  it("plans a missing reference checkout without creating reference paths", async () => {
-    const paths = createRuntimePaths({ root, home });
+  it.each([false, true])(
+    "points at refs sync for a missing checkout without cloning it (dry run: %s)",
+    async (dryRun) => {
+      const paths = createRuntimePaths({ root, home });
+      const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
 
-    const outcomes = await applyConfig({
-      root,
-      home,
-      agent: "opencode",
-      target: "all",
-      dryRun: true,
-      noLink: true
-    });
+      const outcomes = await applyConfig({
+        root,
+        home,
+        agent: "opencode",
+        target: "all",
+        dryRun,
+        noLink: true
+      });
 
-    expect(outcomes).toContainEqual(
-      expect.objectContaining({
-        category: "reference",
-        status: "planned",
-        detail: "local-ref: checkout would be cloned"
-      })
-    );
-    expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(false);
-    expect(await exists(referenceStatePath(paths))).toBe(false);
-    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(false);
-
-    const receipt = await cli("mfz", root, home, ["apply", "--dry-run", "--no-link"]);
-    expect(receipt.stdout).toContain("planned\treference");
-    expect(receipt.stdout).toContain("checkout would be cloned");
-    expect(receipt.stdout).toContain("planned\tindex");
-    expect(receipt.stdout).toContain("planned change");
-  });
-
-  it("plans reference and index work without checking upstream or writing reference state", async () => {
-    await applyConfig({ root, home, agent: "opencode", target: "all", noLink: true });
-    const paths = createRuntimePaths({ root, home });
-    const checkout = path.join(home, ".mindframe-z", "references", "local-ref");
-    const source = fixtureReferenceSource(root);
-    const checkoutBefore = await git(checkout, ["rev-parse", "HEAD"]);
-    const stateBefore = await readFile(referenceStatePath(paths), "utf8");
-    const indexPath = path.join(home, ".mindframe-z", "references.md");
-    await writeFile(indexPath, "stale index\n", "utf8");
-    await writeFile(path.join(source, "README.md"), "unfetched upstream\n", "utf8");
-    await git(source, ["add", "README.md"]);
-    await git(source, ["commit", "-m", "unfetched upstream"]);
-
-    const outcomes = await applyConfig({
-      root,
-      home,
-      agent: "opencode",
-      target: "all",
-      dryRun: true,
-      noLink: true
-    });
-
-    expect(outcomes.find((outcome) => outcome.category === "reference")?.detail).toContain(
-      "upstream state not checked"
-    );
-    expect(outcomes).toContainEqual(
-      expect.objectContaining({ category: "index", target: indexPath, status: "planned" })
-    );
-    expect(await git(checkout, ["rev-parse", "HEAD"])).toBe(checkoutBefore);
-    expect(await readFile(referenceStatePath(paths), "utf8")).toBe(stateBefore);
-    expect(await readFile(indexPath, "utf8")).toBe("stale index\n");
-  });
-
-  it("retains completed activation and reference effects after a late reference failure", async () => {
-    const referencesPath = path.join(root, "catalog", "references.yml");
-    await writeFile(
-      referencesPath,
-      (await readFile(referencesPath, "utf8")).replace(
-        "    description: Local test reference.\n",
-        [
-          "    description: Local test reference.",
-          "  - name: broken-ref",
-          `    url: ${path.join(home, "missing-reference.git")}`,
-          "    description: Broken reference.",
-          ""
-        ].join("\n")
-      ),
-      "utf8"
-    );
-    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
-    await writeFile(
-      profilePath,
-      (await readFile(profilePath, "utf8")).replace(
-        "references:\n  - local-ref",
-        "references:\n  - local-ref\n  - broken-ref"
-      ),
-      "utf8"
-    );
-    const completed: OperationOutcome[] = [];
-    let renders = 0;
-
-    await expect(
-      applyConfig(
-        {
-          root,
-          home,
-          agent: "opencode",
-          target: "all",
-          noLink: true,
-          onComplete: completed.push.bind(completed)
-        },
-        {
-          renderTarget: async () => {
-            renders += 1;
-
-            return { files: [], links: [] };
-          }
-        }
-      )
-    ).rejects.toThrow();
-    expect(renders).toBe(3);
-    expect(completed).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ category: "reference", status: "created" }),
-        expect.objectContaining({ category: "reference", status: "failed" })
-      ])
-    );
-    expect(await exists(path.join(home, ".mindframe-z", "references", "local-ref"))).toBe(true);
-    expect(await exists(path.join(home, ".mindframe-z", "references.md"))).toBe(true);
-  });
-
-  it("retains completed activation when late reference state persistence fails", async () => {
-    const completed: OperationOutcome[] = [];
-    let renders = 0;
-    const failureCause = new Error("state store unavailable");
-    const failureDetail = "Could not record ownership for local-ref: state store unavailable";
-
-    const referenceOutcome: OperationOutcome = {
-      category: "reference",
-      action: "reconcile",
-      status: "created",
-      target: path.join(home, ".mindframe-z", "references", "local-ref"),
-      significance: "meaningful",
-      detail: "local-ref"
-    };
-
-    const referenceFailure: OperationOutcome = {
-      category: "reference",
-      action: "reconcile",
-      status: "failed",
-      target: referenceOutcome.target,
-      significance: "meaningful",
-      detail: failureDetail
-    };
-
-    const bookkeepingFailure: OperationOutcome = {
-      category: "bookkeeping",
-      action: "write",
-      status: "failed",
-      target: referenceStatePath(createRuntimePaths({ root, home })),
-      significance: "internal",
-      detail: failureDetail
-    };
-
-    await expect(
-      applyConfig(
-        {
-          root,
-          home,
-          agent: "opencode",
-          target: "all",
-          noLink: true,
-          onComplete: completed.push.bind(completed)
-        },
-        {
-          syncReferences: async (_paths, _profile, options) => {
-            for (const outcome of [referenceOutcome, referenceFailure, bookkeepingFailure])
-              options.onComplete?.(outcome);
-
-            throw new ReferenceReconciliationError(
-              failureDetail,
-              [referenceOutcome, referenceFailure, bookkeepingFailure],
-              failureCause
-            );
-          },
-          renderTarget: async (_paths, _profile, target) => {
-            renders += 1;
-
-            return {
-              files:
-                target === "opencode"
-                  ? [
-                      {
-                        path: configsPath(home, "personal", "opencode", "opencode.jsonc"),
-                        content: "rendered\n"
-                      }
-                    ]
-                  : [],
-              links: []
-            };
-          }
-        }
-      )
-    ).rejects.toThrow("Could not record ownership");
-
-    expect(renders).toBe(3);
-    expect(completed).toEqual(
-      expect.arrayContaining([referenceOutcome, referenceFailure, bookkeepingFailure])
-    );
-    expect(await readFile(path.join(home, ".mindframe-z", "references.md"), "utf8")).toContain(
-      "local-ref"
-    );
-    expect(
-      await readFile(
-        path.join(home, ".mindframe-z", "configs", "personal", "opencode", "opencode.jsonc"),
-        "utf8"
-      )
-    ).toBe("rendered\n");
-  });
-
-  it("prints known completed effects when apply fails partway through references", async () => {
-    const referencesPath = path.join(root, "catalog", "references.yml");
-    await writeFile(
-      referencesPath,
-      (await readFile(referencesPath, "utf8")).replace(
-        "    description: Local test reference.\n",
-        [
-          "    description: Local test reference.",
-          "  - name: broken-ref",
-          `    url: ${path.join(home, "missing-reference.git")}`,
-          "    description: Broken reference.",
-          ""
-        ].join("\n")
-      ),
-      "utf8"
-    );
-    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
-    await writeFile(
-      profilePath,
-      (await readFile(profilePath, "utf8")).replace(
-        "references:\n  - local-ref",
-        "references:\n  - local-ref\n  - broken-ref"
-      ),
-      "utf8"
-    );
-
-    await expect(cli("mfz", root, home, ["apply", "--no-link"])).rejects.toMatchObject({
-      stdout: expect.stringMatching(
-        /created\treference[\s\S]+failed\treference[\s\S]+earlier changes were not rolled back/u
-      ),
-      stderr: expect.stringContaining("missing-reference.git")
-    });
-  });
+      expect(outcomes).toContainEqual(
+        expect.objectContaining({
+          category: "reference",
+          status: "skipped",
+          target: checkout,
+          detail: "local-ref: not cloned; run mfz refs sync local-ref"
+        })
+      );
+      expect(await exists(checkout)).toBe(false);
+      expect(await exists(referenceStatePath(paths))).toBe(false);
+    }
+  );
 
   it("notifies completed outcomes before a later operation fails", async () => {
     const completed: OperationOutcome[] = [];

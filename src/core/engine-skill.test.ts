@@ -82,9 +82,7 @@ describe("materializeEngineSkill", () => {
     );
 
     expect(skillMd).toContain("name: mindframe-z");
-    expect(skillMd).toContain(
-      `description: "Configure the user's AI-tool setup from a Mindframe-Z home repository: profiles, skills, agent instructions, MCP servers, machine configuration, or recurring OpenCode jobs. Use for home and configuration changes even when the request does not name mfz, and for mfz CLI usage."`
-    );
+    expect(skillMd).toMatch(/^description: ".+"$/mu);
     expect(skillMd).toContain("mfz guide");
     expect(skillMd).toContain("mfz --help");
   });

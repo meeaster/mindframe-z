@@ -23,7 +23,6 @@ import {
   type OperationCollector,
   type OperationOutcome,
   type OperationLifecycleNotification,
-  type OperationStart,
   type OperationStartNotification
 } from "../core/operations.js";
 import {
@@ -47,8 +46,7 @@ import {
   type ReferenceRunOptions,
   type RunGit,
   type WriteReferenceState,
-  ReferenceBlockedError,
-  referenceLifecycleKey
+  ReferenceBlockedError
 } from "./reference-run.js";
 
 export type { ReferenceState, RunGit, WriteReferenceState } from "./reference-run.js";
@@ -215,76 +213,6 @@ export async function syncReferencesLocked(
   return operations.outcomes;
 }
 
-export async function planReferences(
-  paths: RuntimePaths,
-  profile: ResolvedProfile,
-  options: ReferenceSyncOptions = {}
-): Promise<OperationOutcome[]> {
-  const operations = collectOperations(options.onComplete);
-  await validateReferenceDestinations(profile.enabledReferences, profile);
-  let state: ReferenceState;
-
-  try {
-    state = await readReferenceState(paths);
-  } catch (error) {
-    failReference(operations, referenceStatePath(paths), error);
-  }
-
-  for (const [ordinal, reference] of profile.enabledReferences.entries()) {
-    const destination = referencePath(profile, reference);
-    const operation = referenceOperation(profile, reference, "reconcile");
-    emitReferenceStart(options, operation, ordinal);
-    const exists = await pathExists(destination);
-
-    const outcome: OperationOutcome = {
-      category: "reference",
-      action: "reconcile",
-      status: "planned",
-      target: destination,
-      significance: "meaningful",
-      detail: exists
-        ? `${reference.name}: upstream synchronization would be checked; upstream state not checked`
-        : `${reference.name}: checkout would be cloned`
-    };
-
-    if (exists) outcome.verification = "unchecked";
-
-    operations.complete(outcome);
-    emitReferenceCompletion(options, operation, ordinal, outcome);
-  }
-
-  const desired = new Set(profile.enabledReferences.map((reference) => reference.name));
-
-  const retainedElsewhere = new Set(
-    Object.entries(state.profiles)
-      .filter(([profileName]) => profileName !== profile.name)
-      .flatMap(([, names]) => names)
-  );
-
-  for (const [index, name] of (state.profiles[profile.name] ?? []).entries()) {
-    if (desired.has(name) || retainedElsewhere.has(name)) continue;
-    const destination = path.join(profile.referencesDir, name);
-    const operation = referenceOperationForName(profile, name, "remove");
-    emitReferenceStart(options, operation, profile.enabledReferences.length + index);
-
-    const outcome: OperationOutcome = {
-      category: "reference",
-      action: "remove",
-      status: "planned",
-      target: destination,
-      significance: "meaningful",
-      detail: (await pathExists(destination))
-        ? `${name}: managed checkout would be checked and removed if safe`
-        : `${name}: absent checkout ownership would be released`
-    };
-
-    operations.complete(outcome);
-    emitReferenceCompletion(options, operation, profile.enabledReferences.length + index, outcome);
-  }
-
-  return operations.outcomes;
-}
-
 function isSafeReferenceName(name: string): boolean {
   return name !== "" && name !== "." && name !== ".." && path.basename(name) === name;
 }
@@ -355,55 +283,6 @@ function referenceGitRunner(options: ReferenceSyncOptions): RunGit {
 
   return (file, args, gitOptions) =>
     runGit(file, args, { stdio: gitOptions.stdio, cancelSignal: signal });
-}
-
-function referenceOperation(
-  profile: ResolvedProfile,
-  reference: ReferenceEntry,
-  action: "reconcile" | "remove"
-): OperationStart {
-  return referenceOperationForName(profile, reference.name, action);
-}
-
-function referenceOperationForName(
-  profile: ResolvedProfile,
-  name: string,
-  action: "reconcile" | "remove"
-): OperationStart {
-  return {
-    category: "reference",
-    action,
-    target: path.join(profile.referencesDir, name),
-    detail: name
-  };
-}
-
-function emitReferenceStart(
-  options: ReferenceSyncOptions,
-  operation: OperationStart,
-  ordinal: number
-): void {
-  options.onStart?.(operation);
-  options.onLifecycle?.({
-    type: "start",
-    key: referenceLifecycleKey(ordinal, operation.detail ?? operation.target),
-    ordinal,
-    operation
-  });
-}
-
-function emitReferenceCompletion(
-  options: ReferenceSyncOptions,
-  operation: OperationStart,
-  ordinal: number,
-  outcome: OperationOutcome
-): void {
-  options.onLifecycle?.({
-    type: "complete",
-    key: referenceLifecycleKey(ordinal, operation.detail ?? operation.target),
-    ordinal,
-    outcome
-  });
 }
 
 async function validateReferenceDestinations(

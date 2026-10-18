@@ -510,7 +510,6 @@ program
         interactive,
         onStart: reporter.start.bind(reporter),
         onComplete: reporter.complete.bind(reporter),
-        onLifecycle: reporter.lifecycle.bind(reporter),
         beforePrompt: reporter.pause.bind(reporter)
       });
 

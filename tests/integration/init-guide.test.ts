@@ -77,7 +77,10 @@ describe("init and guide integration", () => {
     const routes = Array.from(result.matchAll(/`mfz guide ([a-z-]+)`/g), (match) => match[1]);
 
     expect(routes.sort()).toEqual([...guideTopicNames].sort());
-    const examples = yamlExamples(result);
+  });
+
+  it("prints instruction examples that match the profile schema", async () => {
+    const examples = yamlExamples(await captureGuide("instructions"));
     expect(examples).toHaveLength(2);
 
     for (const example of examples) {
@@ -117,15 +120,21 @@ describe("init and guide integration", () => {
     expect(result).toContain("# MCP Guide");
     expect(result).toContain("executor:");
     expect(result).toContain("all connected supported harnesses");
+    expect(result).toContain("mfz guide executor-auth");
+    const [example] = yamlExamples(result);
+    expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
+  });
+
+  it("prints the Executor authentication topic guide", async () => {
+    const result = await captureGuide("executor-auth");
+    expect(result).toContain("# Executor Authentication Guide");
     expect(result).toContain("Done when every declared credentialed connection");
-    const examples = yamlExamples(result);
-    expect(examples).toHaveLength(2);
-    expect(profileSchema.safeParse({ name: "example", ...examples[0] }).success).toBe(true);
+    const [example] = yamlExamples(result);
     expect(
       mcpServerSchema.safeParse({
         type: "remote",
         url: "https://example.com/mcp",
-        ...examples[1]
+        ...example
       }).success
     ).toBe(true);
   });
@@ -172,7 +181,6 @@ describe("init and guide integration", () => {
     expect(result).toContain("catalog/references.yml");
     expect(result).toContain("profiles/<profile>/profile.yml");
     expect(result).toContain("mfz refs sync");
-    expect(result).toContain("regenerate the local reference");
     expect(result).toContain("without activating configuration");
     expect(result).not.toContain("refs index");
     expect(result).toContain("routing metadata");
