@@ -4,7 +4,7 @@ import {
   eachUpstream,
   homeDisplayName,
   loadManifests,
-  parseNpmPlugin,
+  parsePackagePlugin,
   type LoadedManifests,
   type McpServer,
   type ProfileMcpConfig,
@@ -306,18 +306,18 @@ function resolveCatalogName(
   throw new Error(`Unknown ${kind}: ${rawName}`);
 }
 
-// A child's npm plugin entry replaces the parent's entry for the same package, so the child picks the version.
+// A child selects the revision for the same npm package or Git repository subdirectory.
 function mergeOpenCodePlugins(base: readonly string[], child: readonly string[]): string[] {
   const childPackages = new Set<string>();
 
   for (const entry of child) {
-    const plugin = parseNpmPlugin(entry);
+    const plugin = parsePackagePlugin(entry);
 
     if (plugin) childPackages.add(plugin.name);
   }
 
   const inherited = base.filter((entry) => {
-    const plugin = parseNpmPlugin(entry);
+    const plugin = parsePackagePlugin(entry);
 
     return !plugin || !childPackages.has(plugin.name);
   });
@@ -400,12 +400,12 @@ function normalizeProfile(
         plugins: [
           ...normalizeSourceNames(
             home,
-            profile.opencode.plugins.filter((entry) => parseNpmPlugin(entry) === undefined),
+            profile.opencode.plugins.filter((entry) => parsePackagePlugin(entry) === undefined),
             sources.plugins,
             "opencode plugin",
             "OpenCode plugin"
           ),
-          ...profile.opencode.plugins.filter((entry) => parseNpmPlugin(entry) !== undefined)
+          ...profile.opencode.plugins.filter((entry) => parsePackagePlugin(entry) !== undefined)
         ],
         tui_plugins: normalizeSourceNames(
           home,

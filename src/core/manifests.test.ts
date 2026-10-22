@@ -444,6 +444,20 @@ describe("validateManifests", () => {
 });
 
 describe("OpenCode plugin entries", () => {
+  it("rejects malformed Git targets and unsafe repository subdirectories", () => {
+    for (const entry of [
+      "git+ssh://git@github.com/acme/plugins.git#",
+      "github:acme",
+      "github:acme/plugins::path:../outside",
+      "github:acme/plugins::path:/absolute",
+      "git+https://token@github.com/acme/plugins.git"
+    ]) {
+      expect(() =>
+        profileSchema.parse({ name: "personal", opencode: { plugins: [entry] } })
+      ).toThrow();
+    }
+  });
+
   it("accepts npm plugins only with an exact version", () => {
     const plugins = (entry: string) => ({ name: "personal", opencode: { plugins: [entry] } });
 

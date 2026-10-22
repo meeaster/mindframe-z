@@ -817,6 +817,37 @@ describe("apply integration", () => {
     expect(config.plugins).toEqual(["@acme/review@1.0.0", "shared-plugin@2.0.0"]);
   });
 
+  it("replaces inherited Git revisions per subpackage and renders options without local sources", async () => {
+    const repository = "git+ssh://git@github.com/acme/plugins.git";
+    const review = `${repository}#main::path:packages/review`;
+    const sibling = `${repository}#main::path:packages/other`;
+
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      `name: base\nopencode:\n  plugins:\n    - '${review}'\n    - '${sibling}'\n`
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      `name: personal\nextends: base\nagents: [opencode]\nopencode:\n  plugins:\n    - '${repository}#release::path:packages/review'\n    - 'github:acme/standalone#v1'\n  plugin_options:\n    '${repository}::path:packages/review':\n      workflow: manual\n`
+    );
+
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
+
+    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
+    const config = parseJson(OpenCodeConfig, await readFile(configPath, "utf8"));
+
+    expect(config.plugins).toEqual([
+      sibling,
+      { package: `${repository}#release::path:packages/review`, options: { workflow: "manual" } },
+      "github:acme/standalone#v1"
+    ]);
+
+    await applyConfig({ root, home, agent: "opencode", target: "all" });
+    expect(parseJson(OpenCodeConfig, await readFile(configPath, "utf8")).plugins).toEqual(
+      config.plugins
+    );
+  });
+
   it("renders, links, and removes merged OpenCode runtime dependencies", async () => {
     await writeFile(
       path.join(root, "profiles", "base", "profile.yml"),

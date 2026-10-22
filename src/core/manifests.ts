@@ -667,11 +667,35 @@ export function parseNpmPlugin(entry: string): NpmPlugin | undefined {
   return { name: match[1], version: match[2] };
 }
 
+export function parsePackagePlugin(entry: string): { name: string; target: string } | undefined {
+  const npm = parseNpmPlugin(entry);
+
+  if (npm) return { name: npm.name, target: `${npm.name}@${npm.version}` };
+
+  const match =
+    /^(github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+|git\+(?:ssh:\/\/git@|https:\/\/)[A-Za-z0-9.-]+\/[A-Za-z0-9_./-]+)(?:#([^\s:]+))?(::path:([^\s]+))?$/.exec(
+      entry
+    );
+
+  if (!match?.[1]) return undefined;
+
+  const subdirectory = match[4];
+
+  if (subdirectory && (subdirectory.startsWith("/") || subdirectory.split("/").includes("..")))
+    return undefined;
+
+  return { name: `${match[1]}${match[3] ?? ""}`, target: entry };
+}
+
 const opencodePluginSchema = z
   .string()
   .refine(
     (entry) => !entry.startsWith("npm:") || parseNpmPlugin(entry) !== undefined,
     "npm plugins must be npm:<package>@<exact version>"
+  )
+  .refine(
+    (entry) => !/^(?:git\+|github:)/.test(entry) || parsePackagePlugin(entry) !== undefined,
+    "Git plugins must use github:owner/repo or git+ssh/https URLs, with optional #revision and ::path:subdirectory"
   );
 
 const opencodePermissionRuleSchema = z

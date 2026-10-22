@@ -16,7 +16,7 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
-import { parseNpmPlugin } from "../core/manifests.js";
+import { parsePackagePlugin } from "../core/manifests.js";
 import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -284,7 +284,7 @@ export async function renderOpenCode(
   const pluginResult = await collectPluginFiles(
     (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
     pluginsPath,
-    enabledPlugins.filter((entry) => parseNpmPlugin(entry) === undefined),
+    enabledPlugins.filter((entry) => parsePackagePlugin(entry) === undefined),
     false
   );
 
@@ -326,12 +326,12 @@ export async function renderOpenCode(
   );
 
   for (const entry of enabledPlugins) {
-    const plugin = parseNpmPlugin(entry);
+    const plugin = parsePackagePlugin(entry);
 
     if (!plugin) continue;
 
     const options = jsonObjectSchema.safeParse(pluginOptions[plugin.name]);
-    const target = `${plugin.name}@${plugin.version}`;
+    const target = plugin.target;
 
     serverPluginEntries.push(options.success ? { package: target, options: options.data } : target);
   }

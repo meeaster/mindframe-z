@@ -250,7 +250,7 @@ Home files are the source of truth; everything under \`~/.mindframe-z/configs/<p
 
 \`mfz apply\` is local: it renders configuration, regenerates indexes, and links harness globals without cloning or fetching anything. \`mfz refs sync\` is the separate network step that clones, updates, and prunes reference checkouts. Run it only when references themselves should change; apply reports any enabled reference that is not cloned yet.
 
-OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Published npm plugins need no home source: add \`npm:<package>@<exact version>\` to \`opencode.plugins\`, and OpenCode installs it.
+OpenCode plugins, commands, and agents live under \`opencode/plugins/\`, \`opencode/commands/\`, and \`opencode/agents/\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered. Profiles enable these assets. Package plugins need no home source: add \`npm:<package>@<exact version>\`, \`github:owner/repo#revision\`, or \`git+ssh://git@github.com/owner/repo.git#revision::path:packages/plugin\` to \`opencode.plugins\`. OpenCode installs them. Git plugin options use the target without its \`#revision\` as the key, retaining any \`::path:\` selector.
 
 Before changing a topic below, run its guide:
 
