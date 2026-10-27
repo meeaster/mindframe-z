@@ -86,31 +86,6 @@ function rendererSources(): ResolvedProfile["sources"] {
 }
 
 describe("OpenCode renderer", () => {
-  it("does not render plugin development dependencies", async () => {
-    const home = "/tmp/mfz-opencode-plugin-dependencies";
-    const root = "/tmp/mfz-opencode-plugin-source";
-    const source = path.join(root, "opencode", "plugins", "example", "v2");
-    await mkdir(path.join(source, "node_modules", "helper"), { recursive: true });
-    await writeFile(path.join(source, "index.ts"), "export default {}\n");
-    await writeFile(path.join(source, "package.json"), '{"type":"module"}\n');
-    await writeFile(path.join(source, "node_modules", "helper", "index.js"), "export default {}\n");
-
-    const paths = createRuntimePaths({ root, home });
-
-    const result = await renderOpenCode(paths, {
-      ...profile(home),
-      enabledOpenCodeTuiPlugins: ["example"],
-      // SAFETY: only the plugin map is read by collectPluginFiles in this test.
-      sources: { plugins: new Map([["example", { root }]]) } as ResolvedProfile["sources"]
-    });
-
-    expect(result.localFiles?.map((file) => file.path)).toContain(
-      path.join(paths.configsDir, "personal", "opencode", "plugins", "tui", "example", "index.ts")
-    );
-    expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
-    expect(result.links.some((link) => link.linkPath.endsWith("node_modules"))).toBe(false);
-  });
-
   it("renders the same configured options for server and TUI plugin assets", async () => {
     const home = "/tmp/mfz-opencode-plugin-options";
     const root = "/tmp/mfz-opencode-plugin-options-source";
@@ -133,7 +108,7 @@ describe("OpenCode renderer", () => {
       ...resolved,
       enabledOpenCodePlugins: ["work-ledger"],
       enabledOpenCodeTuiPlugins: ["work-ledger"],
-      // SAFETY: collectPluginFiles reads only the root field from this renderer fixture.
+      // SAFETY: plugin name resolution reads only the root field from this renderer fixture.
       sources: {
         plugins: new Map([["work-ledger", { root }]])
       } as ResolvedProfile["sources"]
@@ -147,28 +122,7 @@ describe("OpenCode renderer", () => {
         options
       }
     ]);
-    expect(result.cliPlugins?.entries).toEqual([
-      {
-        package: `file://${path.join(paths.opencodeConfigDir, "plugins", "tui", "work-ledger")}`,
-        options
-      }
-    ]);
-    expect(result.pluginLinks?.links).toEqual([
-      {
-        linkPath: path.join(paths.opencodeConfigDir, "plugins", "tui", "work-ledger"),
-        targetPath: path.join(
-          paths.configsDir,
-          "personal",
-          "opencode",
-          "plugins",
-          "tui",
-          "work-ledger"
-        )
-      }
-    ]);
-    expect(
-      result.links.some((link) => link.linkPath === path.join(paths.opencodeConfigDir, "plugins"))
-    ).toBe(false);
+    expect(result.cliPlugins?.entries).toEqual([{ package: `file://${source}`, options }]);
   });
 
   it("links active OpenCode runtime dependencies from the profile", async () => {
@@ -396,19 +350,27 @@ describe("OpenCode renderer", () => {
     );
   });
 
-  it("does not register quarantined OpenCode TUI plugins as server plugins", async () => {
-    const resolved = profile("/tmp/mfz-opencode-tui");
-    resolved.enabledOpenCodeTuiPlugins = ["advisor"];
+  it("fails on a plugin entry without a plugin directory", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-home-"));
+    const pluginsDir = path.join(root, "opencode", "plugins");
+    await mkdir(pluginsDir, { recursive: true });
+    await writeFile(path.join(pluginsDir, "single"), "export default {}\n");
 
-    const result = await renderOpenCode(
-      {
-        ...createRuntimePaths({ root: "/tmp/root", home: "/tmp/home" })
-      },
-      resolved
+    const paths = createRuntimePaths({ root, home });
+    const resolved = profile(home);
+    resolved.sources = rendererSources();
+
+    resolved.enabledOpenCodeTuiPlugins = ["single"];
+    await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
+      `OpenCode plugin single has no plugin directory at ${path.join(pluginsDir, "single")}`
     );
 
-    expect(renderedConfig(result).plugins).toBeUndefined();
-    expect(result.localFiles?.some((file) => file.path.includes("advisor"))).toBe(false);
+    resolved.enabledOpenCodeTuiPlugins = [];
+    resolved.enabledOpenCodePlugins = ["~/missing"];
+    await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
+      `OpenCode plugin ~/missing has no plugin directory at ${path.join(home, "missing")}`
+    );
   });
 
   it("merges only its previously registered TUI plugin URLs into CLI settings", () => {
@@ -536,52 +498,46 @@ describe("OpenCode renderer", () => {
     await expect(renderOpenCode(paths, resolved)).rejects.toThrow("Unknown agent: missing-agent");
   });
 
-  it("renders plugin URLs and packaged TUI files without development assets", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-assets-root-"));
-    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-assets-home-"));
+  it("renders home, path, and package plugin entries in place in profile order", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-entries-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-entries-home-"));
     const pluginsDir = path.join(root, "opencode", "plugins");
-    const combinedDir = path.join(pluginsDir, "combined");
+    const localPlugin = path.join(home, "repos", "cairn");
+    const absolutePlugin = path.join(root, "elsewhere", "panel");
 
-    await mkdir(path.join(pluginsDir, "server"), { recursive: true });
-    await mkdir(path.join(combinedDir, "node_modules", "helper"), { recursive: true });
-    await mkdir(path.join(combinedDir, "tests"), { recursive: true });
-    await writeFile(path.join(pluginsDir, "server", "index.mts"), "export default {}\n");
-    await writeFile(path.join(pluginsDir, "single.mjs"), "export default {}\n");
-    await writeFile(path.join(combinedDir, "package.json"), '{"type":"module"}\n');
-    await writeFile(path.join(combinedDir, "server.ts"), "export default {}\n");
-    await writeFile(path.join(combinedDir, "tests", "plugin.test.ts"), "test\n");
-    await writeFile(path.join(combinedDir, "node_modules", "helper", "index.js"), "helper\n");
+    for (const directory of [
+      path.join(pluginsDir, "server"),
+      path.join(pluginsDir, "combined"),
+      localPlugin,
+      absolutePlugin
+    ]) {
+      await mkdir(directory, { recursive: true });
+    }
 
     const paths = createRuntimePaths({ root, home });
     const resolved = profile(home);
-    resolved.enabledOpenCodePlugins = ["server", "combined", "single"];
-    resolved.enabledOpenCodeTuiPlugins = ["combined"];
+    resolved.enabledOpenCodePlugins = [
+      "~/repos/cairn",
+      "npm:plain-plugin@0.4.0",
+      "server",
+      "combined"
+    ];
+    resolved.enabledOpenCodeTuiPlugins = ["combined", absolutePlugin];
+    resolved.profile.opencode.plugin_options = { "~/repos/cairn": { store: "~/cairn" } };
     resolved.sources = rendererSources();
 
     const result = await renderOpenCode(paths, resolved);
-    const pluginPath = path.join(paths.configsDir, "personal", "opencode", "plugins");
-    const tuiPath = path.join(pluginPath, "tui", "combined");
 
     expect(renderedConfig(result).plugins).toEqual([
+      { package: `file://${localPlugin}`, options: { store: "~/cairn" } },
+      "plain-plugin@0.4.0",
       `file://${path.join(pluginsDir, "server")}`,
-      `file://${combinedDir}`,
-      `file://${path.join(pluginPath, "single.mjs")}`
+      `file://${path.join(pluginsDir, "combined")}`
     ]);
     expect(result.cliPlugins?.entries).toEqual([
-      `file://${path.join(paths.opencodeConfigDir, "plugins", "tui", "combined")}`
+      `file://${path.join(pluginsDir, "combined")}`,
+      `file://${absolutePlugin}`
     ]);
-    expect(result.localFiles).toEqual(
-      expect.arrayContaining([
-        {
-          path: path.join(pluginPath, "single.mjs"),
-          content: "export default {}\n"
-        },
-        { path: path.join(tuiPath, "package.json"), content: '{"type":"module"}\n' },
-        { path: path.join(tuiPath, "server.ts"), content: "export default {}\n" }
-      ])
-    );
-    expect(result.localFiles?.some((file) => file.path.includes("node_modules"))).toBe(false);
-    expect(result.localFiles?.some((file) => file.path.includes("plugin.test.ts"))).toBe(false);
   });
 
   it("reports stale snapshots and excludes unconfigured plugin assets", async () => {
@@ -613,7 +569,6 @@ describe("OpenCode renderer", () => {
     const result = await renderTarget(paths, resolved, "opencode");
 
     expect(renderedConfig(result).plugins).toBeUndefined();
-    expect(result.localFiles).toEqual([]);
     expect(result.staleFiles).toContain(staleFile);
     expect(result.files.some((file) => file.path.includes("discovered.mjs"))).toBe(false);
     expect(result.files.some((file) => file.path.includes("bundled"))).toBe(false);

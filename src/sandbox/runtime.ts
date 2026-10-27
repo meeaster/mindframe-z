@@ -400,11 +400,6 @@ function renderedMounts(
       mode: "ro"
     },
     {
-      source: path.join(activeOpenCode, "plugins"),
-      target: path.join(containerHome, ".config", "opencode", "plugins"),
-      mode: "ro"
-    },
-    {
       source: path.join(runtimeDir, "mise"),
       target: path.join(containerHome, ".config", "mise"),
       mode: "ro"

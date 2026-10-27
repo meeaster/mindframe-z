@@ -4,6 +4,7 @@ import {
   eachUpstream,
   homeDisplayName,
   loadManifests,
+  isLocalPluginPath,
   parsePackagePlugin,
   type LoadedManifests,
   type McpServer,
@@ -341,6 +342,21 @@ function normalizeSourceNames(
   });
 }
 
+// Package and path entries name their own location, so only home plugin names resolve through the home sources.
+function normalizePluginEntries(
+  home: LoadedManifests,
+  entries: readonly string[],
+  sourceMap: Map<string, LoadedManifests>,
+  kind: SourceKind,
+  label: string
+): string[] {
+  return entries.flatMap((entry) =>
+    parsePackagePlugin(entry) !== undefined || isLocalPluginPath(entry)
+      ? [entry]
+      : normalizeSourceNames(home, [entry], sourceMap, kind, label)
+  );
+}
+
 function normalizeProfile(
   home: LoadedManifests,
   profile: ProfileManifest,
@@ -397,17 +413,14 @@ function normalizeProfile(
   const opencode = options.includeOpenCode
     ? {
         ...profile.opencode,
-        plugins: [
-          ...normalizeSourceNames(
-            home,
-            profile.opencode.plugins.filter((entry) => parsePackagePlugin(entry) === undefined),
-            sources.plugins,
-            "opencode plugin",
-            "OpenCode plugin"
-          ),
-          ...profile.opencode.plugins.filter((entry) => parsePackagePlugin(entry) !== undefined)
-        ],
-        tui_plugins: normalizeSourceNames(
+        plugins: normalizePluginEntries(
+          home,
+          profile.opencode.plugins,
+          sources.plugins,
+          "opencode plugin",
+          "OpenCode plugin"
+        ),
+        tui_plugins: normalizePluginEntries(
           home,
           profile.opencode.tui_plugins,
           sources.plugins,
@@ -535,7 +548,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       global_instructions: child.opencode.global_instructions ?? base.opencode.global_instructions,
       plugins: mergeOpenCodePlugins(base.opencode.plugins, child.opencode.plugins),
       plugin_options: deepMerge(base.opencode.plugin_options, child.opencode.plugin_options),
-      tui_plugins: dedupe([...base.opencode.tui_plugins, ...child.opencode.tui_plugins]),
+      tui_plugins: mergeOpenCodePlugins(base.opencode.tui_plugins, child.opencode.tui_plugins),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents])
     },

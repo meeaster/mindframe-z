@@ -687,6 +687,11 @@ export function parsePackagePlugin(entry: string): { name: string; target: strin
   return { name: `${match[1]}${match[3] ?? ""}`, target: entry };
 }
 
+/** A plugin folder named by an absolute or home-relative path instead of a home plugin name. */
+export function isLocalPluginPath(entry: string): boolean {
+  return entry.startsWith("~/") || entry.startsWith("/");
+}
+
 const opencodePluginSchema = z
   .string()
   .refine(
@@ -714,7 +719,7 @@ const opencodeConfigSchema = z.object({
   global_instructions: z.boolean().optional(),
   plugins: z.array(opencodePluginSchema).default([]),
   plugin_options: z.record(z.string().min(1), jsonObjectSchema).default({}),
-  tui_plugins: z.array(z.string()).default([]),
+  tui_plugins: z.array(opencodePluginSchema).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([])
 });

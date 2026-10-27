@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import {
   expandHome,
@@ -16,7 +16,7 @@ import {
   type ResolvedProfile
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
-import { parsePackagePlugin } from "../core/manifests.js";
+import { isLocalPluginPath, parsePackagePlugin } from "../core/manifests.js";
 import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -24,83 +24,51 @@ import { openCodeExecutorEntry } from "./executor.js";
 import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
 import { z } from "zod";
 
-async function copyDirContents(
-  src: string,
-  dest: string,
-  files: RenderResult["files"]
-): Promise<void> {
-  for (const entry of await readdir(src, { withFileTypes: true })) {
-    if (entry.name === "node_modules") continue;
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
+// OpenCode loads plugin folders in place and reads their package exports, so MFZ only checks that each folder exists.
+async function renderPluginEntries(
+  entries: readonly string[],
+  paths: RuntimePaths,
+  profile: ResolvedProfile
+): Promise<OpenCodePluginEntry[]> {
+  const pluginOptions = profile.profile.opencode.plugin_options;
+  const rendered: OpenCodePluginEntry[] = [];
 
-    if (entry.isDirectory()) {
-      await copyDirContents(srcPath, destPath, files);
-    } else if (entry.isFile() && !/\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
-      files.push({ path: destPath, content: await readFile(srcPath, "utf8") });
-    }
-  }
-}
+  for (const entry of entries) {
+    const plugin = parsePackagePlugin(entry);
+    let optionsKey = entry;
+    let target: string;
 
-async function collectPluginFiles(
-  rootByName: (name: string) => string,
-  pluginsDir: string,
-  pluginNames: readonly string[],
-  directoryEntry: boolean
-): Promise<{ files: RenderResult["files"]; entries: string[] }> {
-  const files: RenderResult["files"] = [];
-  const entries: string[] = [];
-  const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+    if (plugin) {
+      optionsKey = plugin.name;
+      target = plugin.target;
+    } else {
+      const directory = isLocalPluginPath(entry)
+        ? expandHome(entry, paths.home)
+        : path.join(
+            profile.sources.plugins.get(entry)?.root ?? paths.root,
+            "opencode",
+            "plugins",
+            entry
+          );
 
-  for (const name of pluginNames) {
-    const sourceDir = path.join(rootByName(name), "opencode", "plugins");
-    const versionDir = path.join(sourceDir, name, "v2");
-    const legacyDir = path.join(sourceDir, name);
-    let dirPath = versionDir;
+      const isDirectory = await stat(directory).then(
+        (info) => info.isDirectory(),
+        () => false
+      );
 
-    try {
-      if (!(await stat(dirPath)).isDirectory()) dirPath = legacyDir;
-    } catch {
-      dirPath = legacyDir;
-    }
-
-    let isDir = false;
-
-    try {
-      isDir = (await stat(dirPath)).isDirectory();
-    } catch {
-      // Missing plugin directories are reported by the entry fallback below.
-    }
-
-    if (isDir) {
-      if (!directoryEntry) {
-        entries.push(`file://${dirPath}`);
-        continue;
+      if (!isDirectory) {
+        throw new Error(`OpenCode plugin ${entry} has no plugin directory at ${directory}`);
       }
 
-      await copyDirContents(dirPath, path.join(pluginsDir, name), files);
-      entries.push(`file://${path.join(pluginsDir, name)}`);
-      continue;
+      target = `file://${directory}`;
     }
 
-    for (const ext of sourceExtensions) {
-      const filePath = path.join(sourceDir, `${name}${ext}`);
-      let content: string;
+    const options = pluginOptions[optionsKey];
 
-      try {
-        content = await readFile(filePath, "utf8");
-      } catch {
-        continue;
-      }
-
-      const destRel = `${name}${ext}`;
-      files.push({ path: path.join(pluginsDir, destRel), content });
-      entries.push(`file://${path.join(pluginsDir, destRel)}`);
-      break;
-    }
+    rendered.push(options ? { package: target, options } : target);
   }
 
-  return { files, entries };
+  return rendered;
 }
 
 export function mergeOpenCodeCliPlugins(
@@ -148,32 +116,6 @@ function pluginPackage(entry: OpenCodePluginEntry): string {
   const parsed = z.string().safeParse(entry);
 
   return parsed.success ? parsed.data : pluginObjectEntrySchema.parse(entry).package;
-}
-
-function configurePluginEntries(
-  entries: readonly string[],
-  pluginsPath: string,
-  optionsByName: JsonObject
-): OpenCodePluginEntry[] {
-  const prefix = `file://${pluginsPath}${path.sep}`;
-
-  return entries.map((entry) => {
-    const managedName = entry.startsWith(prefix)
-      ? entry
-          .slice(prefix.length)
-          .split(path.sep)[0]!
-          .replace(/\.[cm]?[jt]sx?$/, "")
-      : Object.keys(optionsByName).find((name) => {
-          const packagePath = `${path.sep}opencode${path.sep}plugins${path.sep}${name}`;
-
-          return entry.endsWith(packagePath) || entry.includes(`${packagePath}${path.sep}`);
-        });
-
-    if (!managedName) return entry;
-    const options = jsonObjectSchema.safeParse(optionsByName[managedName]);
-
-    return options.success ? { package: entry, options: options.data } : entry;
-  });
 }
 
 type NativePermissionRule = ResolvedProfile["profile"]["opencode"]["permissions"][number];
@@ -263,8 +205,6 @@ export async function renderOpenCode(
 
   const configsProfile = profileConfigsDir(paths, profile.name);
   const configsOpenCode = path.join(configsProfile, "opencode");
-  const pluginsPath = path.join(configsOpenCode, "plugins");
-  const tuiPluginsPath = path.join(pluginsPath, "tui");
   const configPath = path.join(configsOpenCode, "opencode.jsonc");
   const packagePath = path.join(configsOpenCode, "package.json");
   const commandsPath = path.join(configsOpenCode, "commands");
@@ -279,29 +219,17 @@ export async function renderOpenCode(
   if (!useGlobalInstructions && profile.extraFolders.length > 0)
     instructions.push(extraFoldersIndexPath(paths));
 
-  const enabledPlugins = profile.enabledOpenCodePlugins ?? [];
-
-  const pluginResult = await collectPluginFiles(
-    (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
-    pluginsPath,
-    enabledPlugins.filter((entry) => parsePackagePlugin(entry) === undefined),
-    false
+  const serverPluginEntries = await renderPluginEntries(
+    profile.enabledOpenCodePlugins ?? [],
+    paths,
+    profile
   );
 
-  const tuiPluginResult = await collectPluginFiles(
-    (name) => profile.sources?.plugins?.get(name)?.root ?? paths.root,
-    tuiPluginsPath,
+  const tuiPluginEntries = await renderPluginEntries(
     profile.enabledOpenCodeTuiPlugins ?? [],
-    true
+    paths,
+    profile
   );
-
-  const tuiDirectory = path.join(paths.opencodeConfigDir, "plugins", "tui");
-
-  const tuiLinks = tuiPluginResult.entries.map((entry) => {
-    const targetPath = entry.slice("file://".length);
-
-    return { linkPath: path.join(tuiDirectory, path.basename(targetPath)), targetPath };
-  });
 
   const commandFiles = await collectOpenCodeMarkdownFiles(
     (name) => profile.sources.commands.get(name)?.root ?? paths.root,
@@ -315,31 +243,6 @@ export async function renderOpenCode(
     configsOpenCode,
     "agents",
     profile.enabledOpenCodeAgents
-  );
-
-  const pluginOptions = profile.profile.opencode.plugin_options;
-
-  const serverPluginEntries = configurePluginEntries(
-    pluginResult.entries,
-    pluginsPath,
-    pluginOptions
-  );
-
-  for (const entry of enabledPlugins) {
-    const plugin = parsePackagePlugin(entry);
-
-    if (!plugin) continue;
-
-    const options = jsonObjectSchema.safeParse(pluginOptions[plugin.name]);
-    const target = plugin.target;
-
-    serverPluginEntries.push(options.success ? { package: target, options: options.data } : target);
-  }
-
-  const tuiPluginEntries = configurePluginEntries(
-    tuiLinks.map((link) => `file://${link.linkPath}`),
-    tuiDirectory,
-    pluginOptions
   );
 
   const config = {
@@ -397,11 +300,6 @@ export async function renderOpenCode(
 
   const result: RenderResult = {
     files,
-    localFiles: [
-      ...new Map(
-        [...pluginResult.files, ...tuiPluginResult.files].map((file) => [file.path, file])
-      ).values()
-    ],
     links,
     staleLinks: [
       ...(useGlobalInstructions
@@ -448,11 +346,6 @@ export async function renderOpenCode(
     entries: [...parseOpenCodePluginEntries(cliPlugins), ...tuiPluginEntries],
     registryPath: path.join(paths.home, ".mindframe-z", "opencode-cli-plugins.json"),
     settings: cliSettings
-  };
-  result.pluginLinks = {
-    directory: tuiDirectory,
-    registryPath: path.join(paths.home, ".mindframe-z", "opencode-plugin-links.json"),
-    links: tuiLinks
   };
 
   return result;

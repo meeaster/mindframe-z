@@ -126,7 +126,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   const referenceSource = await createFixtureReferenceSource(root);
   await mkdir(path.join(root, "catalog"), { recursive: true });
   await mkdir(path.join(root, "instructions"), { recursive: true });
-  await mkdir(path.join(root, "opencode", "plugins"), { recursive: true });
+  await mkdir(path.join(root, "opencode", "plugins", "config-marker"), { recursive: true });
   await mkdir(path.join(root, "opencode", "commands"), { recursive: true });
   await mkdir(path.join(root, "skills", "local-skill"), { recursive: true });
   await mkdir(path.join(root, "skills", "claude-skill"), { recursive: true });
@@ -151,7 +151,7 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
   }
 
   await writeFile(
-    path.join(root, "opencode", "plugins", "config-marker.ts"),
+    path.join(root, "opencode", "plugins", "config-marker", "index.ts"),
     [
       "export default async () => {",
       "  return {",

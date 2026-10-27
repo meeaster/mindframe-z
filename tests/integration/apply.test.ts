@@ -7,7 +7,6 @@ import {
   realpath,
   stat,
   symlink,
-  unlink,
   writeFile
 } from "node:fs/promises";
 import path from "node:path";
@@ -245,7 +244,6 @@ describe("apply integration", () => {
       "utf8"
     );
     const managedPlugins = configsPath(home, "personal", "opencode", "plugins");
-    const plugin = path.join(managedPlugins, "config-marker.ts");
     const stalePlugin = path.join(managedPlugins, "stale.ts");
     await mkdir(managedPlugins, { recursive: true });
     await writeFile(stalePlugin, "export default {}\n", "utf8");
@@ -283,7 +281,6 @@ describe("apply integration", () => {
     };
 
     const firstGitConfig = await fileState(gitConfig);
-    const firstPlugin = await fileState(plugin);
     const firstCommandLink = await linkState(commandLink);
     const firstAgentLink = await linkState(agentLink);
 
@@ -292,7 +289,6 @@ describe("apply integration", () => {
     expect(repeated.stdout).toContain("Result\tmfz apply complete — no changes");
     expect(repeated.stdout).not.toMatch(/^(?:created|updated|removed|linked|relinked)\t/mu);
     expect(await fileState(gitConfig)).toEqual(firstGitConfig);
-    expect(await fileState(plugin)).toEqual(firstPlugin);
     expect(await linkState(commandLink)).toEqual(firstCommandLink);
     expect(await linkState(agentLink)).toEqual(firstAgentLink);
 
@@ -304,20 +300,8 @@ describe("apply integration", () => {
     ]);
 
     expect(withoutLinks.stdout).toContain("Result\tmfz apply complete — no changes");
-    expect(await fileState(plugin)).toEqual(firstPlugin);
     expect(await linkState(commandLink)).toEqual(firstCommandLink);
     expect(await linkState(agentLink)).toEqual(firstAgentLink);
-
-    await writeFile(
-      profilePath,
-      (await readFile(profilePath, "utf8")).replace("  plugins:\n    - config-marker\n", ""),
-      "utf8"
-    );
-
-    const deselected = await cli("mfz", root, home, ["apply", "--agent", "opencode", "--no-link"]);
-
-    expect(deselected.stdout).toContain(`removed\tfile\t${plugin}`);
-    await expect(access(plugin)).rejects.toMatchObject({ code: "ENOENT" });
   }, 30_000);
 
   it("prints default no-change and complete verbose apply receipts", async () => {
@@ -463,9 +447,7 @@ describe("apply integration", () => {
 
     expect(opencode).toContain("https://opencode.ai/config.json");
     expect(opencode).toContain("context7");
-    expect(await readFile(path.join(managedPlugins, "config-marker.ts"), "utf8")).toContain(
-      "mindframe-z-plugin-loaded"
-    );
+    expect(opencode).toContain(`file://${path.join(root, "opencode", "plugins", "config-marker")}`);
     await expect(lstat(stalePlugin)).rejects.toMatchObject({ code: "ENOENT" });
     expect(
       await readFile(configsPath(home, "personal", "opencode", "commands", "test-cmd.md"), "utf8")
@@ -644,14 +626,16 @@ describe("apply integration", () => {
           "      mode: compact",
           "  tui_plugins:",
           "    - session-cost-tui",
+          "    - ~/dev/panel",
           ""
         ].join("\n")
       );
 
     await writeFile(profilePath, profile, "utf8");
+    await mkdir(path.join(home, "dev", "panel"), { recursive: true });
     const cliPath = path.join(home, ".config", "opencode", "cli.json");
     await mkdir(path.dirname(cliPath), { recursive: true });
-    const userPlugin = `file://${configsPath(home, "personal", "opencode", "plugins", "tui", "user-plugin")}`;
+    const userPlugin = "file:///user/tui-plugin";
     await writeFile(
       cliPath,
       JSON.stringify({
@@ -662,18 +646,19 @@ describe("apply integration", () => {
     );
 
     const applied = await cli("mfz", root, home, ["apply", "--agent", "opencode"]);
-    const managedPackage = `file://${path.join(home, ".config", "opencode", "plugins", "tui", "session-cost-tui")}`;
+    const managedPackage = `file://${path.join(root, "opencode", "plugins", "session-cost-tui")}`;
     const managed = { package: managedPackage, options: { mode: "compact" } };
+    const panel = `file://${path.join(home, "dev", "panel")}`;
     expect(applied.stdout).toContain(`updated\tfile\t${cliPath}`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
-      plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin, managed]
+      plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin, managed, panel]
     });
     expect(
       JSON.parse(
         await readFile(path.join(home, ".mindframe-z", "opencode-cli-plugins.json"), "utf8")
       )
-    ).toEqual({ version: 1, entries: [managed] });
+    ).toEqual({ version: 1, entries: [managed, panel] });
     expect((await lstat(cliPath)).isSymbolicLink()).toBe(false);
 
     await writeFile(profilePath, profile.replace("mode: compact", "mode: detailed"), "utf8");
@@ -684,13 +669,14 @@ describe("apply integration", () => {
         "npm:other",
         { path: "file:///user/plugin" },
         userPlugin,
-        { package: managedPackage, options: { mode: "detailed" } }
+        { package: managedPackage, options: { mode: "detailed" } },
+        panel
       ]
     });
 
     await writeFile(
       profilePath,
-      profile.replace("  tui_plugins:\n    - session-cost-tui\n", ""),
+      profile.replace("  tui_plugins:\n    - session-cost-tui\n    - ~/dev/panel\n", ""),
       "utf8"
     );
     await applyConfig({ root, home, agent: "opencode", target: "all" });
@@ -699,89 +685,6 @@ describe("apply integration", () => {
       plugins: ["npm:other", { path: "file:///user/plugin" }, userPlugin]
     });
   }, 15_000);
-
-  it("reconciles only recorded OpenCode plugin links while preserving external entries", async () => {
-    const pluginSource = path.join(root, "opencode", "plugins", "managed", "v2");
-    await mkdir(pluginSource, { recursive: true });
-    await writeFile(path.join(pluginSource, "index.js"), 'export default { id: "managed" };\n');
-    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
-    const original = await readFile(profilePath, "utf8");
-    await writeFile(
-      profilePath,
-      original.replace("opencode:\n", "opencode:\n  tui_plugins:\n    - managed\n")
-    );
-
-    const pluginDir = path.join(home, ".config", "opencode", "plugins");
-    const tuiDir = path.join(pluginDir, "tui");
-    await mkdir(tuiDir, { recursive: true });
-    await writeFile(path.join(pluginDir, "herdr-agent-state.js"), "external\n");
-    await writeFile(path.join(tuiDir, "external.js"), "external\n");
-
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-    const managed = path.join(tuiDir, "managed");
-    const firstTarget = configsPath(home, "personal", "opencode", "plugins", "tui", "managed");
-    expect((await lstat(managed)).isSymbolicLink()).toBe(true);
-    expect(await realpath(managed)).toBe(firstTarget);
-    expect(
-      JSON.parse(
-        await readFile(path.join(home, ".mindframe-z", "opencode-plugin-links.json"), "utf8")
-      )
-    ).toEqual({
-      version: 1,
-      links: [{ name: "managed", target: firstTarget }]
-    });
-
-    await mkdir(path.join(root, "profiles", "alternate"), { recursive: true });
-    await writeFile(
-      path.join(root, "profiles", "alternate", "profile.yml"),
-      "name: alternate\nextends: personal\nagents: [opencode]\n"
-    );
-    await applyConfig({ root, home, profile: "alternate", agent: "opencode", target: "all" });
-    expect(await realpath(managed)).toBe(
-      configsPath(home, "alternate", "opencode", "plugins", "tui", "managed")
-    );
-
-    await writeFile(profilePath, original);
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-    await expect(lstat(managed)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readFile(path.join(pluginDir, "herdr-agent-state.js"), "utf8")).toBe("external\n");
-    expect(await readFile(path.join(tuiDir, "external.js"), "utf8")).toBe("external\n");
-  });
-
-  it("does not delete a recorded plugin path replaced by an external file", async () => {
-    const pluginSource = path.join(root, "opencode", "plugins", "managed", "v2");
-    await mkdir(pluginSource, { recursive: true });
-    await writeFile(path.join(pluginSource, "index.js"), 'export default { id: "managed" };\n');
-    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
-    const original = await readFile(profilePath, "utf8");
-    await writeFile(
-      profilePath,
-      original.replace("opencode:\n", "opencode:\n  tui_plugins:\n    - managed\n")
-    );
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-
-    const pluginPath = path.join(home, ".config", "opencode", "plugins", "tui", "managed");
-    await unlink(pluginPath);
-    await writeFile(pluginPath, "external\n");
-    await writeFile(profilePath, original);
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-    expect(await readFile(pluginPath, "utf8")).toBe("external\n");
-  });
-
-  it("refuses a legacy whole-directory plugin link without touching its contents", async () => {
-    const rendered = configsPath(home, "personal", "opencode", "plugins", "tui");
-    const tuiDir = path.join(home, ".config", "opencode", "plugins", "tui");
-    await mkdir(rendered, { recursive: true });
-    await writeFile(path.join(rendered, "external.js"), "external\n");
-    await mkdir(path.dirname(tuiDir), { recursive: true });
-    await symlink(rendered, tuiDir);
-
-    await expect(applyConfig({ root, home, agent: "opencode", target: "all" })).rejects.toThrow(
-      "is not a real directory"
-    );
-    expect((await lstat(tuiDir)).isSymbolicLink()).toBe(true);
-    expect(await readFile(path.join(tuiDir, "external.js"), "utf8")).toBe("external\n");
-  });
 
   it("merges npm plugins across profiles, with the child's version winning", async () => {
     await writeFile(

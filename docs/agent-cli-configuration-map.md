@@ -110,7 +110,7 @@ mfz currently maps OpenCode well:
 | Permissions | `opencode.config` pass-through plus generated references, extra-folder, and secret rules. | Generated permissions are ordered native rules. |
 | Commands | Source files under `opencode/commands`, selected by `opencode.commands`. | mfz renders the managed `commands` directory. |
 | Agents | Source files under `opencode/agents`, selected by `opencode.agents`. | mfz renders the managed `agents` directory. |
-| Plugins | Source files under `opencode/plugins`, selected by `opencode.plugins` and `tui_plugins`. | Server plugins are linked from `opencode.jsonc`; TUI plugins are merged into global `cli.json`. |
+| Plugins | Folders under `opencode/plugins` or at `~/` and absolute paths, selected by `opencode.plugins` and `tui_plugins`. | Loaded in place from `file://` entries: `opencode.plugins` in `opencode.jsonc`, TUI-only `tui_plugins` merged into global `cli.json`. |
 | Skills | Profile skill catalog rendered to one managed `skills` snapshot path. | Project/global skill toggles remain unsupported for OpenCode. |
 | References | `shared/refs.yml` is rendered into machine index and read permission, not OpenCode `references`. | Could render OpenCode native `references`, but current index approach is tool-neutral. |
 
