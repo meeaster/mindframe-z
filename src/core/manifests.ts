@@ -226,6 +226,9 @@ export const vendoredSkillTargets = ["claude-code", "codex", "opencode"] as cons
 
 export const vendoredSkillTargetSchema = z.enum(vendoredSkillTargets);
 
+// `.` selects the whole repository for skills published at the repository root.
+const vendoredSubtreeSchema = z.union([z.literal("."), skillPathSchema]);
+
 const vendoredSkillVariantsSchema = z
   .object({
     "claude-code": skillPathSchema,
@@ -257,7 +260,7 @@ const vendoredSkillSchema = z.union([
   z
     .object({
       ...vendoredSkillFields,
-      subtree: skillPathSchema
+      subtree: vendoredSubtreeSchema
     })
     .strict(),
   z

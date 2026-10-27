@@ -267,13 +267,13 @@ async function listGitTree(
       "--full-tree",
       commit,
       "--",
-      subtree
+      ...(subtree === "." ? [] : [subtree])
     ],
     { env: gitEnv(), encoding: "buffer", timeout: 30_000 }
   );
 
   const bytes = Buffer.isBuffer(output.stdout) ? output.stdout : Buffer.from(output.stdout);
-  const prefix = `${subtree}/`;
+  const prefix = subtree === "." ? "" : `${subtree}/`;
   const entries: GitTreeEntry[] = [];
 
   for (const record of nulRecords(bytes)) {

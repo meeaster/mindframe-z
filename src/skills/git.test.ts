@@ -85,6 +85,27 @@ describe("Git skill extraction", () => {
     expect(files.map((file) => file.path)).toEqual(["SKILL.md"]);
   });
 
+  it("extracts the whole repository when the subtree is the root", async () => {
+    const repo = await mkdtemp(path.join(os.tmpdir(), "mfz-git-whole-skill-"));
+    await execa("git", ["init", "-q"], { cwd: repo });
+    await execa("git", ["config", "user.email", "test@example.invalid"], { cwd: repo });
+    await execa("git", ["config", "user.name", "Mindframe Test"], { cwd: repo });
+    await mkdir(path.join(repo, "references"));
+    await writeFile(
+      path.join(repo, "SKILL.md"),
+      "---\nname: root-skill\ndescription: test\n---\n",
+      "utf8"
+    );
+    await writeFile(path.join(repo, "references", "detail.md"), "detail\n", "utf8");
+    await execa("git", ["add", "."], { cwd: repo });
+    await execa("git", ["commit", "-qm", "initial"], { cwd: repo });
+    const { stdout: commit } = await execa("git", ["rev-parse", "HEAD"], { cwd: repo });
+
+    const files = await readGitSkillFiles(path.join(repo, ".git"), commit, ".");
+
+    expect(files.map((file) => file.path)).toEqual(["SKILL.md", "references/detail.md"]);
+  });
+
   it("rejects symlink and gitlink entries from a selected tree", async () => {
     const repo = await mkdtemp(path.join(os.tmpdir(), "mfz-git-special-"));
     await execa("git", ["init", "-q"], { cwd: repo });

@@ -372,7 +372,7 @@ Add a local skill:
 
 Add a vendored skill:
 
-1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\`; for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
+1. Declare \`source: vendored\`, an HTTPS \`repo:\`, and tracked \`ref:\`. For one payload, add an explicit upstream \`subtree:\` (\`.\` selects the whole repository); for provider payloads, add exactly \`claude-code\`, \`codex\`, and \`opencode\` under \`variants:\`. MFZ copies a single payload to \`skills/vendor/<name>/\` or provider payloads to \`skills/vendor/<name>/<target>/\` and records the full commit plus digest in \`skills/vendor.lock.yml\` (including each provider digest for variants).
 2. Stage an exact tip or full commit into machine-local quarantine: \`mfz skills stage <name> [--commit <full-sha>]\`. A new declaration does not need a lock entry before staging.
 3. Run \`mfz guide skill-review\`, then review the staged candidate as hostile evidence without executing candidate files.
 4. After the review, run \`mfz skills promote <candidate-id>\`. Promotion writes the reviewed source and lock but does not apply configuration or create links.
