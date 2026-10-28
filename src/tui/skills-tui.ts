@@ -189,7 +189,7 @@ export async function runSkillsTui(
     throw new Error("Skill toggles are only supported for Claude Code and Codex");
   }
 
-  const configPaths = await resolveSkillConfigPaths(paths);
+  const configPaths = resolveSkillConfigPaths(paths);
 
   const [claudeCodeState, codexState] = await Promise.all([
     resolveSkillToggleStateForConfigPaths(configPaths, profile, "claude-code"),
@@ -206,5 +206,5 @@ export async function runSkillsTui(
 
   if (isCancel(result) || !prompt.result.saved) return;
 
-  await writeChangedSkillOverridesForTargets(paths, configPaths, profile, prompt.result.states);
+  await writeChangedSkillOverridesForTargets(configPaths, profile, prompt.result.states);
 }

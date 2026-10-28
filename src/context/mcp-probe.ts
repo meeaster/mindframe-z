@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import type { McpServer } from "../core/manifests.js";
 import { expandHome, type RuntimePaths } from "../core/paths.js";
-import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import {
   executorBridgeName,
   filterMcpForTarget,
+  mcpDefaults,
   requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
@@ -341,13 +341,11 @@ export async function probeMcpServer(
   profile: ResolvedProfile,
   harness: ContextHarness,
   serverName: string,
-  inspectedDirectory: string,
-  projectRoot: string | undefined
+  inspectedDirectory: string
 ): Promise<ContextMcpProbe> {
   const target = filterMcpForTarget(profile, harness).find((entry) => entry.name === serverName);
   const sharedExecutor = serverName === executorBridgeName && requiresExecutorBridge(profile);
-  const overrides = await readOverrideStore(paths.home);
-  const effective = effectiveProjectState(overrides, projectRoot, profile, harness, "mcp");
+  const effective = mcpDefaults(profile, harness);
 
   if ((!target && !sharedExecutor) || (!sharedExecutor && effective[serverName] !== true)) {
     throw new Error(

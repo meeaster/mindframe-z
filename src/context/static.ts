@@ -7,11 +7,11 @@ import {
   executorBridgeName,
   executorMcpServers,
   filterMcpForTarget,
+  mcpDefaults,
   requiresExecutorBridge,
   type ResolvedProfile
 } from "../core/profile.js";
 import { type RuntimePaths } from "../core/paths.js";
-import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
 import { analyzeRepository } from "./repository.js";
 import { measuredContributor, unknownContributor } from "./measurement.js";
 import { toolSkillSourcePath } from "../skills/tool.js";
@@ -248,11 +248,10 @@ export async function analyzeHarnessStatic(
     );
   }
 
-  const overrideStore = await readOverrideStore(paths.home);
   const skills = await skillContributors(paths, profile, harness);
   contributors.push(...skills.contributors);
   scopeNotes.push(...skills.notes);
-  const effectiveMcp = effectiveProjectState(overrideStore, projectRoot, profile, harness, "mcp");
+  const effectiveMcp = mcpDefaults(profile, harness);
 
   const mcpServers: ContextMcpMembership[] = filterMcpForTarget(profile, harness).map(
     ({ name }) => ({

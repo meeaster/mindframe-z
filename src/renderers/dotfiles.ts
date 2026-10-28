@@ -5,58 +5,6 @@ import type { ResolvedProfile } from "../core/profile.js";
 import type { RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshLocalFile, zshSecretsFile } from "../core/zsh.js";
 
-function renderHarnessLaunchers(paths: RuntimePaths): string[] {
-  const store = JSON.stringify(path.join(paths.home, ".mindframe-z", "overrides.json"));
-
-  return [
-    "_mfz_project_root() {",
-    "  git rev-parse --show-toplevel 2>/dev/null || pwd",
-    "}",
-    "",
-    "codex() {",
-    `  local store=${store}`,
-    "  local project=$(_mfz_project_root)",
-    '  if command -v jq >/dev/null 2>&1 && [[ -r "$store" ]]; then',
-    "    local -a mfz_argv",
-    '    mfz_argv=( ${(f)$(jq -r --arg project "$project" \'.projects[$project].codex.payload.argv[]? // empty\' "$store" 2>/dev/null)} )',
-    "    if (( ${#mfz_argv[@]} > 0 )); then",
-    '      command codex "${mfz_argv[@]}" "$@"',
-    "      return",
-    "    fi",
-    "  fi",
-    '  command codex "$@"',
-    "}",
-    "",
-    "opencode() {",
-    `  local store=${store}`,
-    "  local project=$(_mfz_project_root)",
-    '  if command -v jq >/dev/null 2>&1 && [[ -r "$store" ]]; then',
-    "    local config",
-    '    config=$(jq -c --arg project "$project" \'.projects[$project].opencode.payload.config // empty\' "$store" 2>/dev/null)',
-    '    if [[ -n "$config" ]]; then',
-    '      OPENCODE_CONFIG_CONTENT="$config" command opencode "$@"',
-    "      return",
-    "    fi",
-    "  fi",
-    '  command opencode "$@"',
-    "}",
-    "",
-    "claude() {",
-    `  local store=${store}`,
-    "  local project=$(_mfz_project_root)",
-    '  if command -v jq >/dev/null 2>&1 && [[ -r "$store" ]]; then',
-    "    local settings",
-    '    settings=$(jq -c --arg project "$project" \'.projects[$project]["claude-code"].payload.settings // empty\' "$store" 2>/dev/null)',
-    '    if [[ -n "$settings" ]]; then',
-    '      command claude --settings "$settings" "$@"',
-    "      return",
-    "    fi",
-    "  fi",
-    '  command claude "$@"',
-    "}"
-  ];
-}
-
 function renderZshrc(paths: RuntimePaths, content: string): string {
   const userBin = path.join(paths.home, ".local", "bin");
 
@@ -71,8 +19,6 @@ function renderZshrc(paths: RuntimePaths, content: string): string {
     "fi",
     "",
     content.trimEnd(),
-    "",
-    ...renderHarnessLaunchers(paths),
     "",
     `if [ -r ${JSON.stringify(zshLocalFile(paths))} ]; then`,
     `  source ${JSON.stringify(zshLocalFile(paths))}`,

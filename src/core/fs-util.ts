@@ -238,8 +238,8 @@ export async function writeTextFile(file: string, content: string): Promise<void
 /**
  * Replace a JSON file atomically: create the parent directory, write the
  * {@link jsonFileContent} form to a uniquely named sibling, then rename it over
- * the destination. This is the canonical mutable-state write behind the
- * override store, executor snapshots, and work-unit manifests, so a concurrent
+ * the destination. This is the canonical mutable-state write behind executor
+ * snapshots and work-unit manifests, so a concurrent
  * or interrupted `mfz` run either sees the previous file or the complete new
  * one, never a half-written record.
  */

@@ -3,11 +3,6 @@ import { pathExists } from "../core/fs-util.js";
 import type { RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
 import {
-  projectOverrides,
-  readOverrideStore,
-  writeProjectOverrideDelta
-} from "../core/override-store.js";
-import {
   mergeSkillOverridesIntoFile,
   readSkillOverridesFile,
   readSkillOverridesFromFile,
@@ -25,12 +20,8 @@ export interface SkillToggleState {
   [skill: string]: boolean;
 }
 
-type GlobalSkillConfigPaths = Extract<SkillConfigPaths, { scope: "global" }>;
-
-type RepoSkillConfigPaths = Extract<SkillConfigPaths, { scope: "repo" }>;
-
 export async function readActiveSkillOverrides(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   target: SkillToggleTarget,
   context: SkillOverrideContext = {}
 ): Promise<SkillToggleState> {
@@ -41,18 +32,7 @@ export async function readLocalSkillOverrides(
   paths: RuntimePaths,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
-  const configPaths = await resolveSkillConfigPaths(paths);
-
-  if (configPaths.scope === "repo") {
-    return projectOverrides(
-      await readOverrideStore(paths.home),
-      configPaths.repoRoot,
-      target,
-      "skills"
-    );
-  }
-
-  return readActiveSkillOverrides(configPaths, target);
+  return readActiveSkillOverrides(resolveSkillConfigPaths(paths), target);
 }
 
 export async function writeLocalSkillOverrides(
@@ -60,11 +40,7 @@ export async function writeLocalSkillOverrides(
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<void> {
-  const configPaths = await resolveSkillConfigPaths(paths);
-
-  if (configPaths.scope === "repo") {
-    throw new Error("Project-scoped skill writes require a resolved profile");
-  }
+  const configPaths = resolveSkillConfigPaths(paths);
 
   await mergeSkillOverridesIntoFile(
     target,
@@ -91,56 +67,35 @@ export async function writeChangedSkillOverrides(
   target: SkillToggleTarget,
   next: SkillToggleState
 ): Promise<void> {
-  const configPaths = await resolveSkillConfigPaths(paths);
-  await writeChangedSkillOverridesForConfigPaths(paths, configPaths, profile, target, next);
+  await writeChangedSkillOverridesForConfigPaths(
+    resolveSkillConfigPaths(paths),
+    profile,
+    target,
+    next
+  );
 }
 
 export async function writeChangedSkillOverridesForConfigPaths(
-  paths: RuntimePaths,
   configPaths: SkillConfigPaths,
   profile: ResolvedProfile,
   target: SkillToggleTarget,
   next: SkillToggleState
 ): Promise<void> {
-  const base = await resolveSkillToggleBaseState(configPaths, profile, target);
-
-  if (configPaths.scope === "repo") {
-    await writeProjectOverrideDelta(
-      paths,
-      profile,
-      configPaths.repoRoot,
-      target,
-      "skills",
-      next,
-      base
-    );
-
-    return;
-  }
-
-  await writeSkillOverrideDelta(configPaths, target, base, next);
+  await writeSkillOverrideDelta(configPaths, target, profileDefaults(profile, target), next);
 }
 
 export async function writeChangedSkillOverridesForTargets(
-  paths: RuntimePaths,
   configPaths: SkillConfigPaths,
   profile: ResolvedProfile,
   states: Record<SkillToggleTarget, SkillToggleState>
 ): Promise<void> {
   await writeChangedSkillOverridesForConfigPaths(
-    paths,
     configPaths,
     profile,
     "claude-code",
     states["claude-code"]
   );
-  await writeChangedSkillOverridesForConfigPaths(
-    paths,
-    configPaths,
-    profile,
-    "codex",
-    states.codex
-  );
+  await writeChangedSkillOverridesForConfigPaths(configPaths, profile, "codex", states.codex);
 }
 
 export async function resolveSkillToggleState(
@@ -148,9 +103,7 @@ export async function resolveSkillToggleState(
   profile: ResolvedProfile,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
-  const configPaths = await resolveSkillConfigPaths(paths);
-
-  return resolveSkillToggleStateForConfigPaths(configPaths, profile, target);
+  return resolveSkillToggleStateForConfigPaths(resolveSkillConfigPaths(paths), profile, target);
 }
 
 export async function resolveSkillToggleStateForConfigPaths(
@@ -158,14 +111,10 @@ export async function resolveSkillToggleStateForConfigPaths(
   profile: ResolvedProfile,
   target: SkillToggleTarget
 ): Promise<SkillToggleState> {
-  const defaults = profileDefaults(profile, target);
-
-  const [globalOverrides, localOverrides] = await Promise.all([
-    readSkillOverridesFile(configPaths.state[target]),
-    configPaths.scope === "repo" ? readOverrideStoreForConfigPaths(configPaths, target) : {}
-  ]);
-
-  return { ...defaults, ...globalOverrides, ...localOverrides };
+  return {
+    ...profileDefaults(profile, target),
+    ...(await readSkillOverridesFile(configPaths.state[target]))
+  };
 }
 
 export function profileDefaults(
@@ -183,23 +132,8 @@ export function profileDefaults(
   return defaults;
 }
 
-async function resolveSkillToggleBaseState(
-  configPaths: SkillConfigPaths,
-  profile: ResolvedProfile,
-  target: SkillToggleTarget
-): Promise<SkillToggleState> {
-  const defaults = profileDefaults(profile, target);
-
-  if (configPaths.scope === "global") return defaults;
-
-  return {
-    ...defaults,
-    ...(await readSkillOverridesFile(configPaths.state[target]))
-  };
-}
-
 async function writeSkillOverrideDelta(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   target: SkillToggleTarget,
   base: SkillToggleState,
   next: SkillToggleState
@@ -225,7 +159,7 @@ async function writeSkillOverrideDelta(
 }
 
 async function replaceLocalSkillOverrides(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<void> {
@@ -239,7 +173,7 @@ async function replaceLocalSkillOverrides(
 }
 
 async function mergeGlobalSkillState(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<void> {
@@ -249,20 +183,8 @@ async function mergeGlobalSkillState(
   });
 }
 
-async function readOverrideStoreForConfigPaths(
-  configPaths: RepoSkillConfigPaths,
-  target: SkillToggleTarget
-): Promise<SkillToggleState> {
-  return projectOverrides(
-    await readOverrideStore(configPaths.home),
-    configPaths.repoRoot,
-    target,
-    "skills"
-  );
-}
-
 async function writeContext(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   target: SkillToggleTarget,
   state: SkillToggleState
 ): Promise<SkillOverrideContext> {
@@ -278,7 +200,7 @@ async function writeContext(
 }
 
 async function resolveCodexSkillPath(
-  configPaths: GlobalSkillConfigPaths,
+  configPaths: SkillConfigPaths,
   skillName: string
 ): Promise<string> {
   const skillPath = path.join(configPaths.home, ".agents", "skills", skillName, "SKILL.md");

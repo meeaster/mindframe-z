@@ -14,7 +14,6 @@ import {
   resolveProfile,
   type ResolvedProfile
 } from "../core/profile.js";
-import { renderAllPayloads } from "../core/override-store.js";
 import {
   removeRenderedFiles,
   renderTarget,
@@ -364,16 +363,6 @@ export async function applyConfig(
         dryRun: options.dryRun ?? false,
         onComplete: operations.complete
       });
-
-      if (!options.dryRun) {
-        options.onStart?.({
-          category: "bookkeeping",
-          action: "write",
-          target: profile.name,
-          detail: "project override payloads"
-        });
-        await renderAllPayloads(paths, profile, operations.complete);
-      }
     }
 
     if (!options.noLink && rendersAgents) {

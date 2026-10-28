@@ -16,7 +16,6 @@ import {
   mindframeZDir,
   opencodeDataHome,
   opencodeDbPath,
-  overrideStorePath,
   referenceIndexPath,
   type RuntimePaths,
   threadCliLogPath,
@@ -215,10 +214,6 @@ describe(".mindframe-z store path contract", () => {
     expect(globalSkillStatePath(runtime, "claude-code")).toBe(
       path.join(mfz, "skill-overrides", "claude-code.json")
     );
-  });
-
-  it("pins the override store path from a home directory", () => {
-    expect(overrideStorePath(home)).toBe(path.join(mfz, "overrides.json"));
   });
 
   it("pins the generated reference and extra-folder index paths", () => {

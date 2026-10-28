@@ -52,7 +52,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.executor/ (Executor-owned native default, unless EXECUTOR_DATA_DIR is set)
 ~/.mindframe-z/references/
 ~/.mindframe-z/homes/<name>/       # `mfz init --clone` bootstrap only
-~/.mindframe-z/overrides.json
 ~/.mindframe-z/work/v1/
 ~/.mindframe-z/cache/skills/
 ~/.mindframe-z/skill-candidates/

@@ -1,7 +1,6 @@
 import path from "node:path";
 import type { ResolvedProfile } from "../core/profile.js";
-import { requiresExecutorBridge } from "../core/profile.js";
-import { effectiveProjectState, readOverrideStore } from "../core/override-store.js";
+import { mcpDefaults, requiresExecutorBridge } from "../core/profile.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { readClaudeHistory } from "./claude-history.js";
 import { probeMcpServer } from "./mcp-probe.js";
@@ -69,8 +68,7 @@ async function enrichMcpProbes(
         profile,
         harnesses[0]!,
         server,
-        report.inspectedDirectory,
-        report.projectRoot
+        report.inspectedDirectory
       );
 
       for (const harness of report.harnesses) {
@@ -182,12 +180,9 @@ export async function buildContextHistoryReport(
   }
 
   const reports: HarnessReport[] = [];
-  const overrides = await readOverrideStore(paths.home);
 
   for (const harness of harnesses) {
-    const mcpNames = Object.entries(
-      effectiveProjectState(overrides, projectRoot, profile, harness, "mcp")
-    )
+    const mcpNames = Object.entries(mcpDefaults(profile, harness))
       .filter(([, enabled]) => enabled)
       .map(([name]) => name);
 

@@ -1086,10 +1086,17 @@ export function requiresExecutorBridge(profile: ResolvedProfile, target?: AgentN
   );
 }
 
-export function assertMcpToggleSupported(target: AgentName, enabled: boolean): void {
-  if (target === "claude-code" && !enabled) {
-    throw new Error(
-      "Cannot disable MCP servers for Claude Code: user/local Claude MCP configuration has no supported configured-but-disabled state"
-    );
-  }
+export function mcpDefaults(profile: ResolvedProfile, target: AgentName): Record<string, boolean> {
+  const capabilityTarget: CapabilityAgentName | undefined =
+    target === "opencode" ? "opencode" : target === "pi" ? undefined : target;
+
+  return Object.fromEntries(
+    profile.mcpServers.flatMap((server) =>
+      capabilityTarget === undefined ||
+      server.agents === undefined ||
+      server.agents[capabilityTarget] === undefined
+        ? []
+        : [[server.name, server.agents[capabilityTarget]]]
+    )
+  );
 }

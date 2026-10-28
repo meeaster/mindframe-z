@@ -49,8 +49,8 @@ async function closeServer(server: ReturnType<typeof createServer>): Promise<voi
   });
 }
 
-describe("context overrides and MCP probes", () => {
-  it("keeps skill visibility independent of legacy OpenCode overrides", async () => {
+describe("context skill visibility and MCP probes", () => {
+  it("keeps OpenCode skill visibility independent of skill toggle state", async () => {
     const { root, home } = await setupIntegrationFixture();
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
     const profile = await readFile(profilePath, "utf8");
@@ -73,15 +73,6 @@ describe("context overrides and MCP probes", () => {
     await writeFile(
       path.join(home, ".mindframe-z", "skill-overrides", "opencode.json"),
       JSON.stringify({ "local-skill": false }),
-      "utf8"
-    );
-    await writeFile(
-      path.join(home, ".mindframe-z", "overrides.json"),
-      JSON.stringify({
-        projects: {
-          [root]: { opencode: { skills: { "local-skill": true } } }
-        }
-      }),
       "utf8"
     );
     await execa("git", ["init", "-q", root]);
@@ -121,13 +112,17 @@ describe("context overrides and MCP probes", () => {
 
   it("reports effective MCP membership separately for each harness", async () => {
     const { root, home } = await setupIntegrationFixture();
-    await execa("git", ["init", "-q", root]);
-    await mkdir(path.join(home, ".mindframe-z"), { recursive: true });
+    const profilePath = path.join(root, "profiles", "personal", "profile.yml");
+    const profile = await readFile(profilePath, "utf8");
     await writeFile(
-      path.join(home, ".mindframe-z", "overrides.json"),
-      JSON.stringify({ projects: { [root]: { opencode: { mcp: { context7: false } } } } }),
+      profilePath,
+      profile.replace(
+        "  context7:\n    agents: [opencode, claude-code]\n",
+        "  context7:\n    agents: { enabled: [claude-code], disabled: [opencode] }\n"
+      ),
       "utf8"
     );
+    await execa("git", ["init", "-q", root]);
 
     const result = await cli("mfz", root, home, ["context"], {}, undefined, root);
 
@@ -334,12 +329,12 @@ describe("context overrides and MCP probes", () => {
   it("probes one shared enabled server once across active harnesses and hides failures", async () => {
     const fixture = await setupIntegrationFixture();
     await execa("git", ["init", "-q", fixture.root]);
-    await mkdir(path.join(fixture.home, ".mindframe-z"), { recursive: true });
+    const basePath = path.join(fixture.root, "profiles", "base", "profile.yml");
+    const base = await readFile(basePath, "utf8");
+    // Leave only the HTTP server so the probe never launches the fixture's stdio helper.
     await writeFile(
-      path.join(fixture.home, ".mindframe-z", "overrides.json"),
-      JSON.stringify({
-        projects: { [fixture.root]: { "claude-code": { mcp: { "local-helper": false } } } }
-      }),
+      basePath,
+      base.replace("  local-helper:\n    agents: [claude-code]\n", ""),
       "utf8"
     );
     const methods: string[] = [];
@@ -381,7 +376,7 @@ describe("context overrides and MCP probes", () => {
       );
 
       expect(result.stdout).toContain(
-        "MCP schema inventory (1 enabled; 1 disabled | loading unknown; excluded from Per request)"
+        "MCP schema inventory (1 enabled | loading unknown; excluded from Per request)"
       );
       expect(result.stdout.match(/context7  enabled \| unavailable/g)).toHaveLength(2);
       expect(result.stdout).not.toContain("credential=private-value");

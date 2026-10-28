@@ -21,19 +21,7 @@ import {
   writeProviderVariantSkill
 } from "./support.js";
 
-const Overrides = z.object({
-  projects: z.record(
-    z.string(),
-    z.object({
-      "claude-code": z.object({ skills: z.record(z.string(), z.boolean()) }).optional(),
-      codex: z.object({ skills: z.record(z.string(), z.boolean()) }).optional()
-    })
-  )
-});
-
-const OpenCodePermission = z.object({ permission: z.object({ webfetch: z.string() }) });
-
-const ClaudeSettings = z.object({ includeGitInstructions: z.boolean() });
+const ClaudeSkillOverrides = z.object({ skillOverrides: z.record(z.string(), z.string()) });
 
 async function vendoredUpstream(name: string): Promise<{ root: string; commit: string }> {
   const root = await makeTempDir();
@@ -526,20 +514,8 @@ describe("skill CLI integration", () => {
     expect(result.stdout).toContain("would render skill\tlocal-skill");
   });
 
-  it("toggles project skill state in the override store", async () => {
+  it("toggles skills globally from inside a repo", async () => {
     await execa("git", ["init"], { cwd: root });
-    await mkdir(path.join(root, ".opencode"), { recursive: true });
-    await writeFile(
-      path.join(root, ".opencode", "opencode.jsonc"),
-      JSON.stringify({ permission: { webfetch: "allow" } }, null, 2) + "\n",
-      "utf8"
-    );
-    await mkdir(path.join(root, ".claude"), { recursive: true });
-    await writeFile(
-      path.join(root, ".claude", "settings.local.json"),
-      JSON.stringify({ includeGitInstructions: true }, null, 2) + "\n",
-      "utf8"
-    );
 
     const disable = await cli(
       "mfz",
@@ -565,27 +541,13 @@ describe("skill CLI integration", () => {
 
     expect(enable.stdout).toContain("Enabled claude-skill for claude-code");
 
-    const overrides = parseJson(
-      Overrides,
-      await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
+    const settings = parseJson(
+      ClaudeSkillOverrides,
+      await readFile(path.join(home, ".claude", "settings.json"), "utf8")
     );
 
-    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["local-skill"]).toBe(false);
-    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBeUndefined();
-
-    const opencode = parseJson(
-      OpenCodePermission,
-      await readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
-    );
-
-    expect(opencode.permission).toEqual({ webfetch: "allow" });
-
-    const claude = parseJson(
-      ClaudeSettings,
-      await readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
-    );
-
-    expect(claude).toEqual({ includeGitInstructions: true });
+    expect(settings.skillOverrides["local-skill"]).toBe("off");
+    expect(settings.skillOverrides["claude-skill"]).toBeUndefined();
   });
 
   it("rejects OpenCode skill toggles", async () => {
@@ -605,7 +567,7 @@ describe("skill CLI integration", () => {
     });
   });
 
-  it("TUI saves profile-default skill state to local config files", async () => {
+  it("TUI saves skill toggles to user settings", async () => {
     const originalCwd = process.cwd();
     await execa("git", ["init"], { cwd: root });
     process.chdir(root);
@@ -639,19 +601,12 @@ describe("skill CLI integration", () => {
       process.chdir(originalCwd);
     }
 
-    const overrides = parseJson(
-      Overrides,
-      await readFile(path.join(home, ".mindframe-z", "overrides.json"), "utf8")
+    const settings = parseJson(
+      ClaudeSkillOverrides,
+      await readFile(path.join(home, ".claude", "settings.json"), "utf8")
     );
 
-    expect(overrides.projects?.[root]?.["claude-code"]?.skills?.["claude-skill"]).toBe(false);
-    await expect(
-      readFile(path.join(root, ".opencode", "opencode.jsonc"), "utf8")
-    ).rejects.toMatchObject({ code: "ENOENT" });
-
-    await expect(
-      readFile(path.join(root, ".claude", "settings.local.json"), "utf8")
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(settings.skillOverrides["claude-skill"]).toBe("off");
   });
 
   it("rejects enable/disable on non-toggleable skill", async () => {

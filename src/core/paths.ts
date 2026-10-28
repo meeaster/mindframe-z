@@ -194,10 +194,6 @@ export function globalSkillStatePath(paths: RuntimePaths, target: CapabilityAgen
   return path.join(mindframeZDir(paths.home), "skill-overrides", `${target}.json`);
 }
 
-export function overrideStorePath(home: string): string {
-  return path.join(mindframeZDir(home), "overrides.json");
-}
-
 // Generated index of enabled references, embedded into every agent's instructions
 // (referenced by @-path for Claude, read inline for Codex, listed for OpenCode).
 export function referenceIndexPath(paths: RuntimePaths): string {

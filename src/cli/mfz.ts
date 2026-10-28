@@ -17,20 +17,13 @@ import {
   type InfraTarget
 } from "../core/paths.js";
 import {
-  assertMcpToggleSupported,
+  mcpDefaults,
   resolveProfile,
   resolveSkillDeclarations,
   type ResolvedMcpServer
 } from "../core/profile.js";
 import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
-import { findProjectRoot } from "../core/git-root.js";
 import { withUpstreamHomeLock } from "../core/upstream-clones.js";
-import {
-  effectiveProjectState,
-  projectOverrides,
-  readOverrideStore,
-  writeProjectOverrideDelta
-} from "../core/override-store.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
 import {
@@ -85,7 +78,6 @@ import {
   runThreadToolsBuild
 } from "../thread/cli.js";
 import { setLocalSkillState, type SkillToggleTarget } from "../tui/config-io.js";
-import { runMcpTui } from "../tui/mcp-tui.js";
 import { runSkillsTui } from "../tui/skills-tui.js";
 import { readOtherGlobalSkills } from "../skills/global-inventory.js";
 import { guide, guideTopicNames, initHome } from "./init.js";
@@ -211,22 +203,6 @@ async function doctor(options: {
     for (const link of result.links) {
       const status = await verifyLink(link);
       console.log(`link:${status.state}\t${status.linkPath}\t${status.detail}`);
-    }
-  }
-
-  const projectRoot = await findProjectRoot();
-
-  if (projectRoot) {
-    for (const file of [
-      path.join(projectRoot, ".opencode", "opencode.jsonc"),
-      path.join(projectRoot, ".claude", "settings.local.json"),
-      path.join(projectRoot, ".codex", "config.toml")
-    ]) {
-      if (await pathExists(file)) {
-        console.log(
-          `stale-project-toggle\t${file}\tproject toggles now live in ~/.mindframe-z/overrides.json`
-        );
-      }
     }
   }
 }
@@ -950,10 +926,6 @@ function isAgentName(target: string): target is AgentName {
   return target === "opencode" || target === "claude-code" || target === "codex" || target === "pi";
 }
 
-function isMcpToggleAgent(target: string): target is "claude-code" | "codex" {
-  return target === "claude-code" || target === "codex";
-}
-
 function isMcpStatusAgent(target: string): target is AgentName {
   return isAgentName(target);
 }
@@ -1058,14 +1030,14 @@ async function setSkillEnabled(
 
 skills
   .command("enable")
-  .description("Enable a skill for this project")
+  .description("Enable a skill globally")
   .argument("<name>", "skill name")
   .option("--target <target>", "claude-code or codex")
   .action(async (name, options) => setSkillEnabled(name, true, options));
 
 skills
   .command("disable")
-  .description("Disable a skill for this project")
+  .description("Disable a skill globally")
   .argument("<name>", "skill name")
   .option("--target <target>", "claude-code or codex")
   .action(async (name, options) => setSkillEnabled(name, false, options));
@@ -1297,78 +1269,9 @@ skills
     console.log("Active harness skills remain unchanged until `mfz apply`.");
   });
 
-function parseAgentOption(agent: string | undefined): AgentName | undefined {
-  if (!agent) return undefined;
-
-  if (agent === "opencode" || agent === "claude-code" || agent === "codex" || agent === "pi")
-    return agent;
-  throw new Error(`Unknown agent: ${agent}`);
-}
-
-async function setMcpEnabled(
-  name: string,
-  enabled: boolean,
-  options: { agent?: string | undefined }
-): Promise<void> {
-  const paths = createRuntimePaths(program.opts());
-  const profile = await resolveProfile(paths, program.opts().profile);
-  const server = profile.mcpServers.find((entry) => entry.name === name);
-
-  if (!server) throw new Error(`Profile ${profile.name} does not declare MCP server: ${name}`);
-
-  if (!server.agents) {
-    throw new Error(
-      `MCP server ${name} is Executor-routed and shared by every connected agent; change the profile instead of using a per-agent toggle`
-    );
-  }
-
-  const requestedAgent = parseAgentOption(options.agent);
-
-  if (requestedAgent === "opencode") {
-    throw new Error("OpenCode project MCP toggles are not supported");
-  }
-
-  if (requestedAgent === "pi") {
-    throw new Error("Pi MCP toggles are not supported yet");
-  }
-
-  const targets = requestedAgent
-    ? [requestedAgent]
-    : Object.keys(server.agents).filter(isMcpToggleAgent);
-
-  if (targets.length === 0) {
-    throw new Error("OpenCode project MCP toggles are not supported");
-  }
-
-  for (const target of targets) {
-    if (server.agents[target] === undefined) {
-      throw new Error(`MCP server ${name} is not available for ${target}`);
-    }
-  }
-
-  if (!enabled && targets.includes("claude-code")) {
-    assertMcpToggleSupported("claude-code", false);
-  }
-
-  const projectRoot = await findProjectRoot();
-
-  if (!projectRoot) throw new Error("mfz mcp toggles must be run inside a git repository");
-
-  for (const target of targets) {
-    await writeProjectOverrideDelta(paths, profile, projectRoot, target, "mcp", {
-      [name]: enabled
-    });
-  }
-
-  for (const target of targets)
-    console.log(`${enabled ? "Enabled" : "Disabled"} ${name} for ${target}`);
-}
-
 async function printMcpStatus(): Promise<void> {
   const paths = createRuntimePaths(program.opts());
   const profile = await resolveProfile(paths, program.opts().profile);
-  const projectRoot = await findProjectRoot();
-  const store = await readOverrideStore(paths.home);
 
   for (const server of profile.mcpServers) {
     if (server.executor) {
@@ -1378,45 +1281,18 @@ async function printMcpStatus(): Promise<void> {
     if (!server.agents) continue;
 
     for (const target of Object.keys(server.agents).filter(isMcpStatusAgent)) {
-      const effective = effectiveProjectState(store, projectRoot, profile, target, "mcp");
-      const overrides = projectRoot ? projectOverrides(store, projectRoot, target, "mcp") : {};
-      const marker = server.name in overrides ? "\toverridden" : "";
-      console.log(
-        `${server.name}\t${target}\t${effective[server.name] ? "enabled" : "disabled"}${marker}`
-      );
+      const enabled = mcpDefaults(profile, target)[server.name];
+      console.log(`${server.name}\t${target}\t${enabled ? "enabled" : "disabled"}`);
     }
   }
 }
 
-const mcp = program.command("mcp").description("Manage project-scoped MCP server toggles");
-
-mcp
-  .command("enable")
-  .description("Enable an MCP server for this project")
-  .argument("<name>", "MCP server name")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
-  .action(async (name, options) => setMcpEnabled(name, true, options));
-
-mcp
-  .command("disable")
-  .description("Disable an MCP server for this project")
-  .argument("<name>", "MCP server name")
-  .option("--agent <agent>", "opencode, claude-code, or codex")
-  .action(async (name, options) => setMcpEnabled(name, false, options));
+const mcp = program.command("mcp").description("Inspect profile MCP servers");
 
 mcp
   .command("status")
-  .description("Show merged MCP server state for this project")
+  .description("Show MCP server state for each agent")
   .action(async () => printMcpStatus());
-
-mcp
-  .command("tui")
-  .description("Toggle MCP servers for this project")
-  .action(async () => {
-    const paths = createRuntimePaths(program.opts());
-    const profile = await resolveProfile(paths, program.opts().profile);
-    await runMcpTui(paths, profile);
-  });
 
 const refs = program.command("refs").description("Manage AI reference repositories");
 
