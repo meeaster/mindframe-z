@@ -7,7 +7,6 @@ import {
   profileConfigsDir,
   referenceIndexPath
 } from "../core/paths.js";
-import { parseEnvRef } from "../core/env-ref.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
 import {
   deepMerge,
@@ -53,23 +52,23 @@ function mergeClaudePermissions(
   return merged;
 }
 
-function stripEnvRef(value: string): string {
-  const name = parseEnvRef(value);
-
-  return name === null ? value : `\${${name}}`;
+// Claude Code expands ${NAME} anywhere in an MCP url or header value, so tokens
+// embedded in a longer value (such as a secret URL path) are rewritten too.
+function toClaudeEnvRefs(value: string): string {
+  return value.replaceAll(/\{env:([^}]+)\}/g, "${$1}");
 }
 
 function renderClaudeMcpServer(server: ResolvedProfile["mcpServers"][number], home: string) {
   if (server.server.type === "remote") {
     const entry = {
       type: server.server.transport === "sse" ? "sse" : "http",
-      url: server.server.url
+      url: toClaudeEnvRefs(server.server.url)
     };
 
     if (server.server.headers) {
       Object.assign(entry, {
         headers: Object.fromEntries(
-          Object.entries(server.server.headers).map(([k, v]) => [k, stripEnvRef(v)])
+          Object.entries(server.server.headers).map(([k, v]) => [k, toClaudeEnvRefs(v)])
         )
       });
     }

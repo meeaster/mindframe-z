@@ -15,7 +15,8 @@ const OpenCodeConfig = z.object({
 
 const ClaudeMcp = z
   .object({
-    exa: z.object({ type: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) })
+    exa: z.object({ type: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) }),
+    secretpath: z.object({ type: z.string(), url: z.string() })
   })
   .passthrough();
 
@@ -65,6 +66,11 @@ describe("mcp remote header rendering", () => {
         "    headers:",
         '      x-api-key: "{env:EXA_API_KEY}"',
         "      x-client: mindframe-z",
+        "  secretpath:",
+        "    description: Server behind a secret URL path.",
+        "    type: remote",
+        "    transport: http",
+        "    url: http://mcp.secret.invalid:9583/{env:SECRET_PATH}",
         ""
       ].join("\n"),
       "utf8"
@@ -79,6 +85,8 @@ describe("mcp remote header rendering", () => {
         "mcp:",
         "  exa:",
         "    agents: [opencode, claude-code, codex]",
+        "  secretpath:",
+        "    agents: [claude-code]",
         ""
       ].join("\n"),
       "utf8"
@@ -112,6 +120,18 @@ describe("mcp remote header rendering", () => {
         "x-api-key": "${EXA_API_KEY}",
         "x-client": "mindframe-z"
       }
+    });
+  });
+
+  it("rewrites env tokens embedded in a Claude server URL", async () => {
+    const mcp = parseJson(
+      ClaudeMcp,
+      await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
+    );
+
+    expect(mcp.secretpath).toEqual({
+      type: "http",
+      url: "http://mcp.secret.invalid:9583/${SECRET_PATH}"
     });
   });
 
