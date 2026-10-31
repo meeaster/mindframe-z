@@ -340,7 +340,6 @@
         "cli": {},
         "plugins": [],
         "plugin_options": {},
-        "tui_plugins": [],
         "commands": [],
         "agents": []
       },
@@ -404,7 +403,8 @@
           "default": [],
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         },
         "plugin_options": {
@@ -416,13 +416,6 @@
           },
           "additionalProperties": {
             "$ref": "#/$defs/__schema0"
-          }
-        },
-        "tui_plugins": {
-          "default": [],
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         },
         "commands": {

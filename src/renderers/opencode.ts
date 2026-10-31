@@ -13,10 +13,10 @@ import {
   executorBridgeName,
   filterMcpForTarget,
   requiresExecutorBridge,
+  type ResolvedOpenCodePlugin,
   type ResolvedProfile
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
-import { isLocalPluginPath, parsePackagePlugin } from "../core/manifests.js";
 import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
@@ -26,30 +26,35 @@ import { z } from "zod";
 
 // OpenCode loads plugin folders in place and reads their package exports, so MFZ only checks that each folder exists.
 async function renderPluginEntries(
-  entries: readonly string[],
+  plugins: readonly ResolvedOpenCodePlugin[],
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<OpenCodePluginEntry[]> {
   const pluginOptions = profile.profile.opencode.plugin_options;
   const rendered: OpenCodePluginEntry[] = [];
 
-  for (const entry of entries) {
-    const plugin = parsePackagePlugin(entry);
-    let optionsKey = entry;
-    let target: string;
+  for (const plugin of plugins) {
+    const target = await pluginTarget(plugin, paths);
+    const options = pluginOptions[plugin.name];
 
-    if (plugin) {
-      optionsKey = plugin.name;
-      target = plugin.target;
-    } else {
-      const directory = isLocalPluginPath(entry)
-        ? expandHome(entry, paths.home)
-        : path.join(
-            profile.sources.plugins.get(entry)?.root ?? paths.root,
-            "opencode",
-            "plugins",
-            entry
-          );
+    rendered.push(options ? { package: target, options } : target);
+  }
+
+  return rendered;
+}
+
+async function pluginTarget(plugin: ResolvedOpenCodePlugin, paths: RuntimePaths): Promise<string> {
+  switch (plugin.source) {
+    case "npm":
+      return `${plugin.package}@${plugin.version}`;
+    case "git":
+      return `${plugin.repo}${plugin.ref ? `#${plugin.ref}` : ""}${plugin.subdirectory ? `::path:${plugin.subdirectory}` : ""}`;
+    case "local":
+    case "path": {
+      const directory =
+        plugin.source === "local"
+          ? path.join(plugin.sourceRoot, plugin.path)
+          : expandHome(plugin.path, paths.home);
 
       const isDirectory = await stat(directory).then(
         (info) => info.isDirectory(),
@@ -57,18 +62,12 @@ async function renderPluginEntries(
       );
 
       if (!isDirectory) {
-        throw new Error(`OpenCode plugin ${entry} has no plugin directory at ${directory}`);
+        throw new Error(`OpenCode plugin ${plugin.name} has no plugin directory at ${directory}`);
       }
 
-      target = `file://${directory}`;
+      return `file://${directory}`;
     }
-
-    const options = pluginOptions[optionsKey];
-
-    rendered.push(options ? { package: target, options } : target);
   }
-
-  return rendered;
 }
 
 export function mergeOpenCodeCliPlugins(
@@ -219,14 +218,16 @@ export async function renderOpenCode(
   if (!useGlobalInstructions && profile.extraFolders.length > 0)
     instructions.push(extraFoldersIndexPath(paths));
 
+  const plugins = profile.enabledOpenCodePlugins ?? [];
+
   const serverPluginEntries = await renderPluginEntries(
-    profile.enabledOpenCodePlugins ?? [],
+    plugins.filter((plugin) => !plugin.tui_only),
     paths,
     profile
   );
 
   const tuiPluginEntries = await renderPluginEntries(
-    profile.enabledOpenCodeTuiPlugins ?? [],
+    plugins.filter((plugin) => plugin.tui_only),
     paths,
     profile
   );

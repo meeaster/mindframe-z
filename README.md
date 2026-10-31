@@ -119,7 +119,8 @@ Resolution order:
 ├── catalog/
 │   ├── references.yml
 │   ├── skills.yml
-│   └── mcp.yml
+│   ├── mcp.yml
+│   └── opencode-plugins.yml
 ├── instructions/
 │   └── AGENTS.md
 ├── profiles/<name>/

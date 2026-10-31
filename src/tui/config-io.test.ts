@@ -59,7 +59,6 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
         cli: {},
         plugins: [],
         plugin_options: {},
-        tui_plugins: [],
         commands: [],
         agents: []
       },
@@ -77,6 +76,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       references: [],
       skills: [],
       mcpServers: {},
+      opencodePlugins: [],
       profiles: new Map(),
       miseFiles: new Map(),
       machine: {
@@ -107,7 +107,6 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     enabledOpenCodePlugins: [],
-    enabledOpenCodeTuiPlugins: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []

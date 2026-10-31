@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "plugins": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "tui_only": {
+                "default": false,
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "const": "local"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "tui_only": {
+                "default": false,
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "const": "path"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "tui_only": {
+                "default": false,
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "const": "npm"
+              },
+              "package": {
+                "type": "string",
+                "pattern": "^(?:@[a-z0-9][a-z0-9._~-]*\\/)?[a-z0-9][a-z0-9._~-]*$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "package",
+              "version"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "tui_only": {
+                "default": false,
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
+                "const": "git"
+              },
+              "repo": {
+                "type": "string",
+                "pattern": "^(?:github:[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+|git\\+(?:ssh:\\/\\/git@|https:\\/\\/)[A-Za-z0-9.-]+\\/[A-Za-z0-9_./-]+)$"
+              },
+              "ref": {
+                "type": "string",
+                "pattern": "^[^\\s:#]+$"
+              },
+              "subdirectory": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "repo"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}

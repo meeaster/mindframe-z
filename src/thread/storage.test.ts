@@ -72,7 +72,6 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
         cli: {},
         plugins: [],
         plugin_options: {},
-        tui_plugins: [],
         commands: [],
         agents: []
       },
@@ -103,6 +102,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       references: [],
       skills: [],
       mcpServers: {},
+      opencodePlugins: [],
       profiles: new Map(),
       miseFiles: new Map(),
       machine: manifest

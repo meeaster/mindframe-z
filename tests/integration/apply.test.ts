@@ -614,21 +614,34 @@ describe("apply integration", () => {
     );
     const profilePath = path.join(root, "profiles", "personal", "profile.yml");
 
+    await writeFile(
+      path.join(root, "catalog", "opencode-plugins.yml"),
+      [
+        "plugins:",
+        "  - name: config-marker",
+        "    source: local",
+        "    path: opencode/plugins/config-marker",
+        "  - name: session-cost-tui",
+        "    source: local",
+        "    path: opencode/plugins/session-cost-tui",
+        "    tui_only: true",
+        "  - name: panel",
+        "    source: path",
+        "    path: ~/dev/panel",
+        "    tui_only: true",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
     const profile = (await readFile(profilePath, "utf8"))
       .replaceAll("agents: [opencode, claude-code]", "agents: [opencode]")
-      .replace("  context7:\n    agents: [opencode]", "  context7:\n    agents: [opencode]")
+      .replace("  plugins:\n    - config-marker", "  plugins:\n    - session-cost-tui\n    - panel")
       .replace(
         "opencode:\n",
-        [
-          "opencode:",
-          "  plugin_options:",
-          "    session-cost-tui:",
-          "      mode: compact",
-          "  tui_plugins:",
-          "    - session-cost-tui",
-          "    - ~/dev/panel",
-          ""
-        ].join("\n")
+        ["opencode:", "  plugin_options:", "    session-cost-tui:", "      mode: compact", ""].join(
+          "\n"
+        )
       );
 
     await writeFile(profilePath, profile, "utf8");
@@ -676,7 +689,7 @@ describe("apply integration", () => {
 
     await writeFile(
       profilePath,
-      profile.replace("  tui_plugins:\n    - session-cost-tui\n    - ~/dev/panel\n", ""),
+      profile.replace("  plugins:\n    - session-cost-tui\n    - panel", "  plugins: []"),
       "utf8"
     );
     await applyConfig({ root, home, agent: "opencode", target: "all" });
@@ -686,17 +699,30 @@ describe("apply integration", () => {
     });
   }, 15_000);
 
-  it("merges npm plugins across profiles, with the child's version winning", async () => {
+  it("renders catalog package plugins enabled across profiles with options by name", async () => {
     await writeFile(
-      path.join(root, "profiles", "base", "profile.yml"),
+      path.join(root, "catalog", "opencode-plugins.yml"),
       [
-        "name: base",
-        "opencode:",
-        "  plugins:",
-        "    - npm:@acme/review@1.0.0",
-        "    - npm:shared-plugin@1.0.0",
+        "plugins:",
+        "  - name: config-marker",
+        "    source: local",
+        "    path: opencode/plugins/config-marker",
+        "  - name: review",
+        "    source: npm",
+        "    package: '@acme/review'",
+        "    version: 1.0.0",
+        "  - name: tools",
+        "    source: git",
+        "    repo: git+ssh://git@github.com/acme/plugins.git",
+        "    ref: release",
+        "    subdirectory: packages/review",
         ""
       ].join("\n"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      ["name: base", "opencode:", "  plugins:", "    - review", "    - tools", ""].join("\n"),
       "utf8"
     );
     await writeFile(
@@ -707,7 +733,10 @@ describe("apply integration", () => {
         "agents: [opencode]",
         "opencode:",
         "  plugins:",
-        "    - npm:shared-plugin@2.0.0",
+        "    - review",
+        "  plugin_options:",
+        "    tools:",
+        "      workflow: manual",
         ""
       ].join("\n"),
       "utf8"
@@ -717,37 +746,27 @@ describe("apply integration", () => {
 
     const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
     const config = parseJson(OpenCodeConfig, await readFile(configPath, "utf8"));
-    expect(config.plugins).toEqual(["@acme/review@1.0.0", "shared-plugin@2.0.0"]);
-  });
-
-  it("replaces inherited Git revisions per subpackage and renders options without local sources", async () => {
-    const repository = "git+ssh://git@github.com/acme/plugins.git";
-    const review = `${repository}#main::path:packages/review`;
-    const sibling = `${repository}#main::path:packages/other`;
-
-    await writeFile(
-      path.join(root, "profiles", "base", "profile.yml"),
-      `name: base\nopencode:\n  plugins:\n    - '${review}'\n    - '${sibling}'\n`
-    );
-    await writeFile(
-      path.join(root, "profiles", "personal", "profile.yml"),
-      `name: personal\nextends: base\nagents: [opencode]\nopencode:\n  plugins:\n    - '${repository}#release::path:packages/review'\n    - 'github:acme/standalone#v1'\n  plugin_options:\n    '${repository}::path:packages/review':\n      workflow: manual\n`
-    );
-
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-
-    const configPath = configsPath(home, "personal", "opencode", "opencode.jsonc");
-    const config = parseJson(OpenCodeConfig, await readFile(configPath, "utf8"));
 
     expect(config.plugins).toEqual([
-      sibling,
-      { package: `${repository}#release::path:packages/review`, options: { workflow: "manual" } },
-      "github:acme/standalone#v1"
+      "@acme/review@1.0.0",
+      {
+        package: "git+ssh://git@github.com/acme/plugins.git#release::path:packages/review",
+        options: { workflow: "manual" }
+      }
     ]);
+  });
 
-    await applyConfig({ root, home, agent: "opencode", target: "all" });
-    expect(parseJson(OpenCodeConfig, await readFile(configPath, "utf8")).plugins).toEqual(
-      config.plugins
+  it("rejects a profile plugin missing from the catalog", async () => {
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      ["name: personal", "agents: [opencode]", "opencode:", "  plugins:", "    - absent", ""].join(
+        "\n"
+      ),
+      "utf8"
+    );
+
+    await expect(applyConfig({ root, home, agent: "opencode", target: "all" })).rejects.toThrow(
+      "Unknown opencode plugin: absent"
     );
   });
 

@@ -18,7 +18,8 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 ├── catalog/
 │   ├── references.yml
 │   ├── skills.yml
-│   └── mcp.yml
+│   ├── mcp.yml
+│   └── opencode-plugins.yml
 ├── instructions/
 ├── profiles/<name>/
 ├── <explicit-local-skill-path>/          # required catalog skill: path, relative to home
@@ -86,7 +87,7 @@ Normal MCP OAuth discovers metadata from the integration endpoint. Assisted OAut
 
 Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
-- `opencode`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI plugins, commands, agents, native permissions, and nested MCP servers.
+- `opencode`: `opencode.jsonc`, optional runtime `package.json`, global `cli.json` TUI-only plugins, commands, agents, native permissions, and nested MCP servers.
 - `claude-code`: `CLAUDE.md`, settings snapshot, MCP snapshot, permissions. The MCP snapshot replaces top-level `~/.claude.json#mcpServers`.
 - `codex`: `config.toml`, `AGENTS.md`, MCP/permission/plugin tables. The MCP and plugin tables replace their local counterparts.
 - `pi`: `settings.json`, `AGENTS.md`, and optional `extensions/subagent/config.json` snapshots; merges managed user files under `~/.pi/agent/` while preserving unrelated keys.
@@ -123,17 +124,15 @@ An old direct map with every value `true` becomes a concise list. A map with `fa
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
-`opencode.plugins` and `opencode.tui_plugins` accept the same entry forms and render the same way, in profile order. A home plugin name is a folder at `opencode/plugins/<name>` in the home that owns the name, resolved through upstream aliases like other home assets. An entry starting with `~/` or `/` names a plugin folder anywhere on disk, such as a plugin developed in its own checkout, and skips name resolution. Both render as `file://` URLs to the folder, which OpenCode loads in place; the package's `exports` (`./server`, `./tui`) say which parts it has, so MFZ copies nothing and has no single-file or versioned-subfolder layout. A named or path plugin whose folder is missing fails the render with the entry and the path checked.
+OpenCode plugins are catalog assets like skills and MCP servers. `catalog/opencode-plugins.yml` declares each plugin's name, description, source, and `tui_only` flag; a profile's `opencode.plugins` enables catalog names, resolved through upstream aliases like other catalog assets, and `opencode.plugin_options` is keyed by the same names. Plugins render in profile order, after base entries, deduplicated.
 
-Package entries enable external plugins instead of home assets. npm entries use `npm:<package>@<exact version>`. Git entries use `github:owner/repo` or `git+ssh` and `git+https` URLs, with an optional `#revision` and `::path:subdirectory`. The renderer strips the MFZ `npm:` prefix and preserves Git targets. OpenCode owns package installation and loading, including private Git credentials. MFZ does not install or vendor these packages.
+The source decides the rendered target. `local` names a folder relative to the root of the home that declares the plugin, and `path` an absolute or `~/` folder anywhere on disk, such as a plugin developed in its own checkout; both render as `file://` URLs, which OpenCode loads in place. The package's `exports` (`./server`, `./tui`) say which parts it has, so MFZ copies nothing. A folder plugin whose folder is missing fails the render with the plugin name and the path checked. `npm` renders `<package>@<exact version>`, and `git` renders `<repo>[#ref][::path:subdirectory]`; OpenCode owns package installation and loading, including private Git credentials, and MFZ does not install or vendor them. A version or ref change is a catalog edit, so profiles never carry versions.
 
-A child profile replaces an inherited npm entry with the same package name. For Git entries, replacement requires the same repository target and subdirectory, ignoring `#revision`. Different URL spellings remain distinct targets.
-
-OpenCode profiles may define `opencode.plugin_options` by plugin asset name, path entry as written, npm package name, or Git target without `#revision` and with its `::path:` selector. The renderer applies the same options to that plugin's enabled server and native TUI entries using OpenCode's `{ package, options }` form; plugins without options remain string entries.
+A plugin with options renders in OpenCode's `{ package, options }` form; others remain string entries.
 
 MFZ owns OpenCode's top-level `permissions`. It renders extra-folder and references access, then the profile's `opencode.permissions` rules (base before child), then the protected denies for MFZ secrets and `service.json`. OpenCode applies the last matching rule, so profile rules can refine folder access but can't reopen the protected paths.
 
-`opencode.plugins` entries go in `opencode.jsonc` `plugins`; OpenCode's TUI also loads the TUI part of a package listed there. `opencode.tui_plugins` is for TUI-only packages, whose entries MFZ merges into the global `cli.json` while preserving external entries. MFZ writes nothing under `~/.config/opencode/plugins/`, which OpenCode scans for its own plugin folders. Entries in the profile's `opencode.cli.plugins`, such as `-opencode.sidebar.context` to turn off a built-in TUI plugin, are managed the same way: recorded in `~/.mindframe-z/opencode-cli-plugins.json`, merged beside external entries, and removed when the profile drops them.
+Plugins go in `opencode.jsonc` `plugins`; OpenCode's TUI also loads the TUI part of a package listed there. A `tui_only` plugin, a package with only a TUI part, goes in the global `cli.json` instead, merged beside external entries. MFZ writes nothing under `~/.config/opencode/plugins/`, which OpenCode scans for its own plugin folders. Entries in the profile's `opencode.cli.plugins`, such as `-opencode.sidebar.context` to turn off a built-in TUI plugin, are managed the same way: recorded in `~/.mindframe-z/opencode-cli-plugins.json`, merged beside external entries, and removed when the profile drops them.
 
 ## Sync
 

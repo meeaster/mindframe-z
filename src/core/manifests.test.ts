@@ -2,11 +2,13 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 import {
   agentSchema,
   homeManifestSchema,
   loadManifests,
   mcpServerSchema,
+  opencodePluginsManifestSchema,
   profileSchema,
   skillSchema,
   skillsManifestSchema,
@@ -443,30 +445,64 @@ describe("validateManifests", () => {
   });
 });
 
-describe("OpenCode plugin entries", () => {
-  it("rejects malformed Git targets and unsafe repository subdirectories", () => {
-    for (const entry of [
-      "git+ssh://git@github.com/acme/plugins.git#",
-      "github:acme",
-      "github:acme/plugins::path:../outside",
-      "github:acme/plugins::path:/absolute",
-      "git+https://token@github.com/acme/plugins.git"
-    ]) {
-      expect(() =>
-        profileSchema.parse({ name: "personal", opencode: { plugins: [entry] } })
-      ).toThrow();
+describe("OpenCode plugin catalog", () => {
+  type PluginInput = NonNullable<z.input<typeof opencodePluginsManifestSchema>["plugins"]>[number];
+
+  type PluginLocation = PluginInput extends infer Plugin
+    ? Plugin extends PluginInput
+      ? Omit<Plugin, "name">
+      : never
+    : never;
+
+  const catalog = (plugin: PluginLocation) =>
+    opencodePluginsManifestSchema.parse({ plugins: [{ name: "review", ...plugin }] });
+
+  it("accepts each source with its own location fields", () => {
+    expect(
+      catalog({ source: "local", path: "opencode/plugins/active/review" }).plugins[0]
+    ).toMatchObject({
+      tui_only: false
+    });
+    expect(() => catalog({ source: "path", path: "~/repos/review" })).not.toThrow();
+    expect(() =>
+      catalog({ source: "npm", package: "@acme/review", version: "1.2.3" })
+    ).not.toThrow();
+    expect(() =>
+      catalog({
+        source: "git",
+        repo: "github:acme/plugins",
+        ref: "v1",
+        subdirectory: "packages/review"
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects locations that escape their source's rules", () => {
+    const invalid: PluginLocation[] = [
+      { source: "local", path: "../outside" },
+      { source: "local", path: "/absolute" },
+      { source: "path", path: "relative/plugin" },
+      { source: "npm", package: "@acme/review", version: "^1.2.3" },
+      { source: "npm", package: "@acme/review", version: "latest" },
+      { source: "git", repo: "github:acme" },
+      { source: "git", repo: "git+https://token@github.com/acme/plugins.git" },
+      { source: "git", repo: "github:acme/plugins", subdirectory: "../outside" }
+    ];
+
+    for (const plugin of invalid) {
+      expect(() => catalog(plugin)).toThrow();
     }
   });
 
-  it("accepts npm plugins only with an exact version", () => {
-    const plugins = (entry: string) => ({ name: "personal", opencode: { plugins: [entry] } });
-
-    expect(profileSchema.parse(plugins("npm:@acme/review@1.2.3")).opencode.plugins).toEqual([
-      "npm:@acme/review@1.2.3"
-    ]);
-    expect(() => profileSchema.parse(plugins("npm:@acme/review"))).toThrow();
-    expect(() => profileSchema.parse(plugins("npm:@acme/review@^1.2.3"))).toThrow();
-    expect(() => profileSchema.parse(plugins("npm:@acme/review@latest"))).toThrow();
+  it("rejects duplicate plugin names", () => {
+    expect(() =>
+      opencodePluginsManifestSchema.parse({
+        plugins: [
+          { name: "review", source: "path", path: "~/a" },
+          { name: "review", source: "path", path: "~/b" }
+        ]
+      })
+    ).toThrow("duplicate OpenCode plugin name: review");
   });
 });
 

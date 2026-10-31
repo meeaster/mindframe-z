@@ -201,6 +201,18 @@ export async function writeFixture(root: string, home?: string): Promise<void> {
     "utf8"
   );
   await writeFile(
+    path.join(root, "catalog", "opencode-plugins.yml"),
+    [
+      "plugins:",
+      "  - name: config-marker",
+      "    description: Marks the rendered config.",
+      "    source: local",
+      "    path: opencode/plugins/config-marker",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
     path.join(root, "catalog", "mcp.yml"),
     [
       "servers:",

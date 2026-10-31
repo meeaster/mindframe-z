@@ -2,9 +2,9 @@ import path from "node:path";
 import os from "node:os";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
-import { profileSchema } from "../core/manifests.js";
+import { profileSchema, type OpenCodePlugin } from "../core/manifests.js";
 import { createRuntimePaths } from "../core/paths.js";
-import type { ResolvedProfile } from "../core/profile.js";
+import type { ResolvedOpenCodePlugin, ResolvedProfile } from "../core/profile.js";
 import { renderTarget } from "../core/render.js";
 import type { JsonObject } from "../core/json.js";
 import { mergeOpenCodeCliPlugins, renderOpenCode } from "./opencode.js";
@@ -85,44 +85,56 @@ function rendererSources(): ResolvedProfile["sources"] {
   } as ResolvedProfile["sources"];
 }
 
-describe("OpenCode renderer", () => {
-  it("renders the same configured options for server and TUI plugin assets", async () => {
-    const home = "/tmp/mfz-opencode-plugin-options";
-    const root = "/tmp/mfz-opencode-plugin-options-source";
-    const source = path.join(root, "opencode", "plugins", "work-ledger");
-    await rm(root, { recursive: true, force: true });
-    await mkdir(source, { recursive: true });
-    await writeFile(path.join(source, "index.ts"), "export default {}\n");
-    await writeFile(
-      path.join(source, "package.json"),
-      '{"type":"module","exports":{".":"./index.ts","./tui":"./tui/index.tsx"}}\n'
-    );
+function plugin(fields: OpenCodePlugin, sourceRoot = "/tmp/root"): ResolvedOpenCodePlugin {
+  return { ...fields, sourceRoot };
+}
 
-    const paths = createRuntimePaths({ root, home });
+describe("OpenCode renderer", () => {
+  it("applies a plugin's options to its server or TUI-only entry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-options-root-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-options-home-"));
+    const server = path.join(root, "opencode", "plugins", "ledger");
+    const panel = path.join(root, "opencode", "plugins", "panel");
+    await mkdir(server, { recursive: true });
+    await mkdir(panel, { recursive: true });
+
     const resolved = profile(home);
     resolved.profile.opencode.plugin_options = {
-      "work-ledger": { root: "~/workspace/knowledge/personal-knowledge/ledgers" }
+      ledger: { root: "~/ledgers" },
+      panel: { dense: true }
     };
 
-    const result = await renderOpenCode(paths, {
-      ...resolved,
-      enabledOpenCodePlugins: ["work-ledger"],
-      enabledOpenCodeTuiPlugins: ["work-ledger"],
-      // SAFETY: plugin name resolution reads only the root field from this renderer fixture.
-      sources: {
-        plugins: new Map([["work-ledger", { root }]])
-      } as ResolvedProfile["sources"]
-    });
+    resolved.enabledOpenCodePlugins = [
+      plugin(
+        {
+          name: "ledger",
+          description: "",
+          tui_only: false,
+          source: "local",
+          path: "opencode/plugins/ledger"
+        },
+        root
+      ),
+      plugin(
+        {
+          name: "panel",
+          description: "",
+          tui_only: true,
+          source: "local",
+          path: "opencode/plugins/panel"
+        },
+        root
+      )
+    ];
 
-    const options = { root: "~/workspace/knowledge/personal-knowledge/ledgers" };
+    const result = await renderOpenCode(createRuntimePaths({ root, home }), resolved);
 
     expect(renderedConfig(result).plugins).toEqual([
-      {
-        package: `file://${source}`,
-        options
-      }
+      { package: `file://${server}`, options: { root: "~/ledgers" } }
     ]);
-    expect(result.cliPlugins?.entries).toEqual([{ package: `file://${source}`, options }]);
+    expect(result.cliPlugins?.entries).toEqual([
+      { package: `file://${panel}`, options: { dense: true } }
+    ]);
   });
 
   it("links active OpenCode runtime dependencies from the profile", async () => {
@@ -141,17 +153,44 @@ describe("OpenCode renderer", () => {
     });
   });
 
-  it("registers npm plugins by exact version with their plugin options", async () => {
-    const home = "/tmp/mfz-opencode-npm-plugins";
+  it("registers npm and Git plugins as OpenCode package targets", async () => {
+    const home = "/tmp/mfz-opencode-package-plugins";
     const resolved = profile(home);
-    resolved.enabledOpenCodePlugins = ["npm:@acme/review@1.2.3", "npm:plain-plugin@0.4.0"];
-    resolved.profile.opencode.plugin_options = { "@acme/review": { workflow: "manual" } };
+    resolved.profile.opencode.plugin_options = { review: { workflow: "manual" } };
+
+    resolved.enabledOpenCodePlugins = [
+      plugin({
+        name: "review",
+        description: "",
+        tui_only: false,
+        source: "npm",
+        package: "@acme/review",
+        version: "1.2.3"
+      }),
+      plugin({
+        name: "tools",
+        description: "",
+        tui_only: false,
+        source: "git",
+        repo: "github:acme/tools",
+        ref: "v2",
+        subdirectory: "packages/plugin"
+      }),
+      plugin({
+        name: "plain",
+        description: "",
+        tui_only: false,
+        source: "git",
+        repo: "github:acme/plain"
+      })
+    ];
 
     const result = await renderOpenCode(createRuntimePaths({ root: "/tmp/root", home }), resolved);
 
     expect(renderedConfig(result).plugins).toEqual([
       { package: "@acme/review@1.2.3", options: { workflow: "manual" } },
-      "plain-plugin@0.4.0"
+      "github:acme/tools#v2::path:packages/plugin",
+      "github:acme/plain"
     ]);
   });
 
@@ -350,7 +389,7 @@ describe("OpenCode renderer", () => {
     );
   });
 
-  it("fails on a plugin entry without a plugin directory", async () => {
+  it("fails on a folder plugin without a plugin directory", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-root-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-home-"));
     const pluginsDir = path.join(root, "opencode", "plugins");
@@ -359,17 +398,34 @@ describe("OpenCode renderer", () => {
 
     const paths = createRuntimePaths({ root, home });
     const resolved = profile(home);
-    resolved.sources = rendererSources();
 
-    resolved.enabledOpenCodeTuiPlugins = ["single"];
+    resolved.enabledOpenCodePlugins = [
+      plugin(
+        {
+          name: "single",
+          description: "",
+          tui_only: true,
+          source: "local",
+          path: "opencode/plugins/single"
+        },
+        root
+      )
+    ];
     await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
       `OpenCode plugin single has no plugin directory at ${path.join(pluginsDir, "single")}`
     );
 
-    resolved.enabledOpenCodeTuiPlugins = [];
-    resolved.enabledOpenCodePlugins = ["~/missing"];
+    resolved.enabledOpenCodePlugins = [
+      plugin({
+        name: "missing",
+        description: "",
+        tui_only: false,
+        source: "path",
+        path: "~/missing"
+      })
+    ];
     await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
-      `OpenCode plugin ~/missing has no plugin directory at ${path.join(home, "missing")}`
+      `OpenCode plugin missing has no plugin directory at ${path.join(home, "missing")}`
     );
   });
 
@@ -498,46 +554,62 @@ describe("OpenCode renderer", () => {
     await expect(renderOpenCode(paths, resolved)).rejects.toThrow("Unknown agent: missing-agent");
   });
 
-  it("renders home, path, and package plugin entries in place in profile order", async () => {
+  it("renders local, path, and package plugins in profile order, TUI-only ones into cli.json", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-entries-root-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-entries-home-"));
     const pluginsDir = path.join(root, "opencode", "plugins");
-    const localPlugin = path.join(home, "repos", "cairn");
+    const checkout = path.join(home, "repos", "cairn");
     const absolutePlugin = path.join(root, "elsewhere", "panel");
 
-    for (const directory of [
-      path.join(pluginsDir, "server"),
-      path.join(pluginsDir, "combined"),
-      localPlugin,
-      absolutePlugin
-    ]) {
+    for (const directory of [path.join(pluginsDir, "active", "server"), checkout, absolutePlugin]) {
       await mkdir(directory, { recursive: true });
     }
 
-    const paths = createRuntimePaths({ root, home });
     const resolved = profile(home);
-    resolved.enabledOpenCodePlugins = [
-      "~/repos/cairn",
-      "npm:plain-plugin@0.4.0",
-      "server",
-      "combined"
-    ];
-    resolved.enabledOpenCodeTuiPlugins = ["combined", absolutePlugin];
-    resolved.profile.opencode.plugin_options = { "~/repos/cairn": { store: "~/cairn" } };
-    resolved.sources = rendererSources();
 
-    const result = await renderOpenCode(paths, resolved);
+    resolved.enabledOpenCodePlugins = [
+      plugin({
+        name: "cairn",
+        description: "",
+        tui_only: false,
+        source: "path",
+        path: "~/repos/cairn"
+      }),
+      plugin({
+        name: "plain",
+        description: "",
+        tui_only: false,
+        source: "npm",
+        package: "plain-plugin",
+        version: "0.4.0"
+      }),
+      plugin(
+        {
+          name: "server",
+          description: "",
+          tui_only: false,
+          source: "local",
+          path: "opencode/plugins/active/server"
+        },
+        root
+      ),
+      plugin({
+        name: "panel",
+        description: "",
+        tui_only: true,
+        source: "path",
+        path: absolutePlugin
+      })
+    ];
+
+    const result = await renderOpenCode(createRuntimePaths({ root, home }), resolved);
 
     expect(renderedConfig(result).plugins).toEqual([
-      { package: `file://${localPlugin}`, options: { store: "~/cairn" } },
+      `file://${checkout}`,
       "plain-plugin@0.4.0",
-      `file://${path.join(pluginsDir, "server")}`,
-      `file://${path.join(pluginsDir, "combined")}`
+      `file://${path.join(pluginsDir, "active", "server")}`
     ]);
-    expect(result.cliPlugins?.entries).toEqual([
-      `file://${path.join(pluginsDir, "combined")}`,
-      `file://${absolutePlugin}`
-    ]);
+    expect(result.cliPlugins?.entries).toEqual([`file://${absolutePlugin}`]);
   });
 
   it("reports stale snapshots and excludes unconfigured plugin assets", async () => {

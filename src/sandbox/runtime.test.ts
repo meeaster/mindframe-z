@@ -66,7 +66,6 @@ function profile(
         cli: {},
         plugins: [],
         plugin_options: {},
-        tui_plugins: [],
         commands: [],
         agents: []
       },
@@ -88,6 +87,7 @@ function profile(
       references: [],
       skills: [],
       mcpServers: {},
+      opencodePlugins: [],
       profiles: new Map(),
       miseFiles: new Map(),
       machine

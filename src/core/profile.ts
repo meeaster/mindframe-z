@@ -4,9 +4,8 @@ import {
   eachUpstream,
   homeDisplayName,
   loadManifests,
-  isLocalPluginPath,
-  parsePackagePlugin,
   type LoadedManifests,
+  type OpenCodePlugin,
   type McpServer,
   type ProfileMcpConfig,
   type ProfileAgentDefaults,
@@ -23,15 +22,9 @@ import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from ".
 import { readDirEntries } from "./fs-util.js";
 import { machineInstructionsDir } from "./path-util.js";
 
-type CatalogKind = "reference" | "skill" | "mcp" | "profile";
+type CatalogKind = "reference" | "skill" | "mcp" | "opencode plugin" | "profile";
 
-type SourceKind =
-  | CatalogKind
-  | "instruction"
-  | "opencode plugin"
-  | "opencode TUI plugin"
-  | "opencode command"
-  | "opencode agent";
+type SourceKind = CatalogKind | "instruction" | "opencode command" | "opencode agent";
 
 interface ProfileSources {
   references: Map<string, LoadedManifests>;
@@ -143,6 +136,9 @@ export type TargetedMcpServer = ResolvedMcpServer & {
   enabled: boolean;
 };
 
+/** A catalog plugin enabled by the profile, with the root of the home that declares it. */
+export type ResolvedOpenCodePlugin = OpenCodePlugin & { sourceRoot: string };
+
 export interface ResolvedProfile {
   name: string;
   agents: AgentName[];
@@ -156,8 +152,7 @@ export interface ResolvedProfile {
   enabledSkills: ResolvedSkill[];
   enabledOpenCodeCommands: string[];
   enabledOpenCodeAgents: string[];
-  enabledOpenCodePlugins?: string[];
-  enabledOpenCodeTuiPlugins?: string[];
+  enabledOpenCodePlugins?: ResolvedOpenCodePlugin[];
   mcpServers: ResolvedMcpServer[];
   extraFolders: ExtraFolder[];
   miseLayers: ResolvedMiseLayer[];
@@ -267,6 +262,8 @@ function hasLocalDefinition(home: LoadedManifests, kind: CatalogKind, name: stri
       return home.skills.some((entry) => entry.name === name);
     case "mcp":
       return name in home.mcpServers;
+    case "opencode plugin":
+      return home.opencodePlugins.some((entry) => entry.name === name);
     case "profile":
       return home.profiles.has(name);
   }
@@ -307,25 +304,6 @@ function resolveCatalogName(
   throw new Error(`Unknown ${kind}: ${rawName}`);
 }
 
-// A child selects the revision for the same npm package or Git repository subdirectory.
-function mergeOpenCodePlugins(base: readonly string[], child: readonly string[]): string[] {
-  const childPackages = new Set<string>();
-
-  for (const entry of child) {
-    const plugin = parsePackagePlugin(entry);
-
-    if (plugin) childPackages.add(plugin.name);
-  }
-
-  const inherited = base.filter((entry) => {
-    const plugin = parsePackagePlugin(entry);
-
-    return !plugin || !childPackages.has(plugin.name);
-  });
-
-  return dedupe([...inherited, ...child]);
-}
-
 function normalizeSourceNames(
   home: LoadedManifests,
   names: readonly string[],
@@ -340,21 +318,6 @@ function normalizeSourceNames(
 
     return resolved.name;
   });
-}
-
-// Package and path entries name their own location, so only home plugin names resolve through the home sources.
-function normalizePluginEntries(
-  home: LoadedManifests,
-  entries: readonly string[],
-  sourceMap: Map<string, LoadedManifests>,
-  kind: SourceKind,
-  label: string
-): string[] {
-  return entries.flatMap((entry) =>
-    parsePackagePlugin(entry) !== undefined || isLocalPluginPath(entry)
-      ? [entry]
-      : normalizeSourceNames(home, [entry], sourceMap, kind, label)
-  );
 }
 
 function normalizeProfile(
@@ -413,19 +376,18 @@ function normalizeProfile(
   const opencode = options.includeOpenCode
     ? {
         ...profile.opencode,
-        plugins: normalizePluginEntries(
-          home,
-          profile.opencode.plugins,
-          sources.plugins,
-          "opencode plugin",
-          "OpenCode plugin"
-        ),
-        tui_plugins: normalizePluginEntries(
-          home,
-          profile.opencode.tui_plugins,
-          sources.plugins,
-          "opencode TUI plugin",
-          "OpenCode TUI plugin"
+        plugins: profile.opencode.plugins.map((rawName) => {
+          const resolved = resolveCatalogName(home, rawName, "opencode plugin");
+          setSource(sources.plugins, "OpenCode plugin", resolved.name, resolved.home);
+
+          return resolved.name;
+        }),
+        // Options use the same catalog names, so a qualified key selects an upstream plugin's options.
+        plugin_options: Object.fromEntries(
+          Object.entries(profile.opencode.plugin_options).map(([rawName, options]) => [
+            resolveCatalogName(home, rawName, "opencode plugin").name,
+            options
+          ])
         ),
         commands: normalizeSourceNames(
           home,
@@ -546,9 +508,8 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       dependencies: { ...base.opencode.dependencies, ...child.opencode.dependencies },
       cli: deepMerge(base.opencode.cli, child.opencode.cli),
       global_instructions: child.opencode.global_instructions ?? base.opencode.global_instructions,
-      plugins: mergeOpenCodePlugins(base.opencode.plugins, child.opencode.plugins),
+      plugins: dedupe([...base.opencode.plugins, ...child.opencode.plugins]),
       plugin_options: deepMerge(base.opencode.plugin_options, child.opencode.plugin_options),
-      tui_plugins: mergeOpenCodePlugins(base.opencode.tui_plugins, child.opencode.tui_plugins),
       commands: dedupe([...base.opencode.commands, ...child.opencode.commands]),
       agents: dedupe([...base.opencode.agents, ...child.opencode.agents])
     },
@@ -1000,8 +961,19 @@ export async function resolveProfile(
 
   const enabledOpenCodeCommands = includeOpenCode ? dedupe(profile.opencode.commands) : [];
   const enabledOpenCodeAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
-  const enabledOpenCodePlugins = includeOpenCode ? dedupe(profile.opencode.plugins) : [];
-  const enabledOpenCodeTuiPlugins = includeOpenCode ? dedupe(profile.opencode.tui_plugins) : [];
+
+  const enabledOpenCodePlugins = includeOpenCode
+    ? dedupe(profile.opencode.plugins).map((pluginName): ResolvedOpenCodePlugin => {
+        const sourceHome = sources.plugins.get(pluginName) ?? manifests;
+        const plugin = sourceHome.opencodePlugins.find((entry) => entry.name === pluginName);
+
+        if (!plugin)
+          throw new Error(`Profile ${name} references unknown OpenCode plugin: ${pluginName}`);
+
+        return { ...plugin, sourceRoot: sourceHome.root };
+      })
+    : [];
+
   const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
 
   const extraFolders: ExtraFolder[] = (() => {
@@ -1030,7 +1002,6 @@ export async function resolveProfile(
     enabledOpenCodeCommands,
     enabledOpenCodeAgents,
     enabledOpenCodePlugins,
-    enabledOpenCodeTuiPlugins,
     mcpServers,
     extraFolders,
     miseLayers: profileBuild.miseLayers

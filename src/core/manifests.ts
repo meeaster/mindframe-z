@@ -654,57 +654,81 @@ const exactVersionSchema = z
     "must be an exact semantic version"
   );
 
-const npmPluginPattern = /^npm:((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)@(.+)$/;
+const opencodePluginFields = {
+  name: skillNameSchema,
+  description: z.string().default(""),
+  // A TUI-only package is registered in the CLI's cli.json; every other plugin goes in opencode.jsonc, whose
+  // TUI also loads the package's TUI part.
+  tui_only: z.boolean().default(false)
+};
 
-export interface NpmPlugin {
-  name: string;
-  version: string;
-}
+const opencodePluginSchema = z.discriminatedUnion("source", [
+  // A folder in the home, relative to the home root.
+  z.object({ ...opencodePluginFields, source: z.literal("local"), path: skillPathSchema }).strict(),
+  // A folder elsewhere on disk, such as a plugin developed in its own checkout.
+  z
+    .object({
+      ...opencodePluginFields,
+      source: z.literal("path"),
+      path: z
+        .string()
+        .refine(
+          (value) => value.startsWith("~/") || value.startsWith("/"),
+          "must be absolute or start with ~/"
+        )
+    })
+    .strict(),
+  z
+    .object({
+      ...opencodePluginFields,
+      source: z.literal("npm"),
+      package: z
+        .string()
+        .regex(
+          /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/,
+          "must be an npm package name"
+        ),
+      version: exactVersionSchema
+    })
+    .strict(),
+  z
+    .object({
+      ...opencodePluginFields,
+      source: z.literal("git"),
+      repo: z
+        .string()
+        .regex(
+          /^(?:github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+|git\+(?:ssh:\/\/git@|https:\/\/)[A-Za-z0-9.-]+\/[A-Za-z0-9_./-]+)$/,
+          "must be github:owner/repo or a git+ssh or git+https URL"
+        ),
+      ref: z
+        .string()
+        .regex(/^[^\s:#]+$/, "must be a Git ref without whitespace, : or #")
+        .optional(),
+      subdirectory: skillPathSchema.optional()
+    })
+    .strict()
+]);
 
-/** An `npm:<package>@<exact version>` plugin entry, or undefined for a home plugin name. */
-export function parseNpmPlugin(entry: string): NpmPlugin | undefined {
-  const match = npmPluginPattern.exec(entry);
+export const opencodePluginsManifestSchema = z
+  .object({
+    plugins: z.array(opencodePluginSchema).default([])
+  })
+  .superRefine(({ plugins }, context) => {
+    const seen = new Set<string>();
 
-  if (!match?.[1] || !match[2] || !exactVersionSchema.safeParse(match[2]).success) return undefined;
+    for (const [index, plugin] of plugins.entries()) {
+      if (seen.has(plugin.name)) {
+        context.addIssue({
+          code: "custom",
+          message: `duplicate OpenCode plugin name: ${plugin.name}`,
+          path: ["plugins", index, "name"]
+        });
+      }
 
-  return { name: match[1], version: match[2] };
-}
-
-export function parsePackagePlugin(entry: string): { name: string; target: string } | undefined {
-  const npm = parseNpmPlugin(entry);
-
-  if (npm) return { name: npm.name, target: `${npm.name}@${npm.version}` };
-
-  const match =
-    /^(github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+|git\+(?:ssh:\/\/git@|https:\/\/)[A-Za-z0-9.-]+\/[A-Za-z0-9_./-]+)(?:#([^\s:]+))?(::path:([^\s]+))?$/.exec(
-      entry
-    );
-
-  if (!match?.[1]) return undefined;
-
-  const subdirectory = match[4];
-
-  if (subdirectory && (subdirectory.startsWith("/") || subdirectory.split("/").includes("..")))
-    return undefined;
-
-  return { name: `${match[1]}${match[3] ?? ""}`, target: entry };
-}
-
-/** A plugin folder named by an absolute or home-relative path instead of a home plugin name. */
-export function isLocalPluginPath(entry: string): boolean {
-  return entry.startsWith("~/") || entry.startsWith("/");
-}
-
-const opencodePluginSchema = z
-  .string()
-  .refine(
-    (entry) => !entry.startsWith("npm:") || parseNpmPlugin(entry) !== undefined,
-    "npm plugins must be npm:<package>@<exact version>"
-  )
-  .refine(
-    (entry) => !/^(?:git\+|github:)/.test(entry) || parsePackagePlugin(entry) !== undefined,
-    "Git plugins must use github:owner/repo or git+ssh/https URLs, with optional #revision and ::path:subdirectory"
-  );
+      seen.add(plugin.name);
+    }
+  });
 
 const opencodePermissionRuleSchema = z
   .object({
@@ -720,9 +744,8 @@ const opencodeConfigSchema = z.object({
   dependencies: z.record(z.string().min(1), exactVersionSchema).default({}),
   cli: jsonObjectSchema.default({}),
   global_instructions: z.boolean().optional(),
-  plugins: z.array(opencodePluginSchema).default([]),
+  plugins: z.array(z.string().min(1)).default([]),
   plugin_options: z.record(z.string().min(1), jsonObjectSchema).default({}),
-  tui_plugins: z.array(opencodePluginSchema).default([]),
   commands: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([])
 });
@@ -798,7 +821,6 @@ export const profileSchema = z
       cli: {},
       plugins: [],
       plugin_options: {},
-      tui_plugins: [],
       commands: [],
       agents: []
     }),
@@ -874,6 +896,8 @@ export type ProfileMcpConfig = z.infer<typeof profileMcpConfigSchema>;
 
 export type McpServer = z.infer<typeof mcpServerSchema>;
 
+export type OpenCodePlugin = z.infer<typeof opencodePluginSchema>;
+
 export type ExecutorAuthenticationMethod = NonNullable<
   NonNullable<NonNullable<McpServer["executor"]>["authentication"]>[number]
 >;
@@ -910,6 +934,7 @@ export interface LoadedManifests {
   references: ReferenceEntry[];
   skills: SkillEntry[];
   mcpServers: Record<string, McpServer>;
+  opencodePlugins: OpenCodePlugin[];
   profiles: Map<string, ProfileManifest>;
   miseFiles: Map<string, string>;
   machine: MachineManifest;
@@ -981,6 +1006,10 @@ export async function validateManifests(
     { file: path.join(root, "catalog", "references.yml"), schema: refsManifestSchema },
     { file: path.join(root, "catalog", "skills.yml"), schema: skillsManifestSchema },
     { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema },
+    {
+      file: path.join(root, "catalog", "opencode-plugins.yml"),
+      schema: opencodePluginsManifestSchema
+    },
     { file: path.join(root, "skills", "vendor.lock.yml"), schema: vendorLockSchema }
   ];
 
@@ -1062,6 +1091,12 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     servers: {}
   });
 
+  const opencodePlugins = await readYaml(
+    path.join(root, "catalog", "opencode-plugins.yml"),
+    opencodePluginsManifestSchema,
+    { plugins: [] }
+  );
+
   const machine = effectiveHome
     ? await readYaml(machineConfigPath(effectiveHome), machineSchema, machineDefaults())
     : machineDefaults();
@@ -1103,6 +1138,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     references: refs.references,
     skills: skills.skills,
     mcpServers: mcp.servers,
+    opencodePlugins: opencodePlugins.plugins,
     profiles: profileMap,
     miseFiles: miseMap,
     machine

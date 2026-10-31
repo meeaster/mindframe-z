@@ -76,7 +76,6 @@ function profile(root = "/tmp/home"): ResolvedProfile {
         cli: {},
         plugins: [],
         plugin_options: {},
-        tui_plugins: [],
         commands: [],
         agents: []
       },
@@ -103,6 +102,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       references: [],
       skills: [],
       mcpServers: {},
+      opencodePlugins: [],
       profiles: new Map(),
       miseFiles: new Map(),
       machine: machine()

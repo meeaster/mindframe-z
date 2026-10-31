@@ -117,6 +117,7 @@ function groupedProfile(home: string): ResolvedProfile {
       references: [],
       skills: [],
       mcpServers: {},
+      opencodePlugins: [],
       profiles: new Map(),
       miseFiles: new Map(),
       machine: machineSchema.parse({})
