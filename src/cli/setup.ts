@@ -38,8 +38,11 @@ async function updateHome(root: string, verbose: boolean): Promise<boolean> {
 }
 
 // Upgrades stay within the versions the home declares; prune removes versions no layer uses.
+// The first prune frees space held by versions the config no longer references before anything
+// downloads; the last removes the versions that upgrade has just replaced.
 async function installTools(): Promise<boolean> {
   for (const args of [
+    ["prune", "--tools", "--yes"],
     ["install", "--yes"],
     ["upgrade", "--yes"],
     ["prune", "--tools", "--yes"]
