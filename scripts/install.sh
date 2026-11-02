@@ -6,6 +6,15 @@ MFZ_BIN="$MFZ_HOME/.local/bin"
 REPO="${MFZ_REPO:-meeaster/mindframe-z}"
 TAG="${MFZ_VERSION:-latest}"
 
+missing=()
+for tool in git curl; do
+  command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "mindframe-z needs bash, git, and curl; install ${missing[*]} with your package manager first." >&2
+  exit 1
+fi
+
 mkdir -p "$MFZ_BIN"
 
 if command -v mise >/dev/null 2>&1; then
@@ -40,7 +49,14 @@ tmp="$(mktemp "$MFZ_BIN/mfz.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 curl -fsSL "$url" -o "$tmp"
 chmod +x "$tmp"
-mv "$tmp" "$MFZ_BIN/mfz"
+# mfz-release always holds the release binary, so `mfz-release engine use release` can recover
+# from a broken source build. A source install links mfz into a checkout; leave that link alone.
+cp "$tmp" "$MFZ_BIN/mfz-release"
+if [ -L "$MFZ_BIN/mfz" ]; then
+  echo "mfz runs from a source checkout; updated only mfz-release"
+else
+  mv "$tmp" "$MFZ_BIN/mfz"
+fi
 
 rc="$HOME/.zshrc"
 shell_kind="zsh"
@@ -62,4 +78,4 @@ if ! grep -qs "Added by mindframe-z installer" "$rc"; then
   } >> "$rc"
 fi
 
-echo "installed mfz to $MFZ_BIN/mfz"
+echo "installed the mfz release binary to $MFZ_BIN"

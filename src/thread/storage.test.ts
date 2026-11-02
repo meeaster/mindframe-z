@@ -41,6 +41,7 @@ function paths(home: string): RuntimePaths {
 function machine(stores: MachineManifest["thread"]["stores"]): MachineManifest {
   return {
     references_dir: "~/.mindframe-z/references",
+    workspace_root: "~/workspace",
     extra_folders: [],
     git: {},
     sandbox: {},

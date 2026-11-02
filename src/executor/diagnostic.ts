@@ -156,11 +156,26 @@ export async function inspectExecutor(
   return diagnostic;
 }
 
+// The version the adapter's daemon and API calls were last verified against. The home's mise.toml
+// owns the installed version; a different one is reported, never blocked.
+const EXECUTOR_TESTED_VERSION = "v2.0.0-beta.33";
+
+function compatibilityLines(installedVersion: string): string[] {
+  if (["missing", "unknown", "not required"].includes(installedVersion)) return [];
+
+  if (installedVersion.endsWith(EXECUTOR_TESTED_VERSION)) return [];
+
+  return [
+    `executor compatibility\t${installedVersion}\tuntested; mfz was verified with executor ${EXECUTOR_TESTED_VERSION}`
+  ];
+}
+
 export function executorDiagnosticLines(diagnostic: ExecutorDiagnostic): string[] {
   if (!diagnostic.required && diagnostic.managed === "absent") return [];
 
   return [
     `executor version\t${diagnostic.installedVersion}`,
+    ...compatibilityLines(diagnostic.installedVersion),
     `executor data\t${diagnostic.dataDir}`,
     `executor runtime\t${diagnostic.runtime}\tmanaged ${diagnostic.managed}`,
     ...diagnostic.connections.map(

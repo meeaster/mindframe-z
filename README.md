@@ -10,12 +10,15 @@ A home is a git repo with `mfz-home.yml`, `catalog/`, `instructions/`, `profiles
 curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash
 ```
 
-This installs mise, node (for the `skills` CLI), and the self-contained `mfz` binary to `~/.local/bin/mfz`, and adds shell integration to your rc file. Then, in a new shell:
+The machine needs only bash, git, and curl, plus whatever access your environment provides to private repositories; mfz has no authentication step. The installer installs mise and the self-contained `mfz` binary to `~/.local/bin/mfz`, keeps a copy as `~/.local/bin/mfz-release`, and adds shell integration to your rc file. Then, in a new shell:
 
 ```sh
-mfz init --create ~/code/my-home   # or --clone <home-repo-url> / --point <path>
-mfz apply --target all --agent all
+mfz setup --clone <home-repo-url>   # clones to ~/workspace/repos/<name>; --path to override
 ```
+
+`mfz setup` brings the machine to the state its home declares: it clones or fast-forwards the home, syncs references, applies configuration, installs and upgrades the home's mise tools, and runs `mfz workspace sync`. Rerun plain `mfz setup` to update. To develop the engine on the machine, run `mfz engine use source` afterwards; `mfz-release engine use release` returns to the release binary.
+
+To start a new home instead, run `mfz init --create <path>` and then `mfz setup`.
 
 ### Agent-driven setup
 
@@ -39,7 +42,10 @@ pnpm dev apply --target all --agent all --no-link
 
 Common commands:
 
+- `mfz setup` bootstraps or updates the machine from its home; see Install.
 - `mfz init` creates machine config and creates, clones, or points at a home.
+- `mfz workspace status` lists workspace checkouts with local changes or unpushed commits; `mfz workspace sync` clones declared repositories that are missing and fast-forwards checkouts on their default branch, skipping `scratch/`, `worktrees/`, `services/`, and references.
+- `mfz engine use source|release` switches `~/.local/bin/mfz` between a built source checkout and the release binary.
 - `mfz guide` prints home layout and editing conventions.
 - `mfz apply` regenerates indexes, renders the active home, and activates global tool configuration. It runs locally and reports enabled references that are not cloned yet.
 - `mfz apply --verbose` includes unchanged checks and internal operations. Captured output uses stable plain lines without terminal control sequences.
@@ -164,11 +170,12 @@ References default to:
 ~/.mindframe-z/references/
 ```
 
-Upstream extension homes use the exact writable checkout configured by
-`extends.path`. The separate `mfz init --clone` bootstrap command uses:
+Homes are edited like any other repository, so they live in the workspace rather than under
+`~/.mindframe-z/`. Upstream extension homes use the exact writable checkout configured by
+`extends.path`, and `mfz init --clone` clones to:
 
 ```text
-~/.mindframe-z/homes/<name>/
+<workspace_root>/repos/<name>/   # workspace_root defaults to ~/workspace
 ```
 
 ## Development

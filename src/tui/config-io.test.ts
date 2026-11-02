@@ -81,6 +81,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       miseFiles: new Map(),
       machine: {
         references_dir: "~/.mindframe-z/references",
+        workspace_root: "~/workspace",
         extra_folders: [],
         git: {},
         sandbox: {},

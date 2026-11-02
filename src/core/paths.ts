@@ -7,7 +7,7 @@ import YAML from "yaml";
 import { machineSchema, type CapabilityAgentName } from "./manifests.js";
 import { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
-export { expandHome, machineConfigPath, mindframeZDir, upstreamHomeRoot } from "./path-util.js";
+export { expandHome, machineConfigPath, mindframeZDir } from "./path-util.js";
 
 export type AgentName = "opencode" | "claude-code" | "codex" | "pi";
 

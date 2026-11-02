@@ -30,10 +30,3 @@ export function machineConfigPath(home: string): string {
 export function machineInstructionsDir(home: string): string {
   return path.join(mindframeZDir(home), "instructions");
 }
-
-// Bootstrap location used by `mfz init --clone`, keyed by the alias declared in
-// `mfz-home.yml#extends`. Extension resolution uses the versioned `extends.path`
-// instead; this helper remains for the separate init bootstrap behavior.
-export function upstreamHomeRoot(machineHome: string, alias: string): string {
-  return path.join(mindframeZDir(machineHome), "homes", alias);
-}

@@ -26,16 +26,7 @@ import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
 import { withUpstreamHomeLock } from "../core/upstream-clones.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
-import {
-  referenceRows,
-  syncReferenceLocked,
-  syncReferencesLocked
-} from "../ref-store/references.js";
-import { reconcileLocalIndexes } from "../ref-store/indexes.js";
-import {
-  throwIfReferenceSyncCancelled,
-  withReferenceResourceLock
-} from "../ref-store/reference-lock.js";
+import { referenceRows } from "../ref-store/references.js";
 import {
   candidateReviewInstruction,
   checkVendoredSkill,
@@ -82,10 +73,8 @@ import { runSkillsTui } from "../tui/skills-tui.js";
 import { readOtherGlobalSkills } from "../skills/global-inventory.js";
 import { guide, guideTopicNames, initHome } from "./init.js";
 import { hasHomeGuidance } from "../core/engine-skill.js";
-import { applyConfig } from "./apply.js";
+import { runApply } from "./apply.js";
 import {
-  commandIsInteractive,
-  createOperationReporter,
   printInventory,
   printInventorySections,
   type InventoryItem,
@@ -117,6 +106,11 @@ import {
   runWorkSwitch,
   runWorkValidate
 } from "../work/cli.js";
+import { runWorkspaceStatus, runWorkspaceSync } from "../workspace/cli.js";
+import { useReleaseEngine, useSourceEngine } from "./engine.js";
+import { runReferenceSync } from "./refs-sync.js";
+import { runSetup } from "./setup.js";
+import { toolRequirementLines } from "../core/tool-requirements.js";
 
 async function doctor(options: {
   root?: string | undefined;
@@ -166,6 +160,8 @@ async function doctor(options: {
   }
 
   console.log(`profile\t${profile.name}`);
+
+  for (const line of await toolRequirementLines(profile)) console.log(line);
 
   for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
     console.log(line);
@@ -439,7 +435,7 @@ program
   .option("--create <path>", "scaffold a new home at path")
   .option("--clone <repo>", "clone an existing home repository")
   .option("--point <path>", "point machine config at an existing home")
-  .option("--name <name>", "clone destination name under ~/.mindframe-z/homes")
+  .option("--path <path>", "clone destination (default ~/workspace/repos/<repository name>)")
   .option("--agents <agents>", "comma-separated starter agents", "opencode,claude-code,codex")
   .action(async (options) => initHome({ ...program.opts(), ...options }));
 
@@ -466,34 +462,16 @@ program
   .option("--no-link", "render without creating global links")
   .option("--verbose", "show every completed operation")
   .action(async (options) => {
-    const interactive = commandIsInteractive();
-
-    const reporter = createOperationReporter({
-      command: "mfz apply",
-      scope: `${program.opts().profile ?? "configured profile"} · ${options.target}`,
-      verbose: options.verbose ?? false,
-      dryRun: options.dryRun ?? false,
-      interactive
+    const applied = await runApply({
+      ...program.opts(),
+      agent: options.agent,
+      target: options.target,
+      dryRun: options.dryRun,
+      noLink: !options.link,
+      verbose: options.verbose
     });
 
-    try {
-      await applyConfig({
-        ...program.opts(),
-        agent: options.agent,
-        target: options.target,
-        dryRun: options.dryRun,
-        noLink: !options.link,
-        interactive,
-        onStart: reporter.start.bind(reporter),
-        onComplete: reporter.complete.bind(reporter),
-        beforePrompt: reporter.pause.bind(reporter)
-      });
-
-      if (!reporter.finish()) process.exitCode = 1;
-    } catch (error) {
-      reporter.fail(error instanceof Error ? error : new Error(String(error)));
-      process.exitCode = 1;
-    }
+    if (!applied) process.exitCode = 1;
   });
 
 const sandbox = program
@@ -1323,37 +1301,7 @@ refs
     const paths = createRuntimePaths(program.opts());
     const profile = await resolveProfile(paths, program.opts().profile);
 
-    const reporter = createOperationReporter({
-      command: "mfz refs sync",
-      scope: `${profile.name} · ${name ?? "all"}`,
-      verbose: options.verbose ?? false,
-      interactive: commandIsInteractive()
-    });
-
-    try {
-      await withReferenceResourceLock(paths, profile.referencesDir, async (signal, scope) => {
-        const lifecycle = {
-          onStart: reporter.start.bind(reporter),
-          onComplete: reporter.complete.bind(reporter),
-          onLifecycle: reporter.lifecycle.bind(reporter),
-          signal
-        };
-
-        if (name) await syncReferenceLocked(paths, profile, name, lifecycle, scope);
-        else await syncReferencesLocked(paths, profile, lifecycle, scope);
-        throwIfReferenceSyncCancelled(signal);
-        reporter.start({
-          category: "index",
-          action: "write",
-          target: profile.name,
-          detail: "local indexes"
-        });
-        await reconcileLocalIndexes(paths, profile, { onComplete: lifecycle.onComplete });
-      });
-
-      if (!reporter.finish()) process.exitCode = 1;
-    } catch (error) {
-      reporter.fail(error instanceof Error ? error : new Error(String(error)));
+    if (!(await runReferenceSync(paths, profile, { name, verbose: options.verbose }))) {
       process.exitCode = 1;
     }
   });
@@ -1373,6 +1321,52 @@ refs
         detail: reference.url
       }))
     );
+  });
+
+program
+  .command("setup")
+  .description("Bring this machine to the state its home declares; safe to rerun")
+  .option("--clone <repo>", "home repository to clone when no home is configured yet")
+  .option("--path <path>", "home clone destination (default ~/workspace/repos/<repository name>)")
+  .option("--verbose", "show every completed operation")
+  .action(async (options) => {
+    if (!(await runSetup({ ...program.opts(), ...options }))) process.exitCode = 1;
+  });
+
+const engine = program.command("engine").description("Switch between release and source engines");
+
+engine
+  .command("use")
+  .description("Run mfz from the release binary or from a built source checkout")
+  .argument("<mode>", "release or source", (value) => {
+    if (value !== "release" && value !== "source")
+      throw new Error("mode must be release or source");
+
+    return value;
+  })
+  .option("--path <path>", "source checkout (default ~/workspace/repos/mindframe-z)")
+  .action(async (mode, options) => {
+    const paths = createRuntimePaths(program.opts());
+
+    if (mode === "source") await useSourceEngine(paths, options.path);
+    else await useReleaseEngine(paths);
+  });
+
+const workspace = program
+  .command("workspace")
+  .description("Inspect and update the repositories in the workspace");
+
+workspace
+  .command("status")
+  .description("List workspace repositories with local changes or unpushed commits")
+  .action(async () => runWorkspaceStatus(program.opts()));
+
+workspace
+  .command("sync")
+  .description("Clone missing declared repositories and fast-forward the rest")
+  .option("--verbose", "show every completed operation")
+  .action(async (options) => {
+    if (!(await runWorkspaceSync({ ...program.opts(), ...options }))) process.exitCode = 1;
   });
 
 await program.parseAsync();

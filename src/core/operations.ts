@@ -3,6 +3,7 @@ export type OperationCategory =
   | "index"
   | "guidance"
   | "reference"
+  | "repository"
   | "link"
   | "skill"
   | "executor"

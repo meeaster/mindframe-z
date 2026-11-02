@@ -229,16 +229,15 @@ describe("init and guide integration", () => {
     ).toContain("https://opencode.ai/config.json");
   });
 
-  it("clones a home into the managed upstream clone root and points machine config at it", async () => {
+  it("clones a home into the workspace repositories and points machine config at it", async () => {
     const sourceMachineHome = await makeTempDir();
     const source = path.join(await makeTempDir(), "shared-home");
     await mfz(sourceMachineHome, ["init", "--create", source, "--agents", "opencode"]);
 
     const machineHome = await makeTempDir();
-    const result = await mfz(machineHome, ["init", "--clone", source, "--name", "shared"]);
+    const result = await mfz(machineHome, ["init", "--clone", source]);
 
-    // The same directory apply-time cloning and skill vendoring resolve for this alias.
-    const cloneRoot = path.join(machineHome, ".mindframe-z", "homes", "shared");
+    const cloneRoot = path.join(machineHome, "workspace", "repos", "shared-home");
     expect(result.stdout).toContain(`home_path\t${cloneRoot}`);
     expect(await readFile(path.join(cloneRoot, "mfz-home.yml"), "utf8")).toContain(
       "mfz-home.schema.json"

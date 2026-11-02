@@ -45,6 +45,7 @@ function threadDir(paths: RuntimePaths, slug: string): string {
 function machine(): MachineManifest {
   return {
     references_dir: "~/references",
+    workspace_root: "~/workspace",
     extra_folders: [],
     git: {},
     sandbox: {},

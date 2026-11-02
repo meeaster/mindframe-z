@@ -99,9 +99,6 @@ describe("home manifest schema", () => {
     );
 
     await expect(loadManifests(root, home)).rejects.toThrow(/absolute or start with ~\//);
-    await expect(
-      readFile(path.join(home, ".mindframe-z", "homes", "personal", "mfz-home.yml"), "utf8")
-    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("publishes the explicit upstream path contract", async () => {

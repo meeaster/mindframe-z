@@ -12,6 +12,10 @@
       "default": "~/.mindframe-z/references",
       "type": "string"
     },
+    "workspace_root": {
+      "default": "~/workspace",
+      "type": "string"
+    },
     "extra_folders": {
       "default": [],
       "type": "array",

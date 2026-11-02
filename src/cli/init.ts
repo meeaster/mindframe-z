@@ -2,7 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execa } from "execa";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
-import { machineConfigPath, mindframeZDir, upstreamHomeRoot } from "../core/paths.js";
+import { machineSchema } from "../core/manifests.js";
+import { expandHome, machineConfigPath, mindframeZDir } from "../core/paths.js";
 
 const mcpGuideMarkdown = `# MCP Guide
 
@@ -584,7 +585,8 @@ export async function initHome(options: {
   create?: string | undefined;
   clone?: string | undefined;
   point?: string | undefined;
-  name?: string | undefined;
+  path?: string | undefined;
+  profile?: string | undefined;
   agents?: string | undefined;
   home?: string | undefined;
 }): Promise<void> {
@@ -611,8 +613,18 @@ export async function initHome(options: {
       () => undefined
     );
   } else if (options.clone) {
-    const name = options.name ?? path.basename(options.clone, ".git");
-    homeRoot = upstreamHomeRoot(machineHome, name);
+    // A home is edited like any other repository, so it lives with them in the workspace.
+    homeRoot = path.resolve(
+      expandHome(
+        options.path ??
+          path.join(
+            machineSchema.parse({}).workspace_root,
+            "repos",
+            path.basename(options.clone, ".git")
+          ),
+        machineHome
+      )
+    );
     await mkdir(path.dirname(homeRoot), { recursive: true });
     await execa("git", ["clone", options.clone, homeRoot]);
   } else if (options.point) {
@@ -623,7 +635,7 @@ export async function initHome(options: {
 
   await writeFile(
     machineConfigPath(machineHome),
-    `home_path: ${homeRoot}\nprofile: base\n`,
+    `home_path: ${homeRoot}\nprofile: ${options.profile ?? "base"}\n`,
     "utf8"
   );
   console.log(`home_path\t${homeRoot}`);

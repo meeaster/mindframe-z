@@ -2,8 +2,10 @@
 # Overrides the profile selection and references directory for this machine.
 # This file is not checked into the repo — it's per-machine config.
 profile: personal
-home_path: ~/code/mindframe-z
+home_path: ~/workspace/repos/my-home
 references_dir: ~/.mindframe-z/references
+# Where homes and other repositories are checked out; `mfz workspace` and `mfz setup` work here.
+workspace_root: ~/workspace
 
 # git:
 #   name: Your Name

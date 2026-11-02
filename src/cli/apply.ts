@@ -28,6 +28,7 @@ import {
   writeGitIdentityFragment
 } from "../core/git-config.js";
 import { backupPathFor, createLink, replaceWithBackup, verifyLink } from "../core/symlinks.js";
+import { commandIsInteractive, createOperationReporter } from "./operation-report.js";
 import { referencePath } from "../ref-store/references.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
@@ -482,5 +483,37 @@ async function reportMissingReferences(
       significance: "meaningful",
       detail: `${reference.name}: not cloned; run mfz refs sync ${reference.name}`
     });
+  }
+}
+
+export async function runApply(
+  options: Omit<ApplyOptions, "interactive" | "onStart" | "onComplete" | "beforePrompt"> & {
+    verbose?: boolean | undefined;
+  }
+): Promise<boolean> {
+  const interactive = commandIsInteractive();
+
+  const reporter = createOperationReporter({
+    command: "mfz apply",
+    scope: `${options.profile ?? "configured profile"} · ${options.target}`,
+    verbose: options.verbose ?? false,
+    dryRun: options.dryRun ?? false,
+    interactive
+  });
+
+  try {
+    await applyConfig({
+      ...options,
+      interactive,
+      onStart: reporter.start.bind(reporter),
+      onComplete: reporter.complete.bind(reporter),
+      beforePrompt: reporter.pause.bind(reporter)
+    });
+
+    return reporter.finish();
+  } catch (error) {
+    reporter.fail(error instanceof Error ? error : new Error(String(error)));
+
+    return false;
   }
 }

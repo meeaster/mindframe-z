@@ -28,6 +28,7 @@ function profile(
 ): ResolvedProfile {
   const machine: MachineManifest = {
     references_dir: "~/.mindframe-z/references",
+    workspace_root: "~/workspace",
     extra_folders: options.extraFolder
       ? [
           {

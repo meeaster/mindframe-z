@@ -842,6 +842,7 @@ export const machineSchema = z.object({
   profile: z.string().optional(),
   home_path: z.string().optional(),
   references_dir: z.string().default("~/.mindframe-z/references"),
+  workspace_root: z.string().default("~/workspace"),
   extra_folders: z.array(extraFolderSchema).default([]),
   git: z
     .object({

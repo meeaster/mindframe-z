@@ -52,7 +52,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ~/.mindframe-z/configs/<profile>/
 ~/.executor/ (Executor-owned native default, unless EXECUTOR_DATA_DIR is set)
 ~/.mindframe-z/references/
-~/.mindframe-z/homes/<name>/       # `mfz init --clone` bootstrap only
 ~/.mindframe-z/work/v1/
 ~/.mindframe-z/cache/skills/
 ~/.mindframe-z/skill-candidates/
@@ -167,19 +166,31 @@ source and is used only when the configured path is absent.
 - Pull failures warn and continue using the existing checkout.
 - Existing non-Git paths are loaded as local homes without Git operations or `repo` validation.
 
-Applied agent configs expose only explicitly declared profile and machine extra folders. A home that wants agents to patch an active or upstream checkout must declare that path itself. The separate `mfz init --clone` bootstrap command continues to use `~/.mindframe-z/homes/<name>/`.
+Applied agent configs expose only explicitly declared profile and machine extra folders. A home that wants agents to patch an active or upstream checkout must declare that path itself.
+
+## Workspace
+
+The workspace is the machine directory where homes and other repositories are checked out and edited, `workspace_root` in machine config (default `~/workspace`). `~/.mindframe-z/` holds only machine config and regenerated state; anything a person edits and commits, including homes, lives in the workspace.
+
+Workspace root guidance files are ordinary profile dotfiles under `profiles/<name>/workspace/`, so the workspace itself needs no repository.
+
+Repositories are discovered, not registered: `mfz workspace status` and `sync` walk the workspace for checkout roots, never entering symlinks, dot directories, `node_modules`, or `scratch/`. An extra folder with a `url` is a declared repository; `mfz workspace sync` clones each one that is missing before fast-forwarding. Sync also skips `worktrees/`, `services/` (live deployments change through their own runbooks), and the references directory (owned by `mfz refs sync`). It fast-forwards only a checkout on its remote's default branch, and reports anything that would need a merge, a branch switch, or a remote guess as skipped. mfz never handles Git credentials; a clone or fetch that fails is reported and the rest continue.
+
+`mfz setup` composes the machine lifecycle: initialize from `--clone` when no home is configured, otherwise fast-forward the home; then `refs sync`, `apply`, `mise install`/`upgrade`/`prune`, and `workspace sync`; then rebuild a source engine whose checkout moved. Each step is repeatable, so the same command bootstraps and updates. The home's mise configuration owns every tool and version; the engine only reports, in `mfz doctor` and the setup summary, a command an enabled feature needs that is missing, and warns when Executor differs from the version its adapter was verified against.
 
 ## Bootstrap And Distribution
 
 `mfz init` writes machine config and supports:
 
 - `--create <path>`: scaffold a minimal valid home, initialize git, and record `home_path`.
-- `--clone <repo>`: clone an existing home under `~/.mindframe-z/homes/<name>/` and record it.
+- `--clone <repo>`: clone an existing home to `<workspace_root>/repos/<name>/`, or `--path`, and record it.
 - `--point <path>`: record an existing local home.
 
 `mfz guide` prints version-local home conventions. Scaffolded homes include a slim `mindframe-z` skill that tells agents to run `mfz guide`.
 
-The installer downloads a self-contained `bun --compile` binary for the host platform to `~/.local/bin/mfz`. MFZ state remains under `~/.mindframe-z/`; the executable uses the conventional per-user binary directory so interactive shells and noninteractive services can resolve it consistently. The per-platform binaries are built by `pnpm release`.
+The installer requires only bash, git, and curl. It downloads a self-contained `bun --compile` binary for the host platform to `~/.local/bin/mfz` and keeps a copy at `~/.local/bin/mfz-release`. MFZ state remains under `~/.mindframe-z/`; the executable uses the conventional per-user binary directory so interactive shells and noninteractive services can resolve it consistently. The per-platform binaries are built by `pnpm release`.
+
+`mfz engine use source` builds a mindframe-z checkout (default `<workspace_root>/repos/mindframe-z`, cloned if missing) with the home's Node and pnpm and links `~/.local/bin/mfz` to it; a symlinked `mfz` is how setup recognizes a source engine. `mfz engine use release` copies `mfz-release` back. The installer refreshes `mfz-release` but leaves a source link in place.
 
 ## Schemas
 

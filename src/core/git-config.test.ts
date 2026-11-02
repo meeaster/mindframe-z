@@ -15,6 +15,7 @@ import {
 function machine(git: MachineManifest["git"]): MachineManifest {
   return {
     references_dir: "~/references",
+    workspace_root: "~/workspace",
     extra_folders: [],
     git,
     sandbox: {},
