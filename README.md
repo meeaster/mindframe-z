@@ -51,7 +51,8 @@ Common commands:
 - `mfz apply --verbose` includes unchanged checks and internal operations. Captured output uses stable plain lines without terminal control sequences.
 - `mfz refs sync [name]` clones or updates all enabled references or only one named reference, removes safe deselected managed checkouts during a bulk sync, then regenerates local indexes without activating agent configuration.
 - `mfz sync` promotes unmanaged rendered config edits back into home profiles.
-- `mfz doctor` validates manifests, symlinks, stale project toggles, legacy references, and upstream checkout state.
+- `mfz doctor` validates manifests, symlinks (including recorded links that are missing, repointed, or dangling), stale project toggles, legacy references, and upstream checkout state.
+- `mfz clean --backups [--dry-run]` deletes the `.mindframe-z.bak-*` backups apply left beside the links it installed.
 - `mfz schemas` regenerates committed JSON Schemas from Zod schemas.
 - `mfz work` manages durable work units, machine-local session bindings, orientation, checkpoints, and context receipts.
 

@@ -98,6 +98,8 @@ When a profile enables Executor for any MCP entry, apply validates the pinned Ex
 
 Catalog auth declarations belong under a server's `executor.authentication` list when its profile entry enables Executor. Use `{slug, kind: none}` for public integrations, `{slug, kind: oauth2}` for normal discovered OAuth, or an `apikey` method with structural header/query `placements` and variable names only. Assisted OAuth declarations require both `discoveryUrl` and `registrationScopes`, but the current encoder sends neither to Executor. MFZ uses `registrationScopes` locally to check reported missing OAuth scopes; these fields do not configure public-client registration. Never put access tokens, refresh tokens, API keys, client secrets, provider values, or generated client data in catalog/profile source. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools use full integration/owner/connection addresses; never silently choose an organization. Apply blocks credentialed cutover until every declared connection has compatible metadata and reports all missing connections together.
 
+Apply records every host link it installs in `configs/.installed.json` and removes recorded links a render no longer wants, including those of harnesses the profile no longer enables; see `ARCHITECTURE.md`.
+
 Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
 
 `extra_folders` grants agents access to host-local directories outside the workspace. Renderers add OpenCode native permission rules and Claude `permissions` rules and `permissions.additionalDirectories`; `references_dir` is always readable and edit-denied by default.

@@ -302,6 +302,20 @@ export async function renderOpenCode(
       : [])
   ];
 
+  // A profile without commands or agents renders no folder, so linking one would leave it dangling.
+  const folderLinks = [
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "commands"),
+      targetPath: commandsPath,
+      files: commandFiles.length
+    },
+    {
+      linkPath: path.join(paths.opencodeConfigDir, "agents"),
+      targetPath: agentsPath,
+      files: agentFiles.length
+    }
+  ];
+
   const links: RenderResult["links"] = [
     ...(useGlobalInstructions
       ? [
@@ -323,8 +337,9 @@ export async function renderOpenCode(
           }
         ]
       : []),
-    { linkPath: path.join(paths.opencodeConfigDir, "commands"), targetPath: commandsPath },
-    { linkPath: path.join(paths.opencodeConfigDir, "agents"), targetPath: agentsPath }
+    ...folderLinks.flatMap(({ linkPath, targetPath, files }) =>
+      files > 0 ? [{ linkPath, targetPath }] : []
+    )
   ];
 
   const result: RenderResult = {
@@ -332,6 +347,9 @@ export async function renderOpenCode(
     files,
     links,
     staleLinks: [
+      ...folderLinks.flatMap(({ linkPath, targetPath, files }) =>
+        files === 0 ? [{ linkPath, targetPath }] : []
+      ),
       ...(useGlobalInstructions
         ? []
         : [

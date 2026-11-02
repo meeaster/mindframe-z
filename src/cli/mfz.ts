@@ -5,6 +5,8 @@ import { execa } from "execa";
 import YAML from "yaml";
 import { z } from "zod";
 import { pathExists } from "../core/fs-util.js";
+import { installedLinkProblems } from "../core/installed.js";
+import { clean } from "./clean.js";
 import { generateSchemas } from "../core/generate-schemas.js";
 import { eachUpstream, machineSchema, validateManifests } from "../core/manifests.js";
 import type { LoadedManifests, SkillEntry } from "../core/manifests.js";
@@ -198,8 +200,21 @@ async function doctor(options: {
 
     for (const link of result.links) {
       const status = await verifyLink(link);
+
+      // An ok link only proves where it points; a target that is gone leaves it dangling.
+      if (status.state === "ok" && !(await pathExists(link.targetPath))) {
+        console.log(`link:dangling\t${status.linkPath}\ttarget ${link.targetPath} is missing`);
+        continue;
+      }
+
       console.log(`link:${status.state}\t${status.linkPath}\t${status.detail}`);
     }
+  }
+
+  for (const problem of await installedLinkProblems(paths)) {
+    console.log(
+      `installed:${problem.problem}\t${problem.path}\t${problem.owner} link to ${problem.target}`
+    );
   }
 }
 
@@ -397,6 +412,13 @@ program
   .command("doctor")
   .description("Verify manifests, profile, and symlink status")
   .action(async () => doctor(program.opts()));
+
+program
+  .command("clean")
+  .description("Delete backups apply left beside the links it installed")
+  .option("--backups", "remove <path>.mindframe-z.bak-* backups")
+  .option("--dry-run", "list what would be removed")
+  .action(async (options) => clean({ ...program.opts(), ...options }));
 
 program
   .command("status")

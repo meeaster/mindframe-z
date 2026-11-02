@@ -6,9 +6,16 @@ import {
   agentList,
   createRuntimePaths,
   infraTargetList,
+  type AgentName,
   type ApplyAgent,
-  type InfraTarget
+  type InfraTarget,
+  type ToolTarget
 } from "../core/paths.js";
+import {
+  reconcileInstalledLinks,
+  skillLinksFromOutcomes,
+  type InstalledLink
+} from "../core/installed.js";
 import {
   requiresExecutorReconciliation,
   resolveProfile,
@@ -106,6 +113,8 @@ async function confirmReplace(
 
   return answer === true;
 }
+
+const allAgents: readonly AgentName[] = ["opencode", "claude-code", "codex", "pi"];
 
 function staleManagedConfigTarget(resolvedTarget: string | undefined, configsDir: string): boolean {
   if (!resolvedTarget) return false;
@@ -334,6 +343,7 @@ export async function applyConfig(
 
   const execute = async (): Promise<OperationOutcome[]> => {
     const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
+    const desiredLinks: InstalledLink[] = [];
 
     if (
       selectedExecutorTarget &&
@@ -409,6 +419,14 @@ export async function applyConfig(
       for (const outcome of result.attention ?? []) operations.complete(outcome);
       await applyRenderedTarget(paths, result, options, interactive, operations.complete);
 
+      for (const link of result.links) {
+        desiredLinks.push({
+          path: link.linkPath,
+          target: path.resolve(link.targetPath),
+          owner: target
+        });
+      }
+
       if (!options.dryRun && result.ownership) {
         await writeOwnership(paths, profile.name, result.ownership, operations.complete);
       }
@@ -432,34 +450,52 @@ export async function applyConfig(
       await ensureHomeGuidance(paths.root, operations.complete);
     }
 
-    if (!rendersAgents) return operations.outcomes;
-    options.onStart?.({
-      category: "skill",
-      action: "write",
-      target: profile.name,
-      detail: "tool skills"
-    });
-    await refreshToolSkills(paths, profile, {
-      dryRun: options.dryRun ?? false,
-      onComplete: operations.complete
-    });
-    options.onStart?.({
-      category: "skill",
-      action: "snapshot",
-      target: profile.name,
-      detail: "skill snapshot"
-    });
-    await syncSkillSnapshot(paths, profile, {
-      selectedTargets: selectedAgents.filter(
-        (target): target is SkillTarget =>
-          target === "opencode" || target === "claude-code" || target === "codex"
-      ),
-      dryRun: options.dryRun ?? false,
-      link: !options.noLink,
-      onComplete: operations.complete
-    });
+    if (rendersAgents) {
+      options.onStart?.({
+        category: "skill",
+        action: "write",
+        target: profile.name,
+        detail: "tool skills"
+      });
+      await refreshToolSkills(paths, profile, {
+        dryRun: options.dryRun ?? false,
+        onComplete: operations.complete
+      });
+      options.onStart?.({
+        category: "skill",
+        action: "snapshot",
+        target: profile.name,
+        detail: "skill snapshot"
+      });
 
-    await reportMissingReferences(profile, operations.complete);
+      const skillOutcomes = await syncSkillSnapshot(paths, profile, {
+        selectedTargets: selectedAgents.filter(
+          (target): target is SkillTarget =>
+            target === "opencode" || target === "claude-code" || target === "codex"
+        ),
+        dryRun: options.dryRun ?? false,
+        link: !options.noLink,
+        onComplete: operations.complete
+      });
+
+      desiredLinks.push(...(await skillLinksFromOutcomes(paths, skillOutcomes)));
+    }
+
+    if (!options.noLink) {
+      // A full apply also owns the harnesses the profile no longer enables, so their links go.
+      const owners = new Set<ToolTarget>(selectedTargets);
+
+      if (rendersAgents && options.agent === "all") {
+        for (const agent of allAgents) if (!profile.agents.includes(agent)) owners.add(agent);
+      }
+
+      await reconcileInstalledLinks(paths, owners, desiredLinks, {
+        dryRun: options.dryRun ?? false,
+        onComplete: operations.complete
+      });
+    }
+
+    if (rendersAgents) await reportMissingReferences(profile, operations.complete);
 
     return operations.outcomes;
   };
