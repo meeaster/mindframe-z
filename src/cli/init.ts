@@ -35,6 +35,14 @@ mcp:
 
 Omitting \`agents\` leaves a server Executor-only. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
 
+In child profiles, an enabled \`agents\` selection replaces the inherited direct-agent selection; agents omitted from that list are omitted from the rendered MCP configuration. A grouped disabled-only selection patches only the named inherited routes:
+
+\`\`\`yaml
+mcp:
+  personal/agent-browser:
+    agents: [opencode, codex]
+\`\`\`
+
 Executor entries are shared inventory for all connected supported harnesses, not per-agent toggles. Set the profile-level \`executor.bridge: false\` to reconcile Executor without adding its MCP bridge to any agent. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only when the bridge is enabled and required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects profiles with Executor integrations.
 
 For an Executor server that needs OAuth, an API key, or named connections, run \`mfz guide executor-auth\` before declaring them.

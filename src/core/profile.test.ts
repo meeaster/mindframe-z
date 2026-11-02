@@ -423,6 +423,29 @@ describe("MCP direct and Executor selection", () => {
     });
   });
 
+  it("replaces inherited direct harnesses when a child selects enabled agents", () => {
+    const base = profileSchema.parse({
+      name: "base",
+      mcp: {
+        docs: {
+          agents: ["opencode", "claude-code", "codex"],
+          executor: { enabled: true }
+        }
+      }
+    });
+
+    const child = profileSchema.parse({
+      name: "child",
+      extends: "base",
+      mcp: { docs: { agents: ["opencode", "codex"] } }
+    });
+
+    expect(mergeProfiles(base, child).mcp.docs).toEqual({
+      agents: { opencode: true, codex: true },
+      executor: { enabled: true }
+    });
+  });
+
   it("retains inherited Executor configuration when direct agents are added", () => {
     const base = profileSchema.parse({
       name: "base",

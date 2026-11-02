@@ -609,6 +609,10 @@ function mergeMcpConfigs(
 
     const combined = deepMerge(baseConfig, childConfig);
 
+    if (childConfig.agents && Object.values(childConfig.agents).some((enabled) => enabled)) {
+      combined.agents = childConfig.agents;
+    }
+
     if (!("agents" in childConfig) && "executor" in childConfig) {
       const { agents: _agents, ...withoutAgents } = combined;
       merged[name] = withoutAgents;
@@ -845,13 +849,17 @@ function resolveMcpServers(
 async function resolveProfileByName(
   manifests: LoadedManifests,
   name: string,
-  options: { includeOpenCode: boolean }
+  options: { includeOpenCode: boolean; repoPathsHome?: string }
 ): Promise<ProfileBuild> {
   const resolvedName = resolveCatalogName(manifests, name, "profile");
   const profile = resolvedName.home.profiles.get(resolvedName.name);
 
   if (!profile) throw new Error(`Unknown profile: ${name}`);
   const own = normalizeProfile(resolvedName.home, profile, options);
+
+  if (options.repoPathsHome !== undefined) {
+    own.profile = withRepoPaths(own.profile, resolvedName.home, options.repoPathsHome);
+  }
 
   if (!profile.extends) return own;
   const parent = await resolveProfileByName(resolvedName.home, profile.extends, options);
@@ -908,18 +916,19 @@ export async function resolveProfile(
     requestedProfile ?? process.env.MFZ_PROFILE ?? manifests.machine.profile ?? "personal";
 
   const preliminary = await resolveProfileByName(manifests, name, {
-    includeOpenCode: false
+    includeOpenCode: false,
+    repoPathsHome: paths.home
   });
 
   const evaluateAgents = options.evaluateAgents ?? preliminary.profile.agents;
   const includeOpenCode = evaluateAgents.includes("opencode");
 
   const profileBuild = includeOpenCode
-    ? await resolveProfileByName(manifests, name, { includeOpenCode })
+    ? await resolveProfileByName(manifests, name, { includeOpenCode, repoPathsHome: paths.home })
     : preliminary;
 
   const { sources } = profileBuild;
-  const profile = withRepoPaths(profileBuild.profile, manifests, paths.home);
+  const profile = profileBuild.profile;
   const agents = profile.agents;
 
   if (includeOpenCode) assertOpenCodeConfigOwned(profile);

@@ -78,6 +78,47 @@ function configuredUpstream(home: string): string {
 }
 
 describe("upstream home integration", () => {
+  it("resolves repository placeholders in the home that owns each profile layer", async () => {
+    const home = await makeTempDir();
+    const upstream = await createUpstreamRemote();
+    const checkout = configuredUpstream(home);
+    const child = await createChildHome(home, upstream.repo, checkout);
+
+    await writeFile(
+      path.join(upstream.source, "catalog", "repos.yml"),
+      "repos:\n  - name: shared\n    github: example/shared\n    description: Shared checkout\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(upstream.source, "profiles", "base", "profile.yml"),
+      "name: base\nagents: [opencode]\nopencode:\n  config:\n    small_model: '{repo:shared}'\n",
+      "utf8"
+    );
+    await commitAll(upstream.source, "add shared checkout");
+    await git(upstream.source, ["push"]);
+
+    await writeFile(
+      path.join(child, "catalog", "repos.yml"),
+      "repos:\n  - name: local\n    github: example/local\n    description: Local checkout\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(child, "profiles", "work", "profile.yml"),
+      "name: work\nextends: personal/base\nagents: [opencode]\nopencode:\n  config:\n    model: '{repo:local}'\n",
+      "utf8"
+    );
+
+    await cli("mfz", child, home, ["apply", "--agent", "opencode", "--no-link"]);
+
+    const config = parseJson(
+      OpenCodeConfig,
+      await readFile(configsPath(home, "work", "opencode", "opencode.jsonc"), "utf8")
+    );
+
+    expect(config.small_model).toBe(path.join(home, "workspace", "repos", "shared"));
+    expect(config.model).toBe(path.join(home, "workspace", "repos", "local"));
+  });
+
   it("clones and fast-forwards a clean upstream home at its configured path during apply", async () => {
     const home = await makeTempDir();
     const upstream = await createUpstreamRemote();

@@ -1510,7 +1510,7 @@ describe("apply integration", () => {
         "extends: base",
         "mcp:",
         "  context7:",
-        "    agents: [opencode]",
+        "    agents: [opencode, claude-code]",
         "  local-helper:",
         "    agents: [claude-code]",
         ""

@@ -10,7 +10,6 @@ describe("mcp status integration", () => {
     expect(result.stdout.trim().split("\n")).toEqual([
       "context7\topencode\tenabled",
       "context7\tclaude-code\tenabled",
-      "context7\tcodex\tenabled",
       "local-helper\tclaude-code\tenabled"
     ]);
   });
