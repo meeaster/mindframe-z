@@ -210,6 +210,9 @@ export async function fetchCommit(
     "-c",
     "credential.helper=",
     "fetch",
+    // Only one commit's tree is read, and some skill repositories carry gigabytes of history
+    // that a full fetch cannot download within the timeout.
+    "--depth=1",
     "--no-tags",
     "--force",
     "origin",
