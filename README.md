@@ -16,7 +16,7 @@ The machine needs only bash, git, and curl, plus whatever access your environmen
 mfz setup --clone <home-repo-url>   # clones to ~/workspace/repos/<name>; --path to override
 ```
 
-`mfz setup` brings the machine to the state its home declares: it clones or fast-forwards the home, syncs references, applies configuration, installs and upgrades the home's mise tools, and runs `mfz workspace sync`. Rerun plain `mfz setup` to update. To develop the engine on the machine, run `mfz engine use source` afterwards; `mfz-release engine use release` returns to the release binary.
+`mfz setup` brings the machine to the state its home declares: it clones or fast-forwards the home, syncs references, runs `mfz workspace sync`, applies configuration, and installs and upgrades the home's mise tools. Rerun plain `mfz setup` to update. To develop the engine on the machine, run `mfz engine use source` afterwards; `mfz-release engine use release` returns to the release binary.
 
 To start a new home instead, run `mfz init --create <path>` and then `mfz setup`.
 

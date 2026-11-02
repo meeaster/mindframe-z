@@ -92,17 +92,25 @@ export async function runSetup(options: SetupOptions): Promise<boolean> {
   const profile = await resolveProfile(paths, options.profile);
 
   healthy = (await runReferenceSync(paths, profile, { verbose: options.verbose })) && healthy;
-  healthy =
-    (await runApply({
-      root: options.root,
-      home: options.home,
-      profile: options.profile,
-      agent: "all",
-      target: "all",
-      verbose: options.verbose
-    })) && healthy;
-  healthy = (await installTools()) && healthy;
+
+  // Apply renders config that points into workspace checkouts, such as folder plugins, so the
+  // declared repositories must be cloned first.
   healthy = (await runWorkspaceSync({ ...options, verbose: options.verbose })) && healthy;
+
+  const applied = await runApply({
+    root: options.root,
+    home: options.home,
+    profile: options.profile,
+    agent: "all",
+    target: "all",
+    verbose: options.verbose
+  });
+
+  // Without rendered mise config there is nothing to install, and a source rebuild would run
+  // without the home's Node and pnpm.
+  if (!applied) return false;
+
+  healthy = (await installTools()) && healthy;
 
   if (engineCheckout && (await head(engineCheckout)) !== engineBefore) {
     await buildEngineCheckout(engineCheckout);
