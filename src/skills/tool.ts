@@ -395,6 +395,42 @@ async function refreshSkill(
   }
 }
 
+const POOL_LOCK_WAIT_MS = 10 * 60_000;
+
+// mise runs tool postinstall hooks in parallel, so several `mfz skills refresh --tool` processes
+// can update the pool at once; without this lock each rewrites the pool manifest from its own
+// stale copy and drops the others' records. A crashed holder leaves the lock directory behind,
+// and the timeout error names it for manual removal.
+async function withPoolLock<T>(pool: string, run: () => Promise<T>): Promise<T> {
+  const lock = `${pool}.lock`;
+  const deadline = Date.now() + POOL_LOCK_WAIT_MS;
+  await mkdir(path.dirname(lock), { recursive: true });
+
+  for (;;) {
+    try {
+      await mkdir(lock);
+      break;
+    } catch (error) {
+      // SAFETY: mkdir rejects with an ErrnoException carrying the filesystem error code.
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Timed out waiting for the tool skill pool lock ${lock}; remove it if no mfz process is running`
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  try {
+    return await run();
+  } finally {
+    await rm(lock, { recursive: true, force: true });
+  }
+}
+
 /**
  * Bring the machine-local tool skill pool in line with installed tool versions. A full refresh
  * also removes pool skills the profile no longer enables; a refresh narrowed by name or tool
@@ -404,6 +440,20 @@ export async function refreshToolSkills(
   paths: RuntimePaths,
   profile: ToolSkillProfile,
   options: ToolSkillRefreshOptions = {}
+): Promise<OperationOutcome[]> {
+  if (options.dryRun) return refreshToolSkillsLocked(paths, profile, options);
+
+  await assertNoSymlinkAncestors(paths.home, toolSkillPoolDir(paths));
+
+  return withPoolLock(toolSkillPoolDir(paths), () =>
+    refreshToolSkillsLocked(paths, profile, options)
+  );
+}
+
+async function refreshToolSkillsLocked(
+  paths: RuntimePaths,
+  profile: ToolSkillProfile,
+  options: ToolSkillRefreshOptions
 ): Promise<OperationOutcome[]> {
   const enabled = enabledToolSkills(profile);
 

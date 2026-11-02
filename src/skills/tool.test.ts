@@ -134,6 +134,33 @@ describe("tool skill refresh", () => {
     expect(await readSkill(paths, "alpha")).toContain("description: v1.1.0");
   });
 
+  it("keeps every record when tool-narrowed refreshes run concurrently", async () => {
+    const paths = await runtimePaths();
+    const host = fakeHost({ MFZ_TEST_COUNTER: path.join(paths.home, "runs") });
+
+    const fromTool = (name: string, tool: string) =>
+      enabledSkill({
+        name,
+        source: "tool",
+        tool,
+        generate: { run: writeSkills, path: `.agents/skills/${name}` }
+      });
+
+    const profile = profileOf(fromTool("alpha", "npm:first"), fromTool("beta", "npm:second"));
+    host.versions.set("npm:first", "1.0.0");
+    host.versions.set("npm:second", "1.0.0");
+
+    // Mirrors mise running two tools' postinstall hooks in parallel.
+    await Promise.all([
+      refreshToolSkills(paths, profile, { host, tool: "npm:first" }),
+      refreshToolSkills(paths, profile, { host, tool: "npm:second" })
+    ]);
+
+    const diagnostics = await toolSkillDiagnostics(paths, profile, host);
+
+    expect(diagnostics.filter((line) => !line.startsWith("tool-skill:ok"))).toEqual([]);
+  });
+
   it("gives generators an isolated home and collects from it with ~/", async () => {
     const paths = await runtimePaths();
     const host = fakeHost();
