@@ -143,6 +143,40 @@ export const refsManifestSchema = z.object({
   references: z.array(referenceSchema).default([])
 });
 
+const workspaceRelativePathSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (value) =>
+      !path.isAbsolute(value) &&
+      value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== ".."),
+    "must be a relative path without empty, . or .. segments"
+  );
+
+// A repository the workspace edits. GitHub repositories are named by owner/name so the clone URL
+// can follow the machine's git.protocol; other hosts give a full URL used as written.
+export const repoSchema = z
+  .object({
+    name: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, "must be a lowercase name"),
+    github: z
+      .string()
+      .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "must be owner/name")
+      .optional(),
+    url: z.string().min(1).optional(),
+    // Relative to the machine's workspace_root; defaults to repos/<name>.
+    path: workspaceRelativePathSchema.optional(),
+    description: z.string().default(""),
+    ...capabilityMetadataSchema
+  })
+  .strict()
+  .refine((repo) => (repo.github === undefined) !== (repo.url === undefined), {
+    message: "set exactly one of github or url"
+  });
+
+export const reposManifestSchema = z.object({
+  repos: z.array(repoSchema).default([])
+});
+
 export const homeManifestSchema = z
   .object({
     description: z.string().optional(),
@@ -678,6 +712,15 @@ const opencodePluginSchema = z.discriminatedUnion("source", [
         )
     })
     .strict(),
+  // The checkout of a catalog repository, resolved through the workspace.
+  z
+    .object({
+      ...opencodePluginFields,
+      source: z.literal("repo"),
+      repo: z.string().min(1),
+      subdirectory: skillPathSchema.optional()
+    })
+    .strict(),
   z
     .object({
       ...opencodePluginFields,
@@ -804,6 +847,7 @@ export const profileSchema = z
     instruction_references: instructionReferencesSchema.default([]),
     capability_groups: capabilityGroupsSchema.default([]),
     references: z.array(z.string()).default([]),
+    repos: z.array(z.string()).default([]),
     skills: z.record(z.string(), profileSkillConfigSchema.optional()).default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
     executor: z
@@ -843,11 +887,15 @@ export const machineSchema = z.object({
   home_path: z.string().optional(),
   references_dir: z.string().default("~/.mindframe-z/references"),
   workspace_root: z.string().default("~/workspace"),
+  // Catalog repositories this machine adds to the profile's selection.
+  repos: z.array(z.string()).default([]),
   extra_folders: z.array(extraFolderSchema).default([]),
   git: z
     .object({
       name: z.string().optional(),
-      email: z.string().optional()
+      email: z.string().optional(),
+      // How GitHub repositories are cloned, matching the Git access this machine has.
+      protocol: z.enum(["https", "ssh"]).optional()
     })
     .default({}),
   sandbox: z
@@ -874,6 +922,8 @@ export const machineSchema = z.object({
 export type ExtraFolder = z.infer<typeof extraFolderSchema>;
 
 export type ReferenceEntry = z.infer<typeof referenceSchema>;
+
+export type RepoEntry = z.infer<typeof repoSchema>;
 
 export type SkillEntry = z.infer<typeof skillSchema>;
 
@@ -933,6 +983,7 @@ export interface LoadedManifests {
   aliasPath: string[];
   upstream?: LoadedManifests;
   references: ReferenceEntry[];
+  repos: RepoEntry[];
   skills: SkillEntry[];
   mcpServers: Record<string, McpServer>;
   opencodePlugins: OpenCodePlugin[];
@@ -1005,6 +1056,7 @@ export async function validateManifests(
   const files: Array<{ file: string; schema: z.ZodType }> = [
     { file: path.join(root, "mfz-home.yml"), schema: homeManifestSchema },
     { file: path.join(root, "catalog", "references.yml"), schema: refsManifestSchema },
+    { file: path.join(root, "catalog", "repos.yml"), schema: reposManifestSchema },
     { file: path.join(root, "catalog", "skills.yml"), schema: skillsManifestSchema },
     { file: path.join(root, "catalog", "mcp.yml"), schema: mcpManifestSchema },
     {
@@ -1084,6 +1136,10 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     references: []
   });
 
+  const repos = await readYaml(path.join(root, "catalog", "repos.yml"), reposManifestSchema, {
+    repos: []
+  });
+
   const skills = await readYaml(path.join(root, "catalog", "skills.yml"), skillsManifestSchema, {
     skills: []
   });
@@ -1137,6 +1193,7 @@ export async function loadManifests(root: string, home?: string): Promise<Loaded
     root,
     aliasPath: [],
     references: refs.references,
+    repos: repos.repos,
     skills: skills.skills,
     mcpServers: mcp.servers,
     opencodePlugins: opencodePlugins.plugins,

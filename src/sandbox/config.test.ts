@@ -35,6 +35,7 @@ function machine(credentials?: "bedrock" | "subscription"): MachineManifest {
   return {
     references_dir: "~/references",
     workspace_root: "~/workspace",
+    repos: [],
     extra_folders: [],
     git: {},
     sandbox: credentials ? { credentials } : {},

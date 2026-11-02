@@ -42,6 +42,7 @@ function machine(stores: MachineManifest["thread"]["stores"]): MachineManifest {
   return {
     references_dir: "~/.mindframe-z/references",
     workspace_root: "~/workspace",
+    repos: [],
     extra_folders: [],
     git: {},
     sandbox: {},
@@ -64,6 +65,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       instruction_references: [],
       capability_groups: [],
       references: [],
+      repos: [],
       skills: {},
       mcp: {},
       opencode: {
@@ -101,6 +103,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
       root,
       aliasPath: [],
       references: [],
+      repos: [],
       skills: [],
       mcpServers: {},
       opencodePlugins: [],
@@ -110,6 +113,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     },
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -121,6 +125,7 @@ function profile(manifest: MachineManifest, root: string): ResolvedProfile {
     instructionReferences: [],
     referencesDir: path.join(root, "references"),
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

@@ -89,6 +89,43 @@
               },
               "source": {
                 "type": "string",
+                "const": "repo"
+              },
+              "repo": {
+                "type": "string",
+                "minLength": 1
+              },
+              "subdirectory": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*\\\\)(?!.*(?:^|\\/)\\.\\.?($|\\/))(?!.*\\/\\/)(?!.*(?:^|\\/)\\.git(?:\\/|$)).+$"
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "repo"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "tui_only": {
+                "default": false,
+                "type": "boolean"
+              },
+              "source": {
+                "type": "string",
                 "const": "npm"
               },
               "package": {

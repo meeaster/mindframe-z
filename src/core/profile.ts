@@ -21,13 +21,15 @@ import {
 import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
 import { readDirEntries } from "./fs-util.js";
 import { machineInstructionsDir } from "./path-util.js";
+import { repoExtraFolder, resolveRepo, type ResolvedRepo } from "./repos.js";
 
-type CatalogKind = "reference" | "skill" | "mcp" | "opencode plugin" | "profile";
+type CatalogKind = "reference" | "repo" | "skill" | "mcp" | "opencode plugin" | "profile";
 
 type SourceKind = CatalogKind | "instruction" | "opencode command" | "opencode agent";
 
 interface ProfileSources {
   references: Map<string, LoadedManifests>;
+  repos: Map<string, LoadedManifests>;
   skills: Map<string, LoadedManifests>;
   mcp: Map<string, LoadedManifests>;
   instructions: Map<string, LoadedManifests>;
@@ -137,7 +139,8 @@ export type TargetedMcpServer = ResolvedMcpServer & {
 };
 
 /** A catalog plugin enabled by the profile, with the root of the home that declares it. */
-export type ResolvedOpenCodePlugin = OpenCodePlugin & { sourceRoot: string };
+// A repo-sourced plugin carries the checkout directory it resolves to.
+export type ResolvedOpenCodePlugin = OpenCodePlugin & { sourceRoot: string; directory?: string };
 
 export interface ResolvedProfile {
   name: string;
@@ -149,6 +152,7 @@ export interface ResolvedProfile {
   instructionReferences: Array<InstructionReference & { sourcePath: string }>;
   referencesDir: string;
   enabledReferences: ReferenceEntry[];
+  enabledRepos: ResolvedRepo[];
   enabledSkills: ResolvedSkill[];
   enabledOpenCodeCommands: string[];
   enabledOpenCodeAgents: string[];
@@ -167,6 +171,7 @@ export interface ResolvedSkillDeclarations {
 function emptySources(): ProfileSources {
   return {
     references: new Map(),
+    repos: new Map(),
     skills: new Map(),
     mcp: new Map(),
     instructions: new Map(),
@@ -201,6 +206,7 @@ function mergeSources(base: ProfileSources, child: ProfileSources): ProfileSourc
 
   return {
     references: merge("reference", base.references, child.references),
+    repos: merge("repository", base.repos, child.repos),
     skills: merge("skill", base.skills, child.skills),
     mcp: merge("MCP", base.mcp, child.mcp),
     instructions: merge("instruction", base.instructions, child.instructions),
@@ -258,6 +264,8 @@ function hasLocalDefinition(home: LoadedManifests, kind: CatalogKind, name: stri
   switch (kind) {
     case "reference":
       return home.references.some((entry) => entry.name === name);
+    case "repo":
+      return home.repos.some((entry) => entry.name === name);
     case "skill":
       return home.skills.some((entry) => entry.name === name);
     case "mcp":
@@ -330,6 +338,13 @@ function normalizeProfile(
   const references = profile.references.map((rawName) => {
     const resolved = resolveCatalogName(home, rawName, "reference");
     setSource(sources.references, "reference", resolved.name, resolved.home);
+
+    return resolved.name;
+  });
+
+  const repos = profile.repos.map((rawName) => {
+    const resolved = resolveCatalogName(home, rawName, "repo");
+    setSource(sources.repos, "repository", resolved.name, resolved.home);
 
     return resolved.name;
   });
@@ -417,6 +432,7 @@ function normalizeProfile(
     profile: {
       ...profile,
       references,
+      repos,
       skills,
       mcp,
       instructions,
@@ -490,6 +506,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
       return [...map.values()];
     })(),
     references: dedupe([...base.references, ...child.references]),
+    repos: dedupe([...base.repos, ...child.repos]),
     extra_folders: (() => {
       const map = new Map<string, ExtraFolder>();
 
@@ -952,6 +969,8 @@ export async function resolveProfile(
     return ref;
   });
 
+  const enabledRepos = resolveEnabledRepos(name, profile, sources, manifests, paths.home);
+
   const enabledSkills = await resolveEnabledSkills(
     name,
     profileBuild,
@@ -970,7 +989,18 @@ export async function resolveProfile(
         if (!plugin)
           throw new Error(`Profile ${name} references unknown OpenCode plugin: ${pluginName}`);
 
-        return { ...plugin, sourceRoot: sourceHome.root };
+        if (plugin.source !== "repo") return { ...plugin, sourceRoot: sourceHome.root };
+
+        const repo = resolveCatalogName(sourceHome, plugin.repo, "repo");
+        // SAFETY: resolveCatalogName fails unless the named repository exists in that home.
+        const entry = repo.home.repos.find((candidate) => candidate.name === repo.name)!;
+        const checkout = resolveRepo(entry, manifests.machine, paths.home).path;
+
+        return {
+          ...plugin,
+          sourceRoot: sourceHome.root,
+          directory: plugin.subdirectory ? path.join(checkout, plugin.subdirectory) : checkout
+        };
       })
     : [];
 
@@ -978,6 +1008,9 @@ export async function resolveProfile(
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
+
+    // Explicit extra folders override the grant a selected repository implies.
+    for (const repo of enabledRepos) map.set(repo.path, repoExtraFolder(repo));
 
     for (const f of profile.extra_folders) map.set(f.path, f);
 
@@ -998,6 +1031,7 @@ export async function resolveProfile(
       expandHome(process.env.MFZ_REFERENCES_DIR ?? manifests.machine.references_dir, paths.home)
     ),
     enabledReferences,
+    enabledRepos,
     enabledSkills,
     enabledOpenCodeCommands,
     enabledOpenCodeAgents,
@@ -1006,6 +1040,35 @@ export async function resolveProfile(
     extraFolders,
     miseLayers: profileBuild.miseLayers
   };
+}
+
+function resolveEnabledRepos(
+  profileName: string,
+  profile: ProfileManifest,
+  sources: ProfileSources,
+  manifests: LoadedManifests,
+  home: string
+): ResolvedRepo[] {
+  const repos = new Map<string, ResolvedRepo>();
+
+  for (const repoName of profile.repos) {
+    const sourceHome = sources.repos.get(repoName) ?? manifests;
+    const entry = sourceHome.repos.find((candidate) => candidate.name === repoName);
+
+    if (!entry)
+      throw new Error(`Profile ${profileName} references unknown repository: ${repoName}`);
+    repos.set(entry.name, resolveRepo(entry, manifests.machine, home));
+  }
+
+  // Machine config selects from the active home's catalog, like an unqualified profile entry.
+  for (const rawName of manifests.machine.repos) {
+    const resolved = resolveCatalogName(manifests, rawName, "repo");
+    // SAFETY: resolveCatalogName fails unless the named repository exists in that home.
+    const entry = resolved.home.repos.find((candidate) => candidate.name === resolved.name)!;
+    repos.set(entry.name, resolveRepo(entry, manifests.machine, home));
+  }
+
+  return [...repos.values()];
 }
 
 export function filterMcpForTarget(

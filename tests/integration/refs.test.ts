@@ -105,6 +105,7 @@ function makeReferenceProfile(
     root: referencesDir,
     aliasPath: [],
     references,
+    repos: [],
     skills: [],
     mcpServers: {},
     opencodePlugins: [],
@@ -119,6 +120,7 @@ function makeReferenceProfile(
     profile: profileSchema.parse({ name: "test", references: enabledNames }),
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -130,6 +132,7 @@ function makeReferenceProfile(
     instructionReferences: [],
     referencesDir,
     enabledReferences: references.filter((reference) => enabled.has(reference.name)),
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

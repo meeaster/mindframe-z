@@ -7,9 +7,13 @@ references_dir: ~/.mindframe-z/references
 # Where homes and other repositories are checked out; `mfz workspace` and `mfz setup` work here.
 workspace_root: ~/workspace
 
+# Catalog repositories this machine clones in addition to the profile's selection.
+# repos: [payments]
+
 # git:
 #   name: Your Name
 #   email: you@example.com
+#   protocol: ssh   # clone GitHub repositories over SSH instead of HTTPS
 
 # sandbox:
 #   credentials: subscription # or bedrock

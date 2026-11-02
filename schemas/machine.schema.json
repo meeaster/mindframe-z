@@ -16,6 +16,13 @@
       "default": "~/workspace",
       "type": "string"
     },
+    "repos": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "extra_folders": {
       "default": [],
       "type": "array",
@@ -83,6 +90,13 @@
         },
         "email": {
           "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "https",
+            "ssh"
+          ]
         }
       }
     },

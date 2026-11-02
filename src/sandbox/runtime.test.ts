@@ -29,6 +29,7 @@ function profile(
   const machine: MachineManifest = {
     references_dir: "~/.mindframe-z/references",
     workspace_root: "~/workspace",
+    repos: [],
     extra_folders: options.extraFolder
       ? [
           {
@@ -58,6 +59,7 @@ function profile(
       instruction_references: [],
       capability_groups: [],
       references: [],
+      repos: [],
       skills: {},
       mcp: {},
       opencode: {
@@ -86,6 +88,7 @@ function profile(
       root: options.root ?? "/tmp/mfz-root",
       aliasPath: [],
       references: [],
+      repos: [],
       skills: [],
       mcpServers: {},
       opencodePlugins: [],
@@ -95,6 +98,7 @@ function profile(
     },
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -105,6 +109,7 @@ function profile(
     instructionFiles: options.root ? [path.join(options.root, "instructions", "AGENTS.md")] : [],
     instructionReferences: [],
     referencesDir: path.join(options.home ?? "/tmp", ".mindframe-z", "references"),
+    enabledRepos: [],
     enabledReferences: [
       { name: "local-ref", url: "https://example.invalid/ref.git", description: "Local ref." }
     ],

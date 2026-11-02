@@ -46,6 +46,7 @@ function machine(): MachineManifest {
   return {
     references_dir: "~/references",
     workspace_root: "~/workspace",
+    repos: [],
     extra_folders: [],
     git: {},
     sandbox: {},
@@ -68,6 +69,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       instruction_references: [],
       capability_groups: [],
       references: [],
+      repos: [],
       skills: {},
       mcp: {},
       opencode: {
@@ -101,6 +103,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       root: "/tmp/home",
       aliasPath: [],
       references: [],
+      repos: [],
       skills: [],
       mcpServers: {},
       opencodePlugins: [],
@@ -110,6 +113,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     },
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -121,6 +125,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
@@ -885,6 +890,7 @@ describe("ingestThread digest anchoring", () => {
     const withRepos: ResolvedProfile = {
       ...profile(home),
       referencesDir: "/home/mark/references",
+      enabledRepos: [],
       enabledReferences: [
         { name: "opencode", url: "https://github.com/sst/opencode", description: "" }
       ],

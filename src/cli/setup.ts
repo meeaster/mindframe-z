@@ -97,20 +97,25 @@ export async function runSetup(options: SetupOptions): Promise<boolean> {
   // declared repositories must be cloned first.
   healthy = (await runWorkspaceSync({ ...options, verbose: options.verbose })) && healthy;
 
-  const applied = await runApply({
-    root: options.root,
-    home: options.home,
-    profile: options.profile,
-    agent: "all",
-    target: "all",
-    verbose: options.verbose
-  });
+  const apply = (target: "dotfiles" | "mise" | "all") =>
+    runApply({
+      root: options.root,
+      home: options.home,
+      profile: options.profile,
+      agent: "all",
+      target,
+      verbose: options.verbose
+    });
 
-  // Without rendered mise config there is nothing to install, and a source rebuild would run
-  // without the home's Node and pnpm.
-  if (!applied) return false;
+  // Tools come before the full apply, which can need them (Executor reconciliation, tool skills).
+  // Dotfiles go first so a home's mise wrapper is in place before anything installs, and the
+  // infra-only applies render no agent configuration, so they need no tools themselves. Without
+  // rendered mise config there is nothing to install.
+  if (!(await apply("dotfiles")) || !(await apply("mise"))) return false;
 
   healthy = (await installTools()) && healthy;
+
+  if (!(await apply("all"))) return false;
 
   if (engineCheckout && (await head(engineCheckout)) !== engineBefore) {
     await buildEngineCheckout(engineCheckout);

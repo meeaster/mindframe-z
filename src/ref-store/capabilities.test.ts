@@ -115,6 +115,7 @@ function groupedProfile(home: string): ResolvedProfile {
       root: home,
       aliasPath: [],
       references: [],
+      repos: [],
       skills: [],
       mcpServers: {},
       opencodePlugins: [],
@@ -124,6 +125,7 @@ function groupedProfile(home: string): ResolvedProfile {
     } satisfies LoadedManifests,
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -134,6 +136,7 @@ function groupedProfile(home: string): ResolvedProfile {
     instructionFiles: [],
     instructionReferences: [],
     referencesDir: path.join(home, "references"),
+    enabledRepos: [],
     enabledReferences: [
       {
         name: "opencode",

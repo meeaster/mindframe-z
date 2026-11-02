@@ -405,6 +405,8 @@ export async function applyConfig(
       if (previousOwnedHostPaths !== undefined)
         Object.assign(renderOptions, { previousOwnedHostPaths });
       const result = await render(paths, profile, target, renderOptions);
+
+      for (const outcome of result.attention ?? []) operations.complete(outcome);
       await applyRenderedTarget(paths, result, options, interactive, operations.complete);
 
       if (!options.dryRun && result.ownership) {

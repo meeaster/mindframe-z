@@ -60,14 +60,23 @@ describe("mfz workspace", () => {
     workspace = path.join(home, "workspace");
   });
 
-  async function writeMachineConfig(declared: Array<{ path: string; url: string }>): Promise<void> {
+  // Declares each repository in the home's catalog and selects it from machine config.
+  async function writeMachineConfig(declared: Array<{ name: string; url: string }>): Promise<void> {
+    await writeFile(
+      path.join(root, "catalog", "repos.yml"),
+      [
+        declared.length === 0 ? "repos: []" : "repos:",
+        ...declared.flatMap((repo) => [`  - name: ${repo.name}`, `    url: ${repo.url}`]),
+        ""
+      ].join("\n"),
+      "utf8"
+    );
     await writeFile(
       path.join(home, ".mindframe-z", "config.yml"),
       [
         "profile: personal",
         `workspace_root: ${workspace}`,
-        declared.length === 0 ? "extra_folders: []" : "extra_folders:",
-        ...declared.flatMap((folder) => [`  - path: ${folder.path}`, `    url: ${folder.url}`]),
+        `repos: [${declared.map((repo) => repo.name).join(", ")}]`,
         ""
       ].join("\n"),
       "utf8"
@@ -87,7 +96,7 @@ describe("mfz workspace", () => {
     const pinned = await git(scratch, ["rev-parse", "HEAD"]);
     const latest = await shared.advance();
     const declaredPath = path.join(workspace, "repos", "declared");
-    await writeMachineConfig([{ path: declaredPath, url: declared.url }]);
+    await writeMachineConfig([{ name: "declared", url: declared.url }]);
 
     const result = await cli("mfz", root, home, ["workspace", "sync"]);
 

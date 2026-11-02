@@ -99,6 +99,13 @@
         "type": "string"
       }
     },
+    "repos": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "skills": {
       "default": {},
       "type": "object",

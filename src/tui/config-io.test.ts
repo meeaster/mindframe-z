@@ -50,6 +50,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       instruction_references: [],
       capability_groups: [],
       references: [],
+      repos: [],
       skills: {},
       mcp: {},
       opencode: {
@@ -74,6 +75,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       root: "/tmp",
       aliasPath: [],
       references: [],
+      repos: [],
       skills: [],
       mcpServers: {},
       opencodePlugins: [],
@@ -82,6 +84,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       machine: {
         references_dir: "~/.mindframe-z/references",
         workspace_root: "~/workspace",
+        repos: [],
         extra_folders: [],
         git: {},
         sandbox: {},
@@ -93,6 +96,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     },
     sources: {
       references: new Map(),
+      repos: new Map(),
       skills: new Map(),
       mcp: new Map(),
       instructions: new Map(),
@@ -104,6 +108,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     instructionReferences: [],
     referencesDir: "/tmp",
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills,
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

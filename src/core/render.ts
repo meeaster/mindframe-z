@@ -34,6 +34,8 @@ export interface RenderedFile {
 
 export interface RenderResult {
   files: RenderedFile[];
+  /** Problems the render worked around, reported by apply without failing it. */
+  attention?: OperationOutcome[];
   localFiles?: RenderedFile[];
   localStaleFiles?: string[];
   cliPlugins?: {

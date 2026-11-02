@@ -39,6 +39,7 @@ function profileWithServer(
     instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

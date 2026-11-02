@@ -3,7 +3,7 @@ import path from "node:path";
 import { execa } from "execa";
 import { pathExists } from "../core/fs-util.js";
 import type { OperationCompletion, OperationOutcome } from "../core/operations.js";
-import { expandHome } from "../core/paths.js";
+import { workspaceRootPath, type ResolvedRepo } from "../core/repos.js";
 import type { ResolvedProfile } from "../core/profile.js";
 
 const SYNC_CONCURRENCY = 8;
@@ -15,11 +15,6 @@ export interface RepositoryStatus {
   upstream?: string;
   ahead: number;
   behind: number;
-}
-
-export interface DeclaredRepository {
-  path: string;
-  url: string;
 }
 
 async function git(cwd: string, args: string[]): Promise<string | undefined> {
@@ -37,7 +32,7 @@ async function gitOrThrow(cwd: string, args: string[]): Promise<string> {
 }
 
 export function workspaceRoot(profile: ResolvedProfile, home: string): string {
-  return path.resolve(expandHome(profile.manifests.machine.workspace_root, home));
+  return workspaceRootPath(profile.manifests.machine, home);
 }
 
 // Scratch holds throwaway clones that may be pinned to a commit on purpose, such as evaluation
@@ -55,20 +50,6 @@ function syncExclusions(root: string, referencesDir: string): string[] {
     path.join(root, "services"),
     referencesDir
   ];
-}
-
-// Extra folders that name an upstream URL are the workspace's declared repositories: a fresh
-// machine clones each one that is missing, and their entries already carry the agent-facing
-// description and permissions.
-export function declaredRepositories(profile: ResolvedProfile, home: string): DeclaredRepository[] {
-  const repositories: DeclaredRepository[] = [];
-
-  for (const folder of profile.extraFolders) {
-    if (folder.url)
-      repositories.push({ path: path.resolve(expandHome(folder.path, home)), url: folder.url });
-  }
-
-  return repositories;
 }
 
 // A `.git` entry alone is not enough: a worktree whose main checkout was deleted keeps a `.git`
@@ -237,20 +218,22 @@ export async function fastForwardRepository(repository: string): Promise<Operati
   return { ...repositoryOutcome(repository, "updated"), changes: ["revision"], before, after };
 }
 
-export async function cloneRepository(repository: DeclaredRepository): Promise<OperationOutcome> {
+export async function cloneRepository(repository: ResolvedRepo): Promise<OperationOutcome> {
   await mkdir(path.dirname(repository.path), { recursive: true });
 
-  const cloned = await execa("git", ["clone", repository.url, repository.path], { reject: false });
+  const cloned = await execa("git", ["clone", repository.cloneUrl, repository.path], {
+    reject: false
+  });
 
   if (cloned.exitCode !== 0) {
     return repositoryOutcome(
       repository.path,
       "failed",
-      `clone of ${repository.url} failed: ${cloned.stderr.trim()}`
+      `clone of ${repository.cloneUrl} failed: ${cloned.stderr.trim()}`
     );
   }
 
-  return repositoryOutcome(repository.path, "created", `cloned ${repository.url}`);
+  return repositoryOutcome(repository.path, "created", `cloned ${repository.cloneUrl}`);
 }
 
 async function inBatches<T>(
@@ -269,16 +252,16 @@ async function inBatches<T>(
   await Promise.all(Array.from({ length: Math.min(SYNC_CONCURRENCY, items.length) }, worker));
 }
 
-// Clones declared repositories that are missing, then fast-forwards the checkouts found in the
-// workspace. Reference checkouts are left to `mfz refs sync`, which owns their lifecycle.
+// Clones the profile's selected repositories that are missing, then fast-forwards the checkouts
+// found in the workspace. Reference checkouts are left to `mfz refs sync`, which owns them.
 export async function syncWorkspace(
   profile: ResolvedProfile,
   home: string,
   onComplete: OperationCompletion
 ): Promise<void> {
-  const missing: DeclaredRepository[] = [];
+  const missing: ResolvedRepo[] = [];
 
-  for (const repository of declaredRepositories(profile, home)) {
+  for (const repository of profile.enabledRepos) {
     const existing = await lstat(repository.path).catch(() => undefined);
 
     if (!existing) missing.push(repository);

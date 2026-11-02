@@ -20,6 +20,7 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

@@ -26,6 +26,7 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     instructionReferences: [],
     referencesDir: "/tmp/references",
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

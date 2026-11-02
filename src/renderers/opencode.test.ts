@@ -36,6 +36,7 @@ function profile(home: string): ResolvedProfile {
     instructionReferences: [],
     referencesDir: path.join(home, "references"),
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
@@ -389,15 +390,27 @@ describe("OpenCode renderer", () => {
     );
   });
 
-  it("fails on a folder plugin without a plugin directory", async () => {
+  it("leaves out folder plugins without a plugin directory and reports each", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-root-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-missing-plugin-home-"));
     const pluginsDir = path.join(root, "opencode", "plugins");
+    const checkout = path.join(home, "workspace", "repos", "tool");
     await mkdir(pluginsDir, { recursive: true });
     await writeFile(path.join(pluginsDir, "single"), "export default {}\n");
 
     const paths = createRuntimePaths({ root, home });
     const resolved = profile(home);
+
+    const fromRepo = {
+      ...plugin({
+        name: "from-repo",
+        description: "",
+        tui_only: false,
+        source: "repo",
+        repo: "tool"
+      }),
+      directory: checkout
+    };
 
     resolved.enabledOpenCodePlugins = [
       plugin(
@@ -409,24 +422,34 @@ describe("OpenCode renderer", () => {
           path: "opencode/plugins/single"
         },
         root
-      )
-    ];
-    await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
-      `OpenCode plugin single has no plugin directory at ${path.join(pluginsDir, "single")}`
-    );
-
-    resolved.enabledOpenCodePlugins = [
+      ),
       plugin({
         name: "missing",
         description: "",
         tui_only: false,
         source: "path",
         path: "~/missing"
-      })
+      }),
+      fromRepo
     ];
-    await expect(renderOpenCode(paths, resolved)).rejects.toThrow(
-      `OpenCode plugin missing has no plugin directory at ${path.join(home, "missing")}`
-    );
+
+    const missing = await renderOpenCode(paths, resolved);
+
+    expect(missing.attention?.map((outcome) => [outcome.status, outcome.target])).toEqual([
+      ["skipped", path.join(home, "missing")],
+      ["skipped", checkout],
+      ["skipped", path.join(pluginsDir, "single")]
+    ]);
+    expect(missing.attention?.[1]?.detail).toContain("run mfz workspace sync to clone tool");
+
+    await mkdir(checkout, { recursive: true });
+    resolved.enabledOpenCodePlugins = [fromRepo];
+
+    const cloned = await renderOpenCode(paths, resolved);
+    const config = cloned.files.find((file) => file.path.endsWith("opencode.jsonc"));
+
+    expect(cloned.attention).toEqual([]);
+    expect(config?.content).toContain(`file://${checkout}`);
   });
 
   it("merges only its previously registered TUI plugin URLs into CLI settings", () => {

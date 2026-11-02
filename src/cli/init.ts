@@ -243,7 +243,7 @@ Done when the manual service run succeeds, the next timer occurrence is correct 
 
 const guideMarkdown = `# mindframe-z Home Guide
 
-A home is a git repository with \`mfz-home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`catalog/opencode-plugins.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
+A home is a git repository with \`mfz-home.yml\` at its root. The engine loads fixed directories: \`catalog/references.yml\`, \`catalog/repos.yml\`, \`catalog/skills.yml\`, \`catalog/mcp.yml\`, \`catalog/opencode-plugins.yml\`, \`instructions/\`, \`profiles/<name>/\`, \`skills/\`, \`opencode/\`, and optional \`sandbox/\` overlays.
 
 Catalog files define what exists. Profiles select entries by name. Unqualified names resolve only in the active home. Upstream entries use qualified names like \`personal/base\` or \`personal/aws-knowledge\` from the alias declared in \`mfz-home.yml#extends\`.
 
@@ -251,7 +251,7 @@ Home files are the source of truth; everything under \`~/.mindframe-z/configs/<p
 
 \`mfz apply\` is local: it renders configuration, regenerates indexes, and links harness globals without cloning or fetching anything. \`mfz refs sync\` is the separate network step that clones, updates, and prunes reference checkouts. Run it only when references themselves should change; apply reports any enabled reference that is not cloned yet.
 
-OpenCode plugins are declared in \`catalog/opencode-plugins.yml\` and enabled by name in a profile's \`opencode.plugins\`, with \`opencode.plugin_options\` keyed by the same name. Each entry has a \`name\`, a \`description\`, and a \`source\`: \`local\` with a \`path\` to a plugin folder relative to the home root, \`path\` with an absolute or \`~/\` \`path\` to a folder elsewhere on disk, \`npm\` with a \`package\` and exact \`version\`, or \`git\` with a \`repo\` (\`github:owner/repo\` or a \`git+ssh\`/\`git+https\` URL) and optional \`ref\` and \`subdirectory\`. OpenCode loads folders in place and installs packages itself. Set \`tui_only: true\` for a package with only a TUI part, which goes in \`cli.json\`; OpenCode's TUI loads the TUI part of every other plugin. Commands and agents live under \`opencode/commands/\` and \`opencode/agents/\` and are enabled by name in \`opencode.commands\` and \`opencode.agents\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered.
+OpenCode plugins are declared in \`catalog/opencode-plugins.yml\` and enabled by name in a profile's \`opencode.plugins\`, with \`opencode.plugin_options\` keyed by the same name. Each entry has a \`name\`, a \`description\`, and a \`source\`: \`local\` with a \`path\` to a plugin folder relative to the home root, \`path\` with an absolute or \`~/\` \`path\` to a folder elsewhere on disk, \`repo\` with the \`repo\` name of a \`catalog/repos.yml\` entry and optional \`subdirectory\` for a plugin developed in a workspace repository, \`npm\` with a \`package\` and exact \`version\`, or \`git\` with a \`repo\` (\`github:owner/repo\` or a \`git+ssh\`/\`git+https\` URL) and optional \`ref\` and \`subdirectory\`. OpenCode loads folders in place and installs packages itself. Set \`tui_only: true\` for a package with only a TUI part, which goes in \`cli.json\`; OpenCode's TUI loads the TUI part of every other plugin. Commands and agents live under \`opencode/commands/\` and \`opencode/agents/\` and are enabled by name in \`opencode.commands\` and \`opencode.agents\`. A command may be a flat \`<name>.md\` file or a \`<name>/COMMAND.md\` package whose sibling development metadata is not rendered.
 
 Before changing a topic below, run its guide:
 
@@ -261,6 +261,7 @@ Before changing a topic below, run its guide:
 - \`mfz guide skills\` - add or change local, vendored, or tool skills.
 - \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
 - \`mfz guide references\` - add, update, or remove read-only reference repositories.
+- \`mfz guide repos\` - add workspace repositories that machines clone and agents may edit.
 - \`mfz guide extra-folders\` - grant host folders or update capability-map metadata.
 - \`mfz guide runtime-files\` - Mise settings and tasks or user systemd units.
 - \`mfz guide cron\` - add or change a recurring OpenCode job.
@@ -306,11 +307,35 @@ Use this guide before changing profile-managed Mise settings, Mise tasks, or use
 - When a systemd service should run, use \`systemctl --user daemon-reload\`, then explicitly \`systemctl --user enable <unit>\` and \`systemctl --user start <unit>\` as appropriate. \`WantedBy=default.target\` affects enablement only.
 `;
 
+const reposGuideMarkdown = `# Repos Guide
+
+Use this guide before adding a repository that machines should clone into the workspace and agents may edit. Read-only upstream source belongs in references instead.
+
+Declare the repository in \`catalog/repos.yml\`, then select it by name in a profile's \`repos\` list. Machine config may add names to its own \`repos\` list for a repository only one machine needs.
+
+~~~yaml
+repos:
+  - name: payments
+    github: example/payments      # or url: for another host, used as written
+    path: repos/payments          # relative to workspace_root; this is the default
+    group: product-systems
+    summary: Payment reconciliation
+    signals: [payments, settlement files, reconciliation]
+    description: "Payment reconciliation: reconciles settlement files and exceptions; TypeScript, PostgreSQL, and S3."
+~~~
+
+A selected repository is cloned by \`mfz workspace sync\` and \`mfz setup\` when missing, and its checkout becomes an extra folder with read and edit access and the entry's capability metadata; an explicit \`extra_folders\` entry at the same path overrides that grant. GitHub repositories clone over the machine's \`git.protocol\` (\`https\` by default, or \`ssh\`), so declare them with \`github: owner/name\` rather than a URL. mfz never handles credentials: the machine's Git configuration must already reach every selected private repository.
+
+Write \`description\` as for extra folders: domain outcome first, then discriminative technology or integration signals.
+
+Run plain \`mfz apply\` and inspect \`~/.mindframe-z/extra_folders.md\`, then \`mfz workspace sync\` to clone. Done when the folder appears in the index and the checkout exists.
+`;
+
 const extraFoldersGuideMarkdown = `# Extra Folders Guide
 
 Use this guide before granting agent access to a host directory or changing its capability-map description.
 
-\`extra_folders\` is both an access grant and cross-repository routing metadata. Declare it in a profile for profile-scoped behavior or machine config for machine-specific access. The rendered \`~/.mindframe-z/extra_folders.md\` index exposes each folder's role and effective permissions to agents.
+\`extra_folders\` is both an access grant and cross-repository routing metadata. For a Git repository the workspace should clone, declare it in the repos catalog instead (\`mfz guide repos\`); use extra folders for mounts, configuration directories, and other paths. Declare it in a profile for profile-scoped behavior or machine config for machine-specific access. The rendered \`~/.mindframe-z/extra_folders.md\` index exposes each folder's role and effective permissions to agents.
 
 ~~~yaml
 extra_folders:
@@ -501,6 +526,7 @@ const guideTopics = new Map([
   ["skills", skillsGuideMarkdown],
   ["skill-review", skillReviewGuideMarkdown],
   ["references", referencesGuideMarkdown],
+  ["repos", reposGuideMarkdown],
   ["extra-folders", extraFoldersGuideMarkdown],
   ["runtime-files", runtimeFilesGuideMarkdown]
 ]);
@@ -537,6 +563,11 @@ async function scaffoldHome(homeRoot: string, agents: string[]): Promise<void> {
   await writeFile(
     path.join(homeRoot, "catalog", "references.yml"),
     `# yaml-language-server: $schema=${schemaBaseUrl}/references.schema.json\nreferences: []\n`,
+    "utf8"
+  );
+  await writeFile(
+    path.join(homeRoot, "catalog", "repos.yml"),
+    `# yaml-language-server: $schema=${schemaBaseUrl}/repos.schema.json\nrepos: []\n`,
     "utf8"
   );
   await writeFile(

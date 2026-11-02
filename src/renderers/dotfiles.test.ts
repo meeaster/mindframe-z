@@ -26,6 +26,7 @@ function profile(dotfiles: Record<string, string>): ResolvedProfile {
     instructionReferences: [],
     referencesDir: path.join("/tmp", "mfz-dotfiles-references"),
     enabledReferences: [],
+    enabledRepos: [],
     enabledSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],

@@ -18,6 +18,7 @@ import {
 } from "../core/profile.js";
 import { jsonFileContent } from "../core/fs-util.js";
 import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
+import type { OperationOutcome } from "../core/operations.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
 import { openCodeExecutorEntry } from "./executor.js";
@@ -25,47 +26,71 @@ import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.
 import { z } from "zod";
 
 // OpenCode loads plugin folders in place and reads their package exports, so MFZ only checks that each folder exists.
+// A folder plugin whose folder is missing, typically a repository that is not cloned yet, is left
+// out and reported rather than failing the whole render.
 async function renderPluginEntries(
   plugins: readonly ResolvedOpenCodePlugin[],
   paths: RuntimePaths,
-  profile: ResolvedProfile
+  profile: ResolvedProfile,
+  attention: OperationOutcome[]
 ): Promise<OpenCodePluginEntry[]> {
   const pluginOptions = profile.profile.opencode.plugin_options;
   const rendered: OpenCodePluginEntry[] = [];
 
   for (const plugin of plugins) {
     const target = await pluginTarget(plugin, paths);
+
+    if (target.kind === "missing") {
+      attention.push({
+        category: "file",
+        action: "write",
+        status: "skipped",
+        target: target.directory,
+        significance: "meaningful",
+        detail: `OpenCode plugin ${plugin.name} left out: no plugin directory${plugin.source === "repo" ? `; run mfz workspace sync to clone ${plugin.repo}` : ""}`
+      });
+      continue;
+    }
+
     const options = pluginOptions[plugin.name];
 
-    rendered.push(options ? { package: target, options } : target);
+    rendered.push(options ? { package: target.entry, options } : target.entry);
   }
 
   return rendered;
 }
 
-async function pluginTarget(plugin: ResolvedOpenCodePlugin, paths: RuntimePaths): Promise<string> {
+async function pluginTarget(
+  plugin: ResolvedOpenCodePlugin,
+  paths: RuntimePaths
+): Promise<{ kind: "entry"; entry: string } | { kind: "missing"; directory: string }> {
   switch (plugin.source) {
     case "npm":
-      return `${plugin.package}@${plugin.version}`;
+      return { kind: "entry", entry: `${plugin.package}@${plugin.version}` };
     case "git":
-      return `${plugin.repo}${plugin.ref ? `#${plugin.ref}` : ""}${plugin.subdirectory ? `::path:${plugin.subdirectory}` : ""}`;
+      return {
+        kind: "entry",
+        entry: `${plugin.repo}${plugin.ref ? `#${plugin.ref}` : ""}${plugin.subdirectory ? `::path:${plugin.subdirectory}` : ""}`
+      };
     case "local":
-    case "path": {
+    case "path":
+    case "repo": {
       const directory =
         plugin.source === "local"
           ? path.join(plugin.sourceRoot, plugin.path)
-          : expandHome(plugin.path, paths.home);
+          : plugin.source === "path"
+            ? expandHome(plugin.path, paths.home)
+            : // SAFETY: profile resolution sets the directory of every repo-sourced plugin.
+              plugin.directory!;
 
       const isDirectory = await stat(directory).then(
         (info) => info.isDirectory(),
         () => false
       );
 
-      if (!isDirectory) {
-        throw new Error(`OpenCode plugin ${plugin.name} has no plugin directory at ${directory}`);
-      }
+      if (!isDirectory) return { kind: "missing", directory };
 
-      return `file://${directory}`;
+      return { kind: "entry", entry: `file://${directory}` };
     }
   }
 }
@@ -219,17 +244,20 @@ export async function renderOpenCode(
     instructions.push(extraFoldersIndexPath(paths));
 
   const plugins = profile.enabledOpenCodePlugins ?? [];
+  const attention: OperationOutcome[] = [];
 
   const serverPluginEntries = await renderPluginEntries(
     plugins.filter((plugin) => !plugin.tui_only),
     paths,
-    profile
+    profile,
+    attention
   );
 
   const tuiPluginEntries = await renderPluginEntries(
     plugins.filter((plugin) => plugin.tui_only),
     paths,
-    profile
+    profile,
+    attention
   );
 
   const commandFiles = await collectOpenCodeMarkdownFiles(
@@ -300,6 +328,7 @@ export async function renderOpenCode(
   ];
 
   const result: RenderResult = {
+    attention,
     files,
     links,
     staleLinks: [

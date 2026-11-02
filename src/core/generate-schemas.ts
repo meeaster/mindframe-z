@@ -10,6 +10,7 @@ import {
   opencodePluginsManifestSchema,
   profileSchema,
   refsManifestSchema,
+  reposManifestSchema,
   skillsManifestSchema,
   vendorLockSchema
 } from "./manifests.js";
@@ -17,6 +18,7 @@ import { threadManifestSchema, threadRunsSchema } from "../thread/schema.js";
 
 const schemaFiles: Array<{ schema: ZodType; filename: string }> = [
   { schema: refsManifestSchema, filename: "references.schema.json" },
+  { schema: reposManifestSchema, filename: "repos.schema.json" },
   { schema: skillsManifestSchema, filename: "skills.schema.json" },
   { schema: vendorLockSchema, filename: "skills-vendor-lock.schema.json" },
   { schema: mcpManifestSchema, filename: "mcp.schema.json" },

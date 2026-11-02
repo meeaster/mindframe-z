@@ -16,7 +16,7 @@ The machine needs only bash, git, and curl, plus whatever access your environmen
 mfz setup --clone <home-repo-url>   # clones to ~/workspace/repos/<name>; --path to override
 ```
 
-`mfz setup` brings the machine to the state its home declares: it clones or fast-forwards the home, syncs references, runs `mfz workspace sync`, applies configuration, and installs and upgrades the home's mise tools. Rerun plain `mfz setup` to update. To develop the engine on the machine, run `mfz engine use source` afterwards; `mfz-release engine use release` returns to the release binary.
+`mfz setup` brings the machine to the state its home declares: it clones or fast-forwards the home, syncs references, runs `mfz workspace sync`, renders dotfiles and mise configuration, installs and upgrades the home's mise tools, and then applies the full configuration. Rerun plain `mfz setup` to update. To develop the engine on the machine, run `mfz engine use source` afterwards; `mfz-release engine use release` returns to the release binary.
 
 To start a new home instead, run `mfz init --create <path>` and then `mfz setup`.
 
@@ -44,7 +44,7 @@ Common commands:
 
 - `mfz setup` bootstraps or updates the machine from its home; see Install.
 - `mfz init` creates machine config and creates, clones, or points at a home.
-- `mfz workspace status` lists workspace checkouts with local changes or unpushed commits; `mfz workspace sync` clones declared repositories that are missing and fast-forwards checkouts on their default branch, skipping `scratch/`, `worktrees/`, `services/`, and references.
+- `mfz workspace status` lists workspace checkouts with local changes or unpushed commits; `mfz workspace sync` clones the profile's selected `catalog/repos.yml` repositories that are missing and fast-forwards checkouts on their default branch, skipping `scratch/`, `worktrees/`, `services/`, and references.
 - `mfz engine use source|release` switches `~/.local/bin/mfz` between a built source checkout and the release binary.
 - `mfz guide` prints home layout and editing conventions.
 - `mfz apply` regenerates indexes, renders the active home, and activates global tool configuration. It runs locally and reports enabled references that are not cloned yet.
@@ -124,6 +124,7 @@ Resolution order:
 ├── mfz-home.yml
 ├── catalog/
 │   ├── references.yml
+│   ├── repos.yml
 │   ├── skills.yml
 │   ├── mcp.yml
 │   └── opencode-plugins.yml
