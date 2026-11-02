@@ -693,7 +693,9 @@ const opencodePluginFields = {
   description: z.string().default(""),
   // A TUI-only package is registered in the CLI's cli.json; every other plugin goes in opencode.jsonc, whose
   // TUI also loads the package's TUI part.
-  tui_only: z.boolean().default(false)
+  tui_only: z.boolean().default(false),
+  // Combined plugins need an explicit CLI registration to receive their configured TUI options.
+  tui: z.boolean().optional()
 };
 
 const opencodePluginSchema = z.discriminatedUnion("source", [

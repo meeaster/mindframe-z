@@ -254,7 +254,11 @@ export async function renderOpenCode(
   );
 
   const tuiPluginEntries = await renderPluginEntries(
-    plugins.filter((plugin) => plugin.tui_only),
+    plugins.filter(
+      (plugin) =>
+        plugin.tui_only ||
+        (plugin.tui === true && profile.profile.opencode.plugin_options[plugin.name] !== undefined)
+    ),
     paths,
     profile,
     attention

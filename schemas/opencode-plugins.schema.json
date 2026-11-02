@@ -23,6 +23,9 @@
                 "default": false,
                 "type": "boolean"
               },
+              "tui": {
+                "type": "boolean"
+              },
               "source": {
                 "type": "string",
                 "const": "local"
@@ -56,6 +59,9 @@
                 "default": false,
                 "type": "boolean"
               },
+              "tui": {
+                "type": "boolean"
+              },
               "source": {
                 "type": "string",
                 "const": "path"
@@ -85,6 +91,9 @@
               },
               "tui_only": {
                 "default": false,
+                "type": "boolean"
+              },
+              "tui": {
                 "type": "boolean"
               },
               "source": {
@@ -124,6 +133,9 @@
                 "default": false,
                 "type": "boolean"
               },
+              "tui": {
+                "type": "boolean"
+              },
               "source": {
                 "type": "string",
                 "const": "npm"
@@ -159,6 +171,9 @@
               },
               "tui_only": {
                 "default": false,
+                "type": "boolean"
+              },
+              "tui": {
                 "type": "boolean"
               },
               "source": {

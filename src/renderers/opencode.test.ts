@@ -91,7 +91,7 @@ function plugin(fields: OpenCodePlugin, sourceRoot = "/tmp/root"): ResolvedOpenC
 }
 
 describe("OpenCode renderer", () => {
-  it("applies a plugin's options to its server or TUI-only entry", async () => {
+  it("supplies combined plugin options to both runtimes and keeps server-only options out of the CLI", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-options-root-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-opencode-plugin-options-home-"));
     const server = path.join(root, "opencode", "plugins", "ledger");
@@ -102,7 +102,8 @@ describe("OpenCode renderer", () => {
     const resolved = profile(home);
     resolved.profile.opencode.plugin_options = {
       ledger: { root: "~/ledgers" },
-      panel: { dense: true }
+      panel: { dense: true },
+      tools: { strict: true }
     };
 
     resolved.enabledOpenCodePlugins = [
@@ -111,6 +112,7 @@ describe("OpenCode renderer", () => {
           name: "ledger",
           description: "",
           tui_only: false,
+          tui: true,
           source: "local",
           path: "opencode/plugins/ledger"
         },
@@ -125,15 +127,35 @@ describe("OpenCode renderer", () => {
           path: "opencode/plugins/panel"
         },
         root
-      )
+      ),
+      plugin({
+        name: "tools",
+        description: "",
+        tui_only: false,
+        source: "npm",
+        package: "@acme/tools",
+        version: "1.2.3"
+      }),
+      plugin({
+        name: "plain",
+        description: "",
+        tui_only: false,
+        tui: true,
+        source: "npm",
+        package: "@acme/plain",
+        version: "1.2.3"
+      })
     ];
 
     const result = await renderOpenCode(createRuntimePaths({ root, home }), resolved);
 
     expect(renderedConfig(result).plugins).toEqual([
-      { package: `file://${server}`, options: { root: "~/ledgers" } }
+      { package: `file://${server}`, options: { root: "~/ledgers" } },
+      { package: "@acme/tools@1.2.3", options: { strict: true } },
+      "@acme/plain@1.2.3"
     ]);
     expect(result.cliPlugins?.entries).toEqual([
+      { package: `file://${server}`, options: { root: "~/ledgers" } },
       { package: `file://${panel}`, options: { dense: true } }
     ]);
   });

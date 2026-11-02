@@ -597,7 +597,7 @@ describe("apply integration", () => {
     ).resolves.toContain("Local test reference with full routing detail.");
   });
 
-  it("merges and removes only MFZ-owned OpenCode TUI plugins from CLI settings", async () => {
+  it("merges, updates, and removes combined and TUI-only plugin options without changing external CLI entries", async () => {
     await writeFile(path.join(home, ".mindframe-z", "config.yml"), "profile: personal\n", "utf8");
     await mkdir(path.join(root, "opencode", "plugins", "session-cost-tui", "tui"), {
       recursive: true
@@ -624,7 +624,7 @@ describe("apply integration", () => {
         "  - name: session-cost-tui",
         "    source: local",
         "    path: opencode/plugins/session-cost-tui",
-        "    tui_only: true",
+        "    tui: true",
         "  - name: panel",
         "    source: path",
         "    path: ~/dev/panel",
@@ -662,6 +662,12 @@ describe("apply integration", () => {
     const managedPackage = `file://${path.join(root, "opencode", "plugins", "session-cost-tui")}`;
     const managed = { package: managedPackage, options: { mode: "compact" } };
     const panel = `file://${path.join(home, "dev", "panel")}`;
+
+    const serverConfig = JSON.parse(
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    );
+
+    expect(serverConfig.plugins).toEqual([managed]);
     expect(applied.stdout).toContain(`updated\tfile\t${cliPath}`);
     expect(JSON.parse(await readFile(cliPath, "utf8"))).toEqual({
       theme: "dark",
