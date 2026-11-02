@@ -7,7 +7,7 @@ A home is a git repo with `mfz-home.yml`, `catalog/`, `instructions/`, `profiles
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/main/scripts/install.sh | bash
 ```
 
 The machine needs only bash, git, and curl, plus whatever access your environment provides to private repositories; mfz has no authentication step. The installer installs mise and the self-contained `mfz` binary to `~/.local/bin/mfz`, keeps a copy as `~/.local/bin/mfz-release`, and adds shell integration to your rc file. Then, in a new shell:
@@ -26,7 +26,7 @@ Or let your AI coding agent do the whole setup — paste this into Claude Code, 
 
 ```text
 Set up mindframe-z on this machine. Fetch
-https://raw.githubusercontent.com/meeaster/mindframe-z/master/docs/agent-setup.md
+https://raw.githubusercontent.com/meeaster/mindframe-z/main/docs/agent-setup.md
 and follow its steps. My home: <your home repo URL, or "create a new home at ~/code/my-home">
 ```
 

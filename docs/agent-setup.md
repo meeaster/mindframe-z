@@ -3,7 +3,7 @@
 You are setting up mindframe-z on this machine.
 
 1. Install or update the engine. The machine needs bash, git, and curl; if the installer reports one missing, ask the human to install it.
-   `curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/master/scripts/install.sh | bash`
+   `curl -fsSL https://raw.githubusercontent.com/meeaster/mindframe-z/main/scripts/install.sh | bash`
    Then make `mfz` and mise resolvable in this session: `export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"` (new interactive shells get this from the rc block the installer writes).
 2. Run `mfz setup` with the human's chosen home source:
    - `mfz --profile <profile> setup --clone <home-repo-url>` to activate an existing home. It clones to `~/workspace/repos/<name>`; pass `--path` for another location.
