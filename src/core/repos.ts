@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { ExtraFolder, MachineManifest, RepoEntry } from "./manifests.js";
+import { jsonObjectSchema, type JsonObject } from "./json.js";
 import { expandHome } from "./path-util.js";
 
 export interface ResolvedRepo {
@@ -34,6 +35,27 @@ export function resolveRepo(
     cloneUrl,
     entry
   };
+}
+
+const repoPlaceholder = /\{repo:([^}]+)\}/g;
+
+// Harness settings sometimes need a checkout's absolute path, such as a Claude Code directory
+// marketplace, which rejects ~. `{repo:NAME}` in any string expands to that path, so profiles stay
+// portable across users and workspace roots.
+export function expandRepoPaths(
+  value: JsonObject,
+  checkoutPath: (name: string) => string
+): JsonObject {
+  const serialized = JSON.stringify(value);
+
+  if (!serialized.includes("{repo:")) return value;
+
+  // Serialized form keeps escaping correct for any path inside JSON strings.
+  const expanded = serialized.replaceAll(repoPlaceholder, (_match, name: string) =>
+    JSON.stringify(checkoutPath(name)).slice(1, -1)
+  );
+
+  return jsonObjectSchema.parse(JSON.parse(expanded));
 }
 
 // Selecting a repository grants agents its checkout, described like any other extra folder.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { machineSchema, repoSchema } from "./manifests.js";
-import { resolveRepo } from "./repos.js";
+import { expandRepoPaths, resolveRepo } from "./repos.js";
 
 const home = "/home/tester";
 
@@ -29,6 +29,22 @@ describe("resolveRepo", () => {
     expect(resolveRepo(entry, machine, home)).toMatchObject({
       path: "/home/tester/work/knowledge/notes",
       cloneUrl: "https://git.example.com/me/notes.git"
+    });
+  });
+
+  it("expands {repo:NAME} in nested setting strings to the checkout path", () => {
+    const settings = {
+      extraKnownMarketplaces: {
+        cairn: { source: { source: "directory", path: "{repo:cairn}" } }
+      },
+      hooks: ['bash "{repo:cairn}/bin/hook" --quoted "x"', 7]
+    };
+
+    expect(expandRepoPaths(settings, (name) => `/home/tester/workspace/repos/${name}`)).toEqual({
+      extraKnownMarketplaces: {
+        cairn: { source: { source: "directory", path: "/home/tester/workspace/repos/cairn" } }
+      },
+      hooks: ['bash "/home/tester/workspace/repos/cairn/bin/hook" --quoted "x"', 7]
     });
   });
 

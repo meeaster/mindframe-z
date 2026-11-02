@@ -328,6 +328,8 @@ A selected repository is cloned by \`mfz workspace sync\` and \`mfz setup\` when
 
 Write \`description\` as for extra folders: domain outcome first, then discriminative technology or integration signals.
 
+Harness settings that need a checkout's absolute path, such as a Claude Code directory marketplace, write \`{repo:NAME}\` in the string; mfz expands it in \`claude.settings\`, \`opencode.config\`, \`opencode.cli\`, \`opencode.plugin_options\`, \`codex.config\`, and \`pi\` settings. The name must exist in the repos catalog; it need not be selected or cloned.
+
 Run plain \`mfz apply\` and inspect \`~/.mindframe-z/extra_folders.md\`, then \`mfz workspace sync\` to clone. Done when the folder appears in the index and the checkout exists.
 `;
 

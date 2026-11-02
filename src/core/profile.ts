@@ -21,7 +21,8 @@ import {
 import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
 import { readDirEntries } from "./fs-util.js";
 import { machineInstructionsDir } from "./path-util.js";
-import { repoExtraFolder, resolveRepo, type ResolvedRepo } from "./repos.js";
+import { expandRepoPaths, repoExtraFolder, resolveRepo, type ResolvedRepo } from "./repos.js";
+import type { JsonObject } from "./json.js";
 
 type CatalogKind = "reference" | "repo" | "skill" | "mcp" | "opencode plugin" | "profile";
 
@@ -917,7 +918,8 @@ export async function resolveProfile(
     ? await resolveProfileByName(manifests, name, { includeOpenCode })
     : preliminary;
 
-  const { profile, sources } = profileBuild;
+  const { sources } = profileBuild;
+  const profile = withRepoPaths(profileBuild.profile, manifests, paths.home);
   const agents = profile.agents;
 
   if (includeOpenCode) assertOpenCodeConfigOwned(profile);
@@ -1039,6 +1041,45 @@ export async function resolveProfile(
     mcpServers,
     extraFolders,
     miseLayers: profileBuild.miseLayers
+  };
+}
+
+// Expands {repo:NAME} in the harness settings a profile passes through verbatim.
+function withRepoPaths(
+  profile: ProfileManifest,
+  manifests: LoadedManifests,
+  home: string
+): ProfileManifest {
+  const checkoutPath = (rawName: string): string => {
+    const resolved = resolveCatalogName(manifests, rawName, "repo");
+    // SAFETY: resolveCatalogName fails unless the named repository exists in that home.
+    const entry = resolved.home.repos.find((candidate) => candidate.name === resolved.name)!;
+
+    return resolveRepo(entry, manifests.machine, home).path;
+  };
+
+  const expand = (value: JsonObject): JsonObject => expandRepoPaths(value, checkoutPath);
+
+  return {
+    ...profile,
+    opencode: {
+      ...profile.opencode,
+      config: expand(profile.opencode.config),
+      cli: expand(profile.opencode.cli),
+      plugin_options: Object.fromEntries(
+        Object.entries(profile.opencode.plugin_options).map(([name, options]) => [
+          name,
+          expand(options)
+        ])
+      )
+    },
+    claude: { ...profile.claude, settings: expand(profile.claude.settings) },
+    codex: { ...profile.codex, config: expand(profile.codex.config) },
+    pi: {
+      ...profile.pi,
+      settings: expand(profile.pi.settings),
+      subagent_config: expand(profile.pi.subagent_config)
+    }
   };
 }
 
