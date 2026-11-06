@@ -134,6 +134,8 @@ function makeReferenceProfile(
     enabledReferences: references.filter((reference) => enabled.has(reference.name)),
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

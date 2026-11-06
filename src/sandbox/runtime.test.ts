@@ -114,6 +114,8 @@ function profile(
       { name: "local-ref", url: "https://example.invalid/ref.git", description: "Local ref." }
     ],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

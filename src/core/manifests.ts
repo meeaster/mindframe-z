@@ -113,10 +113,17 @@ const profileMcpConfigSchema = z
     "MCP server must declare direct agents or enable Executor"
   );
 
+const skillNameSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "must be a safe skill directory name");
+
 const profileSkillConfigSchema = z
   .object({
     agents: agentsMapSchema.optional(),
-    toggleable: z.boolean().default(true)
+    toggleable: z.boolean().default(true),
+    // The member skills wanted from a generated tool skill set or an external tool.
+    select: z.array(skillNameSchema).min(1).optional()
   })
   .strict();
 
@@ -195,11 +202,6 @@ export const homeManifestSchema = z
       .optional()
   })
   .strict();
-
-const skillNameSchema = z
-  .string()
-  .min(1)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "must be a safe skill directory name");
 
 const skillPathSchema = z
   .string()
@@ -316,13 +318,12 @@ const toolTagSchema = z
   .refine(safeGitRef, "must be a Git ref without option or whitespace characters")
   .refine((value) => value.includes("{version}"), "must contain the {version} placeholder");
 
-// `~/` selects the generator's isolated home; `{name}` is the catalog skill name.
-const generatedSkillPathSchema = z
+// `~/` selects the generator's isolated home; otherwise the path is relative to its project.
+const generatedSkillsPathSchema = z
   .string()
   .min(1)
   .refine(
-    (value) =>
-      skillPathSchema.safeParse(value.replace(/^~\//u, "").replaceAll("{name}", "skill")).success,
+    (value) => skillPathSchema.safeParse(value.replace(/^~\//u, "")).success,
     "must be a relative POSIX path, optionally starting with ~/"
   );
 
@@ -344,17 +345,42 @@ const toolSkillSchema = z.union([
   z
     .object({
       ...toolSkillFields,
+      // A generator yields a set: every skill directory it writes under `collect`.
       generate: z
         .object({
           run: z.string().min(1),
-          path: generatedSkillPathSchema
+          collect: generatedSkillsPathSchema
         })
         .strict()
     })
     .strict()
 ]);
 
-export const skillSchema = z.union([localSkillSchema, vendoredSkillSchema, toolSkillSchema]);
+// `*` matches any run of characters in a skill directory name.
+const skillNamePatternSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9*][A-Za-z0-9._*-]*$/, "must be a skill name, optionally with * wildcards");
+
+// Skills a tool's own CLI installs into agent folders; MFZ only declares and checks them.
+const externalSkillSchema = z
+  .object({
+    ...skillFields,
+    source: z.literal("external"),
+    tool: toolSpecSchema,
+    // The command that installs or updates the skills, which doctor names when one is missing.
+    sync: z.string().min(1),
+    // Names of skills the tool installs without a profile selection.
+    owns: z.array(skillNamePatternSchema).min(1).optional()
+  })
+  .strict();
+
+export const skillSchema = z.union([
+  localSkillSchema,
+  vendoredSkillSchema,
+  toolSkillSchema,
+  externalSkillSchema
+]);
 
 const vendorCommitSchema = z
   .string()
@@ -930,6 +956,8 @@ export type RepoEntry = z.infer<typeof repoSchema>;
 export type SkillEntry = z.infer<typeof skillSchema>;
 
 export type ToolSkillEntry = z.infer<typeof toolSkillSchema>;
+
+export type ExternalSkillEntry = z.infer<typeof externalSkillSchema>;
 
 export type VendoredSkillTarget = z.infer<typeof vendoredSkillTargetSchema>;
 

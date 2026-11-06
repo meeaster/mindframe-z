@@ -148,6 +148,8 @@ function groupedProfile(home: string): ResolvedProfile {
       }
     ],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

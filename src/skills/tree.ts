@@ -248,6 +248,19 @@ export function parseSkillFrontmatter(bytes: Buffer, name: string): void {
   if (!result.success) throw new Error(`${name} frontmatter requires string name and description`);
 }
 
+const frontmatterDescriptionSchema = z.object({ description: z.string() });
+
+/** The `description` from a validated SKILL.md's frontmatter, or "" when it has none. */
+export function skillDescription(bytes: Buffer): string {
+  const raw = bytes.toString("utf8");
+
+  const parsed = frontmatterDescriptionSchema.safeParse(
+    YAML.parse(raw.slice(4, raw.indexOf("\n---", 4)))
+  );
+
+  return parsed.success ? parsed.data.description.trim() : "";
+}
+
 export function validateSkillRecords(files: readonly SkillFileRecord[]): void {
   const skill = files.find((file) => file.path === "SKILL.md");
 

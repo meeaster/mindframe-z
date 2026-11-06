@@ -39,7 +39,7 @@ import { commandIsInteractive, createOperationReporter } from "./operation-repor
 import { referencePath } from "../ref-store/references.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
-import { refreshToolSkills } from "../skills/tool.js";
+import { unrefreshedToolSkills } from "../skills/tool.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
 import { mergeOpenCodeCliPlugins, parseOpenCodePluginEntries } from "../renderers/opencode.js";
@@ -332,6 +332,21 @@ export async function applyConfig(
     significance: "internal",
     detail: "profile resolved"
   });
+
+  // Mise installs and refreshes tool skills; apply only renders what the pool already holds.
+  if (rendersAgents) {
+    for (const name of await unrefreshedToolSkills(paths, profile)) {
+      operations.complete({
+        category: "skill",
+        action: "write",
+        status: "skipped",
+        target: name,
+        significance: "meaningful",
+        detail: "not in the tool skill pool; install its tool with mise or run mfz skills refresh"
+      });
+    }
+  }
+
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
@@ -451,16 +466,6 @@ export async function applyConfig(
     }
 
     if (rendersAgents) {
-      options.onStart?.({
-        category: "skill",
-        action: "write",
-        target: profile.name,
-        detail: "tool skills"
-      });
-      await refreshToolSkills(paths, profile, {
-        dryRun: options.dryRun ?? false,
-        onComplete: operations.complete
-      });
       options.onStart?.({
         category: "skill",
         action: "snapshot",

@@ -52,7 +52,7 @@ async function readSkillFile(
 
   const sourceSkill =
     skill.source === "tool"
-      ? path.join(toolSkillSourcePath(paths, skill.name), "SKILL.md")
+      ? path.join(toolSkillSourcePath(paths, skill), "SKILL.md")
       : skill.source === "vendored"
         ? path.join(
             vendoredSkillSourcePath(

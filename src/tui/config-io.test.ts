@@ -110,6 +110,8 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills,
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     enabledOpenCodePlugins: [],

@@ -41,6 +41,8 @@ function profileWithServer(
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [

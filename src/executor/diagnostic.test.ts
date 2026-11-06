@@ -25,6 +25,8 @@ function profile(): ResolvedProfile {
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [

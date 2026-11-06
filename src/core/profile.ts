@@ -16,9 +16,11 @@ import {
   type CapabilityGroup,
   type ReferenceEntry,
   type SkillEntry,
+  type ExternalSkillEntry,
   type ExtraFolder
 } from "./manifests.js";
 import { readVendorLock, validateVendoredSkill, validateVendoredSkills } from "../skills/vendor.js";
+import { expandToolSkillSets } from "../skills/tool.js";
 import { readDirEntries } from "./fs-util.js";
 import { machineInstructionsDir } from "./path-util.js";
 import { expandRepoPaths, repoExtraFolder, resolveRepo, type ResolvedRepo } from "./repos.js";
@@ -126,13 +128,35 @@ type ResolvedVendor =
       digest: string;
     };
 
-export type ResolvedSkill = SkillEntry & {
+interface SkillResolution {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
   targets: CapabilityAgentName[];
   sourceRoot: string;
-  vendor?: ResolvedVendor;
-};
+  /** Member skills wanted from a generated tool skill set or an external tool. */
+  select?: string[];
+}
+
+/** A skill MFZ renders into the profile snapshot. */
+export type ResolvedSkill = Exclude<SkillEntry, ExternalSkillEntry> &
+  SkillResolution & {
+    vendor?: ResolvedVendor;
+    /** The generated tool skill set this member skill came from. */
+    toolSet?: string;
+  };
+
+/** A skill a tool's own CLI installs; MFZ declares and checks it but never renders it. */
+export type ResolvedExternalSkill = ExternalSkillEntry & SkillResolution;
+
+export type DeclaredSkill = ResolvedSkill | ResolvedExternalSkill;
+
+function isExternalSkill(skill: DeclaredSkill): skill is ResolvedExternalSkill {
+  return skill.source === "external";
+}
+
+function isRenderedSkill(skill: DeclaredSkill): skill is ResolvedSkill {
+  return skill.source !== "external";
+}
 
 export type TargetedMcpServer = ResolvedMcpServer & {
   agents: Partial<Record<CapabilityAgentName, boolean>>;
@@ -154,7 +178,12 @@ export interface ResolvedProfile {
   referencesDir: string;
   enabledReferences: ReferenceEntry[];
   enabledRepos: ResolvedRepo[];
+  /** Skills agents receive, with each generated tool skill set expanded into its members. */
   enabledSkills: ResolvedSkill[];
+  /** Enabled generated tool skill sets, as declared; refresh works on these. */
+  toolSkillSets: ResolvedSkill[];
+  /** Enabled skills a tool's own CLI installs; MFZ declares and checks them but never renders them. */
+  externalSkills: ResolvedExternalSkill[];
   enabledOpenCodeCommands: string[];
   enabledOpenCodeAgents: string[];
   enabledOpenCodePlugins?: ResolvedOpenCodePlugin[];
@@ -166,7 +195,7 @@ export interface ResolvedProfile {
 export interface ResolvedSkillDeclarations {
   name: string;
   manifests: LoadedManifests;
-  selectedSkills: ResolvedSkill[];
+  selectedSkills: DeclaredSkill[];
 }
 
 function emptySources(): ProfileSources {
@@ -638,11 +667,15 @@ function resolveSkillConfig(
     .map(([target]) => target)
     .filter((target): target is CapabilityAgentName => agents.some((agent) => agent === target));
 
-  return {
+  const resolved: ResolvedSkillConfig = {
     agents: config.agents,
     toggleable: config.toggleable,
     targets
   };
+
+  if (config.select !== undefined) resolved.select = config.select;
+
+  return resolved;
 }
 
 function isMergeObject(value: MergeValue): value is MergeInput {
@@ -657,6 +690,7 @@ interface ResolvedSkillConfig {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
   targets: CapabilityAgentName[];
+  select?: string[];
 }
 
 function capabilityAgent(agent: AgentName): CapabilityAgentName | undefined {
@@ -676,12 +710,18 @@ function resolveSelectedSkills(
   build: ProfileBuild,
   manifests: LoadedManifests,
   agents: CapabilityAgentName[]
-): ResolvedSkill[] {
-  return Object.entries(build.profile.skills).map(([skillName, config]): ResolvedSkill => {
+): DeclaredSkill[] {
+  return Object.entries(build.profile.skills).map(([skillName, config]): DeclaredSkill => {
     const sourceHome = build.sources.skills.get(skillName) ?? manifests;
     const skill = sourceHome.skills.find((entry) => entry.name === skillName);
 
     if (!skill) throw new Error(`Profile ${profileName} references unknown skill: ${skillName}`);
+
+    if (config?.select !== undefined && !("generate" in skill) && skill.source !== "external") {
+      throw new Error(
+        `Profile ${profileName} sets select on ${skillName}, which is not a generated tool skill set or an external skill`
+      );
+    }
 
     return { ...skill, ...resolveSkillConfig(config, agents), sourceRoot: sourceHome.root };
   });
@@ -692,7 +732,7 @@ async function resolveEnabledSkills(
   build: ProfileBuild,
   manifests: LoadedManifests,
   agents: CapabilityAgentName[]
-): Promise<ResolvedSkill[]> {
+): Promise<DeclaredSkill[]> {
   const enabled = resolveSelectedSkills(profileName, build, manifests, agents).filter(
     (entry) => entry.targets.length > 0
   );
@@ -982,12 +1022,17 @@ export async function resolveProfile(
 
   const enabledRepos = resolveEnabledRepos(name, profile, sources, manifests, paths.home);
 
-  const enabledSkills = await resolveEnabledSkills(
+  const declaredSkills = await resolveEnabledSkills(
     name,
     profileBuild,
     manifests,
     skillCapabilityAgents
   );
+
+  const externalSkills = declaredSkills.filter(isExternalSkill);
+  const renderedSkills = declaredSkills.filter(isRenderedSkill);
+  const toolSkillSets = renderedSkills.filter((skill) => "generate" in skill);
+  const enabledSkills = await expandToolSkillSets(paths, renderedSkills);
 
   const enabledOpenCodeCommands = includeOpenCode ? dedupe(profile.opencode.commands) : [];
   const enabledOpenCodeAgents = includeOpenCode ? dedupe(profile.opencode.agents) : [];
@@ -1044,6 +1089,8 @@ export async function resolveProfile(
     enabledReferences,
     enabledRepos,
     enabledSkills,
+    toolSkillSets,
+    externalSkills,
     enabledOpenCodeCommands,
     enabledOpenCodeAgents,
     enabledOpenCodePlugins,

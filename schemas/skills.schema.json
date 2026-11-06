@@ -223,14 +223,14 @@
                         "type": "string",
                         "minLength": 1
                       },
-                      "path": {
+                      "collect": {
                         "type": "string",
                         "minLength": 1
                       }
                     },
                     "required": [
                       "run",
-                      "path"
+                      "collect"
                     ],
                     "additionalProperties": false
                   }
@@ -244,6 +244,49 @@
                 "additionalProperties": false
               }
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "description": {
+                "default": "",
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "const": "external"
+              },
+              "tool": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!-)\\S+$"
+              },
+              "sync": {
+                "type": "string",
+                "minLength": 1
+              },
+              "owns": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9*][A-Za-z0-9._*-]*$"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "tool",
+              "sync"
+            ],
+            "additionalProperties": false
           }
         ]
       }

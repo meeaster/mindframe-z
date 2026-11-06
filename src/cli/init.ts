@@ -420,32 +420,59 @@ Quarantine lives under \`~/.mindframe-z/skill-candidates/\`; committed home sour
 
 Add a tool skill:
 
-Use \`source: tool\` when a skill ships with a CLI that Mise installs and must match the installed version. Tool skills are not committed to the home and are not reviewed: trusting the installed tool covers the skill it ships. Vendor standalone skills instead. A CLI that serves its own guide at runtime needs only a stable discovery stub, which stays vendored.
+Use \`source: tool\` when a CLI that Mise installs ships skills matching its version, either in its repository or by writing them into a project. Tool skills are not committed to the home and are not reviewed: trusting the installed tool covers the skills it ships. Vendor standalone skills instead. A CLI that serves its own guide at runtime needs only a stable discovery stub, which stays vendored. A CLI that installs and updates skills in agent folders itself is an external skill instead.
 
-1. Declare the skill with \`source: tool\`, the Mise tool name in \`tool:\`, and one way to obtain it:
+1. Declare the entry with \`source: tool\`, the Mise tool name in \`tool:\`, and one way to obtain it:
 
    \`\`\`yaml
    skills:
-     # The repository tag matching the installed version; tag defaults to v{version}, then {version}.
+     # One skill from the repository tag matching the installed version; tag defaults to v{version}, then {version}.
      - name: fframes-video
        source: tool
        tool: cargo:cargo-fframes
        repo: https://github.com/dmtrKovalenko/fframes
        subtree: skills/fframes-video
-     # Run the CLI in a throwaway project with an isolated HOME and collect what it wrote.
-     - name: openspec-explore
+     # A set: run the CLI in a throwaway project and keep every skill it wrote.
+     - name: openspec
        source: tool
        tool: npm:@fission-ai/openspec
-       generate: &openspec
+       generate:
          run: openspec init --tools agents --no-animation --no-copilot-cloud .
-         path: .agents/skills/{name}
+         collect: .agents/skills
    \`\`\`
 
-   \`generate.run\` is a shell command run from the sandbox project directory with \`MFZ_TOOL_VERSION\` set and installed tool binaries on \`PATH\`. \`generate.path\` locates one skill: \`{name}\` is the catalog name, and a leading \`~/\` means the sandbox home, for tools that only install into global agent folders. Entries sharing a tool version and \`run\` command run it once, so several skills from one generator can reuse a YAML anchor (\`generate: *openspec\`).
+   A \`generate\` entry is a skill set: one catalog entry for everything one generator run produces. \`generate.run\` is a shell command run from the sandbox project directory with an isolated \`HOME\`, \`MFZ_TOOL_VERSION\` set, and installed tool binaries on \`PATH\`. \`generate.collect\` is the directory the generator writes skills into, relative to the sandbox project or, with a leading \`~/\`, the sandbox home; every subdirectory with a \`SKILL.md\` becomes a member skill named after its directory.
 
-2. Enable it in the profile, then run plain \`mfz apply\`. Apply refreshes tool skills into the flat machine-local pool \`~/.mindframe-z/skills/<name>/\` before rendering. Folders hold exactly what the tool shipped; \`~/.mindframe-z/skills/.mfz-skills.yml\` records each skill's tool, version, source, and digest. A skill whose tool is not installed is left out of the snapshot.
+2. Enable it in the profile. For a set, the optional \`select\` list narrows it to those members and reaches the generator as the space-separated \`MFZ_SKILLS\`; without \`select\`, the set keeps whatever the generator wrote.
 
-3. Keep skills current after tool upgrades with a Mise postinstall hook that calls \`mfz skills refresh --tool <tool>\`, never the tool's own global installer. A failed refresh keeps the previous copy. \`mfz doctor\` reports missing, stale, and hand-modified tool skills, unrecorded pool folders, and unmanaged skills in harness folders.
+3. Give the tool a Mise postinstall hook that calls \`mfz skills refresh --tool <tool>\`, never the tool's own global installer. Mise installs and refreshes tool skills; \`mfz apply\` only renders what the machine-local pool \`~/.mindframe-z/skills/\` holds (\`<name>/\` for a repository skill, \`<set>/<member>/\` for set members) and reports enabled entries the pool lacks. After enabling an entry whose tool is already installed, run \`mfz skills refresh\` once. \`~/.mindframe-z/skills/.mfz-skills.yml\` records each entry's tool, version, source, digest, and set members. Agents see each member as an ordinary skill, and a member whose name another enabled skill already uses fails resolution. A failed refresh keeps the previous copy. \`mfz doctor\` reports missing, stale, and hand-modified tool skills, unrecorded pool folders, and unmanaged skills in harness folders.
+
+Add an external skill:
+
+Use \`source: external\` when a CLI installs, updates, and removes skills in agent folders itself, such as from a remote catalog or for a signed-in account. MFZ never installs, renders, or links these skills: the profile chooses them, a Mise task runs the CLI, and \`doctor\` checks the result.
+
+1. Declare the entry with the Mise tool name in \`tool:\` and the command that installs or updates its skills in \`sync:\`. Add \`owns:\` name patterns (\`*\` wildcards) when the CLI decides which skills to install:
+
+   \`\`\`yaml
+   skills:
+     - name: aws-agent-toolkit
+       source: external
+       tool: aws-cli
+       sync: mise run aws-skills:sync
+   \`\`\`
+
+2. Enable it in the profile, with \`select\` naming the skills when the CLI installs skills by name:
+
+   \`\`\`yaml
+   skills:
+     aws-agent-toolkit:
+       agents: { opencode: true, claude-code: true }
+       select: [aws-cdk, aws-iam]
+   \`\`\`
+
+3. Write the sync task once, as a Mise task in the profile that installs the tool. It reads the selection with \`mfz skills selection <name>\` (one skill per line) and \`mfz skills selection <name> --agents\` (\`opencode\`, \`claude-code\`, \`codex\`), maps those agents to the CLI's own agent names, and installs, updates, and removes skills to match. An entry the catalog declares but the profile does not enable selects nothing, so the task removes what it installed. \`mfz apply\` never runs it.
+
+\`mfz doctor\` reports an external entry whose tool is missing, or whose selected skills are not visible to every selected agent, with its \`sync\` command, and stops listing skills the entry claims as unmanaged. \`mfz skills list\` shows them under "Installed by tools". A rendered skill with the same name as a tool-installed one fails apply with an unmanaged link conflict.
 
 Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 `;

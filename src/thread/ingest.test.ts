@@ -127,6 +127,8 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

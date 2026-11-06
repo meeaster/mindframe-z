@@ -28,6 +28,8 @@ function profile(dotfiles: Record<string, string>): ResolvedProfile {
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

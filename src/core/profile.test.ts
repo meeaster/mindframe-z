@@ -873,6 +873,60 @@ describe("home inheritance", () => {
     expect(resolved.enabledSkills[0]?.targets).toEqual(["opencode"]);
   });
 
+  it("keeps external skills out of rendered skills and allows select only where it applies", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-external-skill-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-external-skill-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      [
+        "skills:",
+        "  - name: cloud-skills",
+        "    source: external",
+        "    tool: aws-cli",
+        "    sync: mise run cloud-skills:sync",
+        "  - name: plain-skill",
+        "    source: local",
+        "    skill: skills/plain-skill",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+
+    const writeProfile = (plainConfig: string) =>
+      writeFile(
+        path.join(root, "profiles", "work", "profile.yml"),
+        [
+          "name: work",
+          "agents: [opencode, claude-code]",
+          "skills:",
+          "  cloud-skills:",
+          "    agents: { opencode: true, claude-code: true }",
+          "    select: [cloud-cdk]",
+          "  plain-skill:",
+          plainConfig,
+          ""
+        ].join("\n"),
+        "utf8"
+      );
+
+    await writeProfile("    agents: { opencode: true }");
+
+    const resolved = await resolveProfile(createRuntimePaths({ root, home }), "work");
+
+    expect(resolved.enabledSkills.map((entry) => entry.name)).toEqual(["plain-skill"]);
+    expect(resolved.externalSkills.map((entry) => [entry.name, entry.select])).toEqual([
+      ["cloud-skills", ["cloud-cdk"]]
+    ]);
+
+    await writeProfile("    agents: { opencode: true }\n    select: [x]");
+
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "work")).rejects.toThrow(
+      "sets select on plain-skill"
+    );
+  });
+
   it("resolves an unpromoted vendored declaration for authoring without weakening activation", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-skill-home-"));
     const home = await mkdtemp(path.join(os.tmpdir(), "mfz-unpromoted-skill-machine-"));

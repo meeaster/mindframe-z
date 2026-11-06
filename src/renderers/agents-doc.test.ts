@@ -28,6 +28,8 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [],

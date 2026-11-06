@@ -132,6 +132,15 @@
           "toggleable": {
             "default": true,
             "type": "boolean"
+          },
+          "select": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            }
           }
         },
         "additionalProperties": false

@@ -21,6 +21,7 @@ import {
   digestSkillFiles,
   digestSkillTree,
   readSkillFiles,
+  skillDescription,
   validateSkillRecords,
   type SkillFileRecord
 } from "./tree.js";
@@ -50,12 +51,23 @@ export interface ToolSkillRefreshOptions {
 
 const poolManifestFile = ".mfz-skills.yml";
 
+const poolManifestVersion = 2;
+
 const recordedSourceSchema = z.union([
   z.object({ repo: z.string(), tag: z.string().optional(), subtree: z.string() }).strict(),
-  z.object({ generate: z.object({ run: z.string(), path: z.string() }).strict() }).strict()
+  z
+    .object({
+      generate: z.object({ run: z.string(), collect: z.string() }).strict(),
+      select: z.array(z.string()).optional()
+    })
+    .strict()
 ]);
 
 type RecordedSource = z.infer<typeof recordedSourceSchema>;
+
+const memberSchema = z.object({ name: z.string(), description: z.string() }).strict();
+
+type ToolSkillMember = z.infer<typeof memberSchema>;
 
 const poolEntrySchema = z
   .object({
@@ -63,16 +75,20 @@ const poolEntrySchema = z
     version: z.string(),
     source: recordedSourceSchema,
     commit: z.string().optional(),
-    digest: z.string()
+    digest: z.string(),
+    // A generated set records the member skills stored under its pool directory.
+    members: z.array(memberSchema).optional()
   })
   .strict();
 
 const poolManifestSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(poolManifestVersion),
     skills: z.record(z.string(), poolEntrySchema).default({})
   })
   .strict();
+
+const skillDirectoryName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 type PoolEntry = z.infer<typeof poolEntrySchema>;
 
@@ -124,8 +140,18 @@ export function miseToolSkillHost(paths: RuntimePaths): ToolSkillHost {
   };
 }
 
-export function toolSkillSourcePath(paths: RuntimePaths, name: string): string {
-  return path.join(toolSkillPoolDir(paths), name);
+/** A generated set's members live in subdirectories of the set's pool directory. */
+export function toolSkillSourcePath(
+  paths: RuntimePaths,
+  skill: Pick<ResolvedSkill, "name" | "toolSet">
+): string {
+  return skill.toolSet === undefined
+    ? path.join(toolSkillPoolDir(paths), skill.name)
+    : path.join(toolSkillPoolDir(paths), skill.toolSet, skill.name);
+}
+
+function isRepositoryToolSkill(skill: ResolvedSkill): skill is EnabledToolSkill {
+  return skill.source === "tool" && !("generate" in skill);
 }
 
 function isToolSkill(skill: ResolvedSkill): skill is EnabledToolSkill {
@@ -133,15 +159,23 @@ function isToolSkill(skill: ResolvedSkill): skill is EnabledToolSkill {
 }
 
 /** The part of a resolved profile tool skills depend on. */
-export type ToolSkillProfile = Pick<ResolvedProfile, "name" | "enabledSkills">;
+export type ToolSkillProfile = Pick<ResolvedProfile, "name" | "enabledSkills" | "toolSkillSets">;
 
+/** The pool entries a profile enables: repository tool skills and generated sets. */
 export function enabledToolSkills(profile: ToolSkillProfile): EnabledToolSkill[] {
-  return profile.enabledSkills.filter(isToolSkill);
+  return [
+    ...profile.enabledSkills.filter(isRepositoryToolSkill),
+    ...profile.toolSkillSets.filter(isToolSkill)
+  ];
 }
 
 /** Where a skill comes from, as recorded in the pool; a change forces a refresh. */
-function recordedSource(skill: ToolSkillEntry): RecordedSource {
-  if ("generate" in skill) return { generate: { ...skill.generate } };
+function recordedSource(skill: EnabledToolSkill): RecordedSource {
+  if ("generate" in skill) {
+    return skill.select === undefined
+      ? { generate: { ...skill.generate } }
+      : { generate: { ...skill.generate }, select: [...skill.select] };
+  }
 
   return skill.tag === undefined
     ? { repo: skill.repo, subtree: skill.subtree }
@@ -149,11 +183,69 @@ function recordedSource(skill: ToolSkillEntry): RecordedSource {
 }
 
 async function readPoolManifest(pool: string): Promise<PoolManifest> {
-  const content = await readTextFile(path.join(pool, poolManifestFile));
+  const file = path.join(pool, poolManifestFile);
+  const content = await readTextFile(file);
 
-  if (content === undefined) return { version: 1, skills: {} };
+  if (content === undefined) return { version: poolManifestVersion, skills: {} };
+  const parsed = poolManifestSchema.safeParse(YAML.parse(content));
 
-  return poolManifestSchema.parse(YAML.parse(content));
+  if (!parsed.success) {
+    throw new Error(
+      `Unreadable tool skill pool manifest ${file}; remove ${pool} and run mfz skills refresh`
+    );
+  }
+
+  return parsed.data;
+}
+
+/**
+ * Replace each generated tool skill set with the member skills its last refresh recorded, so
+ * every consumer of enabled skills sees ordinary named skills. A set that has not been
+ * refreshed yet contributes nothing.
+ */
+export async function expandToolSkillSets(
+  paths: RuntimePaths,
+  skills: readonly ResolvedSkill[]
+): Promise<ResolvedSkill[]> {
+  if (!skills.some((skill) => "generate" in skill)) return [...skills];
+  const manifest = await readPoolManifest(toolSkillPoolDir(paths));
+  const expanded: ResolvedSkill[] = [];
+
+  for (const skill of skills) {
+    if (!("generate" in skill)) {
+      expanded.push(skill);
+      continue;
+    }
+
+    for (const member of manifest.skills[skill.name]?.members ?? []) {
+      if (skill.select !== undefined && !skill.select.includes(member.name)) continue;
+      expanded.push({
+        ...skill,
+        name: member.name,
+        description: member.description,
+        toolSet: skill.name
+      });
+    }
+  }
+
+  const seen = new Map<string, ResolvedSkill>();
+
+  for (const skill of expanded) {
+    const previous = seen.get(skill.name);
+
+    if (previous !== undefined) {
+      const origin = (entry: ResolvedSkill) =>
+        entry.toolSet === undefined ? "the catalog" : `tool skill set ${entry.toolSet}`;
+
+      throw new Error(
+        `Skill ${skill.name} from ${origin(skill)} conflicts with ${skill.name} from ${origin(previous)}`
+      );
+    }
+
+    seen.set(skill.name, skill);
+  }
+
+  return expanded;
 }
 
 async function writePoolManifest(pool: string, manifest: PoolManifest): Promise<void> {
@@ -175,7 +267,8 @@ async function currentDigest(directory: string): Promise<string | undefined> {
 function generatorEnvironment(
   toolEnvironment: Record<string, string>,
   home: string,
-  version: string
+  version: string,
+  select: readonly string[] | undefined
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
 
@@ -197,33 +290,80 @@ function generatorEnvironment(
   environment.XDG_STATE_HOME = path.join(home, ".local", "state");
   environment.MFZ_TOOL_VERSION = version;
 
+  if (select !== undefined) environment.MFZ_SKILLS = select.join(" ");
+
   return environment;
 }
 
-async function runGenerator(host: ToolSkillHost, run: string, version: string): Promise<string> {
+type GeneratedToolSkill = EnabledToolSkill & Extract<ToolSkillEntry, { generate: unknown }>;
+
+function generatedDirectory(root: string, collect: string): string {
+  return collect.startsWith("~/")
+    ? path.join(root, "home", collect.slice(2))
+    : path.join(root, "project", collect);
+}
+
+/** Every skill directory directly under `directory`, narrowed to `select` when given. */
+async function collectSkillSet(
+  directory: string,
+  select: readonly string[] | undefined
+): Promise<FetchedSkill> {
+  const files: SkillFileRecord[] = [];
+  const members: ToolSkillMember[] = [];
+  const entries = await readDirEntries(directory);
+
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() || (select !== undefined && !select.includes(entry.name))) continue;
+    const memberFiles = await readSkillFiles(path.join(directory, entry.name));
+    const skill = memberFiles.find((file) => file.path === "SKILL.md");
+
+    if (skill === undefined) continue;
+
+    if (!skillDirectoryName.test(entry.name)) {
+      throw new Error(`Generated skill directory ${entry.name} is not a safe skill name`);
+    }
+
+    validateSkillRecords(memberFiles);
+    members.push({ name: entry.name, description: skillDescription(skill.bytes) });
+
+    for (const file of memberFiles) files.push({ ...file, path: `${entry.name}/${file.path}` });
+  }
+
+  const missing = select?.filter((name) => !members.some((member) => member.name === name)) ?? [];
+
+  if (missing.length > 0) {
+    throw new Error(`Generator did not produce selected skills: ${missing.join(", ")}`);
+  }
+
+  if (members.length === 0) throw new Error(`Generator produced no skills under ${directory}`);
+
+  return { files, members };
+}
+
+async function generateSkillSet(
+  host: ToolSkillHost,
+  skill: GeneratedToolSkill,
+  version: string
+): Promise<FetchedSkill> {
   const root = await mkdtemp(path.join(tmpdir(), "mfz-tool-skill-"));
   const project = path.join(root, "project");
   const home = path.join(root, "home");
 
-  await mkdir(project);
-  await mkdir(home);
+  try {
+    await mkdir(project);
+    await mkdir(home);
 
-  await execa("sh", ["-c", run], {
-    cwd: project,
-    env: generatorEnvironment(await host.toolEnvironment(), home, version),
-    extendEnv: false,
-    timeout: 600_000
-  });
+    await execa("sh", ["-c", skill.generate.run], {
+      cwd: project,
+      env: generatorEnvironment(await host.toolEnvironment(), home, version, skill.select),
+      extendEnv: false,
+      timeout: 600_000
+    });
 
-  return root;
-}
-
-function generatedSkillPath(root: string, template: string, name: string): string {
-  const relative = template.replaceAll("{name}", name);
-
-  return relative.startsWith("~/")
-    ? path.join(root, "home", relative.slice(2))
-    : path.join(root, "project", relative);
+    return await collectSkillSet(generatedDirectory(root, skill.generate.collect), skill.select);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
 function tagCandidates(tag: string | undefined, version: string): string[] {
@@ -233,43 +373,30 @@ function tagCandidates(tag: string | undefined, version: string): string[] {
 interface FetchedSkill {
   files: SkillFileRecord[];
   commit?: string;
-}
-
-interface RefreshContext {
-  host: ToolSkillHost;
-  /** One sandbox per generator command and tool version, shared by the skills it produces. */
-  generators: Map<string, Promise<string>>;
+  members?: ToolSkillMember[];
 }
 
 async function fetchToolSkill(
-  context: RefreshContext,
+  host: ToolSkillHost,
   skill: EnabledToolSkill,
   version: string
 ): Promise<FetchedSkill> {
-  if ("generate" in skill) {
-    const key = JSON.stringify([skill.tool, version, skill.generate.run]);
-    let generated = context.generators.get(key);
-
-    if (generated === undefined) {
-      generated = runGenerator(context.host, skill.generate.run, version);
-      context.generators.set(key, generated);
-    }
-
-    const root = await generated;
-
-    return {
-      files: await readSkillFiles(generatedSkillPath(root, skill.generate.path, skill.name))
-    };
-  }
-
+  if ("generate" in skill) return generateSkillSet(host, skill, version);
   const failures: string[] = [];
 
   for (const tag of tagCandidates(skill.tag, version)) {
+    let fetched: FetchedSkill;
+
     try {
-      return await context.host.fetchRepository(skill.repo, `refs/tags/${tag}`, skill.subtree);
+      fetched = await host.fetchRepository(skill.repo, `refs/tags/${tag}`, skill.subtree);
     } catch (error) {
       failures.push(`${tag}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
     }
+
+    validateSkillRecords(fetched.files);
+
+    return fetched;
   }
 
   throw new Error(
@@ -325,7 +452,7 @@ function outcome(
 }
 
 async function refreshSkill(
-  context: RefreshContext,
+  host: ToolSkillHost,
   pool: string,
   manifest: PoolManifest,
   skill: EnabledToolSkill,
@@ -333,7 +460,7 @@ async function refreshSkill(
 ): Promise<OperationOutcome> {
   const target = path.join(pool, skill.name);
   const recorded = manifest.skills[skill.name];
-  const version = await context.host.toolVersion(skill.tool);
+  const version = await host.toolVersion(skill.tool);
 
   if (version === undefined) {
     const detail = `${skill.tool} is not installed`;
@@ -370,19 +497,16 @@ async function refreshSkill(
   }
 
   try {
-    const fetched = await fetchToolSkill(context, skill, version);
+    const fetched = await fetchToolSkill(host, skill, version);
+    const digest = digestSkillFiles(fetched.files);
 
-    validateSkillRecords(fetched.files);
     await installSkill(pool, skill.name, fetched.files);
 
-    const entry: PoolEntry = {
-      tool: skill.tool,
-      version,
-      source,
-      digest: digestSkillFiles(fetched.files)
-    };
+    const entry: PoolEntry = { tool: skill.tool, version, source, digest };
 
     if (fetched.commit !== undefined) entry.commit = fetched.commit;
+
+    if (fetched.members !== undefined) entry.members = fetched.members;
     manifest.skills[skill.name] = entry;
 
     return outcome(target, recorded === undefined ? "created" : "updated", versions);
@@ -474,11 +598,7 @@ async function refreshToolSkillsLocked(
   const pool = toolSkillPoolDir(paths);
   const manifest = await readPoolManifest(pool);
 
-  const context: RefreshContext = {
-    host: options.host ?? miseToolSkillHost(paths),
-    generators: new Map()
-  };
-
+  const host = options.host ?? miseToolSkillHost(paths);
   const outcomes: OperationOutcome[] = [];
 
   const complete = (result: OperationOutcome): void => {
@@ -492,8 +612,7 @@ async function refreshToolSkillsLocked(
   }
 
   try {
-    for (const skill of selected)
-      complete(await refreshSkill(context, pool, manifest, skill, dryRun));
+    for (const skill of selected) complete(await refreshSkill(host, pool, manifest, skill, dryRun));
 
     if (!partial) {
       for (const name of Object.keys(manifest.skills)) {
@@ -513,16 +632,22 @@ async function refreshToolSkillsLocked(
       }
     }
   } finally {
-    const roots = await Promise.allSettled(context.generators.values());
-
-    for (const root of roots) {
-      if (root.status === "fulfilled") await rm(root.value, { recursive: true, force: true });
-    }
-
     if (!dryRun) await writePoolManifest(pool, manifest);
   }
 
   return outcomes;
+}
+
+/** Enabled tool skills and sets the pool has no record of, which apply cannot render. */
+export async function unrefreshedToolSkills(
+  paths: RuntimePaths,
+  profile: ToolSkillProfile
+): Promise<string[]> {
+  const manifest = await readPoolManifest(toolSkillPoolDir(paths));
+
+  return enabledToolSkills(profile)
+    .map((skill) => skill.name)
+    .filter((name) => manifest.skills[name] === undefined);
 }
 
 /** `doctor` lines describing each enabled tool skill and any pool directory MFZ did not record. */
@@ -555,7 +680,13 @@ export async function toolSkillDiagnostics(
         `tool-skill:modified\t${skill.name}\tfiles differ from the recorded digest; the next refresh replaces them`
       );
     } else {
-      lines.push(`tool-skill:ok\t${skill.name}\t${skill.tool}@${version}`);
+      const members = recorded.members?.map((member) => member.name).join(", ");
+
+      lines.push(
+        [`tool-skill:ok`, skill.name, `${skill.tool}@${version}`, members]
+          .filter(Boolean)
+          .join("\t")
+      );
     }
   }
 

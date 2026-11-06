@@ -118,7 +118,7 @@ interface SkillSnapshotGroupOptions {
 }
 
 function sourcePath(paths: RuntimePaths, skill: ResolvedSkill, target?: SkillTarget): string {
-  if (skill.source === "tool") return toolSkillSourcePath(paths, skill.name);
+  if (skill.source === "tool") return toolSkillSourcePath(paths, skill);
 
   if (skill.source === "vendored") {
     if ("variants" in skill) {

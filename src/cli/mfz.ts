@@ -39,10 +39,16 @@ import {
 import { runSync } from "../sync/index.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import {
+  miseToolSkillHost,
   refreshToolSkills,
   toolSkillDiagnostics,
   type ToolSkillRefreshOptions
 } from "../skills/tool.js";
+import {
+  externalOwner,
+  externalSkillDiagnostics,
+  externalSkillSelection
+} from "../skills/external.js";
 import { parseSandboxTarget, runSandboxInit, runSandboxLaunch } from "../sandbox/cli.js";
 import { runSeedClaude } from "../sandbox/seed-claude.js";
 import { runSeedOpenai } from "../sandbox/seed-openai.js";
@@ -188,8 +194,15 @@ async function doctor(options: {
   }
 
   for (const line of await toolSkillDiagnostics(paths, profile)) console.log(line);
+  const otherGlobalSkills = await readOtherGlobalSkills(paths);
+  const { toolVersion } = miseToolSkillHost(paths);
 
-  for (const skill of await readOtherGlobalSkills(paths)) {
+  for (const line of await externalSkillDiagnostics(profile, otherGlobalSkills, toolVersion)) {
+    console.log(line);
+  }
+
+  for (const skill of otherGlobalSkills) {
+    if (externalOwner(profile, skill.name) !== undefined) continue;
     console.log(
       `skill:unmanaged\t${skill.name}\t${skill.targets.join(",")}\tnot an mfz link; agents see it regardless of the profile`
     );
@@ -1052,17 +1065,41 @@ skills
     const verbose = options.verbose ?? false;
     const otherGlobalSkills = await readOtherGlobalSkills(paths, { verbose });
 
+    const toolInstalled = otherGlobalSkills.filter(
+      (skill) => externalOwner(profile, skill.name) !== undefined
+    );
+
+    const unclaimed = otherGlobalSkills.filter((skill) => !toolInstalled.includes(skill));
+
     printInventorySections(
       "mfz skills list",
       profile.name,
       [
         skillInventorySection("MFZ managed", profile.enabledSkills, verbose),
-        skillInventorySection("Other global skills", otherGlobalSkills, verbose)
+        ...(profile.externalSkills.length > 0
+          ? [skillInventorySection("Installed by tools", toolInstalled, verbose)]
+          : []),
+        skillInventorySection("Other global skills", unclaimed, verbose)
       ],
       process.stdout,
       "skill",
       true
     );
+  });
+
+skills
+  .command("selection")
+  .description(
+    "Print the skills, or with --agents the agents, a profile wants an external tool to install"
+  )
+  .argument("<name>", "external skill catalog name")
+  .option("--agents", "print agents (opencode, claude-code, codex) instead of skills")
+  .action(async (name: string, options: { agents?: boolean }) => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+    const selection = externalSkillSelection(profile, name);
+
+    for (const line of options.agents ? selection.agents : selection.skills) console.log(line);
   });
 
 skills
@@ -1121,8 +1158,11 @@ skills
 
     if (outcomes.some((outcome) => outcome.status === "failed")) process.exitCode = 1;
 
-    await syncSkillSnapshot(paths, profile, {
-      selectedTargets: profile.agents.filter(isSkillTarget),
+    // Re-resolve so the snapshot sees the generated set members this refresh recorded.
+    const refreshed = await resolveProfile(paths, program.opts().profile);
+
+    await syncSkillSnapshot(paths, refreshed, {
+      selectedTargets: refreshed.agents.filter(isSkillTarget),
       dryRun
     });
   });

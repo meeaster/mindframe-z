@@ -22,6 +22,8 @@ function profileWithServer(server: ResolvedProfile["mcpServers"][number]): Resol
     enabledReferences: [],
     enabledRepos: [],
     enabledSkills: [],
+    toolSkillSets: [],
+    externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
     mcpServers: [server],
