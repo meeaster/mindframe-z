@@ -60,6 +60,8 @@ export interface ResolvedMcpServer {
   name: string;
   server: McpServer;
   agents: Partial<Record<CapabilityAgentName, boolean>>;
+  // Hosted as an Executor app by `mfz executor apply`; direct renderers ignore it.
+  executor: boolean;
 }
 
 type ResolvedVendor =
@@ -734,8 +736,39 @@ function resolveMcpServers(
       throw new Error(`Profile ${profileName} references unknown MCP server: ${serverName}`);
     }
 
-    return { name: serverName, server, agents: config.agents };
+    const agents = config.agents ?? {};
+    const executor = config.executor ?? false;
+
+    if (Object.keys(agents).length === 0 && !executor) {
+      throw new Error(
+        `Profile ${profileName} MCP server ${serverName} has no route; declare agents or executor: true`
+      );
+    }
+
+    if (executor) assertExecutorEligible(profileName, serverName, server);
+
+    return { name: serverName, server, agents, executor };
   });
+}
+
+// Executor hosts the server from generated app source, which must hold no secrets or local setup.
+function assertExecutorEligible(profileName: string, serverName: string, server: McpServer): void {
+  const problem =
+    server.type !== "remote"
+      ? "is a local server; Executor can only host remote servers"
+      : server.transport !== undefined && server.transport !== "http"
+        ? `uses ${server.transport} transport; Executor needs http`
+        : server.url.includes("{env:")
+          ? "has an {env:...} reference in its URL, which cannot go into app source"
+          : server.headers !== undefined
+            ? "sets headers, which cannot go into app source"
+            : undefined;
+
+  if (problem !== undefined) {
+    throw new Error(
+      `Profile ${profileName} sets executor: true for MCP server ${serverName}, which ${problem}`
+    );
+  }
 }
 
 async function resolveProfileByName(

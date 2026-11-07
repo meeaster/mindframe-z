@@ -116,6 +116,7 @@ import {
 import { runWorkspaceStatus, runWorkspaceSync } from "../workspace/cli.js";
 import { useReleaseEngine, useSourceEngine } from "./engine.js";
 import { runReferenceSync } from "./refs-sync.js";
+import { runExecutorApply } from "./executor-apply.js";
 import { runSetup } from "./setup.js";
 import { toolRequirementLines } from "../core/tool-requirements.js";
 
@@ -301,9 +302,13 @@ async function statusFn(options: {
 }
 
 function formatMcpStatus(server: ResolvedMcpServer): string {
-  return `${server.name}:${Object.entries(server.agents)
-    .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
-    .join("|")}`;
+  const routes = Object.entries(server.agents).map(
+    ([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`
+  );
+
+  if (server.executor) routes.push("executor=enabled");
+
+  return `${server.name}:${routes.join("|")}`;
 }
 
 function parseContextAgent(agent: string): ContextHarness {
@@ -1295,6 +1300,8 @@ async function printMcpStatus(): Promise<void> {
       const enabled = mcpDefaults(profile, target)[server.name];
       console.log(`${server.name}\t${target}\t${enabled ? "enabled" : "disabled"}`);
     }
+
+    if (server.executor) console.log(`${server.name}\texecutor\tenabled`);
   }
 }
 
@@ -1304,6 +1311,22 @@ mcp
   .command("status")
   .description("Show MCP server state for each agent")
   .action(async () => printMcpStatus());
+
+const executor = program
+  .command("executor")
+  .description("Host profile MCP servers as Executor apps");
+
+executor
+  .command("apply")
+  .description("Create or update the Executor apps for MCP servers with executor: true")
+  .option("--dry-run", "plan app changes without creating or deploying apps")
+  .option("--verbose", "show every completed operation")
+  .action(async (options) => {
+    const paths = createRuntimePaths(program.opts());
+    const profile = await resolveProfile(paths, program.opts().profile);
+
+    if (!(await runExecutorApply(paths, profile, options))) process.exitCode = 1;
+  });
 
 const refs = program.command("refs").description("Manage AI reference repositories");
 

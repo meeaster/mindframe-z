@@ -9,7 +9,7 @@ const mcpGuideMarkdown = `# MCP Guide
 
 Use this guide when adding or changing an MCP server.
 
-The catalog defines server connection details. A profile selects the harnesses that receive each server with \`agents\`, which every profile MCP entry must declare. Use a concise enabled list or a grouped state list:
+The catalog defines server connection details. A profile routes each server to harnesses with \`agents\`, to a local Executor app with \`executor: true\`, or both; every profile MCP entry must declare at least one route. Use a concise enabled list or a grouped state list for \`agents\`:
 
 \`\`\`yaml
 mcp:
@@ -30,6 +30,20 @@ mcp:
   personal/agent-browser:
     agents: [opencode, codex]
 \`\`\`
+
+## Executor apps
+
+\`executor: true\` hosts the server in the local Executor as an app named after the catalog server, alongside or instead of direct harness routes:
+
+\`\`\`yaml
+mcp:
+  deepwiki:
+    executor: true
+\`\`\`
+
+Only a \`remote\` catalog server with \`http\` transport qualifies, and its URL must not contain \`{env:...}\` references and it must not set \`headers\`, because the generated app source cannot hold secrets. Profile resolution rejects other servers. A child profile's \`executor\` value overrides the inherited one.
+
+\`mfz apply\` stays offline and only notes when the declared Executor apps changed. Run \`mfz executor apply\` (or \`--dry-run\` first) to create or update the apps through the \`executor\` CLI. It manages only apps whose \`package.json\` name is \`mfz-<server>\`: an unmanaged app already holding the server's address is reported as a conflict to remove or rename, and a managed app no longer declared is reported for manual removal in the Executor dashboard, never deleted.
 
 Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when the intended routing is rendered and the profile reports healthy links.
 `;
@@ -218,7 +232,7 @@ OpenCode plugins are declared in \`catalog/opencode-plugins.yml\` and enabled by
 Before changing a topic below, run its guide:
 
 - \`mfz guide instructions\` - global guidance, instruction references, machine-local instructions, or capability groups.
-- \`mfz guide mcp\` - add or change MCP servers.
+- \`mfz guide mcp\` - add or change MCP servers, including Executor apps applied with \`mfz executor apply\`.
 - \`mfz guide skills\` - add or change local, vendored, or tool skills.
 - \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
 - \`mfz guide references\` - add, update, or remove read-only reference repositories.

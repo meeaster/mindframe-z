@@ -116,8 +116,11 @@ describe("init and guide integration", () => {
   it("prints the MCP topic guide", async () => {
     const result = await captureGuide("mcp");
     expect(result).toContain("# MCP Guide");
-    const [example] = yamlExamples(result);
-    expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
+    expect(result).toContain("mfz executor apply");
+
+    for (const example of yamlExamples(result)) {
+      expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
+    }
   });
 
   it("prints the extra folders topic guide", async () => {

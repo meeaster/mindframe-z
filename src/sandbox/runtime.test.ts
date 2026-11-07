@@ -155,6 +155,7 @@ function remoteMcp(
     agents: Object.fromEntries(
       (options.targets ?? ["opencode", "claude-code"]).map((target) => [target, true])
     ),
+    executor: false,
     server
   };
 }

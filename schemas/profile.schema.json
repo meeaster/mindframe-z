@@ -300,12 +300,24 @@
                 }
               }
             ]
+          },
+          "executor": {
+            "type": "boolean"
           }
         },
-        "required": [
-          "agents"
-        ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "agents"
+            ]
+          },
+          {
+            "required": [
+              "executor"
+            ]
+          }
+        ]
       }
     },
     "opencode": {

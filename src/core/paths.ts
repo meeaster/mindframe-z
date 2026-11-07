@@ -187,6 +187,11 @@ export function referenceStatePath(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "references-state.json");
 }
 
+// Desired Executor app set last applied by `mfz executor apply`, so offline apply can flag drift.
+export function executorAppsStatePath(paths: RuntimePaths): string {
+  return path.join(mindframeZDir(paths.home), "executor-apps-state.json");
+}
+
 // Companion index of extra folder grants; only embedded when the profile grants any.
 export function extraFoldersIndexPath(paths: RuntimePaths): string {
   return path.join(mindframeZDir(paths.home), "extra_folders.md");

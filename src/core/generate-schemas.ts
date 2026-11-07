@@ -124,6 +124,8 @@ function strengthenProfileMcpSchema(schema: JsonSchemaNode): void {
   }
 
   mcp.additionalProperties = entries;
+  // Mirrors the Zod refinement: an entry must declare at least one route key.
+  entries.anyOf = [{ required: ["agents"] }, { required: ["executor"] }];
   const entryProperties = entries.properties;
   const agents = entryProperties.agents;
 

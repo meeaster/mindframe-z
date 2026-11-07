@@ -302,7 +302,7 @@ describe("MCP direct selection", () => {
     }
   });
 
-  it("requires an agents selection", () => {
+  it("requires an agents selection or executor route", () => {
     expect(() => profileSchema.parse({ name: "routes", mcp: { direct: {} } })).toThrow();
   });
 
@@ -338,6 +338,82 @@ describe("MCP direct selection", () => {
     expect(mergeProfiles(base, child).mcp.docs).toEqual({
       agents: { opencode: true, codex: true }
     });
+  });
+});
+
+describe("Executor MCP routes", () => {
+  async function resolveRoute(server: string, entry: string) {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-route-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-route-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      ["servers:", `  ${server}:`, ...entry.split("\n").map((line) => `    ${line}`), ""].join(
+        "\n"
+      ),
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      ["name: work", "mcp:", `  ${server}:`, "    executor: true", ""].join("\n"),
+      "utf8"
+    );
+
+    return resolveProfile(createRuntimePaths({ root, home }), "work");
+  }
+
+  it("accepts a remote http server without secrets and routes it only to Executor", async () => {
+    const resolved = await resolveRoute(
+      "deepwiki",
+      "type: remote\ntransport: http\nurl: https://mcp.deepwiki.com/mcp"
+    );
+
+    expect(resolved.mcpServers).toEqual([
+      expect.objectContaining({ name: "deepwiki", agents: {}, executor: true })
+    ]);
+  });
+
+  it.each([
+    ["local", "type: local\ncommand: [helper]", /is a local server/],
+    ["sse", "type: remote\ntransport: sse\nurl: https://example.test/sse", /uses sse transport/],
+    [
+      "env-url",
+      "type: remote\nurl: https://example.test/{env:TOKEN}/mcp",
+      /\{env:\.\.\.\} reference/
+    ],
+    ["headed", "type: remote\nurl: https://example.test/mcp\nheaders: { X-Key: secret }", /headers/]
+  ])("rejects the ineligible %s server by name", async (server, entry, problem) => {
+    const resolution = resolveRoute(server, entry);
+
+    await expect(resolution).rejects.toThrow(problem);
+    await expect(resolution).rejects.toThrow(`MCP server ${server}`);
+  });
+
+  it("rejects an inherited entry a child leaves with neither route", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-route-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-route-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      "servers:\n  docs:\n    type: remote\n    url: https://example.test/mcp\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      "name: base\nmcp:\n  docs:\n    executor: true\n",
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      "name: work\nextends: base\nmcp:\n  docs:\n    executor: false\n",
+      "utf8"
+    );
+
+    await expect(resolveProfile(createRuntimePaths({ root, home }), "work")).rejects.toThrow(
+      "MCP server docs has no route"
+    );
   });
 });
 

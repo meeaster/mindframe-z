@@ -88,13 +88,15 @@ The active home's `catalog/*.yml` declares available references, skills, MCP ser
 
 Profile arrays such as `instructions`, `references`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, and `claude` are deep-merged with child keys overriding parent keys. For MCP routing, a child selection with any enabled agent replaces the inherited selection; a grouped disabled-only selection patches only the named routes. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 
-MCP enablement is profile-owned: the MCP catalog defines connection details only; each profile entry declares `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays. Claude Code cannot be declared in a `disabled` group. Keep credentials out of catalog and profile source; reference them with `{env:NAME}`.
+MCP enablement is profile-owned: the MCP catalog defines connection details only; each profile entry declares `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, `executor: true`, or both. Claude Code cannot be declared in a `disabled` group. `executor: true` requires a remote `http` server with no `headers` and no `{env:` in its URL. Keep credentials out of catalog and profile source; reference them with `{env:NAME}`.
 
 ## Rendering And Sync
 
 `mfz apply` writes rendered files under `~/.mindframe-z/configs/<profile>/`, writes machine-local `~/.mindframe-z/references.md` and `~/.mindframe-z/extra_folders.md` when configured, and links global config unless `--no-link` or `--dry-run` is used. After a real apply, run `mise install` to fetch tools declared by the active profile.
 
 Apply records every host link it installs in `configs/.installed.json` and removes recorded links a render no longer wants, including those of harnesses the profile no longer enables; see `ARCHITECTURE.md`.
+
+`mfz executor apply [--dry-run]` creates or deploys Executor apps for `executor: true` servers through the `executor` CLI (`src/executor/`); apply only reports when that set changed. Integration tests use a fake `executor` CLI. To check real deploys, run a throwaway instance (`EXECUTOR_DATA_DIR=<temp> EXECUTOR_PORT=<port> EXECUTOR_KEY_STORAGE=file executor serve`) and point `mfz executor apply` at it with the same two variables; never deploy test apps to the user's Executor.
 
 Use `mise prune --tools -y` to remove unused installed versions; plain `mise prune` only cleans stale config links.
 

@@ -53,7 +53,8 @@ function profile(home: string): ResolvedProfile {
           headers: { Authorization: "Bearer ${TOKEN}" },
           opencode: { pool: true }
         },
-        agents: { opencode: true }
+        agents: { opencode: true },
+        executor: false
       },
       {
         name: "local",
@@ -64,7 +65,8 @@ function profile(home: string): ResolvedProfile {
           env: { MODE: "test" },
           opencode: { pool: true, cwd: "~" }
         },
-        agents: { opencode: false }
+        agents: { opencode: false },
+        executor: false
       }
     ],
     extraFolders: manifest.extra_folders,

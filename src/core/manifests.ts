@@ -81,11 +81,17 @@ const directMcpAgentsSchema = z
     ]);
   });
 
+// A route is a native harness selection, an Executor app, or both. A child entry may set only one
+// of them to patch an inherited entry; resolution checks that the merged entry keeps a route.
 const profileMcpConfigSchema = z
   .object({
-    agents: directMcpAgentsSchema
+    agents: directMcpAgentsSchema.optional(),
+    executor: z.boolean().optional()
   })
-  .strict();
+  .strict()
+  .refine((config) => config.agents !== undefined || config.executor !== undefined, {
+    message: "MCP entries must declare agents or executor"
+  });
 
 const skillNameSchema = z
   .string()

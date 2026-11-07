@@ -35,6 +35,7 @@ import { referencePath } from "../ref-store/references.js";
 import { reconcileLocalIndexes } from "../ref-store/indexes.js";
 import { syncSkillSnapshot, type SkillTarget } from "../skills/snapshot.js";
 import { unrefreshedToolSkills } from "../skills/tool.js";
+import { executorAppsDrifted } from "../executor/state.js";
 import { ensureHomeGuidance } from "../core/engine-skill.js";
 import { jsonFileContent, pathExists, readJsonObject } from "../core/fs-util.js";
 import { mergeOpenCodeCliPlugins, parseOpenCodePluginEntries } from "../renderers/opencode.js";
@@ -475,6 +476,17 @@ export async function applyConfig(
     }
 
     if (rendersAgents) await reportMissingReferences(profile, operations.complete);
+
+    if (rendersAgents && (await executorAppsDrifted(paths, profile))) {
+      operations.complete({
+        category: "executor",
+        action: "reconcile",
+        status: "skipped",
+        target: profile.name,
+        significance: "meaningful",
+        detail: "Executor apps changed; run mfz executor apply"
+      });
+    }
 
     return operations.outcomes;
   };
