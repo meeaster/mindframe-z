@@ -293,7 +293,7 @@ describe("writeJsonFileAtomic", () => {
 
   it("creates missing parent directories", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "mindframe-z-fs-util-"));
-    const file = path.join(dir, "state", "executor", "managed.json");
+    const file = path.join(dir, "state", "work", "manifest.json");
 
     await writeJsonFileAtomic(file, { complete: true });
 

@@ -1533,7 +1533,7 @@ describe("apply integration", () => {
           installMethod: "native",
           mcpServers: {
             context7: { type: "http", url: "https://old.invalid" },
-            executor: { type: "stdio", command: "executor" },
+            legacy: { type: "stdio", command: "legacy-helper" },
             manual: { type: "http", url: "https://manual.invalid" }
           },
           projects: {
@@ -1569,7 +1569,7 @@ describe("apply integration", () => {
       expect.objectContaining({
         target: path.join(home, ".claude.json"),
         status: "updated",
-        detail: "removes unmanaged MCP servers: executor, manual"
+        detail: "removes unmanaged MCP servers: legacy, manual"
       })
     );
   });

@@ -11,7 +11,6 @@ import {
   type RuntimePaths
 } from "../core/paths.js";
 import {
-  executorMcpServers,
   filterMcpForTarget,
   type ResolvedMcpServer,
   type ResolvedProfile
@@ -581,10 +580,7 @@ function launchCommand(target: SandboxLaunchTarget, args: readonly string[]): st
 
 function remoteEnabledMcpServers(profile: ResolvedProfile): ResolvedMcpServer[] {
   return profile.mcpServers.filter(
-    (entry) =>
-      entry.agents !== undefined &&
-      Object.values(entry.agents).some(Boolean) &&
-      entry.server.type === "remote"
+    (entry) => Object.values(entry.agents).some(Boolean) && entry.server.type === "remote"
   );
 }
 
@@ -765,12 +761,6 @@ export async function resolveSandboxRuntimeInputs(
     readonly tty?: boolean | undefined;
   } = {}
 ): Promise<SandboxRuntimeInputs> {
-  if (executorMcpServers(profile).length > 0) {
-    throw new Error(
-      `Sandbox cannot run profile ${profile.name} with Executor-routed MCP servers; use a direct-only profile until the host Executor security boundary is supported`
-    );
-  }
-
   const credentialMode = await resolveSandboxCredentialMode(paths, profile.manifests.machine);
   const workspace = path.resolve(expandHome(options.workspace ?? process.cwd(), paths.home));
   const noProxy = ["localhost", "127.0.0.1", "host.docker.internal"];

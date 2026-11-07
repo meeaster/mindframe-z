@@ -1,7 +1,6 @@
 import { confirm, isCancel } from "@clack/prompts";
 import path from "node:path";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
-import { hasManagedExecutorState, reconcileExecutor } from "../executor/index.js";
 import {
   agentList,
   createRuntimePaths,
@@ -16,11 +15,7 @@ import {
   skillLinksFromOutcomes,
   type InstalledLink
 } from "../core/installed.js";
-import {
-  requiresExecutorReconciliation,
-  resolveProfile,
-  type ResolvedProfile
-} from "../core/profile.js";
+import { resolveProfile, type ResolvedProfile } from "../core/profile.js";
 import {
   removeRenderedFiles,
   renderTarget,
@@ -79,7 +74,6 @@ export interface ApplyOptions {
 }
 
 export interface ApplyDependencies {
-  reconcileExecutor?: typeof reconcileExecutor;
   renderTarget?: typeof renderTarget;
 }
 
@@ -350,8 +344,6 @@ export async function applyConfig(
   const selectedAgents = rendersAgents ? agentList(options.agent, profile.agents) : [];
   const selectedInfraTargets = infraTargetList(options.target);
   const selectedTargets = [...selectedAgents, ...selectedInfraTargets];
-  const selectedExecutorTarget = selectedAgents.some((target) => target !== "pi");
-  const reconcile = dependencies.reconcileExecutor ?? reconcileExecutor;
   const render = dependencies.renderTarget ?? renderTarget;
   const usePrompts = !options.dryRun && !options.noLink;
   const interactive = usePrompts && options.interactive === true;
@@ -359,24 +351,6 @@ export async function applyConfig(
   const execute = async (): Promise<OperationOutcome[]> => {
     const previousProfile = (await readActiveProfile(paths)) ?? profile.name;
     const desiredLinks: InstalledLink[] = [];
-
-    if (
-      selectedExecutorTarget &&
-      (requiresExecutorReconciliation(profile, selectedAgents) ||
-        (await hasManagedExecutorState(paths, profile.name)))
-    ) {
-      options.onStart?.({
-        category: "executor",
-        action: "reconcile",
-        target: profile.name,
-        detail: "Executor integrations"
-      });
-      await reconcile(paths, profile, {
-        dryRun: options.dryRun ?? false,
-        interactive: options.interactive === true,
-        onComplete: operations.complete
-      });
-    }
 
     if (rendersAgents) {
       options.onStart?.({

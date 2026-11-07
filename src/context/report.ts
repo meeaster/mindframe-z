@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { ResolvedProfile } from "../core/profile.js";
-import { mcpDefaults, requiresExecutorBridge } from "../core/profile.js";
+import { mcpDefaults } from "../core/profile.js";
 import type { RuntimePaths } from "../core/paths.js";
 import { readClaudeHistory } from "./claude-history.js";
 import { probeMcpServer } from "./mcp-probe.js";
@@ -186,7 +186,6 @@ export async function buildContextHistoryReport(
       .filter(([, enabled]) => enabled)
       .map(([name]) => name);
 
-    if (requiresExecutorBridge(profile)) mcpNames.push("executor");
     reports.push({
       harness,
       scopeNotes: [],
@@ -501,20 +500,6 @@ function formatMcp(report: ContextReport, harness: HarnessReport, established: b
 
   for (const server of enabled) {
     const result = probes.get(server.name);
-
-    if (server.sharedIntegrations && server.sharedIntegrations.length > 0) {
-      lines.push(
-        `        shared inventory: ${server.sharedIntegrations
-          .map((integration) => {
-            const connections = server.sharedConnections?.[integration] ?? [];
-
-            return connections.length > 0
-              ? `${integration} [${connections.join(", ")}]`
-              : integration;
-          })
-          .join(", ")}`
-      );
-    }
 
     if (!result) {
       lines.push(`      ${server.name}  enabled | schemas unmeasured (not probed)`);

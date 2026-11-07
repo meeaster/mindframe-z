@@ -24,7 +24,6 @@ import {
   resolveSkillDeclarations,
   type ResolvedMcpServer
 } from "../core/profile.js";
-import { executorDiagnosticLines, inspectExecutor } from "../executor/index.js";
 import { withUpstreamHomeLock } from "../core/upstream-clones.js";
 import { renderTarget } from "../core/render.js";
 import { verifyLink } from "../core/symlinks.js";
@@ -171,10 +170,6 @@ async function doctor(options: {
 
   for (const line of await toolRequirementLines(profile)) console.log(line);
 
-  for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
-    console.log(line);
-  }
-
   if (await hasHomeGuidance(paths.root)) {
     console.log(`home-guidance:ok\t${path.join(paths.root, "AGENTS.md")}`);
   } else {
@@ -296,10 +291,6 @@ async function statusFn(options: {
   const profile = await resolveProfile(paths, options.profile);
   console.log(`profile\t${profile.name}`);
 
-  for (const line of executorDiagnosticLines(await inspectExecutor(paths, profile))) {
-    console.log(line);
-  }
-
   console.log(`agents\t${profile.agents.join(", ") || "none"}`);
   console.log(
     `references\t${profile.enabledReferences.map((ref) => ref.name).join(", ") || "none"}`
@@ -310,23 +301,9 @@ async function statusFn(options: {
 }
 
 function formatMcpStatus(server: ResolvedMcpServer): string {
-  const direct = server.agents
-    ? `${server.name}:${Object.entries(server.agents)
-        .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
-        .join("|")}`
-    : undefined;
-
-  const shared = server.executor
-    ? `${server.name}:shared${
-        Object.keys(server.executor.connections).length > 0
-          ? `[${Object.entries(server.executor.connections)
-              .map(([name, method]) => `${name}=${method}`)
-              .join("|")}]`
-          : ""
-      }`
-    : undefined;
-
-  return [direct, shared].filter((value): value is string => value !== undefined).join("+");
+  return `${server.name}:${Object.entries(server.agents)
+    .map(([agent, enabled]) => `${agent}=${enabled ? "enabled" : "disabled"}`)
+    .join("|")}`;
 }
 
 function parseContextAgent(agent: string): ContextHarness {
@@ -1314,12 +1291,6 @@ async function printMcpStatus(): Promise<void> {
   const profile = await resolveProfile(paths, program.opts().profile);
 
   for (const server of profile.mcpServers) {
-    if (server.executor) {
-      console.log(`${server.name}\tshared\texecutor`);
-    }
-
-    if (!server.agents) continue;
-
     for (const target of Object.keys(server.agents).filter(isMcpStatusAgent)) {
       const enabled = mcpDefaults(profile, target)[server.name];
       console.log(`${server.name}\t${target}\t${enabled ? "enabled" : "disabled"}`);

@@ -325,7 +325,6 @@ export function cli(
       CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
       CODEX_HOME: path.join(home, ".codex"),
       PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
-      EXECUTOR_DATA_DIR: path.join(home, ".executor"),
       MFZ_REFERENCES_DIR: undefined,
       ...env
     }
@@ -393,7 +392,6 @@ export function cliWithPtyStdin(
         CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
         CODEX_HOME: path.join(home, ".codex"),
         PI_CODING_AGENT_DIR: path.join(home, ".pi", "agent"),
-        EXECUTOR_DATA_DIR: path.join(home, ".executor"),
         MFZ_REFERENCES_DIR: undefined,
         ...env
       }

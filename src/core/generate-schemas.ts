@@ -156,81 +156,7 @@ function strengthenProfileMcpSchema(schema: JsonSchemaNode): void {
       }
     }))
   };
-
-  const executor = entryProperties.executor;
-
-  if (!executor?.properties) throw new Error("profile.schema.json is missing executor properties");
-  const executorProperties = executor.properties;
-  executorProperties.connections = {
-    type: "object",
-    minProperties: 1,
-    propertyNames: {
-      type: "string",
-      minLength: 1,
-      pattern: "^[a-z][a-z0-9_]*$"
-    },
-    additionalProperties: { type: "string", minLength: 1 }
-  };
 }
-
-function strengthenMcpSchema(schema: JsonSchemaNode): void {
-  const properties = schema.properties;
-
-  if (!properties) throw new Error("mcp.schema.json is missing properties");
-  const servers = properties.servers;
-
-  if (!servers) throw new Error("mcp.schema.json is missing the servers property");
-  const serverEntries = jsonSchemaNodeSchema.safeParse(servers.additionalProperties).data;
-  const branches = serverEntries?.anyOf;
-
-  if (!Array.isArray(branches)) {
-    throw new Error("mcp.schema.json servers must expose anyOf branches");
-  }
-
-  servers.additionalProperties = serverEntries;
-
-  for (const branch of branches) {
-    const branchProperties = branch.properties;
-
-    if (!branchProperties) throw new Error("mcp.schema.json has a branch without properties");
-    const executor = branchProperties.executor;
-
-    if (!executor) continue;
-    const executorProperties = executor.properties;
-
-    if (!executorProperties) throw new Error("mcp.schema.json Executor branch lacks properties");
-    const authentication = executorProperties.authentication;
-
-    if (!authentication) continue;
-    const methods = authentication.items;
-    const methodBranches = methods?.anyOf;
-
-    if (!Array.isArray(methodBranches)) {
-      throw new Error("mcp.schema.json Executor authentication lacks method branches");
-    }
-
-    const oauth = methodBranches.find((method) => method.properties?.kind?.const === "oauth2");
-
-    if (!oauth) throw new Error("mcp.schema.json Executor authentication lacks an oauth2 branch");
-
-    const requireWhenPresent = (field: string, required: string): JsonSchemaConditional => ({
-      if: { required: [field] },
-      // JSON Schema's conditional keyword is intentionally named `then`.
-      // oxlint-disable-next-line unicorn/no-thenable
-      then: { required: [required] }
-    });
-
-    oauth.allOf = [
-      requireWhenPresent("discoveryUrl", "registrationScopes"),
-      requireWhenPresent("registrationScopes", "discoveryUrl")
-    ];
-  }
-}
-
-type JsonSchemaConditional = JsonObject & {
-  if: { required: string[] };
-  then: { required: string[] };
-};
 
 function strengthenThreadManifestSchema(schema: JsonSchemaNode): void {
   const sessions = schema.properties?.sessions?.items;
@@ -261,8 +187,6 @@ export async function generateSchemas(root = process.cwd()): Promise<string[]> {
     if (entry.filename === "mfz-home.schema.json") strengthenHomeManifestSchema(schema);
 
     if (entry.filename === "profile.schema.json") strengthenProfileMcpSchema(schema);
-
-    if (entry.filename === "mcp.schema.json") strengthenMcpSchema(schema);
 
     if (entry.filename === "thread-manifest.schema.json") strengthenThreadManifestSchema(schema);
     const outputPath = path.join(schemasDir, entry.filename);

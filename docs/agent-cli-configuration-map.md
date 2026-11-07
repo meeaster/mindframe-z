@@ -106,7 +106,7 @@ mfz currently maps OpenCode well:
 | Config file | `opencode.config` renders into `opencode.jsonc`. | Generated fields such as MCP, permissions, skills, instructions, and plugins are owned by the renderer. |
 | Global runtime location | Symlink to ~/.config/opencode/opencode.jsonc. | Works, but direct symlink means non-mfz edits happen in rendered output. |
 | Instructions | Generated `instructions` points to AGENTS and machine indexes. | None. |
-| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `mcp.servers`. | Direct native entries use `disabled` and `environment` fields; Executor routes remain shared inventory. |
+| MCP | `shared/mcp.yml` plus `profile.mcp`, rendered to `mcp.servers`. | Native entries use `disabled` and `environment` fields. |
 | Permissions | `opencode.config` pass-through plus generated references, extra-folder, and secret rules. | Generated permissions are ordered native rules. |
 | Commands | Source files under `opencode/commands`, selected by `opencode.commands`. | mfz renders the managed `commands` directory. |
 | Agents | Source files under `opencode/agents`, selected by `opencode.agents`. | mfz renders the managed `agents` directory. |

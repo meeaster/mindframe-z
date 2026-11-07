@@ -7,7 +7,7 @@ interface ToolRequirement {
 }
 
 // The home's mise.toml owns which tools are installed and at what version; the engine only knows
-// which of its features call which commands. Executor is checked by its own diagnostics.
+// which of its features call which commands.
 function requiredTools(profile: ResolvedProfile): ToolRequirement[] {
   const requirements: ToolRequirement[] = [
     { tool: "git", feature: "home, reference, and workspace checkouts" },

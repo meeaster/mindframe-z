@@ -110,7 +110,7 @@ export async function runSetup(options: SetupOptions): Promise<boolean> {
       verbose: options.verbose
     });
 
-  // Tools come before the full apply, which can need them (Executor reconciliation, tool skills).
+  // Tools come before the full apply, which can need them for tool skills.
   // Dotfiles go first so a home's mise wrapper is in place before anything installs, and the
   // infra-only applies render no agent configuration, so they need no tools themselves. Without
   // rendered mise config there is nothing to install.

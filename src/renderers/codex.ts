@@ -2,13 +2,7 @@ import path from "node:path";
 import { stringify } from "smol-toml";
 import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
 import { parseEnvRef } from "../core/env-ref.js";
-import {
-  deepMerge,
-  executorBridgeName,
-  filterMcpForTarget,
-  requiresExecutorBridge,
-  type ResolvedProfile
-} from "../core/profile.js";
+import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderedFile, RenderResult } from "../core/render.js";
 import {
   mcpRemovalDetail,
@@ -19,7 +13,6 @@ import { renderInlinedAgents } from "./agents-doc.js";
 import { readTomlObject } from "../core/fs-util.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { mergeSkillOverrides } from "../core/skill-overrides.js";
-import { codexExecutorEntry } from "./executor.js";
 
 export const CODEX_DERIVED_KEYS = new Set([
   "mcp_servers",
@@ -30,7 +23,7 @@ export const CODEX_DERIVED_KEYS = new Set([
 ]);
 
 function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile) {
-  const mcp = Object.fromEntries(
+  return Object.fromEntries(
     filterMcpForTarget(profile, "codex").map(({ name, server, enabled }) => {
       if (server.type === "remote") {
         const literalHeaders: Record<string, string> = {};
@@ -67,11 +60,6 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile) {
       return [name, entry];
     })
   );
-
-  if (requiresExecutorBridge(profile, "codex"))
-    mcp[executorBridgeName] = codexExecutorEntry(profile);
-
-  return mcp;
 }
 
 function renderCodexPermissions(paths: RuntimePaths, profile: ResolvedProfile) {

@@ -4,16 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import type { McpServer } from "../core/manifests.js";
 import { expandHome, type RuntimePaths } from "../core/paths.js";
-import {
-  executorBridgeName,
-  filterMcpForTarget,
-  mcpDefaults,
-  requiresExecutorBridge,
-  type ResolvedProfile
-} from "../core/profile.js";
+import { filterMcpForTarget, mcpDefaults, type ResolvedProfile } from "../core/profile.js";
 import type { ContextHarness, ContextMcpProbe } from "./model.js";
 import { measureText } from "./measurement.js";
-import { executorBridgeArgs } from "../renderers/executor.js";
 import {
   jsonString,
   parseJsonObject,
@@ -344,16 +337,15 @@ export async function probeMcpServer(
   inspectedDirectory: string
 ): Promise<ContextMcpProbe> {
   const target = filterMcpForTarget(profile, harness).find((entry) => entry.name === serverName);
-  const sharedExecutor = serverName === executorBridgeName && requiresExecutorBridge(profile);
   const effective = mcpDefaults(profile, harness);
 
-  if ((!target && !sharedExecutor) || (!sharedExecutor && effective[serverName] !== true)) {
+  if (!target || effective[serverName] !== true) {
     throw new Error(
       `MCP server ${serverName} is not enabled for ${harness} in profile ${profile.name}`
     );
   }
 
-  if (target?.server.type === "remote" && target.server.transport === "sse") {
+  if (target.server.type === "remote" && target.server.transport === "sse") {
     throw new Error("MCP probe does not support remote SSE transport; no connection was made");
   }
 
@@ -361,21 +353,12 @@ export async function probeMcpServer(
   let connection: McpConnection | undefined;
 
   try {
-    if (sharedExecutor) {
-      const child = spawn("executor", executorBridgeArgs(profile), {
-        env: temporaryEnvironment(temporaryDirectory),
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-
-      connection = new StdioConnection(child);
-    } else {
-      connection = createConnection(
-        target!.server,
-        paths,
-        inspectedDirectory,
-        temporaryEnvironment(temporaryDirectory)
-      );
-    }
+    connection = createConnection(
+      target.server,
+      paths,
+      inspectedDirectory,
+      temporaryEnvironment(temporaryDirectory)
+    );
 
     const initialized = await connection.request(
       "initialize",

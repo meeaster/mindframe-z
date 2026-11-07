@@ -6,7 +6,6 @@ import YAML from "yaml";
 import { guide, guideTopicNames } from "../../src/cli/init.js";
 import { applyConfig } from "../../src/cli/apply.js";
 import {
-  mcpServerSchema,
   profileSchema,
   refsManifestSchema,
   skillsManifestSchema
@@ -72,7 +71,6 @@ describe("init and guide integration", () => {
     expect(result).toContain("mfz guide skill-review");
     expect(result).toContain("mfz guide references");
     expect(result).toContain("mfz guide extra-folders");
-    expect(result).not.toContain("Declare Executor authentication structure");
 
     const routes = Array.from(result.matchAll(/`mfz guide ([a-z-]+)`/g), (match) => match[1]);
 
@@ -118,25 +116,8 @@ describe("init and guide integration", () => {
   it("prints the MCP topic guide", async () => {
     const result = await captureGuide("mcp");
     expect(result).toContain("# MCP Guide");
-    expect(result).toContain("executor:");
-    expect(result).toContain("all connected supported harnesses");
-    expect(result).toContain("mfz guide executor-auth");
     const [example] = yamlExamples(result);
     expect(profileSchema.safeParse({ name: "example", ...example }).success).toBe(true);
-  });
-
-  it("prints the Executor authentication topic guide", async () => {
-    const result = await captureGuide("executor-auth");
-    expect(result).toContain("# Executor Authentication Guide");
-    expect(result).toContain("Done when every declared credentialed connection");
-    const [example] = yamlExamples(result);
-    expect(
-      mcpServerSchema.safeParse({
-        type: "remote",
-        url: "https://example.com/mcp",
-        ...example
-      }).success
-    ).toBe(true);
   });
 
   it("prints the extra folders topic guide", async () => {

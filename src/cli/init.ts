@@ -7,11 +7,9 @@ import { expandHome, machineConfigPath, mindframeZDir } from "../core/paths.js";
 
 const mcpGuideMarkdown = `# MCP Guide
 
-Use this guide when adding or changing a direct MCP server or Executor routing.
+Use this guide when adding or changing an MCP server.
 
-The catalog defines server connection details. A profile may select native agents, Executor, or both independently.
-
-Select direct harnesses with \`agents\` and Executor with \`executor.enabled: true\`. Set both for both routes. Omitting \`agents\` selects no direct harnesses. Use a concise enabled list or a grouped state list:
+The catalog defines server connection details. A profile selects the harnesses that receive each server with \`agents\`, which every profile MCP entry must declare. Use a concise enabled list or a grouped state list:
 
 \`\`\`yaml
 mcp:
@@ -21,21 +19,11 @@ mcp:
     agents:
       enabled: [claude-code]
       disabled: [opencode, codex]
-  context7:
-    executor:
-      enabled: true
-  datadog:
-    agents: [opencode, claude-code, codex]
-    executor:
-      enabled: true
-      connections:
-        publicsafety: oauth
-        tylertech: oauth
 \`\`\`
 
-Omitting \`agents\` leaves a server Executor-only. Direct entries keep per-harness toggles; OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
+Each entry keeps per-harness toggles. OpenCode and Codex may use grouped \`disabled\` state, but Claude Code cannot be declared disabled because its user/local MCP configuration has no supported configured-but-disabled state.
 
-In child profiles, an enabled \`agents\` selection replaces the inherited direct-agent selection; agents omitted from that list are omitted from the rendered MCP configuration. A grouped disabled-only selection patches only the named inherited routes:
+In child profiles, an enabled \`agents\` selection replaces the inherited selection; agents omitted from that list are omitted from the rendered MCP configuration. A grouped disabled-only selection patches only the named inherited routes:
 
 \`\`\`yaml
 mcp:
@@ -43,41 +31,7 @@ mcp:
     agents: [opencode, codex]
 \`\`\`
 
-Executor entries are shared inventory for all connected supported harnesses, not per-agent toggles. Set the profile-level \`executor.bridge: false\` to reconcile Executor without adding its MCP bridge to any agent. A real \`mfz apply\` starts or reuses the native Executor daemon and uses its default \`$HOME/.executor\` data store (or an intentionally set \`EXECUTOR_DATA_DIR\`), then writes harness bridges only when the bridge is enabled and required connection metadata exists. MFZ never sets \`EXECUTOR_DATA_DIR\` or \`EXECUTOR_SCOPE_DIR\`, and the bridge does not pass \`--scope\`. Keep secret-backed or project-sensitive servers direct until their Executor credential model is specified. Sandbox startup currently rejects profiles with Executor integrations.
-
-For an Executor server that needs OAuth, an API key, or named connections, run \`mfz guide executor-auth\` before declaring them.
-
 Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when the intended routing is rendered and the profile reports healthy links.
-`;
-
-const executorAuthGuideMarkdown = `# Executor Authentication Guide
-
-Use this guide before declaring Executor authentication methods or profile connections. OAuth and API-key connections are created in the Executor app; MFZ never opens authorization flows, accepts secrets, or imports harness credentials.
-
-Declare Executor authentication structure in the catalog, never credential values:
-
-\`\`\`yaml
-executor:
-  authentication:
-    - slug: none
-      kind: none
-    - slug: oauth
-      kind: oauth2
-    - slug: api-key
-      kind: apikey
-      placements:
-        - carrier: header
-          name: X-API-Key
-          variable: api_key
-\`\`\`
-
-Normal OAuth uses endpoint discovery. The catalog accepts assisted OAuth only with both \`discoveryUrl\` and \`registrationScopes\`, but MFZ currently sends neither field to Executor. MFZ uses \`registrationScopes\` locally to check reported missing OAuth scopes. These declarations do not configure public-client registration; verify the connection in Executor before cutover.
-
-Profile connection names must be lowercase and address-safe because Executor persists names such as \`publicSafety\` as \`publicsafety\`; MFZ rejects unsafe or mixed-case names and never silently renames durable state. A profile connection map selects catalog method slugs by exact name. Omit it only when one method can resolve to the deterministic \`main\` connection. Add each named OAuth or API-key connection in the Executor app using the exact profile connection name. Executor tools are addressed with the full integration, owner, and connection path, so agents must not choose an organization implicitly.
-
-Apply may create only explicit no-auth connections, reports every missing credentialed connection together after reconciliation, and blocks cutover until all are present. Do not migrate a credentialed direct server until its Executor connection is verified; disconnect old Executor state explicitly before deleting or changing a durable method. Existing profile-scoped MFZ Executor directories are not migrated or deleted automatically; after an intentional backup and review, use an Executor-supported/manual migration or cleanup procedure.
-
-Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when every declared credentialed connection has compatible metadata, the intended routing is rendered, and the profile reports healthy links.
 `;
 
 const cronGuideMarkdown = `# Scheduled OpenCode Jobs Guide
@@ -264,8 +218,7 @@ OpenCode plugins are declared in \`catalog/opencode-plugins.yml\` and enabled by
 Before changing a topic below, run its guide:
 
 - \`mfz guide instructions\` - global guidance, instruction references, machine-local instructions, or capability groups.
-- \`mfz guide mcp\` - add or change direct MCP servers or Executor routing.
-- \`mfz guide executor-auth\` - declare Executor authentication methods or profile connections.
+- \`mfz guide mcp\` - add or change MCP servers.
 - \`mfz guide skills\` - add or change local, vendored, or tool skills.
 - \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
 - \`mfz guide references\` - add, update, or remove read-only reference repositories.
@@ -559,7 +512,6 @@ const guideTopics = new Map([
   ["instructions", instructionsGuideMarkdown],
   ["cron", cronGuideMarkdown],
   ["mcp", mcpGuideMarkdown],
-  ["executor-auth", executorAuthGuideMarkdown],
   ["skills", skillsGuideMarkdown],
   ["skill-review", skillReviewGuideMarkdown],
   ["references", referencesGuideMarkdown],

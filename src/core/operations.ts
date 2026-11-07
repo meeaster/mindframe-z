@@ -6,7 +6,6 @@ export type OperationCategory =
   | "repository"
   | "link"
   | "skill"
-  | "executor"
   | "bookkeeping";
 
 export type OperationAction = "write" | "remove" | "link" | "reconcile" | "snapshot";

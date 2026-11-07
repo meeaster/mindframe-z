@@ -1,6 +1,5 @@
 import { mkdir } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -135,22 +134,6 @@ export function opencodeSnapshotDir(paths: RuntimePaths, profileName: string): s
 
 export function activeOpenCodeSnapshotDir(paths: RuntimePaths, profileName: string): string {
   return opencodeSnapshotDir(paths, profileName);
-}
-
-export function executorDataDir(): string {
-  return path.resolve(process.env.EXECUTOR_DATA_DIR ?? path.join(homedir(), ".executor"));
-}
-
-export function executorConfigPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "executor", "executor.jsonc");
-}
-
-export function executorDesiredPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "executor", "desired.json");
-}
-
-export function executorManagedPath(paths: RuntimePaths, profileName: string): string {
-  return path.join(profileConfigsDir(paths, profileName), "executor", "managed.json");
 }
 
 export function skillCacheRoot(paths: RuntimePaths): string {

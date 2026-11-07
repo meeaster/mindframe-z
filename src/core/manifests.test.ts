@@ -277,82 +277,11 @@ describe("generated profile MCP schema", () => {
       const disabledItems = variant.properties?.disabled?.items;
       expect(disabledItems?.enum).toEqual(["opencode", "codex"]);
     }
-
-    const connections = entryProperties?.executor?.properties?.connections;
-    expect(connections?.minProperties).toBe(1);
-    expect(jsonSchemaNodeSchema.safeParse(connections?.additionalProperties).data?.minLength).toBe(
-      1
-    );
-    expect(connections?.propertyNames?.pattern).toBe("^[a-z][a-z0-9_]*$");
   });
 });
 
-describe("Executor authentication declarations", () => {
-  it("accepts no-auth, normal OAuth, assisted OAuth, and header/query API-key methods", async () => {
-    expect(
-      mcpServerSchema.parse({
-        type: "remote",
-        url: "https://example.test/mcp",
-        executor: {
-          authentication: [
-            { slug: "none", kind: "none" },
-            { slug: "oauth", kind: "oauth2" },
-            {
-              slug: "key",
-              kind: "apikey",
-              placements: [
-                { carrier: "header", name: "X-API-Key", variable: "api_key" },
-                { carrier: "query", name: "tenant", variable: "tenant_id" }
-              ]
-            }
-          ]
-        }
-      })
-    ).toMatchObject({ type: "remote" });
-
-    expect(
-      mcpServerSchema.parse({
-        type: "remote",
-        url: "https://example.test/mcp",
-        executor: {
-          authentication: [
-            {
-              slug: "oauth",
-              kind: "oauth2",
-              discoveryUrl: "https://example.test/oauth",
-              registrationScopes: ["read", "write"]
-            }
-          ]
-        }
-      })
-    ).toMatchObject({ type: "remote" });
-  });
-
-  it("rejects cross-kind assisted fields and every credential value", () => {
-    for (const method of [
-      { slug: "none", kind: "none", discoveryUrl: "https://example.test/oauth" },
-      { slug: "key", kind: "apikey", registrationScopes: ["read"], placements: [] },
-      {
-        slug: "oauth",
-        kind: "oauth2",
-        discoveryUrl: "https://example.test/oauth"
-      },
-      {
-        slug: "key",
-        kind: "apikey",
-        placements: [{ carrier: "header", name: "X-API-Key", variable: "key" }],
-        value: "secret"
-      }
-    ]) {
-      expect(() =>
-        mcpServerSchema.parse({
-          type: "remote",
-          url: "https://example.test/mcp",
-          executor: { authentication: [method] }
-        })
-      ).toThrow();
-    }
-
+describe("MCP server declarations", () => {
+  it("rejects credential fields outside the declared connection shape", () => {
     expect(() =>
       mcpServerSchema.parse({
         type: "remote",
@@ -360,40 +289,6 @@ describe("Executor authentication declarations", () => {
         token: "secret"
       })
     ).toThrow();
-    expect(() =>
-      mcpServerSchema.parse({
-        type: "remote",
-        url: "https://example.test/mcp",
-        executor: { authentication: [{ slug: "public", kind: "none" }] }
-      })
-    ).toThrow();
-  });
-
-  it("rejects duplicate method slugs and generated schema exposes the auth list", async () => {
-    expect(() =>
-      mcpServerSchema.parse({
-        type: "remote",
-        url: "https://example.test/mcp",
-        executor: {
-          authentication: [
-            { slug: "none", kind: "none" },
-            { slug: "none", kind: "none" }
-          ]
-        }
-      })
-    ).toThrow(/must be unique/);
-
-    const schema = await readGeneratedSchema("mcp.schema.json");
-
-    const branches =
-      jsonSchemaNodeSchema.safeParse(schema.properties?.servers?.additionalProperties).data
-        ?.anyOf ?? [];
-
-    const executor = branches[0]?.properties?.executor;
-    expect(executor?.properties).toHaveProperty("authentication");
-    const authBranches = executor?.properties?.authentication?.items?.anyOf ?? [];
-    const oauth = authBranches.find((branch) => branch.properties?.kind?.const === "oauth2");
-    expect(oauth?.allOf).toHaveLength(2);
   });
 });
 

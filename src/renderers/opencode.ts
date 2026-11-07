@@ -10,9 +10,7 @@ import {
 } from "../core/paths.js";
 import {
   assertOpenCodeConfigOwned,
-  executorBridgeName,
   filterMcpForTarget,
-  requiresExecutorBridge,
   type ResolvedOpenCodePlugin,
   type ResolvedProfile
 } from "../core/profile.js";
@@ -21,7 +19,6 @@ import type { OpenCodePluginEntry, RenderResult } from "../core/render.js";
 import type { OperationOutcome } from "../core/operations.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
 import { collectOpenCodeMarkdownFiles } from "./opencode-files.js";
-import { openCodeExecutorEntry } from "./executor.js";
 import { jsonObjectSchema, type JsonObject, type JsonValue } from "../core/json.js";
 import { z } from "zod";
 
@@ -172,10 +169,6 @@ function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths) {
       return [name, entry];
     })
   );
-
-  if (requiresExecutorBridge(profile, "opencode")) {
-    servers[executorBridgeName] = openCodeExecutorEntry(profile);
-  }
 
   return { servers };
 }

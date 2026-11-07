@@ -51,7 +51,6 @@ Unqualified names resolve only in the current home. If an unqualified name exist
 ```text
 ~/.mindframe-z/config.yml
 ~/.mindframe-z/configs/<profile>/
-~/.executor/ (Executor-owned native default, unless EXECUTOR_DATA_DIR is set)
 ~/.mindframe-z/references/
 ~/.mindframe-z/work/v1/
 ~/.mindframe-z/cache/skills/
@@ -63,7 +62,7 @@ Rendered output goes to `~/.mindframe-z/configs/<profile>/`, not into homes. Sin
 
 ## Apply and reference reconciliation
 
-A full `mfz apply` is the workspace activation command. It reconciles Executor when applicable, regenerates the local reference, extra-folder, and capability indexes, renders snapshots that embed those indexes, writes managed configuration, and activates local files and links. Apply never clones, fetches, or removes reference checkouts, so it stays fast and repeatable for configuration edits; it reports each enabled reference whose checkout is missing and points to `mfz refs sync <name>`. The indexes describe the resolved profile and do not depend on checkout revisions, which is why rendering needs no reference synchronization.
+A full `mfz apply` is the workspace activation command. It regenerates the local reference, extra-folder, and capability indexes, renders snapshots that embed those indexes, writes managed configuration, and activates local files and links. Apply never clones, fetches, or removes reference checkouts, so it stays fast and repeatable for configuration edits; it reports each enabled reference whose checkout is missing and points to `mfz refs sync <name>`. The indexes describe the resolved profile and do not depend on checkout revisions, which is why rendering needs no reference synchronization.
 
 `mfz refs sync` is the only command that touches reference checkouts. It reconciles all enabled references with bounded parallel checkout work and protected managed cleanup. The batch admits at most four checkouts, collects expected checkout failures while allowing later references to run, and stops admitting new work after a fatal error while joining every already-admitted checkout. `mfz refs sync <name>` acquires or updates only the named reference and preserves unrelated checkout and ownership state. Both forms use the same exclusive reference resource scope and regenerate local indexes but do not rerender agent snapshots or activate configuration. There is no separate reference-index command.
 
@@ -76,12 +75,6 @@ Interactive reference lifecycle rows are keyed and updated on actual completion,
 `mfz apply --dry-run` plans index work without writing indexes and reports the same missing reference checkouts as a real apply.
 
 Operation owners below the CLI classify actual outcomes. They compare bytes and managed modes, link destinations, skill digests, reference revisions, and external reconciliation results. The CLI-owned reporter in `src/cli/operation-report.ts` presents those outcomes. Default output lists meaningful changes and attention items, while `--verbose` adds unchanged and internal operations in emission order; reference outcomes are deliberately buffered and emitted in deterministic manifest order. Interactive terminals use one reporter-owned region for keyed reference lifecycle rows and ordinary operations. Captured output uses stable tab-separated plain lines without control sequences. A failed run reports completed effects and does not claim rollback.
-
-Executor-enabled MCP entries use Executor's one native default runtime and store, normally `$HOME/.executor` or the user-selected `EXECUTOR_DATA_DIR`. MFZ never sets `EXECUTOR_DATA_DIR` or `EXECUTOR_SCOPE_DIR`, derives profile runtime data, starts a profile daemon, or passes `--scope`. Each profile may retain `configs/<profile>/executor/desired.json` and `managed.json` as non-secret inspectable desired/ownership snapshots; those snapshots do not become Executor scope input. MFZ owns integration inventory and connection-safe endpoint changes; Executor owns authentication methods, credentials, and connections. `mfz apply` reconciles the shared live state before committing harness changes, and `--dry-run` never starts Executor or writes runtime state.
-
-Executor authentication has three ownership layers: the catalog may declare an integration's non-secret `authentication` methods, the profile selects exact named connections and method slugs, and Executor stores the resulting authentication templates and credentials. Omitted connections resolve to `main` only when one method is unambiguous. Apply configures method structure but never opens OAuth, accepts a secret, or creates credentialed connections. A `none` method may create its selected named connection automatically; OAuth and API-key connections must be added in the Executor app with the exact profile connection name before a direct-to-Executor cutover. Apply reconciles all declared integrations before reporting every missing credentialed connection together. Existing connection identities, OAuth clients, scopes, and refresh state are preserved independently. Removing or changing a method referenced by durable state blocks until the user disconnects that exact connection explicitly.
-
-Normal MCP OAuth discovers metadata from the integration endpoint. Assisted OAuth is an explicit catalog exception: `discoveryUrl` points at a separate metadata endpoint, `registrationScopes` constrain registration, and the catalog endpoint remains the protected resource. OAuth authorization and API-key entry happen entirely in the Executor app; generated clients and credentials never pass through MFZ or enter home source, argv, logs, or rendered snapshots.
 
 ## Renderers
 
@@ -97,11 +90,11 @@ Renderers live in `src/renderers/` and consume a `ResolvedProfile`:
 
 Apply keeps one machine-level record of every host link it installs, `configs/.installed.json`, with each link's resolved target and owning target (a harness, `dotfiles`, or `mise`); skill links belong to the harness whose skill directory holds them. After rendering, apply removes the recorded links of the targets it reconciled that the render no longer wants, so switching profiles, disabling a harness, or dropping a dotfile leaves nothing behind. A full apply also reconciles the harnesses the profile no longer enables; a partial `--agent` or `--target` apply reconciles only what it rendered. A recorded link is removed only while it still points at its recorded target; one a user repointed is reported and left. Removing a systemd user unit link reports that units need stopping and `systemctl --user daemon-reload`, since MFZ never drives systemctl. The record covers links only: files apply writes or merges into, such as Claude settings and mise `conf.d` copies, keep their own cleanup. `mfz doctor` reports recorded links that are missing, repointed, or dangling, and `mfz clean --backups` deletes the `<path>.mindframe-z.bak-*` backups apply left beside recorded links. A machine whose links predate the record needs a one-time manual cleanup.
 
-MCP profile entries independently declare native `agents` (`[opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays) and an optional `executor: { enabled: true, connections: ... }` selection. An entry may declare either capability or both. Direct entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state. Executor entries are shared inventory visible through one local `executor mcp --elicitation-mode browser` bridge when profile-level `executor.bridge` is enabled, and are not project-toggleable per agent. Browser OAuth is parallel authorization, never credential import; direct and Executor configuration can be applied together.
+MCP profile entries declare native `agents` (`[opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays). Entries retain per-harness behavior; OpenCode and Codex can retain a native disabled state, while Claude Code rejects a configured-but-disabled state.
 
 ### MCP Authoring And Migration
 
-The independent MCP authoring model replaces route selection and boolean agent maps:
+The MCP authoring model replaces boolean agent maps:
 
 ```yaml
 mcp:
@@ -111,18 +104,9 @@ mcp:
     agents:
       enabled: [claude-code]
       disabled: [opencode, codex]
-  context7:
-    executor:
-      enabled: true
-  sentry:
-    agents: [opencode, claude-code, codex]
-    executor:
-      enabled: true
-      connections:
-        main: oauth
 ```
 
-An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead. Executor-enabled integrations remain configured in the shared inventory for every connected supported harness, so changing one harness's visibility affects only the `agents` selection and never the shared Executor inventory.
+An old direct map with every value `true` becomes a concise list. A map with `false` values becomes grouped state. Do not place `claude-code` in `disabled`; omit that harness or enable it instead.
 
 Renderer source files for inherited OpenCode plugins, commands, agents, and local skills come from the source home recorded during profile resolution. OpenCode commands may use a flat `opencode/commands/<name>.md` source or a packaged `opencode/commands/<name>/COMMAND.md` source; only `COMMAND.md` is rendered, leaving package-local development metadata out of runtime context.
 
@@ -141,8 +125,6 @@ Plugins go in `opencode.jsonc` `plugins`; OpenCode's TUI also loads the TUI part
 `mfz sync` reads managed snapshots from `~/.mindframe-z/configs/<profile>/` and promotes unmanaged harness keys back into profiles. Mise is intentionally excluded: native Mise commands own unmanaged user edits. It no longer imports external skill lock state or promotes unmanaged installed skills. `mfz skills sync` runs only the skill snapshot and owned-link reconciliation path. When an upstream checkout is pushable (`git push --dry-run` succeeds), its profiles are offered as qualified targets such as `personal/base`. Writes to upstream checkouts are reported as uncommitted.
 
 Managed source layout follows the target-relative path: profile dotfiles under `profiles/<name>/.config/systemd/user/` render to `configs/<profile>/dotfiles/.config/systemd/user/` and are installed at `~/.config/systemd/user/`. Dedicated renderers are reserved for target-specific semantics; systemd is currently file-only. `mfz apply` writes units but does not call `systemctl` or `loginctl`, reload, enable, start, stop, or disable services.
-
-Generated Executor snapshots and bridge entries are derived output and are not adopted by `mfz sync`. OAuth-backed Executor integrations and named connections are not removed automatically; apply blocks with a metadata-only remediation message naming the exact connection until the user disconnects it explicitly.
 
 ## Skills
 
@@ -181,7 +163,7 @@ Workspace root guidance files are ordinary profile dotfiles under `profiles/<nam
 
 Repositories are discovered, not registered: `mfz workspace status` and `sync` walk the workspace for checkout roots, never entering symlinks, dot directories, `node_modules`, or `scratch/`. Repositories the workspace should have are declared in the home's `catalog/repos.yml` and selected by profiles (and optionally machine config) through `repos`; a selected repository resolves to a checkout under `workspace_root` and implies an extra folder grant with the entry's capability metadata. `mfz workspace sync` clones each selected repository that is missing before fast-forwarding. Harness settings a profile passes through verbatim may write `{repo:NAME}` in a string; profile resolution expands it to that catalog repository's absolute checkout path, because some settings, such as Claude Code directory marketplaces, reject `~`. GitHub entries name `owner/name`, and the machine's `git.protocol` (`https` or `ssh`) chooses the clone URL, because Git access is a property of the machine; other hosts give a URL used as written. Sync also skips `worktrees/`, `services/` (live deployments change through their own runbooks), and the references directory (owned by `mfz refs sync`). It fast-forwards only a checkout on its remote's default branch, and reports anything that would need a merge, a branch switch, or a remote guess as skipped. mfz never handles Git credentials; a clone or fetch that fails is reported and the rest continue.
 
-`mfz setup` composes the machine lifecycle: initialize from `--clone` when no home is configured, otherwise fast-forward the home; then `refs sync` and `workspace sync`, which precede rendering because config can point into workspace checkouts such as folder plugins; then an infra-only `apply` of dotfiles and mise configuration, which renders no agent configuration and so needs no tools; then `mise prune`/`install`/`upgrade`/`prune`, pruning first to free space held by unreferenced versions before downloading; then the full `apply`, which can need installed tools for Executor reconciliation and tool skills. Setup stops if any apply fails; then rebuild a source engine whose checkout moved. Each step is repeatable, so the same command bootstraps and updates. The home's mise configuration owns every tool and version; the engine only reports, in `mfz doctor` and the setup summary, a command an enabled feature needs that is missing, and warns when Executor differs from the version its adapter was verified against.
+`mfz setup` composes the machine lifecycle: initialize from `--clone` when no home is configured, otherwise fast-forward the home; then `refs sync` and `workspace sync`, which precede rendering because config can point into workspace checkouts such as folder plugins; then an infra-only `apply` of dotfiles and mise configuration, which renders no agent configuration and so needs no tools; then `mise prune`/`install`/`upgrade`/`prune`, pruning first to free space held by unreferenced versions before downloading; then the full `apply`, which can need installed tools for tool skills. Setup stops if any apply fails; then rebuild a source engine whose checkout moved. Each step is repeatable, so the same command bootstraps and updates. The home's mise configuration owns every tool and version; the engine only reports, in `mfz doctor` and the setup summary, a command an enabled feature needs that is missing.
 
 ## Bootstrap And Distribution
 
@@ -242,9 +224,7 @@ Sandbox code remains engine-owned. Home-specific sandbox overlays belong in home
 
 Sandbox Mise projection is deliberately smaller than the host projection: it contains only `conf.d/*.toml` fragments and namespaced `tasks/<layer>/` files. Host ownership manifests and bootstrap configuration are omitted from the sandbox tree; bootstrap remains host-only because it may reference host repositories.
 
-Sandbox remains a separate credential boundary. Profiles containing Executor-enabled MCP entries are rejected by sandbox startup until a future design defines safe host-Executor access.
-
-Existing profile-scoped MFZ Executor directories are legacy state, not an input to the native store. MFZ does not migrate, merge, delete, or authorize that state automatically. An operator who needs it must stop relevant Executor processes, back up and inspect the old `~/.mindframe-z/executor/<profile>/data/` directory, then use an explicitly approved Executor-supported or manual migration/cleanup procedure; only after that deliberate review may the legacy directory be removed.
+Sandbox remains a separate credential boundary.
 
 ## Description Convention
 
@@ -270,7 +250,6 @@ CI build artifacts — needed for inspecting test failures
 | `MFZ_HOME` | Machine home directory | `$HOME` |
 | `MFZ_PROFILE` | Active profile name | machine profile or `personal` |
 | `MFZ_REFERENCES_DIR` | Reference clone directory | `~/.mindframe-z/references` |
-| `EXECUTOR_DATA_DIR` | Executor-owned native data-directory override | `~/.executor` |
 | `OPENCODE_CONFIG_DIR` | OpenCode global config dir | `~/.config/opencode` |
 | `CLAUDE_CONFIG_DIR` | Claude config dir | `~/.claude` |
 | `CODEX_HOME` | Codex home/config dir | `~/.codex` |

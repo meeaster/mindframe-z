@@ -8,13 +8,7 @@ import {
   referenceIndexPath
 } from "../core/paths.js";
 import { jsonFileContent, readJsonObject } from "../core/fs-util.js";
-import {
-  deepMerge,
-  executorBridgeName,
-  filterMcpForTarget,
-  requiresExecutorBridge,
-  type ResolvedProfile
-} from "../core/profile.js";
+import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderedFile, RenderResult } from "../core/render.js";
 import {
   mcpRemovalDetail,
@@ -23,7 +17,6 @@ import {
 } from "../core/mcp-full-sync.js";
 import { jsonObjectSchema, type JsonObject } from "../core/json.js";
 import { hasManagedZsh, zshSecretsDir } from "../core/zsh.js";
-import { claudeExecutorEntry } from "./executor.js";
 
 function claudePermissionPattern(absPath: string): string {
   const normalized = absPath.replace(/\/+$/, "") || "/";
@@ -179,8 +172,6 @@ export async function renderClaude(
     )
   );
 
-  if (requiresExecutorBridge(profile, "claude-code"))
-    managedClaudeMcp[executorBridgeName] = claudeExecutorEntry(profile);
   const localSettingsPath = path.join(paths.claudeDir, "settings.json");
   const localClaudeJsonPath = path.join(paths.home, ".claude.json");
   const existingClaudeJson = jsonObjectSchema.parse(await readJsonObject(localClaudeJsonPath));

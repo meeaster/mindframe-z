@@ -42,7 +42,7 @@ type FrontmatterObject = z.infer<typeof frontmatterObjectSchema>;
 /**
  * Report whether a path is reachable on disk. This is the canonical async
  * existence predicate behind the "skip when absent" branches in apply, thread
- * storage, skill overrides, and executor reconcile, so the answer stays
+ * storage, and skill overrides, so the answer stays
  * identical wherever the check is made. It resolves symlinks, so a dangling
  * link reads as absent, and it does not distinguish files from directories —
  * callers that need that distinction stat the path themselves.
@@ -238,8 +238,8 @@ export async function writeTextFile(file: string, content: string): Promise<void
 /**
  * Replace a JSON file atomically: create the parent directory, write the
  * {@link jsonFileContent} form to a uniquely named sibling, then rename it over
- * the destination. This is the canonical mutable-state write behind executor
- * snapshots and work-unit manifests, so a concurrent
+ * the destination. This is the canonical mutable-state write behind work-unit
+ * manifests, so a concurrent
  * or interrupted `mfz` run either sees the previous file or the complete new
  * one, never a half-written record.
  */

@@ -7,7 +7,6 @@ import {
   type LoadedManifests,
   type OpenCodePlugin,
   type McpServer,
-  type ProfileMcpConfig,
   type ProfileAgentDefaults,
   type CapabilityAgentName,
   type VendoredSkillTarget,
@@ -57,59 +56,10 @@ export interface ProfileResolutionOptions {
   readonly evaluateAgents?: readonly AgentName[];
 }
 
-export const executorBridgeName = "executor";
-
-export function validateExecutorMcpServer(name: string, server: McpServer): void {
-  if (server.type === "remote") {
-    if (server.transport === "stdio") {
-      throw new Error(`Executor route for ${name} cannot use stdio transport for a remote server`);
-    }
-
-    if (server.url.includes("{env:")) {
-      throw new Error(
-        `Executor route for ${name}.url contains an environment reference; keep it direct`
-      );
-    }
-
-    if (server.headers && Object.keys(server.headers).length > 0) {
-      throw new Error(`Executor route for ${name} contains headers; keep it direct`);
-    }
-
-    if (server.env && Object.keys(server.env).length > 0) {
-      throw new Error(`Executor route for ${name} contains environment values; keep it direct`);
-    }
-  } else {
-    if (server.transport !== undefined && server.transport !== "stdio") {
-      throw new Error(`Executor route for ${name} cannot use remote transport for a local server`);
-    }
-
-    if (server.executor?.transport !== undefined) {
-      throw new Error(`Executor route for ${name} has remote-only settings on a local server`);
-    }
-
-    if (server.executor?.authentication?.some((method) => method.kind === "oauth2")) {
-      throw new Error(`Executor route for ${name} cannot use OAuth for a local server`);
-    }
-
-    if (server.env && Object.keys(server.env).length > 0) {
-      throw new Error(`Executor route for ${name} contains environment values; keep it direct`);
-    }
-
-    if (server.command.some((part) => part.includes("{env:"))) {
-      throw new Error(
-        `Executor route for ${name}.command contains an environment reference; keep it direct`
-      );
-    }
-  }
-}
-
 export interface ResolvedMcpServer {
   name: string;
   server: McpServer;
-  agents?: Partial<Record<CapabilityAgentName, boolean>>;
-  executor?: {
-    connections: Record<string, string>;
-  };
+  agents: Partial<Record<CapabilityAgentName, boolean>>;
 }
 
 type ResolvedVendor =
@@ -158,10 +108,7 @@ function isRenderedSkill(skill: DeclaredSkill): skill is ResolvedSkill {
   return skill.source !== "external";
 }
 
-export type TargetedMcpServer = ResolvedMcpServer & {
-  agents: Partial<Record<CapabilityAgentName, boolean>>;
-  enabled: boolean;
-};
+export type TargetedMcpServer = ResolvedMcpServer & { enabled: boolean };
 
 /** A catalog plugin enabled by the profile, with the root of the home that declares it. */
 // A repo-sourced plugin carries the checkout directory it resolves to.
@@ -548,7 +495,6 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     })(),
     skills: deepMerge(base.skills, child.skills),
     mcp: mergeMcpConfigs(base.mcp, child.mcp),
-    executor: deepMerge(base.executor ?? {}, child.executor ?? {}),
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       permissions: [...base.opencode.permissions, ...child.opencode.permissions],
@@ -587,41 +533,6 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
   };
 }
 
-type ExecutorMcpConfig = NonNullable<ProfileMcpConfig["executor"]>;
-
-function resolveExecutorConnections(
-  name: string,
-  server: McpServer,
-  config: ExecutorMcpConfig
-): ExecutorConnections {
-  const methods = server.executor?.authentication ?? [];
-  const selected = config.connections;
-
-  if (!selected) {
-    if (methods.length === 1) return { main: methods[0]!.slug };
-
-    if (methods.length > 1) {
-      throw new Error(
-        `Executor MCP server ${name} declares multiple authentication methods; declare named connections with their authentication slugs`
-      );
-    }
-
-    return { main: "none" };
-  }
-
-  const methodSlugs = new Set(methods.map((method) => method.slug));
-
-  for (const [connection, method] of Object.entries(selected)) {
-    if (!methodSlugs.has(method)) {
-      throw new Error(
-        `Executor MCP server ${name} connection ${connection} selects unknown authentication method ${method}`
-      );
-    }
-  }
-
-  return { ...selected };
-}
-
 function mergeMcpConfigs(
   base: ProfileManifest["mcp"],
   child: ProfileManifest["mcp"]
@@ -640,12 +551,6 @@ function mergeMcpConfigs(
 
     if (childConfig.agents && Object.values(childConfig.agents).some((enabled) => enabled)) {
       combined.agents = childConfig.agents;
-    }
-
-    if (!("agents" in childConfig) && "executor" in childConfig) {
-      const { agents: _agents, ...withoutAgents } = combined;
-      merged[name] = withoutAgents;
-      continue;
     }
 
     merged[name] = combined;
@@ -682,10 +587,6 @@ function isMergeObject(value: MergeValue): value is MergeInput {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
-interface ExecutorConnections {
-  [connection: string]: string;
-}
-
 interface ResolvedSkillConfig {
   agents: ProfileAgentDefaults;
   toggleable: boolean;
@@ -694,12 +595,6 @@ interface ResolvedSkillConfig {
 }
 
 function capabilityAgent(agent: AgentName): CapabilityAgentName | undefined {
-  if (agent === "pi") return undefined;
-
-  return agent;
-}
-
-function directCapabilityAgent(agent: AgentName): CapabilityAgentName | undefined {
   if (agent === "pi") return undefined;
 
   return agent;
@@ -829,61 +724,18 @@ export async function resolveSkillDeclarations(
 function resolveMcpServers(
   profileName: string,
   build: ProfileBuild,
-  manifests: LoadedManifests,
-  evaluateAgents: readonly AgentName[]
+  manifests: LoadedManifests
 ): ResolvedMcpServer[] {
-  const resolved = Object.entries(build.profile.mcp).map(
-    ([serverName, config]): ResolvedMcpServer => {
-      const sourceHome = build.sources.mcp.get(serverName) ?? manifests;
-      const server = sourceHome.mcpServers[serverName];
+  return Object.entries(build.profile.mcp).map(([serverName, config]): ResolvedMcpServer => {
+    const sourceHome = build.sources.mcp.get(serverName) ?? manifests;
+    const server = sourceHome.mcpServers[serverName];
 
-      if (!server) {
-        throw new Error(`Profile ${profileName} references unknown MCP server: ${serverName}`);
-      }
-
-      const executorConfig = config.executor?.enabled ? config.executor : undefined;
-
-      const executorRelevant =
-        executorConfig !== undefined &&
-        (config.agents === undefined
-          ? evaluateAgents.some((agent) => agent !== "pi")
-          : evaluateAgents.some((agent) => {
-              const target = directCapabilityAgent(agent);
-
-              return target !== undefined && config.agents?.[target] !== undefined;
-            }));
-
-      if (executorConfig && executorRelevant) {
-        validateExecutorMcpServer(serverName, server);
-
-        const executor = {
-          connections: resolveExecutorConnections(serverName, server, executorConfig)
-        };
-
-        if (config.agents) return { name: serverName, server, agents: config.agents, executor };
-
-        return { name: serverName, server, executor };
-      }
-
-      if (executorConfig) {
-        if (config.agents) return { name: serverName, server, agents: config.agents };
-
-        return { name: serverName, server };
-      }
-
-      if (!config.agents) throw new Error(`MCP server ${serverName} has no active routing`);
-
-      return { name: serverName, server, agents: config.agents };
+    if (!server) {
+      throw new Error(`Profile ${profileName} references unknown MCP server: ${serverName}`);
     }
-  );
 
-  if (resolved.some((entry) => entry.name === executorBridgeName)) {
-    throw new Error(
-      `MCP server name ${executorBridgeName} is reserved for the generated Executor bridge`
-    );
-  }
-
-  return resolved;
+    return { name: serverName, server, agents: config.agents };
+  });
 }
 
 async function resolveProfileByName(
@@ -1060,7 +912,7 @@ export async function resolveProfile(
       })
     : [];
 
-  const mcpServers = resolveMcpServers(name, profileBuild, manifests, evaluateAgents);
+  const mcpServers = resolveMcpServers(name, profileBuild, manifests);
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
@@ -1177,44 +1029,12 @@ export function filterMcpForTarget(
   if (capabilityTarget === undefined) return [];
 
   return profile.mcpServers.flatMap((entry): TargetedMcpServer[] => {
-    const agents = entry.agents;
+    const enabled = entry.agents[capabilityTarget];
 
-    if (!agents || agents[capabilityTarget] === undefined) return [];
+    if (enabled === undefined) return [];
 
-    return [{ ...entry, agents, enabled: agents[capabilityTarget] }];
+    return [{ ...entry, enabled }];
   });
-}
-
-export function executorMcpServers(
-  profile: ResolvedProfile,
-  targets: readonly AgentName[] = profile.agents
-): ResolvedMcpServer[] {
-  const capabilityTargets = targets.flatMap((target) => {
-    const capability = capabilityAgent(target);
-
-    return capability === undefined ? [] : [capability];
-  });
-
-  return profile.mcpServers.filter(
-    (entry) =>
-      entry.executor !== undefined &&
-      (entry.agents === undefined ||
-        capabilityTargets.some((target) => entry.agents?.[target] !== undefined))
-  );
-}
-
-export function requiresExecutorReconciliation(
-  profile: ResolvedProfile,
-  targets: readonly AgentName[] = profile.agents
-): boolean {
-  return executorMcpServers(profile, targets).length > 0;
-}
-
-export function requiresExecutorBridge(profile: ResolvedProfile, target?: AgentName): boolean {
-  return (
-    profile.profile.executor?.bridge !== false &&
-    requiresExecutorReconciliation(profile, target ? [target] : profile.agents)
-  );
 }
 
 export function mcpDefaults(profile: ResolvedProfile, target: AgentName): Record<string, boolean> {
@@ -1223,9 +1043,7 @@ export function mcpDefaults(profile: ResolvedProfile, target: AgentName): Record
 
   return Object.fromEntries(
     profile.mcpServers.flatMap((server) =>
-      capabilityTarget === undefined ||
-      server.agents === undefined ||
-      server.agents[capabilityTarget] === undefined
+      capabilityTarget === undefined || server.agents[capabilityTarget] === undefined
         ? []
         : [[server.name, server.agents[capabilityTarget]]]
     )
