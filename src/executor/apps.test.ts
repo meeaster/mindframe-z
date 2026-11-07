@@ -1,16 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { MCP_SDK_VERSION, appSlug, appSource, planApps, type ExistingApp } from "./apps.js";
+import {
+  MCP_SDK_VERSION,
+  appSlug,
+  appSource,
+  desiredSetHash,
+  frameworkMismatch,
+  planApps,
+  type AppFile,
+  type DesiredApp,
+  type ExistingApp
+} from "./apps.js";
 
 const framework = "0.0.1-beta.120";
 
-const deepwiki = { name: "deepwiki", url: "https://mcp.deepwiki.com/mcp" };
+const deepwiki = { kind: "server", name: "deepwiki", url: "https://mcp.deepwiki.com/mcp" } as const;
 
 function app(slug: string, files: ExistingApp["files"], activeVersion: string | null = "dpl_1") {
   return { id: `app_${slug}`, slug, name: slug, activeVersion, files };
 }
 
 function ownedApp(server: string, url: string, activeVersion: string | null = "dpl_1") {
-  return app(server, appSource({ name: server, url }, framework), activeVersion);
+  return app(server, appSource({ kind: "server", name: server, url }, framework), activeVersion);
+}
+
+function bookmarksFiles(apps = framework): AppFile[] {
+  return [
+    { path: "index.ts", content: 'export { default } from "./src/app.js";\n' },
+    { path: "src/app.ts", content: "export default {};\n" },
+    {
+      path: "package.json",
+      content: JSON.stringify({ name: "mfz-bookmarks", dependencies: { apps } }, null, 2)
+    }
+  ];
+}
+
+function bookmarks(files = bookmarksFiles()): DesiredApp {
+  return { kind: "source", name: "bookmarks", directory: "/home/executor/apps/bookmarks", files };
 }
 
 describe("appSource", () => {
@@ -28,6 +53,10 @@ describe("appSource", () => {
       dependencies: { apps: framework, "@modelcontextprotocol/sdk": MCP_SDK_VERSION }
     });
   });
+
+  it("deploys a hand-written app as written, whatever Executor's framework version", () => {
+    expect(appSource(bookmarks(), "0.0.2")).toEqual(bookmarksFiles());
+  });
 });
 
 describe("appSlug", () => {
@@ -43,7 +72,7 @@ describe("appSlug", () => {
 describe("planApps", () => {
   it("creates a declared server that has no app", () => {
     expect(planApps([deepwiki], framework, [])).toEqual([
-      { action: "create", server: deepwiki, files: appSource(deepwiki, framework) }
+      { action: "create", desired: deepwiki, files: appSource(deepwiki, framework) }
     ]);
   });
 
@@ -51,7 +80,7 @@ describe("planApps", () => {
     const existing = ownedApp("deepwiki", deepwiki.url);
 
     expect(planApps([deepwiki], framework, [existing])).toEqual([
-      { action: "unchanged", server: deepwiki, app: existing }
+      { action: "unchanged", desired: deepwiki, existing }
     ]);
   });
 
@@ -70,7 +99,7 @@ describe("planApps", () => {
     ["no active version", ownedApp("deepwiki", deepwiki.url, null)]
   ])("updates an owned app with %s", (_reason, existing) => {
     expect(planApps([deepwiki], framework, [existing])).toEqual([
-      { action: "update", server: deepwiki, app: existing, files: appSource(deepwiki, framework) }
+      { action: "update", desired: deepwiki, existing, files: appSource(deepwiki, framework) }
     ]);
   });
 
@@ -86,8 +115,10 @@ describe("planApps", () => {
       { path: "package.json", content: '{\n  "name": "deepwiki"\n}' }
     ]);
 
-    expect(planApps([{ ...deepwiki, name: "DeepWiki" }], framework, [handMade])).toEqual([
-      { action: "conflict", server: { ...deepwiki, name: "DeepWiki" }, app: handMade }
+    const upper = { ...deepwiki, name: "DeepWiki" };
+
+    expect(planApps([upper], framework, [handMade])).toEqual([
+      { action: "conflict", desired: upper, existing: handMade }
     ]);
   });
 
@@ -96,7 +127,70 @@ describe("planApps", () => {
     const handMade = app("bookmarks", [{ path: "package.json", content: '{"name":"bookmarks"}' }]);
 
     expect(planApps([], framework, [orphan, handMade])).toEqual([
-      { action: "orphan", server: "exa", app: orphan }
+      { action: "orphan", name: "exa", existing: orphan }
     ]);
+  });
+
+  it("creates a hand-written app with its files, nested ones included", () => {
+    expect(planApps([bookmarks()], framework, [])).toEqual([
+      { action: "create", desired: bookmarks(), files: bookmarksFiles() }
+    ]);
+  });
+
+  it("leaves a deployed hand-written app with the same files unchanged", () => {
+    const existing = app("bookmarks", bookmarksFiles());
+
+    expect(planApps([bookmarks()], framework, [existing])[0]?.action).toBe("unchanged");
+  });
+
+  it.each([
+    [
+      "an edited file",
+      bookmarksFiles().map((file) =>
+        file.path === "src/app.ts" ? { ...file, content: "export default { tools: {} };\n" } : file
+      )
+    ],
+    [
+      "a file only Executor still holds",
+      [...bookmarksFiles(), { path: "src/old.ts", content: "export {};\n" }]
+    ]
+  ])("updates a hand-written app with %s", (_reason, remoteFiles) => {
+    const existing = app("bookmarks", remoteFiles);
+
+    expect(planApps([bookmarks()], framework, [existing])).toEqual([
+      { action: "update", desired: bookmarks(), existing, files: bookmarksFiles() }
+    ]);
+  });
+
+  it("reports a hand-written app the profile no longer declares", () => {
+    const existing = app("bookmarks", bookmarksFiles());
+
+    expect(planApps([deepwiki], framework, [existing])).toEqual([
+      { action: "create", desired: deepwiki, files: appSource(deepwiki, framework) },
+      { action: "orphan", name: "bookmarks", existing }
+    ]);
+  });
+});
+
+describe("frameworkMismatch", () => {
+  it("names the version a hand-written app declares when Executor's differs", () => {
+    expect(frameworkMismatch(bookmarks(bookmarksFiles("0.0.1-beta.100")), framework)).toBe(
+      "0.0.1-beta.100"
+    );
+    expect(frameworkMismatch(bookmarks(), framework)).toBeUndefined();
+    expect(frameworkMismatch(deepwiki, "0.0.2")).toBeUndefined();
+  });
+});
+
+describe("desiredSetHash", () => {
+  it("changes when a hand-written app's source changes", () => {
+    const edited = bookmarksFiles().map((file) =>
+      file.path === "src/app.ts" ? { ...file, content: "export default { tools: {} };\n" } : file
+    );
+
+    expect(desiredSetHash([deepwiki, bookmarks()])).toBe(desiredSetHash([bookmarks(), deepwiki]));
+    expect(desiredSetHash([deepwiki, bookmarks(edited)])).not.toBe(
+      desiredSetHash([deepwiki, bookmarks()])
+    );
   });
 });

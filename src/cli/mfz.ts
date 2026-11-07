@@ -1314,11 +1314,13 @@ mcp
 
 const executor = program
   .command("executor")
-  .description("Host profile MCP servers as Executor apps");
+  .description("Host profile MCP servers and hand-written apps in Executor");
 
 executor
   .command("apply")
-  .description("Create or update the Executor apps for MCP servers with executor: true")
+  .description(
+    "Create or update the Executor apps for MCP servers with executor: true and the profile's executor.apps"
+  )
   .option("--dry-run", "plan app changes without creating or deploying apps")
   .option("--verbose", "show every completed operation")
   .action(async (options) => {

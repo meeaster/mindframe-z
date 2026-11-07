@@ -28,6 +28,7 @@ mindframe-z is a content-free engine that renders AI coding tool configuration f
 ├── skills/vendor/<name>/<target>/         # provider-variant vendored skill
 ├── skills/vendor.lock.yml
 ├── opencode/
+├── executor/apps/<name>/                 # hand-written Executor app source
 └── sandbox/
 ```
 
@@ -96,7 +97,9 @@ MCP profile entries declare native `agents` (`[opencode, claude-code, codex]` or
 
 `executor: true` hosts a server in the local Executor service as an app instead of, or beside, direct harness configuration; renderers ignore it. Profile resolution accepts it only for a remote `http` server with no `headers` and no `{env:` URL references, because the generated app source carries no secrets. `src/executor/` generates each app's source (an `mcpRouter` `index.ts` and a `package.json` pinning Executor's framework version and MCP SDK), plans against existing apps, and runs the `executor` CLI, which owns the local server's address and key; MFZ never calls Executor's HTTP API. An app is MFZ-owned when its package name is `mfz-<server>`. The plan creates missing apps (create, then deploy so they run), deploys owned apps whose source differs or that have no active version, refuses an unowned app holding the address Executor would derive from the server name, and reports owned apps no longer declared for manual removal; it never deletes apps.
 
-`mfz executor apply` is the only command that changes Executor. After a run that reaches every declared server it records a hash of the declared server names and URLs in `~/.mindframe-z/executor-apps-state.json`. `mfz apply` stays offline and adds one attention item when the profile's set no longer matches that record, as it does for an uncloned reference.
+A profile's `executor.apps` (additive and deduplicated across inheritance) names hand-written apps, each a folder at `executor/apps/<name>/` in the home that declares it. Profile resolution reads every file the `executor` CLI would deploy, skipping `.git`, `node_modules`, and `.DS_Store`, and rejects a missing folder, `index.ts`, or `package.json`, a package name other than `mfz-<name>`, a non-UTF-8 file, a name that is not already its own Executor slug, and a name whose slug an `executor: true` server already takes. The planner treats both kinds as desired apps with the same ownership marker and the same comparison over the full file set, so a file only Executor holds is a change. Hand-written source deploys as written; a `dependencies.apps` version that differs from Executor's framework is reported, not rewritten.
+
+`mfz executor apply` is the only command that changes Executor. After a run that reaches every declared app it records a hash of the declared server names and URLs and hand-written app names and files in `~/.mindframe-z/executor-apps-state.json`. `mfz apply` stays offline and adds one attention item when the profile's set no longer matches that record, as it does for an uncloned reference.
 
 ### MCP Authoring And Migration
 

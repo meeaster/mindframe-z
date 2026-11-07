@@ -32,6 +32,7 @@ function profile(overrides: Partial<ResolvedProfile> = {}): ResolvedProfile {
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: [],

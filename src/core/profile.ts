@@ -24,10 +24,17 @@ import { readDirEntries } from "./fs-util.js";
 import { machineInstructionsDir } from "./path-util.js";
 import { expandRepoPaths, repoExtraFolder, resolveRepo, type ResolvedRepo } from "./repos.js";
 import type { JsonObject } from "./json.js";
+import { appSlug, type AppFile } from "../executor/apps.js";
+import { readAppSource } from "../executor/source.js";
 
 type CatalogKind = "reference" | "repo" | "skill" | "mcp" | "opencode plugin" | "profile";
 
-type SourceKind = CatalogKind | "instruction" | "opencode command" | "opencode agent";
+type SourceKind =
+  | CatalogKind
+  | "instruction"
+  | "opencode command"
+  | "opencode agent"
+  | "executor app";
 
 interface ProfileSources {
   references: Map<string, LoadedManifests>;
@@ -38,6 +45,7 @@ interface ProfileSources {
   plugins: Map<string, LoadedManifests>;
   commands: Map<string, LoadedManifests>;
   agents: Map<string, LoadedManifests>;
+  executorApps: Map<string, LoadedManifests>;
 }
 
 interface ProfileBuild {
@@ -62,6 +70,13 @@ export interface ResolvedMcpServer {
   agents: Partial<Record<CapabilityAgentName, boolean>>;
   // Hosted as an Executor app by `mfz executor apply`; direct renderers ignore it.
   executor: boolean;
+}
+
+/** A hand-written Executor app from a home's executor/apps/<name>/ folder. */
+export interface ResolvedExecutorApp {
+  name: string;
+  directory: string;
+  files: AppFile[];
 }
 
 type ResolvedVendor =
@@ -137,6 +152,7 @@ export interface ResolvedProfile {
   enabledOpenCodeAgents: string[];
   enabledOpenCodePlugins?: ResolvedOpenCodePlugin[];
   mcpServers: ResolvedMcpServer[];
+  executorApps: ResolvedExecutorApp[];
   extraFolders: ExtraFolder[];
   miseLayers: ResolvedMiseLayer[];
 }
@@ -156,7 +172,8 @@ function emptySources(): ProfileSources {
     instructions: new Map(),
     plugins: new Map(),
     commands: new Map(),
-    agents: new Map()
+    agents: new Map(),
+    executorApps: new Map()
   };
 }
 
@@ -191,7 +208,8 @@ function mergeSources(base: ProfileSources, child: ProfileSources): ProfileSourc
     instructions: merge("instruction", base.instructions, child.instructions),
     plugins: merge("OpenCode plugin", base.plugins, child.plugins),
     commands: merge("OpenCode command", base.commands, child.commands),
-    agents: merge("OpenCode agent", base.agents, child.agents)
+    agents: merge("OpenCode agent", base.agents, child.agents),
+    executorApps: merge("Executor app", base.executorApps, child.executorApps)
   };
 }
 
@@ -367,6 +385,14 @@ function normalizeProfile(
     path: instructionReferencePaths[index]!
   }));
 
+  const executorApps = normalizeSourceNames(
+    home,
+    profile.executor.apps,
+    sources.executorApps,
+    "executor app",
+    "Executor app"
+  );
+
   const opencode = options.includeOpenCode
     ? {
         ...profile.opencode,
@@ -416,6 +442,7 @@ function normalizeProfile(
       mcp,
       instructions,
       instruction_references: instructionReferences,
+      executor: { apps: executorApps },
       opencode: opencode
     },
     sources,
@@ -497,6 +524,7 @@ export function mergeProfiles(base: ProfileManifest, child: ProfileManifest): Pr
     })(),
     skills: deepMerge(base.skills, child.skills),
     mcp: mergeMcpConfigs(base.mcp, child.mcp),
+    executor: { apps: dedupe([...base.executor.apps, ...child.executor.apps]) },
     opencode: {
       config: deepMerge(base.opencode.config, child.opencode.config),
       permissions: [...base.opencode.permissions, ...child.opencode.permissions],
@@ -771,6 +799,41 @@ function assertExecutorEligible(profileName: string, serverName: string, server:
   }
 }
 
+async function resolveExecutorApps(
+  profileName: string,
+  build: ProfileBuild,
+  manifests: LoadedManifests,
+  mcpServers: readonly ResolvedMcpServer[]
+): Promise<ResolvedExecutorApp[]> {
+  // Executor addresses apps by slug, so an app and a server app must not share one.
+  const serverSlugs = new Map(
+    mcpServers.flatMap((entry) => (entry.executor ? [[appSlug(entry.name), entry.name]] : []))
+  );
+
+  return Promise.all(
+    build.profile.executor.apps.map(async (appName): Promise<ResolvedExecutorApp> => {
+      if (appSlug(appName) !== appName) {
+        throw new Error(
+          `Profile ${profileName} declares Executor app ${appName}, which is not a valid app name; use lowercase letters, digits, and single hyphens, such as ${appSlug(appName)}`
+        );
+      }
+
+      const server = serverSlugs.get(appName);
+
+      if (server !== undefined) {
+        throw new Error(
+          `Profile ${profileName} declares Executor app ${appName}, which collides with MCP server ${server} that sets executor: true; rename one of them`
+        );
+      }
+
+      const sourceHome = build.sources.executorApps.get(appName) ?? manifests;
+      const directory = path.join(sourceHome.root, "executor", "apps", appName);
+
+      return { name: appName, directory, files: await readAppSource(appName, directory) };
+    })
+  );
+}
+
 async function resolveProfileByName(
   manifests: LoadedManifests,
   name: string,
@@ -946,6 +1009,7 @@ export async function resolveProfile(
     : [];
 
   const mcpServers = resolveMcpServers(name, profileBuild, manifests);
+  const executorApps = await resolveExecutorApps(name, profileBuild, manifests, mcpServers);
 
   const extraFolders: ExtraFolder[] = (() => {
     const map = new Map<string, ExtraFolder>();
@@ -980,6 +1044,7 @@ export async function resolveProfile(
     enabledOpenCodeAgents,
     enabledOpenCodePlugins,
     mcpServers,
+    executorApps,
     extraFolders,
     miseLayers: profileBuild.miseLayers
   };

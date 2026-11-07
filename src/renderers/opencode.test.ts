@@ -42,6 +42,7 @@ function profile(home: string): ResolvedProfile {
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [
       {
         name: "remote",

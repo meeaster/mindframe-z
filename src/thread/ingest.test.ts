@@ -72,6 +72,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       repos: [],
       skills: {},
       mcp: {},
+      executor: { apps: [] },
       opencode: {
         config: {},
         permissions: [],
@@ -119,7 +120,8 @@ function profile(root = "/tmp/home"): ResolvedProfile {
       instructions: new Map(),
       plugins: new Map(),
       commands: new Map(),
-      agents: new Map()
+      agents: new Map(),
+      executorApps: new Map()
     },
     instructionFiles: [],
     instructionReferences: [],
@@ -131,6 +133,7 @@ function profile(root = "/tmp/home"): ResolvedProfile {
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []

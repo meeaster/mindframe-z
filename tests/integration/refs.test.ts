@@ -126,7 +126,8 @@ function makeReferenceProfile(
       instructions: new Map(),
       plugins: new Map(),
       commands: new Map(),
-      agents: new Map()
+      agents: new Map(),
+      executorApps: new Map()
     },
     instructionFiles: [],
     instructionReferences: [],
@@ -138,6 +139,7 @@ function makeReferenceProfile(
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: [],

@@ -4,7 +4,7 @@ import { writeJsonAtomicOutcome } from "../core/file-operations.js";
 import type { OperationCompletion } from "../core/operations.js";
 import { executorAppsStatePath, type RuntimePaths } from "../core/paths.js";
 import type { ResolvedProfile } from "../core/profile.js";
-import { desiredSetHash, executorServers } from "./apps.js";
+import { desiredApps, desiredSetHash } from "./apps.js";
 
 const stateSchema = z.object({ desired: z.string() });
 
@@ -25,10 +25,10 @@ export async function executorAppsDrifted(
   paths: RuntimePaths,
   profile: ResolvedProfile
 ): Promise<boolean> {
-  const servers = executorServers(profile);
+  const apps = desiredApps(profile);
   const recorded = stateSchema.safeParse(await readJsonObject(executorAppsStatePath(paths))).data;
 
-  if (recorded === undefined) return servers.length > 0;
+  if (recorded === undefined) return apps.length > 0;
 
-  return recorded.desired !== desiredSetHash(servers);
+  return recorded.desired !== desiredSetHash(apps);
 }

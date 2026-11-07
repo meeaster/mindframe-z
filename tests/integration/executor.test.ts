@@ -1,4 +1,4 @@
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -13,8 +13,12 @@ const statePath = process.env.FAKE_EXECUTOR_STATE;
 const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
 const [, command, ...args] = process.argv.slice(2);
 const flag = (name) => args[args.indexOf("--" + name) + 1];
-const readDir = (dir) =>
-  fs.readdirSync(dir).map((file) => ({ path: file, content: fs.readFileSync(path.join(dir, file), "utf8") }));
+const readDir = (dir, prefix = "") =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? readDir(path.join(dir, entry.name), prefix + entry.name + "/")
+      : [{ path: prefix + entry.name, content: fs.readFileSync(path.join(dir, entry.name), "utf8") }]
+  );
 const print = (value) => {
   fs.writeFileSync(statePath, JSON.stringify(state));
   console.log(JSON.stringify(value, null, 2));
@@ -91,6 +95,7 @@ async function executorFixture(state: FakeExecutorState) {
   return {
     root,
     home,
+    profilePath,
     readState: async () => parseJson(fakeStateSchema, await readFile(statePath, "utf8")),
     executorApply: (args: string[] = []) =>
       cli("mfz", root, home, ["executor", "apply", ...args], env).catch(
@@ -166,6 +171,54 @@ describe("Executor apps", () => {
       { slug: "deepwiki", activeVersion: "dpl_hand", files: handMadeDeepwiki.files }
     ]);
     expect(await fixture.driftNotices()).toHaveLength(1);
+  });
+
+  it("deploys a hand-written app from the home and reports source edits as drift", async () => {
+    const fixture = await executorFixture({ apps: [] });
+    const appDirectory = path.join(fixture.root, "executor", "apps", "notes");
+
+    await mkdir(path.join(appDirectory, "src"), { recursive: true });
+    await writeFile(
+      path.join(appDirectory, "index.ts"),
+      'export { default } from "./src/app.js";\n'
+    );
+    await writeFile(path.join(appDirectory, "src", "app.ts"), "export default {};\n");
+    await writeFile(
+      path.join(appDirectory, "package.json"),
+      JSON.stringify({ name: "mfz-notes", dependencies: { apps: "0.0.1-beta.100" } })
+    );
+    await writeFile(
+      fixture.profilePath,
+      `${await readFile(fixture.profilePath, "utf8")}executor:\n  apps: [notes]\n`
+    );
+
+    const applied = await fixture.executorApply();
+
+    expect(applied.exitCode).toBe(0);
+    expect(applied.stdout).toContain(`created\texecutor\tnotes\t${appDirectory}`);
+    expect(applied.stdout).toContain(
+      "skipped\texecutor\tnotes\tpackage.json declares apps 0.0.1-beta.100, but Executor's framework is 0.0.1-beta.120; it deploys as written"
+    );
+
+    const notes = (await fixture.readState()).apps.find((app) => app.slug === "notes");
+    expect(notes?.files.map((file) => file.path).sort()).toEqual([
+      "index.ts",
+      "package.json",
+      "src/app.ts"
+    ]);
+    expect(await fixture.driftNotices()).toEqual([]);
+
+    await writeFile(path.join(appDirectory, "src", "app.ts"), "export default { tools: {} };\n");
+    expect(await fixture.driftNotices()).toHaveLength(1);
+
+    const updated = await fixture.executorApply();
+    expect(updated.stdout).toContain(`updated\texecutor\tnotes\t${appDirectory}`);
+    expect(
+      (await fixture.readState()).apps
+        .find((app) => app.slug === "notes")
+        ?.files.find((file) => file.path === "src/app.ts")?.content
+    ).toBe("export default { tools: {} };\n");
+    expect(await fixture.driftNotices()).toEqual([]);
   });
 
   it("fails with a start hint when the Executor service is unreachable", async () => {

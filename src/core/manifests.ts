@@ -810,6 +810,11 @@ export const profileSchema = z
     repos: z.array(z.string()).default([]),
     skills: z.record(z.string(), profileSkillConfigSchema.optional()).default({}),
     mcp: z.record(z.string(), profileMcpConfigSchema).default({}),
+    // Hand-written Executor apps, each a folder under the home's executor/apps/.
+    executor: z
+      .object({ apps: z.array(z.string().min(1)).default([]) })
+      .strict()
+      .default({ apps: [] }),
     opencode: opencodeConfigSchema.default({
       config: {},
       permissions: [],

@@ -62,6 +62,7 @@ function profile(
       repos: [],
       skills: {},
       mcp: {},
+      executor: { apps: [] },
       opencode: {
         config: {},
         permissions: [],
@@ -104,7 +105,8 @@ function profile(
       instructions: new Map(),
       plugins: new Map(),
       commands: new Map(),
-      agents: new Map()
+      agents: new Map(),
+      executorApps: new Map()
     },
     instructionFiles: options.root ? [path.join(options.root, "instructions", "AGENTS.md")] : [],
     instructionReferences: [],
@@ -118,6 +120,7 @@ function profile(
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: options.extraFolder
       ? [

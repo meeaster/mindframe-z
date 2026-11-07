@@ -33,7 +33,7 @@ mcp:
 
 ## Executor apps
 
-\`executor: true\` hosts the server in the local Executor as an app named after the catalog server, alongside or instead of direct harness routes:
+\`executor: true\` hosts the server in the local Executor as an app, alongside or instead of direct harness routes:
 
 \`\`\`yaml
 mcp:
@@ -41,11 +41,46 @@ mcp:
     executor: true
 \`\`\`
 
-Only a \`remote\` catalog server with \`http\` transport qualifies, and its URL must not contain \`{env:...}\` references and it must not set \`headers\`, because the generated app source cannot hold secrets. Profile resolution rejects other servers. A child profile's \`executor\` value overrides the inherited one.
-
-\`mfz apply\` stays offline and only notes when the declared Executor apps changed. Run \`mfz executor apply\` (or \`--dry-run\` first) to create or update the apps through the \`executor\` CLI. It manages only apps whose \`package.json\` name is \`mfz-<server>\`: an unmanaged app already holding the server's address is reported as a conflict to remove or rename, and a managed app no longer declared is reported for manual removal in the Executor dashboard, never deleted.
+Run \`mfz guide executor\` before adding one; it covers eligibility, hand-written apps, and \`mfz executor apply\`.
 
 Verify with plain \`mfz apply\`, then \`mfz doctor\`. Done when the intended routing is rendered and the profile reports healthy links.
+`;
+
+const executorGuideMarkdown = `# Executor Guide
+
+Use this guide before hosting an MCP server in the local Executor or adding a hand-written Executor app.
+
+Executor runs apps: TypeScript packages that expose tools to agents. A profile declares two kinds, and \`mfz executor apply\` reconciles both:
+
+\`\`\`yaml
+mcp:
+  deepwiki:
+    executor: true
+executor:
+  apps: [bookmarks]
+\`\`\`
+
+## MCP servers
+
+\`executor: true\` on a profile MCP entry makes mfz generate an app named after the catalog server that routes the server's tools. Only a \`remote\` catalog server with \`http\` transport qualifies, and its URL must not contain \`{env:...}\` references and it must not set \`headers\`, because the generated app source cannot hold secrets. Profile resolution rejects other servers. A child profile's \`executor\` value overrides the inherited one.
+
+## Hand-written apps
+
+\`executor.apps\` names apps written in the home. Each is a self-contained folder at \`executor/apps/<name>/\` with a root \`index.ts\` and a \`package.json\`, plus any other text files. The list is additive across profile inheritance, and an upstream app uses a qualified name such as \`<alias>/<name>\`.
+
+- The name uses lowercase letters, digits, and single hyphens, so it is also the app's address and tool path in Executor.
+- The \`package.json\` \`name\` must be exactly \`mfz-<name>\`; that is how mfz recognizes the apps it manages.
+- No app may share its name with an \`executor: true\` server.
+- Every file must be UTF-8 text. mfz and the \`executor\` CLI skip \`.git\`, \`node_modules\`, and \`.DS_Store\`; everything else deploys.
+- The app's \`dependencies.apps\` version is yours to move. \`mfz executor apply\` deploys it as written and notes when it differs from Executor's framework version (\`executor apps framework\`).
+
+For type checking, make the folder a package of a pnpm workspace in the home (list \`executor/apps/*\` in \`pnpm-workspace.yaml\`) and run \`pnpm install\`, so the \`apps\` types install beside the source. \`node_modules\` is never deployed.
+
+## Applying
+
+\`mfz apply\` stays offline and only notes when the declared servers or app source changed since the last run. Run \`mfz executor apply --dry-run\`, then \`mfz executor apply\`, to create or deploy the apps through the \`executor\` CLI. An app whose source matches what Executor holds is left alone; a file only Executor still holds counts as a change, because a deploy replaces the whole source. mfz manages only apps whose \`package.json\` name is \`mfz-<name>\`: an unmanaged app already holding the address is reported as a conflict to remove or rename, and a managed app no longer declared is reported for manual removal in the Executor dashboard, never deleted.
+
+Done when \`mfz executor apply\` reports no changes and \`mfz apply\` shows no Executor notice.
 `;
 
 const cronGuideMarkdown = `# Scheduled OpenCode Jobs Guide
@@ -232,7 +267,8 @@ OpenCode plugins are declared in \`catalog/opencode-plugins.yml\` and enabled by
 Before changing a topic below, run its guide:
 
 - \`mfz guide instructions\` - global guidance, instruction references, machine-local instructions, or capability groups.
-- \`mfz guide mcp\` - add or change MCP servers, including Executor apps applied with \`mfz executor apply\`.
+- \`mfz guide mcp\` - add or change MCP servers.
+- \`mfz guide executor\` - host MCP servers or hand-written apps in Executor with \`mfz executor apply\`.
 - \`mfz guide skills\` - add or change local, vendored, or tool skills.
 - \`mfz guide skill-review\` - review a quarantined vendored skill candidate before promotion.
 - \`mfz guide references\` - add, update, or remove read-only reference repositories.
@@ -526,6 +562,7 @@ const guideTopics = new Map([
   ["instructions", instructionsGuideMarkdown],
   ["cron", cronGuideMarkdown],
   ["mcp", mcpGuideMarkdown],
+  ["executor", executorGuideMarkdown],
   ["skills", skillsGuideMarkdown],
   ["skill-review", skillReviewGuideMarkdown],
   ["references", referencesGuideMarkdown],

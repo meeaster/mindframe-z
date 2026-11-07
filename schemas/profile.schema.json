@@ -320,6 +320,23 @@
         ]
       }
     },
+    "executor": {
+      "default": {
+        "apps": []
+      },
+      "type": "object",
+      "properties": {
+        "apps": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "opencode": {
       "default": {
         "config": {},

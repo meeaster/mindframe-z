@@ -417,6 +417,123 @@ describe("Executor MCP routes", () => {
   });
 });
 
+describe("Executor apps", () => {
+  async function writeApp(root: string, name: string, files: Record<string, string | Buffer>) {
+    for (const [file, content] of Object.entries(files)) {
+      const location = path.join(root, "executor", "apps", name, file);
+      await mkdir(path.dirname(location), { recursive: true });
+      await writeFile(location, content);
+    }
+  }
+
+  function appFiles(name: string) {
+    return {
+      "index.ts": "export default {};\n",
+      "package.json": JSON.stringify({ name: `mfz-${name}` })
+    };
+  }
+
+  async function appHome(work: string) {
+    const root = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-apps-home-"));
+    const home = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-apps-machine-"));
+    await writeHome(root);
+    await writeFile(
+      path.join(root, "catalog", "mcp.yml"),
+      "servers:\n  docs:\n    type: remote\n    url: https://example.test/mcp\n",
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "profiles", "base", "profile.yml"),
+      "name: base\nexecutor:\n  apps: [bookmarks]\n",
+      "utf8"
+    );
+    await mkdir(path.join(root, "profiles", "work"), { recursive: true });
+    await writeFile(
+      path.join(root, "profiles", "work", "profile.yml"),
+      `name: work\nextends: base\n${work}`,
+      "utf8"
+    );
+    await writeApp(root, "bookmarks", appFiles("bookmarks"));
+
+    return {
+      root,
+      resolve: () => resolveProfile(createRuntimePaths({ root, home }), "work")
+    };
+  }
+
+  it("inherits apps additively and reads their files as the executor CLI would", async () => {
+    const fixture = await appHome("executor:\n  apps: [notes, bookmarks]\n");
+
+    await writeApp(fixture.root, "notes", {
+      ...appFiles("notes"),
+      "src/tools.ts": "export const tools = {};\n",
+      "node_modules/apps/index.js": "ignored\n",
+      ".DS_Store": "ignored\n"
+    });
+
+    const resolved = await fixture.resolve();
+
+    expect(resolved.executorApps.map((app) => app.name)).toEqual(["bookmarks", "notes"]);
+    expect(resolved.executorApps[1]).toEqual({
+      name: "notes",
+      directory: path.join(fixture.root, "executor", "apps", "notes"),
+      files: [
+        { path: "index.ts", content: "export default {};\n" },
+        { path: "package.json", content: '{"name":"mfz-notes"}' },
+        { path: "src/tools.ts", content: "export const tools = {};\n" }
+      ]
+    });
+  });
+
+  it.each([
+    ["a missing folder", {}, /Executor app notes has no source; create .*executor\/apps\/notes/u],
+    [
+      "a missing index.ts",
+      { "package.json": '{"name":"mfz-notes"}' },
+      /Executor app notes has no index\.ts/u
+    ],
+    [
+      "a package name without the ownership prefix",
+      { "index.ts": "", "package.json": '{"name":"notes"}' },
+      /Executor app notes: set "name": "mfz-notes"/u
+    ],
+    [
+      "a binary file",
+      { ...appFiles("notes"), "logo.png": Buffer.from([0x89, 0x50, 0xff, 0xfe]) },
+      /Executor app notes: logo\.png is not UTF-8 text/u
+    ]
+  ])("rejects an app with %s", async (_problem, files, message) => {
+    const fixture = await appHome("executor:\n  apps: [notes]\n");
+
+    await writeApp(fixture.root, "notes", files);
+
+    await expect(fixture.resolve()).rejects.toThrow(message);
+  });
+
+  it("rejects an app name Executor would turn into a different slug", async () => {
+    const fixture = await appHome("executor:\n  apps: [My_Notes]\n");
+
+    await expect(fixture.resolve()).rejects.toThrow(
+      "Executor app My_Notes, which is not a valid app name; use lowercase letters, digits, and single hyphens, such as my-notes"
+    );
+  });
+
+  it("rejects an app that shares its name with an executor: true server", async () => {
+    const fixture = await appHome("mcp:\n  Docs:\n    executor: true\nexecutor:\n  apps: [docs]\n");
+
+    await writeFile(
+      path.join(fixture.root, "catalog", "mcp.yml"),
+      "servers:\n  Docs:\n    type: remote\n    url: https://example.test/mcp\n",
+      "utf8"
+    );
+    await writeApp(fixture.root, "docs", appFiles("docs"));
+
+    await expect(fixture.resolve()).rejects.toThrow(
+      "Executor app docs, which collides with MCP server Docs that sets executor: true"
+    );
+  });
+});
+
 describe("mergeProfiles codex plugins", () => {
   it("merges child plugins with base plugins", () => {
     const base = profileSchema.parse({

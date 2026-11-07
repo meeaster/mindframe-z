@@ -32,6 +32,7 @@ function profile(dotfiles: Record<string, string>): ResolvedProfile {
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: [],
     miseLayers: []

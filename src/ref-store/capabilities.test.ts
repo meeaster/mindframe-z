@@ -131,7 +131,8 @@ function groupedProfile(home: string): ResolvedProfile {
       instructions: new Map(),
       plugins: new Map(),
       commands: new Map(),
-      agents: new Map()
+      agents: new Map(),
+      executorApps: new Map()
     },
     instructionFiles: [],
     instructionReferences: [],
@@ -152,6 +153,7 @@ function groupedProfile(home: string): ResolvedProfile {
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     mcpServers: [],
     extraFolders: [
       {

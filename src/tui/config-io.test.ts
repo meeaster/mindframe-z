@@ -53,6 +53,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       repos: [],
       skills: {},
       mcp: {},
+      executor: { apps: [] },
       opencode: {
         config: {},
         permissions: [],
@@ -102,7 +103,8 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
       instructions: new Map(),
       plugins: new Map(),
       commands: new Map(),
-      agents: new Map()
+      agents: new Map(),
+      executorApps: new Map()
     },
     instructionFiles: [],
     instructionReferences: [],
@@ -114,6 +116,7 @@ function resolvedProfile(enabledSkills: ResolvedProfile["enabledSkills"]): Resol
     externalSkills: [],
     enabledOpenCodeCommands: [],
     enabledOpenCodeAgents: [],
+    executorApps: [],
     enabledOpenCodePlugins: [],
     mcpServers: [],
     extraFolders: [],

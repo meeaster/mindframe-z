@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execa } from "execa";
@@ -91,7 +91,13 @@ async function withSourceDirectory(
   const directory = await mkdtemp(path.join(os.tmpdir(), "mfz-executor-app-"));
 
   try {
-    for (const file of files) await writeFile(path.join(directory, file.path), file.content);
+    for (const file of files) {
+      const location = path.join(directory, file.path);
+
+      await mkdir(path.dirname(location), { recursive: true });
+      await writeFile(location, file.content);
+    }
+
     await action(directory);
   } finally {
     await rm(directory, { recursive: true, force: true });
