@@ -155,6 +155,9 @@ function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths) {
 
         if (server.headers) Object.assign(entry, { headers: server.headers });
 
+        if (server.opencode?.pool !== undefined)
+          Object.assign(entry, { pool: server.opencode.pool });
+
         return [name, entry];
       }
 
@@ -165,6 +168,11 @@ function nativeMcp(profile: ResolvedProfile, paths: RuntimePaths) {
       };
 
       if (server.env) Object.assign(entry, { environment: server.env });
+
+      if (server.opencode?.cwd !== undefined)
+        Object.assign(entry, { cwd: expandHome(server.opencode.cwd, paths.home) });
+
+      if (server.opencode?.pool !== undefined) Object.assign(entry, { pool: server.opencode.pool });
 
       return [name, entry];
     })

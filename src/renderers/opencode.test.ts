@@ -50,7 +50,8 @@ function profile(home: string): ResolvedProfile {
           description: "Remote server",
           transport: "http",
           url: "https://example.test/mcp",
-          headers: { Authorization: "Bearer ${TOKEN}" }
+          headers: { Authorization: "Bearer ${TOKEN}" },
+          opencode: { pool: true }
         },
         agents: { opencode: true }
       },
@@ -60,7 +61,8 @@ function profile(home: string): ResolvedProfile {
           type: "local",
           description: "Local server",
           command: ["helper", "--serve"],
-          env: { MODE: "test" }
+          env: { MODE: "test" },
+          opencode: { pool: true, cwd: "~" }
         },
         agents: { opencode: false }
       }
@@ -242,12 +244,15 @@ describe("OpenCode renderer", () => {
           type: "remote",
           url: "https://example.test/mcp",
           headers: { Authorization: "Bearer ${TOKEN}" },
+          pool: true,
           disabled: false
         },
         local: {
           type: "local",
           command: ["helper", "--serve"],
           environment: { MODE: "test" },
+          cwd: home,
+          pool: true,
           disabled: true
         }
       });

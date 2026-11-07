@@ -426,9 +426,27 @@ const mcpServerBaseSchema = z
   })
   .strict();
 
+// OpenCode-only connection options; other harnesses have no equivalent and ignore them.
+const opencodeMcpRemoteSchema = z.object({ pool: z.boolean().optional() }).strict();
+
+const opencodeMcpLocalSchema = opencodeMcpRemoteSchema
+  .extend({
+    // A fixed working directory lets a pooled local server be shared across projects.
+    cwd: z.string().min(1).optional()
+  })
+  .strict();
+
 export const mcpServerSchema = z.union([
-  mcpServerBaseSchema.extend({ type: z.literal("remote"), url: z.string().min(1) }),
-  mcpServerBaseSchema.extend({ type: z.literal("local"), command: z.array(z.string()).min(1) })
+  mcpServerBaseSchema.extend({
+    type: z.literal("remote"),
+    url: z.string().min(1),
+    opencode: opencodeMcpRemoteSchema.optional()
+  }),
+  mcpServerBaseSchema.extend({
+    type: z.literal("local"),
+    command: z.array(z.string()).min(1),
+    opencode: opencodeMcpLocalSchema.optional()
+  })
 ]);
 
 export const mcpManifestSchema = z.object({

@@ -50,6 +50,15 @@
               "url": {
                 "type": "string",
                 "minLength": 1
+              },
+              "opencode": {
+                "type": "object",
+                "properties": {
+                  "pool": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "required": [
@@ -101,6 +110,19 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "opencode": {
+                "type": "object",
+                "properties": {
+                  "pool": {
+                    "type": "boolean"
+                  },
+                  "cwd": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "required": [
