@@ -87,6 +87,45 @@ describe("external skill ownership", () => {
 });
 
 describe("external skill diagnostics", () => {
+  it("checks a separately installed CLI without a Mise tool", async () => {
+    const entry = skillSchema.parse({
+      name: "twg",
+      source: "external",
+      command: "twg",
+      sync: "mise run twg-skills:sync",
+      owns: ["twg-*"]
+    });
+
+    if (entry.source !== "external") throw new Error("expected an external entry");
+
+    const profile = profileOf({
+      ...entry,
+      select: ["twg-jira"],
+      agents: { opencode: true, "claude-code": true },
+      targets: ["opencode", "claude-code"],
+      toggleable: true,
+      sourceRoot: "/home-root"
+    });
+
+    expect(
+      await externalSkillDiagnostics(
+        profile,
+        installed,
+        async () => undefined,
+        async () => true
+      )
+    ).toEqual(["external-skill:ok\ttwg\ttwg\ttwg-jira"]);
+    expect(
+      await externalSkillDiagnostics(
+        profile,
+        installed,
+        async () => undefined,
+        async () => false
+      )
+    ).toEqual(["external-skill:missing\ttwg\ttwg is not installed"]);
+    expect(skillSchema.safeParse({ ...entry, tool: "aws-cli" }).success).toBe(false);
+  });
+
   it("names skills an agent cannot see, missing tools, and healthy entries", async () => {
     const profile = profileOf(
       external("cloud", { select: ["cloud-cdk", "cloud-iam"] }),
@@ -102,7 +141,12 @@ describe("external skill diagnostics", () => {
     ]);
 
     expect(
-      await externalSkillDiagnostics(profile, installed, async (tool) => versions.get(tool))
+      await externalSkillDiagnostics(
+        profile,
+        installed,
+        async (tool) => versions.get(tool),
+        async () => false
+      )
     ).toEqual([
       "external-skill:missing\tcloud\tcloud-iam (claude-code)\trun mise run cloud:sync",
       "external-skill:ok\ttwg\tnpm:twg@1.0.0\ttwg-jira",

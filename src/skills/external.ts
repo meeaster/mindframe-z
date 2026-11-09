@@ -69,15 +69,20 @@ export function externalSkillSelection(
 export async function externalSkillDiagnostics(
   profile: Pick<ResolvedProfile, "externalSkills">,
   installed: readonly OtherGlobalSkill[],
-  toolVersion: (tool: string) => Promise<string | undefined>
+  toolVersion: (tool: string) => Promise<string | undefined>,
+  commandAvailable: (command: string) => Promise<boolean>
 ): Promise<string[]> {
   const lines: string[] = [];
 
   for (const skill of profile.externalSkills) {
-    const version = await toolVersion(skill.tool);
+    const version = "tool" in skill ? await toolVersion(skill.tool) : undefined;
+    const tool = "tool" in skill ? skill.tool : skill.command;
 
-    if (version === undefined) {
-      lines.push(`external-skill:missing\t${skill.name}\t${skill.tool} is not installed`);
+    const available =
+      "tool" in skill ? version !== undefined : await commandAvailable(skill.command);
+
+    if (!available) {
+      lines.push(`external-skill:missing\t${skill.name}\t${tool} is not installed`);
       continue;
     }
 
@@ -101,7 +106,9 @@ export async function externalSkillDiagnostics(
     } else {
       const names = owned.map((entry) => entry.name).join(", ");
 
-      lines.push(`external-skill:ok\t${skill.name}\t${skill.tool}@${version}\t${names}`);
+      const source = version === undefined ? tool : `${tool}@${version}`;
+
+      lines.push(`external-skill:ok\t${skill.name}\t${source}\t${names}`);
     }
   }
 

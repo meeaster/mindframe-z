@@ -48,6 +48,30 @@ describe("doctor integration", () => {
     expect(result.stdout).toContain("manifest:✓\tprofiles/personal/profile.yml");
   });
 
+  it("checks an external skill's standalone command and selected links", async () => {
+    await writeFile(
+      path.join(root, "catalog", "skills.yml"),
+      "skills:\n  - name: external\n    source: external\n    command: node\n    sync: mise run external:sync\n"
+    );
+    await writeFile(
+      path.join(root, "profiles", "personal", "profile.yml"),
+      "name: personal\nagents: [codex]\nskills:\n  external:\n    agents: { codex: true }\n    select: [external-jira]\n"
+    );
+    const skillDir = path.join(home, ".agents", "skills", "external-jira");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: external-jira\ndescription: test\n---\n"
+    );
+
+    const result = await cli("mfz", root, home, ["doctor"]);
+    expect(result.stdout).toContain("external-skill:ok\texternal\tnode\texternal-jira");
+    expect(result.stdout).not.toContain("skill:unmanaged\texternal-jira");
+
+    const missing = await cli("mfz", root, home, ["doctor"], { PATH: "/definitely-missing" });
+    expect(missing.stdout).toContain("external-skill:missing\texternal\tnode is not installed");
+  });
+
   it("doctor reports invalid manifests without throwing", async () => {
     await writeFile(
       path.join(root, "catalog", "mcp.yml"),

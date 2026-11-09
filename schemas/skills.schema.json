@@ -246,47 +246,93 @@
             ]
           },
           {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "external"
+                  },
+                  "sync": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "owns": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z0-9*][A-Za-z0-9._*-]*$"
+                    }
+                  },
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!-)\\S+$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "sync",
+                  "tool"
+                ],
+                "additionalProperties": false
               },
-              "description": {
-                "default": "",
-                "type": "string"
-              },
-              "source": {
-                "type": "string",
-                "const": "external"
-              },
-              "tool": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "^(?!-)\\S+$"
-              },
-              "sync": {
-                "type": "string",
-                "minLength": 1
-              },
-              "owns": {
-                "minItems": 1,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "^[A-Za-z0-9*][A-Za-z0-9._*-]*$"
-                }
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "external"
+                  },
+                  "sync": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "owns": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z0-9*][A-Za-z0-9._*-]*$"
+                    }
+                  },
+                  "command": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "source",
+                  "sync",
+                  "command"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "name",
-              "source",
-              "tool",
-              "sync"
-            ],
-            "additionalProperties": false
+            ]
           }
         ]
       }

@@ -343,17 +343,21 @@ const skillNamePatternSchema = z
   .regex(/^[A-Za-z0-9*][A-Za-z0-9._*-]*$/, "must be a skill name, optionally with * wildcards");
 
 // Skills a tool's own CLI installs into agent folders; MFZ only declares and checks them.
-const externalSkillSchema = z
-  .object({
-    ...skillFields,
-    source: z.literal("external"),
-    tool: toolSpecSchema,
-    // The command that installs or updates the skills, which doctor names when one is missing.
-    sync: z.string().min(1),
-    // Names of skills the tool installs without a profile selection.
-    owns: z.array(skillNamePatternSchema).min(1).optional()
-  })
-  .strict();
+const externalSkillFields = {
+  ...skillFields,
+  source: z.literal("external"),
+  // The command that installs or updates the skills, which doctor names when one is missing.
+  sync: z.string().min(1),
+  // Names of skills the tool installs without a profile selection.
+  owns: z.array(skillNamePatternSchema).min(1).optional()
+};
+
+const externalSkillSchema = z.union([
+  z.object({ ...externalSkillFields, tool: toolSpecSchema }).strict(),
+  z
+    .object({ ...externalSkillFields, command: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u) })
+    .strict()
+]);
 
 export const skillSchema = z.union([
   localSkillSchema,

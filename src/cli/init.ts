@@ -454,7 +454,7 @@ Add an external skill:
 
 Use \`source: external\` when a CLI installs, updates, and removes skills in agent folders itself, such as from a remote catalog or for a signed-in account. MFZ never installs, renders, or links these skills: the profile chooses them, a Mise task runs the CLI, and \`doctor\` checks the result.
 
-1. Declare the entry with the Mise tool name in \`tool:\` and the command that installs or updates its skills in \`sync:\`. Add \`owns:\` name patterns (\`*\` wildcards) when the CLI decides which skills to install:
+1. Declare the entry with the Mise tool name in \`tool:\`, or, for a CLI installed outside Mise, its executable name in \`command:\`. Give the command that installs or updates its skills in \`sync:\`. Add \`owns:\` name patterns (\`*\` wildcards) when the CLI decides which skills to install:
 
    \`\`\`yaml
    skills:
@@ -475,7 +475,7 @@ Use \`source: external\` when a CLI installs, updates, and removes skills in age
 
 3. Write the sync task once, as a Mise task in the profile that installs the tool. It reads the selection with \`mfz skills selection <name>\` (one skill per line) and \`mfz skills selection <name> --agents\` (\`opencode\`, \`claude-code\`, \`codex\`), maps those agents to the CLI's own agent names, and installs, updates, and removes skills to match. An entry the catalog declares but the profile does not enable selects nothing, so the task removes what it installed. \`mfz apply\` never runs it.
 
-\`mfz doctor\` reports an external entry whose tool is missing, or whose selected skills are not visible to every selected agent, with its \`sync\` command, and stops listing skills the entry claims as unmanaged. \`mfz skills list\` shows them under "Installed by tools". A rendered skill with the same name as a tool-installed one fails apply with an unmanaged link conflict.
+\`mfz doctor\` checks a standalone \`command\` by running it with \`--version\`. It reports an external entry whose tool is missing, or whose selected skills are not visible to every selected agent, with its \`sync\` command, and stops listing skills the entry claims as unmanaged. \`mfz skills list\` shows them under "Installed by tools". A rendered skill with the same name as a tool-installed one fails apply with an unmanaged link conflict.
 
 Skills from the upstream home are enabled with qualified names like \`<alias>/<name>\`, where the alias comes from \`mfz-home.yml#extends\`.
 `;

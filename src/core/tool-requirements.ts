@@ -28,7 +28,7 @@ function requiredTools(profile: ResolvedProfile): ToolRequirement[] {
   return requirements;
 }
 
-async function commandAvailable(command: string): Promise<boolean> {
+export async function commandAvailable(command: string): Promise<boolean> {
   try {
     const result = await execa(command, ["--version"], { reject: false });
 

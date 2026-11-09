@@ -118,7 +118,7 @@ import { useReleaseEngine, useSourceEngine } from "./engine.js";
 import { runReferenceSync } from "./refs-sync.js";
 import { runExecutorApply } from "./executor-apply.js";
 import { runSetup } from "./setup.js";
-import { toolRequirementLines } from "../core/tool-requirements.js";
+import { commandAvailable, toolRequirementLines } from "../core/tool-requirements.js";
 
 async function doctor(options: {
   root?: string | undefined;
@@ -193,7 +193,12 @@ async function doctor(options: {
   const otherGlobalSkills = await readOtherGlobalSkills(paths);
   const { toolVersion } = miseToolSkillHost(paths);
 
-  for (const line of await externalSkillDiagnostics(profile, otherGlobalSkills, toolVersion)) {
+  for (const line of await externalSkillDiagnostics(
+    profile,
+    otherGlobalSkills,
+    toolVersion,
+    commandAvailable
+  )) {
     console.log(line);
   }
 
