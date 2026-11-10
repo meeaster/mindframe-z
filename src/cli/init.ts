@@ -31,6 +31,19 @@ mcp:
     agents: [opencode, codex]
 \`\`\`
 
+## Per-profile URLs
+
+A profile entry's \`url\` replaces a remote catalog server's URL for that profile, so the catalog can hold a public default (such as localhost) while another profile reaches the same server elsewhere. Keep private hosts out of source with \`{env:NAME}\`, set in \`~/.mindframe-z/secrets/zsh.env\`:
+
+\`\`\`yaml
+mcp:
+  doop:
+    agents: [opencode, claude-code, codex]
+    url: https://grif.{env:TAILNET}/mcp
+\`\`\`
+
+OpenCode and Claude Code resolve the token at runtime. Codex reads URLs literally, so \`mfz apply\` writes the value from its own environment into Codex's config and fails when the variable is unset.
+
 ## Executor apps
 
 \`executor: true\` hosts the server in the local Executor as an app, alongside or instead of direct harness routes:

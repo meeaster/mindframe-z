@@ -82,16 +82,21 @@ const directMcpAgentsSchema = z
   });
 
 // A route is a native harness selection, an Executor app, or both. A child entry may set only one
-// of them to patch an inherited entry; resolution checks that the merged entry keeps a route.
+// of them, or only a url, to patch an inherited entry; resolution checks that the merged entry
+// keeps a route. `url` replaces a remote catalog server's URL for this profile, so machines that
+// reach the same server differently (localhost at work, a tailnet host at home) share one name.
 const profileMcpConfigSchema = z
   .object({
     agents: directMcpAgentsSchema.optional(),
-    executor: z.boolean().optional()
+    executor: z.boolean().optional(),
+    url: z.string().min(1).optional()
   })
   .strict()
-  .refine((config) => config.agents !== undefined || config.executor !== undefined, {
-    message: "MCP entries must declare agents or executor"
-  });
+  .refine(
+    (config) =>
+      config.agents !== undefined || config.executor !== undefined || config.url !== undefined,
+    { message: "MCP entries must declare agents, executor, or url" }
+  );
 
 const skillNameSchema = z
   .string()

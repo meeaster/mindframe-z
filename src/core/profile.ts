@@ -758,10 +758,22 @@ function resolveMcpServers(
 ): ResolvedMcpServer[] {
   return Object.entries(build.profile.mcp).map(([serverName, config]): ResolvedMcpServer => {
     const sourceHome = build.sources.mcp.get(serverName) ?? manifests;
-    const server = sourceHome.mcpServers[serverName];
+    const catalogServer = sourceHome.mcpServers[serverName];
 
-    if (!server) {
+    if (!catalogServer) {
       throw new Error(`Profile ${profileName} references unknown MCP server: ${serverName}`);
+    }
+
+    let server: McpServer = catalogServer;
+
+    if (config.url !== undefined) {
+      if (catalogServer.type !== "remote") {
+        throw new Error(
+          `Profile ${profileName} sets url for MCP server ${serverName}, which is a local server`
+        );
+      }
+
+      server = { ...catalogServer, url: config.url };
     }
 
     const agents = config.agents ?? {};

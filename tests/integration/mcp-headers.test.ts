@@ -8,7 +8,7 @@ const OpenCodeConfig = z.object({
   mcp: z.object({
     servers: z.record(
       z.string(),
-      z.object({ headers: z.record(z.string(), z.string()).optional() })
+      z.object({ url: z.string(), headers: z.record(z.string(), z.string()).optional() })
     )
   })
 });
@@ -16,7 +16,8 @@ const OpenCodeConfig = z.object({
 const ClaudeMcp = z
   .object({
     exa: z.object({ type: z.string(), url: z.string(), headers: z.record(z.string(), z.string()) }),
-    secretpath: z.object({ type: z.string(), url: z.string() })
+    secretpath: z.object({ type: z.string(), url: z.string() }),
+    tailnet: z.object({ type: z.string(), url: z.string() })
   })
   .passthrough();
 
@@ -28,7 +29,8 @@ const CodexConfig = z.object({
         enabled: z.boolean(),
         http_headers: z.record(z.string(), z.string()),
         env_http_headers: z.record(z.string(), z.string())
-      })
+      }),
+      tailnet: z.object({ url: z.string(), enabled: z.boolean() })
     })
     .passthrough()
 });
@@ -71,6 +73,11 @@ describe("mcp remote header rendering", () => {
         "    type: remote",
         "    transport: http",
         "    url: http://mcp.secret.invalid:9583/{env:SECRET_PATH}",
+        "  tailnet:",
+        "    description: Self-hosted server, localhost unless a profile says otherwise.",
+        "    type: remote",
+        "    transport: http",
+        "    url: http://localhost:4400/mcp",
         ""
       ].join("\n"),
       "utf8"
@@ -87,12 +94,15 @@ describe("mcp remote header rendering", () => {
         "    agents: [opencode, claude-code, codex]",
         "  secretpath:",
         "    agents: [claude-code]",
+        "  tailnet:",
+        "    agents: [opencode, claude-code, codex]",
+        "    url: https://grif.{env:TEST_TAILNET}/mcp",
         ""
       ].join("\n"),
       "utf8"
     );
 
-    await cli("mfz", root, home, ["apply", "--no-link"]);
+    await cli("mfz", root, home, ["apply", "--no-link"], { TEST_TAILNET: "example.ts.net" });
   });
 
   it("passes the env token through to OpenCode verbatim", async () => {
@@ -147,5 +157,38 @@ describe("mcp remote header rendering", () => {
       http_headers: { "x-client": "mindframe-z" },
       env_http_headers: { "x-api-key": "EXA_API_KEY" }
     });
+  });
+
+  // A profile url replaces the catalog URL; each harness then renders its env token its own way.
+  it("renders a profile URL override with each harness's env handling", async () => {
+    const opencode = parseJson(
+      OpenCodeConfig,
+      await readFile(configsPath(home, "personal", "opencode", "opencode.jsonc"), "utf8")
+    );
+
+    const claude = parseJson(
+      ClaudeMcp,
+      await readFile(configsPath(home, "personal", "claude", "mcp.json"), "utf8")
+    );
+
+    const codex = parseToml(
+      CodexConfig,
+      await readFile(configsPath(home, "personal", "codex", "config.toml"), "utf8")
+    );
+
+    expect(opencode.mcp.servers.tailnet?.url).toBe("https://grif.{env:TEST_TAILNET}/mcp");
+    expect(claude.tailnet.url).toBe("https://grif.${TEST_TAILNET}/mcp");
+    expect(codex.mcp_servers.tailnet).toEqual({
+      url: "https://grif.example.ts.net/mcp",
+      enabled: true
+    });
+  });
+
+  it("fails the apply when a Codex URL's env variable is unset", async () => {
+    await expect(
+      cli("mfz", root, home, ["apply", "--no-link"], { TEST_TAILNET: "" })
+    ).rejects.toThrow(
+      "Codex MCP server tailnet URL references {env:TEST_TAILNET}, which is not set"
+    );
   });
 });

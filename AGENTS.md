@@ -88,7 +88,7 @@ The active home's `catalog/*.yml` declares available references, skills, MCP ser
 
 Profile arrays such as `instructions`, `references`, `executor.apps`, `opencode.plugins`, and `opencode.commands` are additive and deduplicated. Maps such as `skills`, `mcp`, `opencode.config`, and `claude` are deep-merged with child keys overriding parent keys. For MCP routing, a child selection with any enabled agent replaces the inherited selection; a grouped disabled-only selection patches only the named routes. Mise files remain native per-layer TOML fragments and are ordered without MFZ-side merging. `agents` is replaced by the child when set.
 
-MCP enablement is profile-owned: the MCP catalog defines connection details only; each profile entry declares `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, `executor: true`, or both. Claude Code cannot be declared in a `disabled` group. `executor: true` requires a remote `http` server with no `headers` and no `{env:` in its URL. Keep credentials out of catalog and profile source; reference them with `{env:NAME}`.
+MCP enablement is profile-owned: the MCP catalog defines connection details only; each profile entry declares `agents: [opencode, claude-code, codex]` or grouped `enabled`/`disabled` arrays, `executor: true`, or both, and may set `url` to override a remote catalog server's URL for that profile. Claude Code cannot be declared in a `disabled` group. `executor: true` requires a remote `http` server with no `headers` and no `{env:` in its URL. Keep credentials out of catalog and profile source; reference them with `{env:NAME}`.
 
 ## Rendering And Sync
 

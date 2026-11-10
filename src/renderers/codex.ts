@@ -1,7 +1,7 @@
 import path from "node:path";
 import { stringify } from "smol-toml";
 import { expandHome, profileConfigsDir, type RuntimePaths } from "../core/paths.js";
-import { parseEnvRef } from "../core/env-ref.js";
+import { expandEnvRefs, parseEnvRef } from "../core/env-ref.js";
 import { deepMerge, filterMcpForTarget, type ResolvedProfile } from "../core/profile.js";
 import type { RenderedFile, RenderResult } from "../core/render.js";
 import {
@@ -39,7 +39,10 @@ function renderCodexMcp(paths: RuntimePaths, profile: ResolvedProfile) {
           }
         }
 
-        const entry = { url: server.url, enabled };
+        // Codex reads `url` literally, so env tokens resolve now from the apply process's
+        // environment, which the managed zsh fills from the secrets file.
+        const url = expandEnvRefs(server.url, process.env, `Codex MCP server ${name} URL`);
+        const entry = { url, enabled };
 
         if (Object.keys(literalHeaders).length > 0)
           Object.assign(entry, { http_headers: literalHeaders });
